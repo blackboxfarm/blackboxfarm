@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Archive, FileText, ExternalLink, Lock } from 'lucide-react';
+import { Archive, FileText, Lock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface BacklogRow {
@@ -33,6 +33,11 @@ function fmtUsd(n: number | null | undefined): string {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
   if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}k`;
   return `$${n.toFixed(0)}`;
+}
+
+function shortMint(m: string): string {
+  if (!m) return '—';
+  return `${m.slice(0, 4)}…${m.slice(-4)}`;
 }
 
 export default function CoolDeathsBacklog() {
@@ -154,7 +159,7 @@ export default function CoolDeathsBacklog() {
             <div className="flex items-start gap-4 flex-wrap">
               <div className="flex-1 min-w-[200px]">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold">${r.symbol ?? '—'}</span>
+                  <span className="font-semibold">{r.symbol ? `$${r.symbol}` : shortMint(r.token_mint)}</span>
                   <span className="text-xs text-muted-foreground truncate max-w-[160px]">{r.name ?? ''}</span>
                   {r.death_cause && (
                     <Badge variant="outline" className="text-[10px]">{r.death_cause}</Badge>
@@ -174,12 +179,7 @@ export default function CoolDeathsBacklog() {
               <div className="flex gap-1 flex-wrap">
                 <Button size="sm" disabled={busy === r.token_mint || !!r.drafted_slug}
                   onClick={() => draftAutopsy(r)}>
-                  <FileText className="h-3 w-3 mr-1" /> {r.drafted_slug ? 'Drafted' : 'Draft autopsy'}
-                </Button>
-                <Button size="sm" variant="ghost" asChild>
-                  <a href={`/holders?token=${r.token_mint}`} target="_blank" rel="noreferrer">
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
+                  <FileText className="h-3 w-3 mr-1" /> {r.drafted_slug ? 'Drafted' : 'Generate Report'}
                 </Button>
               </div>
             </div>

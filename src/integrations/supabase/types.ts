@@ -20425,6 +20425,7 @@ export type Database = {
           health_grade: string | null
           health_score: number | null
           holder_count: number | null
+          is_recent: boolean | null
           last_seen_at: string | null
           latest_at: string | null
           launchpad: string | null
