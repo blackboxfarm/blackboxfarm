@@ -7,6 +7,7 @@ import { feedRejectionToMesh } from '../_shared/rejection-mesh.ts';
 import { meshFeed } from '../_shared/mesh-feeder.ts';
 import { trackFunnelStage } from '../_shared/funnel-tracker.ts';
 import { fetchPumpFunCoin, getPumpFunRunStats, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
+import { assertDbWrite } from '../_shared/db-assert.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -16,6 +17,20 @@ const corsHeaders = {
 // Rate limiting
 const BATCH_SIZE = 5;
 const BATCH_DELAY_MS = 2000;
+const PUMPFUN_INITIAL_REAL_TOKEN_RESERVES = 793_100_000_000_000;
+
+function clampPct(value: number): number {
+  return Math.max(0, Math.min(100, value));
+}
+
+function curveProgressFromPump(data: any): number | null {
+  if (data?.complete === true) return 100;
+  const explicit = Number(data?.bonding_curve_progress ?? data?.bonding_curve_percentage ?? NaN);
+  if (Number.isFinite(explicit)) return clampPct(explicit <= 1 ? explicit * 100 : explicit);
+  const realTokenReserves = Number(data?.real_token_reserves ?? NaN);
+  if (!Number.isFinite(realTokenReserves)) return null;
+  return clampPct(((PUMPFUN_INITIAL_REAL_TOKEN_RESERVES - realTokenReserves) / PUMPFUN_INITIAL_REAL_TOKEN_RESERVES) * 100);
+}
 
 // Standard pump.fun supply: 1 billion tokens with 6 decimals
 const STANDARD_PUMPFUN_SUPPLY = 1_000_000_000_000_000;
