@@ -60,6 +60,9 @@ interface WatchlistToken {
   holder_count: number | null;
   bundle_score: number | null;
   bonding_curve_pct: number | null;
+  ath_bonding_curve_pct?: number | null;
+  ath_market_cap_usd?: number | null;
+  ath_market_cap_at?: string | null;
   market_cap_sol: number | null;
   has_image: boolean | null;
   socials_count: number | null;
