@@ -24,22 +24,21 @@ import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 
 const PUMPFUN_LAMB_MIN_CURVE_PCT = 75;
 const PUMPFUN_LAMB_MAX_CURVE_PCT = 99.5;
+const PUMPFUN_GRADUATION_MCAP_USD = 69_000;
+const PUMPFUN_LAMB_MIN_ATH_MCAP_USD = PUMPFUN_GRADUATION_MCAP_USD * (PUMPFUN_LAMB_MIN_CURVE_PCT / 100);
 const PUMPFUN_TOKEN_SUPPLY = 1_000_000_000;
 const PUMPFUN_INITIAL_REAL_TOKEN_RESERVES = 793_100_000_000_000;
-
-function peakMcapUsd(row: { market_cap_usd?: number | null; price_ath_usd?: number | null; price_peak?: number | null }): number {
-  return Math.max(
-    Number(row.market_cap_usd ?? 0),
-    Number(row.price_ath_usd ?? 0) * PUMPFUN_TOKEN_SUPPLY,
-    Number(row.price_peak ?? 0) * PUMPFUN_TOKEN_SUPPLY,
-  );
-}
 
 function liveCurveProgressFromPump(coin: any): number | null {
   const realTokenReserves = Number(coin?.real_token_reserves ?? NaN);
   if (!Number.isFinite(realTokenReserves)) return null;
   const tokensSold = PUMPFUN_INITIAL_REAL_TOKEN_RESERVES - realTokenReserves;
   return Math.max(0, Math.min(100, (tokensSold / PUMPFUN_INITIAL_REAL_TOKEN_RESERVES) * 100));
+}
+
+function athCurveProgressFromPumpMcap(athMarketCapUsd: number): number {
+  if (!Number.isFinite(athMarketCapUsd) || athMarketCapUsd <= 0) return 0;
+  return Math.min(100, (athMarketCapUsd / PUMPFUN_GRADUATION_MCAP_USD) * 100);
 }
 
 const corsHeaders = {
@@ -111,7 +110,7 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
       .from('autopsy_candidates')
       .delete()
       .eq('source_feed', 'pumpfun_curve_death')
-      .or(`bonding_curve_pct.is.null,bonding_curve_pct.lt.${PUMPFUN_LAMB_MIN_CURVE_PCT},bonding_curve_pct.gte.${PUMPFUN_LAMB_MAX_CURVE_PCT}`),
+      .or(`bonding_curve_pct.is.null,bonding_curve_pct.lt.${PUMPFUN_LAMB_MIN_CURVE_PCT},bonding_curve_pct.gte.${PUMPFUN_LAMB_MAX_CURVE_PCT},ath_mcap_usd.is.null,ath_mcap_usd.lt.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD},ath_mcap_usd.gte.${PUMPFUN_GRADUATION_MCAP_USD}`),
     'autopsy_candidates',
     'DELETE stale non-Lamb curve deaths'
   );
@@ -160,8 +159,8 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
   }
 
   // ── 2. pumpfun_watchlist Lambs (75% <= curve ATH < 100%, never graduated) ─────
-  // IMPORTANT: Lambs are selected ONLY by recorded bonding-curve progress.
-  // ATH market cap is display/context only; it must never fake curve progress.
+  // IMPORTANT: stored bonding_curve_pct has proven stale/noisy. Lambs are gated by
+  // live pump.fun ath_market_cap converted against the pump.fun graduation mcap.
   const { data: pfLambs } = await supabase
     .from('pumpfun_watchlist')
     .select(`
@@ -172,16 +171,20 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
     `)
     .eq('status', 'dead')
     .not('is_graduated', 'is', true)
-    .gte('bonding_curve_pct', PUMPFUN_LAMB_MIN_CURVE_PCT)
-    .lt('bonding_curve_pct', PUMPFUN_LAMB_MAX_CURVE_PCT)
+    .or(`bonding_curve_pct.gte.${PUMPFUN_LAMB_MIN_CURVE_PCT},market_cap_usd.gte.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD},price_ath_usd.gte.${PUMPFUN_LAMB_MIN_ATH_MCAP_USD / PUMPFUN_TOKEN_SUPPLY}`)
     .not('token_mint', 'is', null)
     .limit(limit);
 
   for (const t of pfLambs ?? []) {
     if (!t.token_mint) continue;
-    const peakMcap = peakMcapUsd(t);
     const livePump = await fetchPumpFunCoin(t.token_mint, 'autopsy-funnel-feeder-lamb-verify');
+    const liveAthMcap = Number(livePump?.ath_market_cap ?? NaN);
+    const liveCurrentMcap = Number(livePump?.usd_market_cap ?? NaN);
+    const athCurvePct = athCurveProgressFromPumpMcap(liveAthMcap);
     const liveProgress = liveCurveProgressFromPump(livePump);
+    if (!livePump || !Number.isFinite(liveAthMcap) || athCurvePct < PUMPFUN_LAMB_MIN_CURVE_PCT || athCurvePct >= 100) {
+      continue;
+    }
     if (livePump?.complete === true || livePump?.raydium_pool || (liveProgress ?? 0) >= PUMPFUN_LAMB_MAX_CURVE_PCT) {
       await assertDbWrite(
         supabase
@@ -202,12 +205,12 @@ Deno.serve(withRunLog('autopsy-funnel-feeder', async (req) => {
       source_feed: 'pumpfun_curve_death',
       ticker: t.token_symbol ?? existing?.ticker,
       token_name: t.token_name ?? existing?.token_name,
-      ath_mcap_usd: Math.max(existing?.ath_mcap_usd ?? 0, peakMcap),
-      current_mcap_usd: t.market_cap_usd ?? existing?.current_mcap_usd,
       liquidity_usd: t.liquidity_usd ?? existing?.liquidity_usd,
       creator_wallet: t.creator_wallet ?? existing?.creator_wallet,
       age_hours: existing?.age_hours ?? ageHours,
-      bonding_curve_pct: Number(t.bonding_curve_pct),
+      ath_mcap_usd: liveAthMcap,
+      current_mcap_usd: Number.isFinite(liveCurrentMcap) ? liveCurrentMcap : (t.market_cap_usd ?? existing?.current_mcap_usd),
+      bonding_curve_pct: athCurvePct,
       dev_sold: t.dev_sold,
       dev_holding_pct: t.dev_holding_pct,
       linked_wallet_count: t.linked_wallet_count,

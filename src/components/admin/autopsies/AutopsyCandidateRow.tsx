@@ -156,7 +156,7 @@ export default function AutopsyCandidateRow({ ordinal, c, busy, onDraft, onDecid
           <span>· score {c.candidate_score}</span>
           {c.bonding_curve_pct != null && (
             <Badge variant="outline" className={`text-[10px] ${curveBadgeColor(c.bonding_curve_pct)}`}>
-              curve {Math.round(c.bonding_curve_pct)}%
+              ATH curve {Math.round(c.bonding_curve_pct)}%
             </Badge>
           )}
           {c.ath_mcap_usd ? <span>· ATH ${Math.round(c.ath_mcap_usd).toLocaleString()}</span> : null}
