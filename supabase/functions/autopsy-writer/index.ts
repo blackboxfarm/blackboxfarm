@@ -236,10 +236,11 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         socialCompleteness: enrichment.social_completeness,
         devDossier: dossier,
       });
-      const causeId = (!meaningfulCause(c.death_cause) || isRegenerate || freshClass.cause === 'natural_cycle') ? freshClass.cause : c.death_cause;
+      const existingCause: DeathCauseId = meaningfulCause(c.death_cause) ? c.death_cause : 'unknown';
+      const causeId: DeathCauseId = (existingCause === 'unknown' || isRegenerate || freshClass.cause === 'natural_cycle') ? freshClass.cause : existingCause;
       const causeDef = DEATH_TAXONOMY[causeId] ?? DEATH_TAXONOMY.unknown;
-      const confidence = freshClass.confidence ?? c.death_confidence ?? 30;
-      const matchedSignals = freshClass.matchedSignals?.length ? freshClass.matchedSignals : (c.matched_signals ?? []);
+      const confidence = causeId === freshClass.cause ? freshClass.confidence : (c.death_confidence ?? freshClass.confidence ?? 30);
+      const matchedSignals = causeId === freshClass.cause && freshClass.matchedSignals?.length ? freshClass.matchedSignals : (c.matched_signals ?? []);
 
       // Persist enrichment + hydrated facts on the candidate so the UI and next run see them
       await assertUpdate(supabase.from('autopsy_candidates').update({
