@@ -1083,6 +1083,68 @@ serve(withRunLog('bagless-holders-report', async (req) => {
       else console.log(`[bagless] ✅ Upserted ${tokenMint.slice(0,8)} into seen_tokens`);
     }).catch((e: any) => console.warn('[bagless] seen_tokens upsert error:', e));
 
+    // 🪣 Hydrate pumpfun_watchlist with this scan's decision data so the admin
+    // Token Funnel Pool reflects real holder/grade/MC values instead of zeros.
+    // Fire-and-forget — never block the response on this write.
+    (async () => {
+      try {
+        const { data: existingWl } = await supabaseForMesh
+          .from('pumpfun_watchlist')
+          .select('id, ath_market_cap_usd, price_ath_usd, holder_count_peak')
+          .eq('token_mint', tokenMint)
+          .maybeSingle();
+
+        const totalHolders = rankedHolders.length;
+        const realHolders = totalHolders - dustWallets;
+        const hydrate: Record<string, unknown> = {
+          last_checked_at: new Date().toISOString(),
+          last_snapshot_at: new Date().toISOString(),
+          last_processor: 'bagless-holders-report',
+          token_symbol: tokenSymbol || null,
+          token_name: tokenName || null,
+          holder_count: totalHolders,
+        };
+        if (typeof tokenPriceUSD === 'number' && tokenPriceUSD > 0) {
+          hydrate.price_usd = tokenPriceUSD;
+          hydrate.price_current = tokenPriceUSD;
+        }
+        if (typeof inferredMarketCapUSD === 'number' && inferredMarketCapUSD > 0) {
+          hydrate.market_cap_usd = inferredMarketCapUSD;
+        }
+        if (typeof vitality?.liquidityUsd === 'number' && vitality.liquidityUsd > 0) {
+          hydrate.liquidity_usd = vitality.liquidityUsd;
+        }
+        if (creatorInfo?.wallet) hydrate.creator_wallet = creatorInfo.wallet;
+        if (typeof creatorInfo?.bondingCurveProgress === 'number') {
+          hydrate.bonding_curve_pct = creatorInfo.bondingCurveProgress;
+        }
+
+        if (typeof inferredMarketCapUSD === 'number' && inferredMarketCapUSD > (existingWl?.ath_market_cap_usd ?? 0)) {
+          hydrate.ath_market_cap_usd = inferredMarketCapUSD;
+          hydrate.ath_market_cap_at = new Date().toISOString();
+        }
+        if (typeof tokenPriceUSD === 'number' && tokenPriceUSD > (existingWl?.price_ath_usd ?? 0)) {
+          hydrate.price_ath_usd = tokenPriceUSD;
+        }
+        hydrate.holder_count_peak = Math.max(existingWl?.holder_count_peak ?? 0, totalHolders);
+
+        if (existingWl?.id) {
+          const { error } = await supabaseForMesh.from('pumpfun_watchlist').update(hydrate).eq('id', existingWl.id);
+          if (error) console.warn('[bagless] pumpfun_watchlist update failed:', error.message);
+          else console.log(`[bagless] 🪣 Hydrated pumpfun_watchlist row for ${tokenMint.slice(0, 8)}`);
+        } else {
+          const { error } = await supabaseForMesh.from('pumpfun_watchlist').upsert(
+            { token_mint: tokenMint, status: 'pending_triage', source: 'bagless-holders-report', ...hydrate },
+            { onConflict: 'token_mint' }
+          );
+          if (error) console.warn('[bagless] pumpfun_watchlist upsert failed:', error.message);
+          else console.log(`[bagless] 🪣 Created+hydrated pumpfun_watchlist row for ${tokenMint.slice(0, 8)}`);
+        }
+      } catch (e) {
+        console.warn('[bagless] pumpfun_watchlist hydrate error (non-blocking):', e);
+      }
+    })();
+
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });

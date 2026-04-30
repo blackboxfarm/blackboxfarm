@@ -7,6 +7,7 @@ import { isInfrastructureToken } from "../_shared/excluded-tokens.ts";
 import { upsertHealthSnapshot } from "../_shared/snapshot-writer.ts";
 import { obfuscateTicker } from "../_shared/ticker-obfuscator.ts";
 import { isFunctionEnabled } from '../_shared/function-toggle.ts';
+import { assertDbWrite } from '../_shared/db-assert.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -665,6 +666,88 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
           })
           .eq('token_mint', item.token_mint);
         console.log(`[poster] Early-wrote health_grade=${stats.healthGrade} for ${item.token_mint.slice(0, 8)}`);
+      }
+
+      // ── Hydrate pumpfun_watchlist with the decision data we just computed ──
+      // Without this, funnel_feed inserts stay forever at holder_count=0 / price_usd=null
+      // and the admin Token Funnel Pool spreadsheet looks empty for tokens that
+      // actually have full holder reports.
+      try {
+        const reportPriceUsd = (report?.priceUSD ?? report?.priceUsd ?? null) as number | null;
+        const reportMcapUsd = (report?.marketCapUSD ?? report?.marketCap ?? report?.inferredMarketCapUSD ?? null) as number | null;
+        const reportLiquidityUsd = (report?.liquidityUSD ?? report?.liquidityUsd ?? null) as number | null;
+        const reportCreatorWallet =
+          (report?.creatorInfo?.wallet ?? report?.potentialDevWallet ?? null) as string | null;
+        const reportBondingCurvePct = (report?.bondingCurveProgress ?? null) as number | null;
+        const top10Pct = (report?.distributionStats?.top10Percentage ?? null) as number | null;
+        const realHolders = stats.realHolders;
+
+        const hydrate: Record<string, unknown> = {
+          last_checked_at: new Date().toISOString(),
+          last_snapshot_at: new Date().toISOString(),
+          last_processor: 'holders-intel-poster',
+          token_symbol: stats.symbol || null,
+          token_name: stats.name || null,
+          holder_count: stats.totalHolders ?? null,
+        };
+        // Only set peak if it's higher than what's stored (best-effort: we just write — DB has no MAX trigger here).
+        if (typeof stats.totalHolders === 'number') hydrate.holder_count_peak = stats.totalHolders;
+        if (reportPriceUsd != null) {
+          hydrate.price_usd = reportPriceUsd;
+          hydrate.price_current = reportPriceUsd;
+        }
+        if (reportMcapUsd != null) hydrate.market_cap_usd = reportMcapUsd;
+        if (reportLiquidityUsd != null) hydrate.liquidity_usd = reportLiquidityUsd;
+        if (reportCreatorWallet) hydrate.creator_wallet = reportCreatorWallet;
+        if (reportBondingCurvePct != null) hydrate.bonding_curve_pct = reportBondingCurvePct;
+        if (typeof top10Pct === 'number') hydrate.max_single_wallet_pct = top10Pct;
+        if (typeof realHolders === 'number') hydrate.suspicious_wallet_pct = null; // leave untouched
+
+        // We update by token_mint. If the row doesn't exist (manual_push case), upsert it.
+        const { data: existingWlRow } = await supabase
+          .from('pumpfun_watchlist')
+          .select('id, ath_market_cap_usd, price_ath_usd, holder_count_peak')
+          .eq('token_mint', item.token_mint)
+          .maybeSingle();
+
+        // Promote ATH only when the new value is genuinely higher.
+        if (reportMcapUsd != null) {
+          const prevAth = (existingWlRow?.ath_market_cap_usd ?? 0) as number;
+          if (reportMcapUsd > prevAth) {
+            hydrate.ath_market_cap_usd = reportMcapUsd;
+            hydrate.ath_market_cap_at = new Date().toISOString();
+          }
+        }
+        if (reportPriceUsd != null) {
+          const prevPriceAth = (existingWlRow?.price_ath_usd ?? 0) as number;
+          if (reportPriceUsd > prevPriceAth) hydrate.price_ath_usd = reportPriceUsd;
+        }
+        if (typeof stats.totalHolders === 'number') {
+          const prevPeak = (existingWlRow?.holder_count_peak ?? 0) as number;
+          hydrate.holder_count_peak = Math.max(prevPeak, stats.totalHolders);
+        }
+
+        if (existingWlRow) {
+          await assertDbWrite(
+            supabase.from('pumpfun_watchlist').update(hydrate).eq('id', existingWlRow.id),
+            'pumpfun_watchlist',
+            'UPDATE'
+          );
+        } else {
+          await assertDbWrite(
+            supabase.from('pumpfun_watchlist').upsert(
+              { token_mint: item.token_mint, status: 'pending_triage', source: item.trigger_source ?? 'holders-intel-poster', ...hydrate },
+              { onConflict: 'token_mint' }
+            ),
+            'pumpfun_watchlist',
+            'UPSERT'
+          );
+        }
+        console.log(`[poster] Hydrated pumpfun_watchlist for ${item.token_mint.slice(0, 8)} (holders=${stats.totalHolders}, mcap=${reportMcapUsd ?? 'n/a'})`);
+      } catch (hydrateErr) {
+        console.warn('[poster] pumpfun_watchlist hydrate failed:', hydrateErr);
+        // Re-throw so run-logger marks the run as failed (zero-tolerance silent-fail policy).
+        throw hydrateErr;
       }
       
       // Quality checks

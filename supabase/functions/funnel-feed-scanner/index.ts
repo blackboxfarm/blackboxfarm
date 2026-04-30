@@ -77,6 +77,64 @@ async function fetchTokenMeta(mint: string): Promise<{ symbol?: string; name?: s
   return {};
 }
 
+// Richer metadata fetch used at watchlist-insert time so the row has at least
+// price/mcap/liquidity/creator_wallet on day 1 instead of all-null.
+interface RichMeta {
+  symbol?: string;
+  name?: string;
+  priceUsd?: number;
+  marketCapUsd?: number;
+  liquidityUsd?: number;
+  creatorWallet?: string;
+  bondingCurvePct?: number;
+  imageUrl?: string;
+  twitterUrl?: string;
+  telegramUrl?: string;
+  websiteUrl?: string;
+}
+async function fetchRichMeta(mint: string): Promise<RichMeta> {
+  const out: RichMeta = {};
+  // Pump.fun (throttled) — gives us creator + bonding curve when on-curve.
+  try {
+    const d = await fetchPumpFunCoin(mint, 'funnel-feed-scanner');
+    if (d) {
+      out.symbol = d.symbol || out.symbol;
+      out.name = d.name || out.name;
+      out.creatorWallet = d.creator || out.creatorWallet;
+      out.imageUrl = d.image_uri || out.imageUrl;
+      out.twitterUrl = d.twitter || out.twitterUrl;
+      out.telegramUrl = d.telegram || out.telegramUrl;
+      out.websiteUrl = d.website || out.websiteUrl;
+      if (typeof d.usd_market_cap === 'number') out.marketCapUsd = d.usd_market_cap;
+      // pump.fun curve fields are not all consistent — leave bondingCurvePct unset here.
+    }
+  } catch { /* ignore */ }
+
+  // DexScreener — gives us price/mcap/liquidity once a pair exists.
+  try {
+    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      const pair = d.pairs?.[0];
+      if (pair) {
+        out.symbol = out.symbol || pair.baseToken?.symbol || undefined;
+        out.name = out.name || pair.baseToken?.name || undefined;
+        if (pair.priceUsd) {
+          const p = parseFloat(pair.priceUsd);
+          if (!Number.isNaN(p) && p > 0) out.priceUsd = p;
+        }
+        if (typeof pair.marketCap === 'number') out.marketCapUsd = pair.marketCap;
+        else if (typeof pair.fdv === 'number') out.marketCapUsd = out.marketCapUsd ?? pair.fdv;
+        if (typeof pair.liquidity?.usd === 'number') out.liquidityUsd = pair.liquidity.usd;
+      }
+    }
+  } catch { /* ignore */ }
+
+  return out;
+}
+
 // Known non-token addresses to skip (system programs, common wallets)
 const SKIP_ADDRESSES = new Set([
   '11111111111111111111111111111111',
@@ -396,6 +454,11 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
     // Resolve symbol/name: validation result first, then watchlist, then pump.fun API
     let tokenSymbol = validation.symbol || watchlistEntry?.token_symbol || null;
     let tokenName = validation.name || watchlistEntry?.token_name || null;
+    // Always pull rich metadata for new tokens — symbol/name + price/mcap/liquidity/creator.
+    // For tokens already in the watchlist, only refresh symbol/name if missing.
+    const richMeta = !watchlistEntry ? await fetchRichMeta(mint) : ({} as RichMeta);
+    if (!tokenSymbol) tokenSymbol = richMeta.symbol || null;
+    if (!tokenName) tokenName = richMeta.name || null;
     if (!tokenSymbol) {
       const meta = await fetchTokenMeta(mint);
       tokenSymbol = meta.symbol || null;
@@ -443,16 +506,37 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
 
       // Insert into watchlist if not already there
       if (watchlistStatus === 'pending') {
+        const watchlistRow: Record<string, unknown> = {
+          token_mint: mint,
+          token_symbol: tokenSymbol,
+          token_name: tokenName,
+          status: 'pending_triage',
+          source: `funnel_feed:${source.source_name}`,
+          created_at: new Date().toISOString(),
+          last_processor: 'funnel-feed-scanner',
+        };
+        if (typeof richMeta.priceUsd === 'number' && richMeta.priceUsd > 0) {
+          watchlistRow.price_usd = richMeta.priceUsd;
+          watchlistRow.price_current = richMeta.priceUsd;
+          watchlistRow.price_at_discovery_usd = richMeta.priceUsd;
+        }
+        if (typeof richMeta.marketCapUsd === 'number' && richMeta.marketCapUsd > 0) {
+          watchlistRow.market_cap_usd = richMeta.marketCapUsd;
+          watchlistRow.ath_market_cap_usd = richMeta.marketCapUsd;
+          watchlistRow.ath_market_cap_at = new Date().toISOString();
+        }
+        if (typeof richMeta.liquidityUsd === 'number' && richMeta.liquidityUsd > 0) {
+          watchlistRow.liquidity_usd = richMeta.liquidityUsd;
+        }
+        if (richMeta.creatorWallet) watchlistRow.creator_wallet = richMeta.creatorWallet;
+        if (richMeta.imageUrl) watchlistRow.image_url = richMeta.imageUrl;
+        if (richMeta.twitterUrl) watchlistRow.twitter_url = richMeta.twitterUrl;
+        if (richMeta.telegramUrl) watchlistRow.telegram_url = richMeta.telegramUrl;
+        if (richMeta.websiteUrl) watchlistRow.website_url = richMeta.websiteUrl;
+
         const { error: wlErr } = await supabase
           .from('pumpfun_watchlist')
-          .insert({
-            token_mint: mint,
-            token_symbol: tokenSymbol,
-            token_name: tokenName,
-            status: 'pending_triage',
-            source: `funnel_feed:${source.source_name}`,
-            created_at: new Date().toISOString(),
-          })
+          .insert(watchlistRow)
           .select()
           .single();
 

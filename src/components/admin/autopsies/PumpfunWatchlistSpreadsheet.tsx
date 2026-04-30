@@ -11,6 +11,65 @@ import { useToast } from '@/hooks/use-toast';
 
 type WatchlistRow = Database['public']['Tables']['pumpfun_watchlist']['Row'];
 
+// Derived per-token decision data joined from sibling tables.
+type DerivedRow = {
+  // token_health_snapshots (latest)
+  snap_total_holders?: number | null;
+  snap_real_holders?: number | null;
+  snap_health_grade?: string | null;
+  snap_health_score?: number | null;
+  snap_top10_pct?: number | null;
+  snap_dust_pct?: number | null;
+  snap_at?: string | null;
+  // holders_intel_seen_tokens
+  seen_was_posted?: boolean | null;
+  seen_times_posted?: number | null;
+  seen_health_grade?: string | null;
+  seen_mcap_at_discovery?: number | null;
+  // token_lifecycle
+  lc_ath_24h_usd?: number | null;
+  lc_autopsy_at?: string | null;
+  lc_death_cause?: string | null;
+  // funnel_feed_discoveries (latest)
+  disc_mesh_status?: string | null;
+  disc_watchlist_status?: string | null;
+  disc_xpost_status?: string | null;
+  disc_source_name?: string | null;
+};
+type AugmentedRow = WatchlistRow & DerivedRow & { __decision_score?: number };
+
+// Order of derived columns shown FIRST in the table — these are the ones that
+// actually drive autopsy/buy/monitor decisions. Native pumpfun_watchlist columns
+// follow them so we keep all the raw forensic fields visible.
+const DERIVED_KEYS: Array<keyof DerivedRow> = [
+  'snap_health_grade',
+  'snap_total_holders',
+  'snap_real_holders',
+  'snap_top10_pct',
+  'snap_dust_pct',
+  'snap_health_score',
+  'snap_at',
+  'seen_was_posted',
+  'seen_times_posted',
+  'seen_mcap_at_discovery',
+  'lc_ath_24h_usd',
+  'lc_autopsy_at',
+  'lc_death_cause',
+  'disc_mesh_status',
+  'disc_watchlist_status',
+  'disc_xpost_status',
+  'disc_source_name',
+];
+
+// Quick filter presets that match the real workflow (not raw status enum values).
+type QuickFilter =
+  | 'funnel_only'
+  | 'has_snapshot'
+  | 'posted_telegram'
+  | 'missing_price_ath'
+  | 'autopsy_candidates'
+  | 'inserted_only';
+
 const PAGE_SIZE = 1000;
 const ROWS_PER_PAGE = 50;
 
@@ -49,9 +108,9 @@ function formatValue(value: unknown) {
 
 export default function PumpfunWatchlistSpreadsheet() {
   const { toast } = useToast();
-  const [rows, setRows] = useState<WatchlistRow[] | null>(null);
+  const [rows, setRows] = useState<AugmentedRow[] | null>(null);
   const [query, setQuery] = useState('');
-  const [sortKey, setSortKey] = useState<keyof WatchlistRow | null>(null);
+  const [sortKey, setSortKey] = useState<keyof AugmentedRow | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(0);
   // Multi-select filters. Empty Set = "all".
@@ -59,6 +118,7 @@ export default function PumpfunWatchlistSpreadsheet() {
   // Default: hide 'rejected' — they're filtered out for autopsy purposes anyway.
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['rejected']));
   // statusFilter holds EXCLUDED statuses (toggle = exclude/include).
+  const [quickFilters, setQuickFilters] = useState<Set<QuickFilter>>(new Set());
   const topScrollRef = useRef<HTMLDivElement>(null);
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const tableInnerRef = useRef<HTMLDivElement>(null);
@@ -88,7 +148,80 @@ export default function PumpfunWatchlistSpreadsheet() {
       if (batch.length < PAGE_SIZE) break;
     }
 
-    setRows(collected);
+    // Hydrate with derived data from sibling tables so the table actually
+    // shows the decision-driving values (holders/grade from snapshots, posted
+    // status from seen_tokens, ATH from token_lifecycle, mesh/xpost state
+    // from funnel_feed_discoveries).
+    const mints = collected.map((r) => r.token_mint);
+    const derived = new Map<string, DerivedRow>();
+    if (mints.length > 0) {
+      // Chunked IN queries to avoid URL-length limits.
+      const chunks: string[][] = [];
+      for (let i = 0; i < mints.length; i += 500) chunks.push(mints.slice(i, i + 500));
+
+      for (const chunk of chunks) {
+        const [snapsRes, seenRes, lcRes, discRes] = await Promise.all([
+          supabase
+            .from('token_health_snapshots')
+            .select('token_mint, total_holders, real_holders, health_grade, health_score, top10_pct, dust_percentage, snapshot_hour')
+            .in('token_mint', chunk)
+            .order('snapshot_hour', { ascending: false }),
+          supabase
+            .from('holders_intel_seen_tokens')
+            .select('token_mint, was_posted, times_posted, health_grade, market_cap_at_discovery')
+            .in('token_mint', chunk),
+          supabase
+            .from('token_lifecycle')
+            .select('token_mint, ath_24h_usd, autopsy_at, death_cause')
+            .in('token_mint', chunk),
+          supabase
+            .from('funnel_feed_discoveries')
+            .select('token_mint, mesh_status, watchlist_status, xpost_status, discovered_at, funnel_feed_sources(source_name)')
+            .in('token_mint', chunk)
+            .order('discovered_at', { ascending: false }),
+        ]);
+
+        for (const s of (snapsRes.data ?? []) as any[]) {
+          const d = derived.get(s.token_mint) ?? {};
+          if (d.snap_at) continue; // already have newest
+          d.snap_total_holders = s.total_holders;
+          d.snap_real_holders = s.real_holders;
+          d.snap_health_grade = s.health_grade;
+          d.snap_health_score = s.health_score;
+          d.snap_top10_pct = s.top10_pct;
+          d.snap_dust_pct = s.dust_percentage;
+          d.snap_at = s.snapshot_hour;
+          derived.set(s.token_mint, d);
+        }
+        for (const s of (seenRes.data ?? []) as any[]) {
+          const d = derived.get(s.token_mint) ?? {};
+          d.seen_was_posted = s.was_posted;
+          d.seen_times_posted = s.times_posted;
+          d.seen_health_grade = s.health_grade;
+          d.seen_mcap_at_discovery = s.market_cap_at_discovery;
+          derived.set(s.token_mint, d);
+        }
+        for (const s of (lcRes.data ?? []) as any[]) {
+          const d = derived.get(s.token_mint) ?? {};
+          d.lc_ath_24h_usd = s.ath_24h_usd;
+          d.lc_autopsy_at = s.autopsy_at;
+          d.lc_death_cause = s.death_cause;
+          derived.set(s.token_mint, d);
+        }
+        for (const s of (discRes.data ?? []) as any[]) {
+          const d = derived.get(s.token_mint) ?? {};
+          if (d.disc_mesh_status) continue;
+          d.disc_mesh_status = s.mesh_status;
+          d.disc_watchlist_status = s.watchlist_status;
+          d.disc_xpost_status = s.xpost_status;
+          d.disc_source_name = s.funnel_feed_sources?.source_name ?? null;
+          derived.set(s.token_mint, d);
+        }
+      }
+    }
+
+    const augmented: AugmentedRow[] = collected.map((r) => ({ ...r, ...(derived.get(r.token_mint) ?? {}) }));
+    setRows(augmented);
   }, [toast]);
 
   useEffect(() => { load(); }, [load]);
@@ -131,7 +264,21 @@ export default function PumpfunWatchlistSpreadsheet() {
 
   const columns = useMemo(() => {
     const first = rows?.[0];
-    return first ? (Object.keys(first) as Array<keyof WatchlistRow>) : [];
+    if (!first) return [] as Array<keyof AugmentedRow>;
+    // Show derived decision columns first, then the raw watchlist columns,
+    // skipping internal helpers and any duplicate keys.
+    const seen = new Set<string>();
+    const ordered: Array<keyof AugmentedRow> = [];
+    for (const k of DERIVED_KEYS) {
+      if (!seen.has(k as string)) { seen.add(k as string); ordered.push(k as keyof AugmentedRow); }
+    }
+    for (const k of Object.keys(first) as Array<keyof AugmentedRow>) {
+      if ((k as string) === '__decision_score') continue;
+      if (seen.has(k as string)) continue;
+      seen.add(k as string);
+      ordered.push(k);
+    }
+    return ordered;
   }, [rows]);
 
   const sortableColumns = useMemo(() => {
@@ -155,17 +302,33 @@ export default function PumpfunWatchlistSpreadsheet() {
     const statusScoped = statusFilter.size === 0
       ? sourceScoped
       : sourceScoped.filter((r) => !statusFilter.has((r as any).status ?? '(none)'));
+    const quickScoped = statusScoped.filter((r) => {
+      if (quickFilters.has('funnel_only') && !((r.source ?? '').startsWith('funnel_feed:'))) return false;
+      if (quickFilters.has('has_snapshot') && r.snap_at == null) return false;
+      if (quickFilters.has('posted_telegram') && !r.seen_was_posted) return false;
+      if (quickFilters.has('missing_price_ath') && (r.price_usd != null || r.price_ath_usd != null || r.lc_ath_24h_usd != null)) return false;
+      if (quickFilters.has('autopsy_candidates')) {
+        const dead = (r as any).status === 'dead' || r.lc_autopsy_at != null;
+        const lowMcap = (r.market_cap_usd ?? 0) > 0 && (r.market_cap_usd ?? 0) < 1000;
+        if (!dead && !lowMcap) return false;
+      }
+      if (quickFilters.has('inserted_only')) {
+        const enriched = r.snap_at != null || r.seen_was_posted === true || (r.holder_count ?? 0) > 0;
+        if (enriched) return false;
+      }
+      return true;
+    });
     const base = !needle
-      ? statusScoped
-      : statusScoped.filter((row) =>
+      ? quickScoped
+      : quickScoped.filter((row) =>
           Object.values(row).some((value) => String(value ?? '').toLowerCase().includes(needle))
         );
     if (!sortKey) return base;
     const dir = sortDir === 'asc' ? 1 : -1;
     return [...base].sort((a, b) => compareValues(a[sortKey], b[sortKey]) * dir);
-  }, [rows, query, sortKey, sortDir, sourceFilter, statusFilter]);
+  }, [rows, query, sortKey, sortDir, sourceFilter, statusFilter, quickFilters]);
 
-  useEffect(() => { setPage(0); }, [query, sortKey, sortDir, sourceFilter, statusFilter]);
+  useEffect(() => { setPage(0); }, [query, sortKey, sortDir, sourceFilter, statusFilter, quickFilters]);
 
   const sourceCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -202,6 +365,14 @@ export default function PumpfunWatchlistSpreadsheet() {
     });
   }
 
+  function toggleQuickFilter(key: QuickFilter) {
+    setQuickFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
   const totalPages = filteredRows ? Math.max(1, Math.ceil(filteredRows.length / ROWS_PER_PAGE)) : 1;
   const pageRows = useMemo(() => {
     if (!filteredRows) return null;
@@ -209,7 +380,7 @@ export default function PumpfunWatchlistSpreadsheet() {
     return filteredRows.slice(start, start + ROWS_PER_PAGE);
   }, [filteredRows, page]);
 
-  function toggleSort(col: keyof WatchlistRow) {
+  function toggleSort(col: keyof AugmentedRow) {
     if (!sortableColumns.has(String(col))) return;
     if (sortKey === col) {
       setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
