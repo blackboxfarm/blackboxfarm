@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import AutopsyCandidateRow, { type Candidate } from './AutopsyCandidateRow';
 import DeathTaxonomyModal from './DeathTaxonomyModal';
+import PumpfunWatchlistSpreadsheet from './PumpfunWatchlistSpreadsheet';
 
 type SortKey =
   | 'score_desc'
@@ -52,6 +53,7 @@ export default function AutopsyQueueBody() {
   const [busy, setBusy] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'A' | 'B' | 'C'>('all');
   const [sortKey, setSortKey] = useState<SortKey>('score_desc');
+  const [lastAutoRunAt, setLastAutoRunAt] = useState<string | null>(null);
 
   async function load() {
     setItems(null);
@@ -74,6 +76,27 @@ export default function AutopsyQueueBody() {
   }
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [filter]);
+  useEffect(() => {
+    const interval = window.setInterval(load, 60_000);
+    return () => window.clearInterval(interval);
+    /* eslint-disable-next-line */
+  }, [filter]);
+
+  useEffect(() => {
+    const key = 'autopsy-lamb-funnel-last-run';
+    const last = Number(window.localStorage.getItem(key) ?? 0);
+    if (Date.now() - last < 30 * 60 * 1000) {
+      setLastAutoRunAt(new Date(last).toISOString());
+      return;
+    }
+    window.localStorage.setItem(key, String(Date.now()));
+    setLastAutoRunAt(new Date().toISOString());
+    supabase.functions.invoke('autopsy-funnel-feeder', { body: { limit: 200, source: 'autopsy-queue-auto' } })
+      .then(({ error }) => {
+        if (!error) load();
+      });
+    /* eslint-disable-next-line */
+  }, []);
 
   const sorted = useMemo(() => items ? applySort(items, sortKey) : null, [items, sortKey]);
 
@@ -137,7 +160,8 @@ export default function AutopsyQueueBody() {
             <Skull className="h-5 w-5 text-destructive" /> Autopsy Queue — Lambs
           </h3>
           <p className="text-sm text-muted-foreground mt-1">
-            Pump.fun curve-death candidates only · peak curve ≥75% and &lt;100% · never graduated · ATH mcap is context only.
+            Pump.fun curve-death candidates only · peak curve ≥75% and &lt;100% · never graduated · ATH mcap is context only · auto-refreshes every minute.
+            {lastAutoRunAt ? ` Last processor check ${format(new Date(lastAutoRunAt), 'MMM d HH:mm')}.` : ''}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -191,6 +215,8 @@ export default function AutopsyQueueBody() {
           />
         ))}
       </div>
+
+      <PumpfunWatchlistSpreadsheet />
     </div>
   );
 }
