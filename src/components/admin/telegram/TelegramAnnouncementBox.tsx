@@ -168,8 +168,19 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
 
   const toggleOne = (key: AudienceKey) => {
     const next = new Set(selectedAudiences);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
+    if (next.has(key)) {
+      next.delete(key);
+    } else {
+      // GLOBAL is exclusive — selecting it clears everything else, and selecting
+      // anything else clears GLOBAL.
+      if (key === 'global') {
+        next.clear();
+        next.add('global');
+      } else {
+        next.delete('global');
+        next.add(key);
+      }
+    }
     setSelectedAudiences(next);
   };
 
