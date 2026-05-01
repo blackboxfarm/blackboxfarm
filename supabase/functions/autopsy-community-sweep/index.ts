@@ -137,18 +137,23 @@ async function scrapeCommunityPosts(communityId: string, apifyKey: string, fnNam
       body: JSON.stringify({
         communityId,
         searchType: 'Default',
-        rankingMode: 'RelevanceRecencyLikes',
+        rankingMode: 'Recency',
         maxResults: 80,
       }),
     },
   );
   await logger.complete(res.status);
   if (!res.ok) {
-    console.warn(`[autopsy-community-sweep] community scrape ${res.status}`);
+    const errText = await res.text().catch(() => '');
+    console.warn(`[autopsy-community-sweep] community scrape ${res.status}: ${errText.slice(0, 500)}`);
     return [];
   }
   const tweets = await res.json();
-  if (!Array.isArray(tweets)) return [];
+  if (!Array.isArray(tweets)) {
+    console.warn(`[autopsy-community-sweep] non-array response, keys=${Object.keys(tweets || {}).join(',')}`);
+    return [];
+  }
+  console.log(`[autopsy-community-sweep] raw apify returned ${tweets.length} items; sample keys=${tweets[0] ? Object.keys(tweets[0]).join(',') : 'none'}`);
   return tweets
     .map((tweet) => normalizeTweet({
       ...tweet,
