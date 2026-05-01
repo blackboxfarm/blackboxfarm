@@ -224,23 +224,8 @@ export default function AllDrafts() {
       </div>
       {rows.map(r => (
         <Card key={r.id} className="p-3 space-y-3">
-          {/* Header row: title + status pills (left) · actions (right) */}
-          <div className="flex items-start justify-between gap-3 flex-wrap">
-            <div className="min-w-0 flex-1 flex items-center gap-2 flex-wrap">
-              <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="font-semibold">{r.ticker ? `$${r.ticker}` : <span className="italic text-muted-foreground">no ticker</span>}</span>
-              <Badge variant={r.status === 'approved' ? 'default' : r.status === 'failed' ? 'destructive' : r.status === 'drafted' ? 'secondary' : 'outline'} className="text-[10px]">
-                {r.status}{r.current_version && r.current_version > 1 ? ` v${r.current_version}` : ''}
-              </Badge>
-              {r.tier && <Badge variant="outline" className="text-[10px]">Tier {r.tier}</Badge>}
-              {r.source_feed && <Badge variant="outline" className="text-[10px]">{r.source_feed}</Badge>}
-              {r.death_cause && <Badge variant="outline" className="text-[10px]">{r.death_cause}</Badge>}
-              {typeof r.social_completeness === 'number' && r.social_completeness > 0 && (
-                <Badge variant="outline" className="text-[10px]">socials {r.social_completeness}/6</Badge>
-              )}
-              {r.manual_tg_join_completed && <Badge variant="outline" className="text-[10px]">TG✓</Badge>}
-            </div>
-            <div className="flex gap-2 flex-wrap shrink-0">
+          {/* Action row — full width, top */}
+          <div className="flex gap-2 flex-wrap justify-end">
               {r.tg_url && (
                 <Button size="sm" variant="ghost" asChild>
                   <a href={r.tg_url} target="_blank" rel="noreferrer"><Send className="h-3 w-3 mr-1" /> Open TG</a>
@@ -298,7 +283,22 @@ export default function AllDrafts() {
                   <RefreshCw className="h-3 w-3 mr-1" /> Retry
                 </Button>
               )}
-            </div>
+          </div>
+
+          {/* Title + status pills — full width, no compression */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="font-semibold whitespace-nowrap">{r.ticker ? `$${r.ticker}` : <span className="italic text-muted-foreground">no ticker</span>}</span>
+            <Badge variant={r.status === 'approved' ? 'default' : r.status === 'failed' ? 'destructive' : r.status === 'drafted' ? 'secondary' : 'outline'} className="text-[10px] whitespace-nowrap">
+              {r.status}{r.current_version && r.current_version > 1 ? ` v${r.current_version}` : ''}
+            </Badge>
+            {r.tier && <Badge variant="outline" className="text-[10px] whitespace-nowrap">Tier {r.tier}</Badge>}
+            {r.source_feed && <Badge variant="outline" className="text-[10px] whitespace-nowrap">{r.source_feed}</Badge>}
+            {r.death_cause && <Badge variant="outline" className="text-[10px] whitespace-nowrap">{r.death_cause}</Badge>}
+            {typeof r.social_completeness === 'number' && r.social_completeness > 0 && (
+              <Badge variant="outline" className="text-[10px] whitespace-nowrap">socials {r.social_completeness}/6</Badge>
+            )}
+            {r.manual_tg_join_completed && <Badge variant="outline" className="text-[10px] whitespace-nowrap">TG✓</Badge>}
           </div>
 
           {/* Intel row: boost / vultures / dissent — full width, breathing room */}
