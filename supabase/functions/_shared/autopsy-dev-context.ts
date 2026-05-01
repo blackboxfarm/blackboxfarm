@@ -151,5 +151,44 @@ export async function buildDevDossier(
   else if (dossier.reputation_verdict === 'clean' && priors.length === 0) ev.push('Clean dossier — first traceable token from this wallet/cluster.');
   dossier.primary_evidence_strings = ev;
 
+  // ── Cluster lifetime marketing spend (boosts + dex paid) ───
+  try {
+    const clusterMints = (dossier.prior_tokens ?? []).map(p => p.mint).filter(Boolean);
+    if (clusterMints.length > 0) {
+      const [{ data: bh }, { data: po }] = await Promise.all([
+        supabase.from('token_boost_history')
+          .select('token_mint, total_amount')
+          .in('token_mint', clusterMints),
+        supabase.from('token_paid_orders')
+          .select('token_mint, order_type, status')
+          .in('token_mint', clusterMints)
+          .eq('status', 'approved'),
+      ]);
+      const peakByMint = new Map<string, number>();
+      for (const r of bh ?? []) {
+        const m = r.token_mint as string;
+        const v = Number(r.total_amount ?? 0);
+        if (!peakByMint.has(m) || v > (peakByMint.get(m) ?? 0)) peakByMint.set(m, v);
+      }
+      const dexPaidMints = new Set(
+        (po ?? [])
+          .filter((o: any) => o.order_type === 'tokenProfile' || o.order_type === 'communityTakeover')
+          .map((o: any) => o.token_mint),
+      );
+      const lifetimePeak = Array.from(peakByMint.values()).reduce((a, b) => a + b, 0);
+      dossier.cluster_marketing_spend = {
+        lifetime_boost_peak: lifetimePeak,
+        tokens_with_boosts: Array.from(peakByMint.values()).filter(v => v > 0).length,
+        tokens_with_dex_paid: dexPaidMints.size,
+      };
+      if (lifetimePeak > 0) {
+        dossier.primary_evidence_strings = [
+          ...(dossier.primary_evidence_strings ?? []),
+          `Cluster has invested in marketing across prior tokens: peak boost tier sum ${lifetimePeak}, ${dexPaidMints.size} dex-paid token(s).`,
+        ];
+      }
+    }
+  } catch (e) { console.warn('[dev-context] marketing spend rollup failed:', (e as Error).message); }
+
   return dossier;
 }
