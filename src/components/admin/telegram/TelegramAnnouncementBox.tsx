@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Megaphone, Send, Loader2, AlertTriangle, UserCheck, CreditCard, Gift, UserX, History, SquarePen, ChevronDown, ChevronUp, RotateCw, ImagePlus, X, Globe, Crop as CropIcon, ImageIcon } from 'lucide-react';
+import { Megaphone, Send, Loader2, AlertTriangle, UserCheck, CreditCard, Gift, UserX, History, SquarePen, ChevronDown, ChevronUp, RotateCw, X, Globe, Crop as CropIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
 import { GalleryPickerButton } from '@/components/admin/social/GalleryPickerButton';
