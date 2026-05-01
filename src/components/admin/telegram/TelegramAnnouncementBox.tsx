@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Megaphone, Send, Loader2, AlertTriangle, UserCheck, CreditCard, Gift, UserX, History, SquarePen, ChevronDown, ChevronUp, RotateCw } from 'lucide-react';
+import { Megaphone, Send, Loader2, AlertTriangle, UserCheck, CreditCard, Gift, UserX, History, SquarePen, ChevronDown, ChevronUp, RotateCw, ImagePlus, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface TelegramAnnouncementBoxProps {
@@ -52,6 +52,42 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
   const [recipients, setRecipients] = useState<Record<string, RecipientEntry[]>>({});
   const [loadingRecipients, setLoadingRecipients] = useState<string | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleImagePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-picking same file
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please pick an image file');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be under 5MB (Telegram URL limit)');
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from('announcement-images')
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from('announcement-images').getPublicUrl(path);
+      setImageUrl(pub.publicUrl);
+      toast.success('Image attached');
+    } catch (err: any) {
+      console.error('Image upload failed:', err);
+      toast.error(err.message || 'Image upload failed');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const clearImage = () => setImageUrl(null);
 
   const handleResendToNew = async (entry: LogEntry) => {
     setResendingId(entry.id);
@@ -199,6 +235,7 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
           message: message.trim(),
           audiences: audienceList,
           testOnly,
+          image_url: imageUrl,
         },
       });
 
