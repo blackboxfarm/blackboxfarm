@@ -14168,6 +14168,7 @@ export type Database = {
           created_at: string
           failed_count: number
           id: string
+          image_url: string | null
           message_text: string
           resend_of_id: string | null
           sent_by: string | null
@@ -14178,6 +14179,7 @@ export type Database = {
           created_at?: string
           failed_count?: number
           id?: string
+          image_url?: string | null
           message_text: string
           resend_of_id?: string | null
           sent_by?: string | null
@@ -14188,6 +14190,7 @@ export type Database = {
           created_at?: string
           failed_count?: number
           id?: string
+          image_url?: string | null
           message_text?: string
           resend_of_id?: string | null
           sent_by?: string | null
