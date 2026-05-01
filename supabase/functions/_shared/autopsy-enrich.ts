@@ -49,6 +49,19 @@ export interface EnrichResult {
     mod_activity_seen: boolean | null;
     sampled_posts: Array<{ handle: string; vulture_kind: string; confidence: number; text: string; scam_urls: string[]; post_url: string | null }>;
   } | null;
+  dissent_summary?: {
+    community_id: string | null;
+    posts_scanned: number;
+    dissent_score: number;
+    riot_threshold_met: boolean;
+    counts: Record<string, number>;
+    top_quotes: Array<{ kind: string; handle: string; quote: string; conf: number; post_url: string | null; posted_at: string | null }>;
+    dev_handle: string | null;
+    dev_last_post_in_community_at: string | null;
+    dev_last_post_anywhere_at: string | null;
+    days_since_dev_post_in_community: number | null;
+    days_since_dev_post_anywhere: number | null;
+  } | null;
 }
 
 export async function enrichCandidate(
@@ -177,6 +190,20 @@ export async function enrichCandidate(
     if (vBlob?.payload) vultureSummary = vBlob.payload as any;
   } catch (e) { console.warn('[autopsy-enrich] vulture blob read failed:', (e as Error).message); }
 
+  // ── Community dissent summary (latest blob) ─────────────────
+  let dissentSummary: EnrichResult['dissent_summary'] = null;
+  try {
+    const { data: dBlob } = await supabase
+      .from('autopsy_evidence_blobs')
+      .select('payload, captured_at')
+      .eq('token_mint', tokenMint)
+      .eq('kind', 'community_dissent')
+      .order('captured_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (dBlob?.payload) dissentSummary = dBlob.payload as any;
+  } catch (e) { console.warn('[autopsy-enrich] dissent blob read failed:', (e as Error).message); }
+
   return {
     social_completeness,
     x_community_member_count: xMembers,
@@ -190,5 +217,6 @@ export async function enrichCandidate(
     boost_timeline: boostTimeline,
     paid_orders: paidOrders,
     vulture_summary: vultureSummary,
+    dissent_summary: dissentSummary,
   };
 }

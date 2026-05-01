@@ -1,6 +1,20 @@
 
 # Vulture Detection v1 — X Community Phishing Sweep
 
+## v2 (current) — Community Sweep, multi-lens
+
+`autopsy-community-sweep` does ONE Apify scrape and runs lenses in parallel:
+- vulture lens (existing) — writes vulture_sightings + vulture_accounts + evidence blob `vulture_sweep`.
+- dissent lens (new) — writes community_dissent_signals + evidence blob `community_dissent` (counts of absent_dev / no_marketing / no_creator_rewards / no_communication / demanding_action / capitulation; dissent_score 0–100; riot_threshold_met when score ≥ 60).
+
+Also scrapes the dev's main X timeline (top 20 posts) so we expose "days since dev posted in community" and "days since dev posted anywhere on X".
+
+`autopsy-vulture-sweep` is now a thin alias forwarding to community-sweep with `lenses=['vulture']` for back-compat.
+
+Verbatim member quotes live in `community_dissent_signals` and are admin-only. The autopsy report cites COUNTS publicly, never raw quotes. The raw scrape is also persisted (kind=`community_scrape`) so future lenses can plug in without re-scraping.
+
+---
+
 ## Concept (your words, codified)
 
 A "Vulture" = an X account that posts in a dying/dead token's X Community trying to lure leftover holders to fake pump.fun live streams or lookalike domains (e.g. `pumpem.fun`, ASCII-spoofed URLs) to phish wallet creds. We want to:

@@ -3521,6 +3521,48 @@ export type Database = {
           },
         ]
       }
+      community_dissent_signals: {
+        Row: {
+          ai_confidence: number | null
+          candidate_id: string | null
+          captured_at: string
+          community_id: string | null
+          handle: string | null
+          id: string
+          post_url: string | null
+          posted_at: string | null
+          quote: string | null
+          signal_kind: string
+          token_mint: string | null
+        }
+        Insert: {
+          ai_confidence?: number | null
+          candidate_id?: string | null
+          captured_at?: string
+          community_id?: string | null
+          handle?: string | null
+          id?: string
+          post_url?: string | null
+          posted_at?: string | null
+          quote?: string | null
+          signal_kind: string
+          token_mint?: string | null
+        }
+        Update: {
+          ai_confidence?: number | null
+          candidate_id?: string | null
+          captured_at?: string
+          community_id?: string | null
+          handle?: string | null
+          id?: string
+          post_url?: string | null
+          posted_at?: string | null
+          quote?: string | null
+          signal_kind?: string
+          token_mint?: string | null
+        }
+        Relationships: []
+      }
       community_follow_targets: {
         Row: {
           community_id: string
