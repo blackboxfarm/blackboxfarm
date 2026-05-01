@@ -221,6 +221,19 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         });
       } catch (e) { console.warn('[autopsy-writer] evidence interpret skipped:', (e as Error).message); }
 
+      // Trigger X-Community vulture sweep (best effort — populates vulture_sightings
+      // and an autopsy_evidence_blobs row of kind='vulture_sweep' that enrichCandidate
+      // will pick up on the next read).
+      try {
+        await supabase.functions.invoke('autopsy-vulture-sweep', {
+          body: { candidate_id: c.id, token_mint: c.token_mint, force: isRegenerate },
+        });
+        // Re-run enrichment so the freshly written vulture_summary is available
+        // to the prompt below.
+        const refreshed = await enrichCandidate(supabase, c.token_mint, creatorWallet);
+        Object.assign(enrichment, refreshed);
+      } catch (e) { console.warn('[autopsy-writer] vulture sweep skipped:', (e as Error).message); }
+
       const { data: blobs } = await supabase
         .from('autopsy_evidence_blobs')
         .select('kind, payload, captured_at')
