@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ExternalLink, RefreshCw, FileText, AlertTriangle, Send, Search, Rocket } from 'lucide-react';
+import { ExternalLink, RefreshCw, FileText, AlertTriangle, Send, Search, Rocket, Skull } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
@@ -31,6 +31,10 @@ type RowWithTg = Row & {
   current_version?: number | null;
   boost_peak?: number | null;
   boost_events?: number | null;
+  vulture_count?: number | null;
+  vulture_swept_at?: string | null;
+  vulture_handles?: string[];
+  vulture_scam_urls?: string[];
 };
 
 /**
@@ -70,6 +74,26 @@ export default function AllDrafts() {
     const { data: boosts } = mints.length
       ? await supabase.from('token_boost_history').select('token_mint, total_amount, delta_amount').in('token_mint', mints)
       : { data: [] as any[] };
+    // Latest vulture_sweep blob per candidate
+    const { data: vBlobs } = candidateIds.length
+      ? await supabase
+          .from('autopsy_evidence_blobs')
+          .select('candidate_id, payload, captured_at')
+          .in('candidate_id', candidateIds)
+          .eq('kind', 'vulture_sweep')
+          .order('captured_at', { ascending: false })
+      : { data: [] as any[] };
+    const vultureByCand = new Map<string, { count: number; at: string; handles: string[]; scam_urls: string[] }>();
+    for (const v of (vBlobs ?? []) as any[]) {
+      if (vultureByCand.has(v.candidate_id)) continue; // first row per cand = latest
+      const p = v.payload || {};
+      vultureByCand.set(v.candidate_id, {
+        count: Number(p.vulture_count ?? 0),
+        at: v.captured_at,
+        handles: Array.isArray(p.vulture_handles) ? p.vulture_handles : [],
+        scam_urls: Array.isArray(p.scam_urls) ? p.scam_urls : [],
+      });
+    }
     const tgByMint = new Map<string, string>();
     for (const s of (socials ?? [])) tgByMint.set(s.token_mint, s.url);
     const versionByCand = new Map<string, number>();
@@ -88,6 +112,10 @@ export default function AllDrafts() {
       current_version: versionByCand.get(r.id) ?? null,
       boost_peak: peakByMint.get(r.token_mint) ?? null,
       boost_events: eventsByMint.get(r.token_mint) ?? null,
+      vulture_count: vultureByCand.get(r.id)?.count ?? null,
+      vulture_swept_at: vultureByCand.get(r.id)?.at ?? null,
+      vulture_handles: vultureByCand.get(r.id)?.handles ?? [],
+      vulture_scam_urls: vultureByCand.get(r.id)?.scam_urls ?? [],
     })));
   }
 
@@ -116,6 +144,24 @@ export default function AllDrafts() {
     setBusy(null);
     if (error) toast({ title: 'TG scrape failed', description: error.message, variant: 'destructive' });
     else { toast({ title: 'TG scrape captured', description: 'Re-generate to use the new evidence.' }); load(); }
+  }
+
+  async function vultureSweep(r: RowWithTg) {
+    setBusy(r.id);
+    const { data, error } = await supabase.functions.invoke('autopsy-vulture-sweep', {
+      body: { candidate_id: r.id, token_mint: r.token_mint, force: true },
+    });
+    setBusy(null);
+    if (error) {
+      toast({ title: 'Vulture sweep failed', description: error.message, variant: 'destructive' });
+      return;
+    }
+    const count = (data as any)?.vulture_count ?? 0;
+    toast({
+      title: `Vulture sweep complete — ${count} flagged`,
+      description: count > 0 ? 'Re-generate to include in the report.' : 'No vultures detected.',
+    });
+    load();
   }
 
   async function approve(r: RowWithTg) {
@@ -166,6 +212,16 @@ export default function AllDrafts() {
                     {r.boost_events ? ` · ${r.boost_events} events` : ''}
                   </Badge>
                 )}
+                {typeof r.vulture_count === 'number' && r.vulture_count > 0 && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] border-red-500/60 text-red-600 dark:text-red-400"
+                    title={(r.vulture_handles ?? []).slice(0, 10).map(h => `@${h}`).join(', ')}
+                  >
+                    <Skull className="h-2.5 w-2.5 mr-1" />{r.vulture_count} vultures
+                    {(r.vulture_scam_urls?.length ?? 0) > 0 ? ` · ${r.vulture_scam_urls!.length} scam URLs` : ''}
+                  </Badge>
+                )}
               </div>
               <div className="text-[11px] text-muted-foreground mt-1 font-mono truncate">{r.token_mint}</div>
               <div className="text-[10px] text-muted-foreground mt-1">
@@ -191,6 +247,16 @@ export default function AllDrafts() {
                   <Search className="h-3 w-3 mr-1" /> I'm in — deep scrape
                 </Button>
               )}
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy === r.id}
+                onClick={() => vultureSweep(r)}
+                className={r.vulture_swept_at ? 'border-red-500/40' : ''}
+              >
+                <Skull className="h-3 w-3 mr-1" />
+                {r.vulture_swept_at ? 'Re-sweep vultures' : 'Sweep vultures'}
+              </Button>
               {r.published_slug && (
                 <Button size="sm" variant="outline" asChild>
                   <Link to={`/autopsy/${r.published_slug}`} target="_blank"><ExternalLink className="h-3 w-3 mr-1" /> View draft</Link>
