@@ -339,10 +339,13 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
                   Only Notify @system_reset
                 </span>
               </label>
-              <Button size="sm" onClick={handleSend} disabled={isSending || !message.trim()} className="gap-1">
-                {isSending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                Send Message
-              </Button>
+              <div className="flex items-center gap-2">
+                <EligibleBadge count={eligibleCount} loading={countingEligible} />
+                <Button size="sm" onClick={handleSend} disabled={isSending || !message.trim()} className="gap-1">
+                  {isSending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                  Send Message
+                </Button>
+              </div>
             </div>
             {lastResult && (
               <div className="text-xs text-muted-foreground flex gap-3 pt-1">
@@ -426,15 +429,18 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
                   Only Notify @system_reset
                 </span>
               </label>
-              <Button
-                size="sm"
-                onClick={handleSend}
-                disabled={isSending || !message.trim() || (!testOnly && selectedAudiences.size === 0)}
-                className="gap-1"
-              >
-                {isSending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                Send Message
-              </Button>
+              <div className="flex items-center gap-2">
+                <EligibleBadge count={eligibleCount} loading={countingEligible} />
+                <Button
+                  size="sm"
+                  onClick={handleSend}
+                  disabled={isSending || !message.trim() || (!testOnly && selectedAudiences.size === 0)}
+                  className="gap-1"
+                >
+                  {isSending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                  Send Message
+                </Button>
+              </div>
             </div>
 
             {lastResult && (
