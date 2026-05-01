@@ -262,9 +262,22 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
       const confidence = causeId === freshClass.cause ? freshClass.confidence : (c.death_confidence ?? freshClass.confidence ?? 30);
       const matchedSignals = causeId === freshClass.cause && freshClass.matchedSignals?.length ? freshClass.matchedSignals : (c.matched_signals ?? []);
 
-      // Persist enrichment + hydrated facts on the candidate so the UI and next run see them
+      // Persist hydrated facts on the candidate so the UI and next run see them.
+      // Only write columns that actually exist on autopsy_candidates — the rest of
+      // the enrichment object (vulture_summary, dissent_summary, paid_orders, etc.)
+      // lives in autopsy_evidence_blobs and is read back via enrichCandidate().
       await assertUpdate(supabase.from('autopsy_candidates').update({
-        ...enrichment,
+        // enrichment fields that ARE columns on autopsy_candidates
+        social_completeness: enrichment.social_completeness,
+        x_community_member_count: enrichment.x_community_member_count,
+        telegram_subscriber_count: enrichment.telegram_subscriber_count,
+        discord_present: enrichment.discord_present,
+        youtube_url: enrichment.youtube_url,
+        boosts_paid_usd: enrichment.boosts_paid_usd,
+        dex_paid: enrichment.dex_paid,
+        holders_at_ath: enrichment.holders_at_ath,
+        dev_holding_pct_at_death: enrichment.dev_holding_pct_at_death,
+        // hydrated facts
         dev_dossier: dossier,
         death_cause: causeId,
         death_intent: causeDef.intent,

@@ -6,16 +6,17 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Megaphone, Send, Loader2, AlertTriangle, UserCheck, CreditCard, Gift, UserX, History, SquarePen, ChevronDown, ChevronUp, RotateCw, ImagePlus, X } from 'lucide-react';
+import { Megaphone, Send, Loader2, AlertTriangle, UserCheck, CreditCard, Gift, UserX, History, SquarePen, ChevronDown, ChevronUp, RotateCw, ImagePlus, X, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface TelegramAnnouncementBoxProps {
   audience: 'accounts' | 'hosted';
 }
 
-type AudienceKey = 'all_registered' | 'subscribers_only' | 'free_only' | 'unregistered';
+type AudienceKey = 'global' | 'all_registered' | 'subscribers_only' | 'free_only' | 'unregistered';
 
 const AUDIENCE_OPTIONS: { value: AudienceKey; label: string; icon: React.ReactNode; desc: string }[] = [
+  { value: 'global', label: 'GLOBAL — every DM user', icon: <Globe className="w-3 h-3" />, desc: 'Every TG user who ever DM\'d the bot (hosts + subs + free + unregistered). Overrides other selections.' },
   { value: 'all_registered', label: 'All Registered', icon: <UserCheck className="w-3 h-3" />, desc: 'All users with a web account' },
   { value: 'subscribers_only', label: 'Subscribers', icon: <CreditCard className="w-3 h-3" />, desc: 'Paid/subscribed users only' },
   { value: 'free_only', label: 'Free Users', icon: <Gift className="w-3 h-3" />, desc: 'Registered but not subscribed' },
@@ -55,6 +56,36 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [eligibleCount, setEligibleCount] = useState<number | null>(null);
+  const [countingEligible, setCountingEligible] = useState(false);
+
+  // Live recipient count whenever audience selection (or hosted view) changes.
+  useEffect(() => {
+    let cancelled = false;
+    async function run() {
+      const audienceList = audience === 'hosted' ? ['hosted'] : Array.from(selectedAudiences);
+      if (audienceList.length === 0) {
+        setEligibleCount(null);
+        return;
+      }
+      setCountingEligible(true);
+      try {
+        const { data, error } = await supabase.rpc(
+          'count_telegram_announcement_recipients' as any,
+          { p_audiences: audienceList } as any,
+        );
+        if (cancelled) return;
+        if (error) throw error;
+        setEligibleCount(typeof data === 'number' ? data : Number(data ?? 0));
+      } catch (err) {
+        if (!cancelled) setEligibleCount(null);
+      } finally {
+        if (!cancelled) setCountingEligible(false);
+      }
+    }
+    run();
+    return () => { cancelled = true; };
+  }, [selectedAudiences, audience]);
 
   const handleImagePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -137,8 +168,19 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
 
   const toggleOne = (key: AudienceKey) => {
     const next = new Set(selectedAudiences);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
+    if (next.has(key)) {
+      next.delete(key);
+    } else {
+      // GLOBAL is exclusive — selecting it clears everything else, and selecting
+      // anything else clears GLOBAL.
+      if (key === 'global') {
+        next.clear();
+        next.add('global');
+      } else {
+        next.delete('global');
+        next.add(key);
+      }
+    }
     setSelectedAudiences(next);
   };
 
@@ -297,10 +339,13 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
                   Only Notify @system_reset
                 </span>
               </label>
-              <Button size="sm" onClick={handleSend} disabled={isSending || !message.trim()} className="gap-1">
-                {isSending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                Send Message
-              </Button>
+              <div className="flex items-center gap-2">
+                <EligibleBadge count={eligibleCount} loading={countingEligible} />
+                <Button size="sm" onClick={handleSend} disabled={isSending || !message.trim()} className="gap-1">
+                  {isSending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                  Send Message
+                </Button>
+              </div>
             </div>
             {lastResult && (
               <div className="text-xs text-muted-foreground flex gap-3 pt-1">
@@ -384,15 +429,18 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
                   Only Notify @system_reset
                 </span>
               </label>
-              <Button
-                size="sm"
-                onClick={handleSend}
-                disabled={isSending || !message.trim() || (!testOnly && selectedAudiences.size === 0)}
-                className="gap-1"
-              >
-                {isSending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                Send Message
-              </Button>
+              <div className="flex items-center gap-2">
+                <EligibleBadge count={eligibleCount} loading={countingEligible} />
+                <Button
+                  size="sm"
+                  onClick={handleSend}
+                  disabled={isSending || !message.trim() || (!testOnly && selectedAudiences.size === 0)}
+                  className="gap-1"
+                >
+                  {isSending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                  Send Message
+                </Button>
+              </div>
             </div>
 
             {lastResult && (
@@ -532,5 +580,24 @@ function ImageAttacher({
       {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ImagePlus className="w-3 h-3" />}
       {uploading ? 'Uploading…' : 'Attach image (optional)'}
     </Button>
+  );
+}
+
+function EligibleBadge({ count, loading }: { count: number | null; loading: boolean }) {
+  if (loading) {
+    return (
+      <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+        <Loader2 className="w-3 h-3 animate-spin" /> counting…
+      </span>
+    );
+  }
+  if (count === null) {
+    return <span className="text-[10px] text-muted-foreground">— select audience —</span>;
+  }
+  return (
+    <Badge variant="secondary" className="text-[10px] gap-1">
+      <Send className="w-2.5 h-2.5" />
+      → {count.toLocaleString()} recipient{count === 1 ? '' : 's'}
+    </Badge>
   );
 }
