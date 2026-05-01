@@ -49,7 +49,10 @@ type RowWithTg = Row & {
 export default function AllDrafts() {
   const { toast } = useToast();
   const [rows, setRows] = useState<RowWithTg[] | null>(null);
+  // Busy key is `${rowId}:${action}` so only the clicked button spins
   const [busy, setBusy] = useState<string | null>(null);
+  const isBusy = (rowId: string, action: string) => busy === `${rowId}:${action}`;
+  const rowBusy = (rowId: string) => !!busy && busy.startsWith(`${rowId}:`);
 
   async function load() {
     const { data, error } = await supabase
@@ -154,7 +157,7 @@ export default function AllDrafts() {
   useEffect(() => { load(); }, []);
 
   async function retry(r: RowWithTg) {
-    setBusy(r.id);
+    setBusy(`${r.id}:retry`);
     await supabase.from('autopsy_candidates').update({ status: 'pending', status_reason: null }).eq('id', r.id);
     const { error } = await supabase.functions.invoke('autopsy-writer', { body: { candidate_id: r.id } });
     setBusy(null);
@@ -163,7 +166,7 @@ export default function AllDrafts() {
   }
 
   async function regenerate(r: RowWithTg) {
-    setBusy(r.id);
+    setBusy(`${r.id}:regenerate`);
     const { error } = await supabase.functions.invoke('autopsy-writer', { body: { candidate_id: r.id, regenerate: true } });
     setBusy(null);
     if (error) toast({ title: 'Re-generate failed', description: error.message, variant: 'destructive' });
@@ -171,7 +174,7 @@ export default function AllDrafts() {
   }
 
   async function tgDeepScrape(r: RowWithTg) {
-    setBusy(r.id);
+    setBusy(`${r.id}:tgscrape`);
     const { data, error } = await supabase.functions.invoke('autopsy-tg-deep-pull', { body: { candidate_id: r.id } });
     setBusy(null);
     if (error) toast({ title: 'TG scrape failed', description: error.message, variant: 'destructive' });
@@ -179,7 +182,7 @@ export default function AllDrafts() {
   }
 
   async function communitySweep(r: RowWithTg) {
-    setBusy(r.id);
+    setBusy(`${r.id}:sweep`);
     const { data, error } = await supabase.functions.invoke('autopsy-community-sweep', {
       body: { candidate_id: r.id, token_mint: r.token_mint, force: true, lenses: ['vulture', 'dissent'] },
     });
@@ -198,7 +201,7 @@ export default function AllDrafts() {
   }
 
   async function approve(r: RowWithTg) {
-    setBusy(r.id);
+    setBusy(`${r.id}:approve`);
     const { error } = await supabase
       .from('autopsy_candidates')
       .update({ status: 'approved', decided_at: new Date().toISOString() })
@@ -232,21 +235,23 @@ export default function AllDrafts() {
                 </Button>
               )}
               {r.tg_url && (
-                <Button size="sm" variant="outline" disabled={busy === r.id} onClick={() => tgDeepScrape(r)}>
-                  <Search className="h-3 w-3 mr-1" /> I'm in — deep scrape
+                <Button size="sm" variant="outline" disabled={rowBusy(r.id)} onClick={() => tgDeepScrape(r)}>
+                  {isBusy(r.id, 'tgscrape')
+                    ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Scraping…</>
+                    : <><Search className="h-3 w-3 mr-1" /> I'm in — deep scrape</>}
                 </Button>
               )}
               <Button
                 size="sm"
                 variant="outline"
-                disabled={busy === r.id}
+                disabled={rowBusy(r.id)}
                 onClick={() => communitySweep(r)}
                 className={r.vulture_swept_at ? 'border-red-500/40' : ''}
               >
-                {busy === r.id
+                {isBusy(r.id, 'sweep')
                   ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                   : <Skull className="h-3 w-3 mr-1" />}
-                {busy === r.id
+                {isBusy(r.id, 'sweep')
                   ? 'Sweeping…'
                   : (r.vulture_swept_at || r.dissent_swept_at ? 'Re-sweep community' : 'Sweep community')}
               </Button>
@@ -260,16 +265,18 @@ export default function AllDrafts() {
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={busy === r.id}
+                    disabled={rowBusy(r.id)}
                     onClick={() => regenerate(r)}
                     className="border-amber-500 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
                   >
-                    {busy === r.id
+                    {isBusy(r.id, 'regenerate')
                       ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-generating…</>
                       : <><RefreshCw className="h-3 w-3 mr-1" /> Re-generate (replace)</>}
                   </Button>
-                  <Button size="sm" disabled={busy === r.id} onClick={() => approve(r)}>
-                    Approve & Publish
+                  <Button size="sm" disabled={rowBusy(r.id)} onClick={() => approve(r)}>
+                    {isBusy(r.id, 'approve')
+                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Approving…</>
+                      : <>Approve & Publish</>}
                   </Button>
                 </>
               )}
@@ -277,11 +284,11 @@ export default function AllDrafts() {
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={busy === r.id}
+                  disabled={rowBusy(r.id)}
                   onClick={() => regenerate(r)}
                   className="border-amber-500 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
                 >
-                  {busy === r.id
+                  {isBusy(r.id, 'regenerate')
                     ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-generating…</>
                     : <><RefreshCw className="h-3 w-3 mr-1" /> Re-generate (replace)</>}
                 </Button>
@@ -291,16 +298,16 @@ export default function AllDrafts() {
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={busy === r.id}
+                    disabled={rowBusy(r.id)}
                     onClick={() => regenerate(r)}
                     className="border-amber-500 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
                   >
-                    {busy === r.id
+                    {isBusy(r.id, 'regenerate')
                       ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-generating…</>
                       : <><RefreshCw className="h-3 w-3 mr-1" /> Re-generate (replace)</>}
                   </Button>
-                  <Button size="sm" variant="outline" disabled={busy === r.id} onClick={() => retry(r)}>
-                    {busy === r.id
+                  <Button size="sm" variant="outline" disabled={rowBusy(r.id)} onClick={() => retry(r)}>
+                    {isBusy(r.id, 'retry')
                       ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Retrying…</>
                       : <><RefreshCw className="h-3 w-3 mr-1" /> Retry</>}
                   </Button>
