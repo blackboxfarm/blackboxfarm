@@ -132,7 +132,7 @@ Deno.serve(async (req) => {
     }
 
     // ─── Create announcement log entry first ───
-    const { data: logEntry, error: logCreateErr } = await supabase
+    const logEntry = await assertInsert(supabase
       .from("telegram_announcement_log")
       .insert({
         message_text: message,
@@ -143,11 +143,7 @@ Deno.serve(async (req) => {
         image_url: imageUrl,
       })
       .select("id")
-      .single();
-
-    if (logCreateErr) {
-      console.error("[announcement] Failed to create log entry:", logCreateErr);
-    }
+      .single(), "telegram_announcement_log");
 
     const announcementId = logEntry?.id;
 
@@ -190,20 +186,17 @@ Deno.serve(async (req) => {
 
     // Batch insert recipient logs
     if (announcementId && recipientRows.length > 0) {
-      const { error: recipErr } = await supabase
+      await assertInsert(supabase
         .from("telegram_announcement_recipients")
-        .insert(recipientRows);
-      if (recipErr) {
-        console.warn("[announcement] Failed to log recipients:", recipErr);
-      }
+        .insert(recipientRows), "telegram_announcement_recipients");
     }
 
     // Update announcement log with final counts
     if (announcementId) {
-      await supabase
+      await assertUpdate(supabase
         .from("telegram_announcement_log")
         .update({ sent_count: sent, failed_count: failed })
-        .eq("id", announcementId);
+        .eq("id", announcementId), "telegram_announcement_log");
     }
 
     return new Response(
