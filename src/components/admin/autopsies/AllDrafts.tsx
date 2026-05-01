@@ -294,11 +294,11 @@ export default function AllDrafts() {
                 size="sm"
                 variant="outline"
                 disabled={busy === r.id}
-                onClick={() => vultureSweep(r)}
+                onClick={() => communitySweep(r)}
                 className={r.vulture_swept_at ? 'border-red-500/40' : ''}
               >
                 <Skull className="h-3 w-3 mr-1" />
-                {r.vulture_swept_at ? 'Re-sweep vultures' : 'Sweep vultures'}
+                {r.vulture_swept_at || r.dissent_swept_at ? 'Re-sweep community' : 'Sweep community'}
               </Button>
               {r.published_slug && (
                 <Button size="sm" variant="outline" asChild>
