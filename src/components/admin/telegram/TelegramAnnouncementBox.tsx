@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Megaphone, Send, Loader2, AlertTriangle, UserCheck, CreditCard, Gift, UserX, History, SquarePen, ChevronDown, ChevronUp, RotateCw } from 'lucide-react';
+import { Megaphone, Send, Loader2, AlertTriangle, UserCheck, CreditCard, Gift, UserX, History, SquarePen, ChevronDown, ChevronUp, RotateCw, ImagePlus, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface TelegramAnnouncementBoxProps {
@@ -52,6 +52,42 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
   const [recipients, setRecipients] = useState<Record<string, RecipientEntry[]>>({});
   const [loadingRecipients, setLoadingRecipients] = useState<string | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleImagePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-picking same file
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please pick an image file');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be under 5MB (Telegram URL limit)');
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from('announcement-images')
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from('announcement-images').getPublicUrl(path);
+      setImageUrl(pub.publicUrl);
+      toast.success('Image attached');
+    } catch (err: any) {
+      console.error('Image upload failed:', err);
+      toast.error(err.message || 'Image upload failed');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const clearImage = () => setImageUrl(null);
 
   const handleResendToNew = async (entry: LogEntry) => {
     setResendingId(entry.id);
@@ -199,6 +235,7 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
           message: message.trim(),
           audiences: audienceList,
           testOnly,
+          image_url: imageUrl,
         },
       });
 
@@ -238,6 +275,19 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
               onChange={(e) => setMessage(e.target.value)}
               rows={4}
               className="text-sm"
+            />
+            <ImageAttacher
+              imageUrl={imageUrl}
+              uploading={uploadingImage}
+              onPick={() => fileInputRef.current?.click()}
+              onClear={clearImage}
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="hidden"
+              onChange={handleImagePick}
             />
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 text-sm cursor-pointer">
@@ -311,6 +361,19 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
               onChange={(e) => setMessage(e.target.value)}
               rows={4}
               className="text-sm"
+            />
+            <ImageAttacher
+              imageUrl={imageUrl}
+              uploading={uploadingImage}
+              onPick={() => fileInputRef.current?.click()}
+              onClear={clearImage}
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="hidden"
+              onChange={handleImagePick}
             />
 
             <div className="flex items-center justify-between mt-3">
@@ -425,5 +488,49 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
         </Tabs>
       </CardContent>
     </Card>
+  );
+}
+
+function ImageAttacher({
+  imageUrl,
+  uploading,
+  onPick,
+  onClear,
+}: {
+  imageUrl: string | null;
+  uploading: boolean;
+  onPick: () => void;
+  onClear: () => void;
+}) {
+  if (imageUrl) {
+    return (
+      <div className="relative inline-block rounded-md border border-border overflow-hidden bg-muted/40">
+        <img src={imageUrl} alt="attachment preview" className="max-h-32 w-auto object-contain" />
+        <button
+          type="button"
+          onClick={onClear}
+          aria-label="Remove image"
+          className="absolute top-1 right-1 rounded-full bg-background/80 hover:bg-background border border-border p-0.5"
+        >
+          <X className="w-3 h-3" />
+        </button>
+        <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[10px] text-white px-1.5 py-0.5 truncate">
+          📎 photo will send as caption (≤1024 chars) or follow-up message
+        </div>
+      </div>
+    );
+  }
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      className="gap-1 text-xs h-7"
+      onClick={onPick}
+      disabled={uploading}
+    >
+      {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ImagePlus className="w-3 h-3" />}
+      {uploading ? 'Uploading…' : 'Attach image (optional)'}
+    </Button>
   );
 }

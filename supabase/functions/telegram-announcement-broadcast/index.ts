@@ -22,6 +22,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { testOnly, resendOfAnnouncementId, dryRun } = body;
     let { message } = body;
+    let imageUrl: string | null = body.image_url || body.imageUrl || null;
     let audiences: string[] = body.audiences
       ? body.audiences
       : body.audience
@@ -33,7 +34,7 @@ Deno.serve(async (req) => {
     if (resendOfAnnouncementId) {
       const { data: original, error: origErr } = await supabase
         .from("telegram_announcement_log")
-        .select("message_text, audiences")
+        .select("message_text, audiences, image_url")
         .eq("id", resendOfAnnouncementId)
         .single();
 
@@ -46,6 +47,8 @@ Deno.serve(async (req) => {
 
       message = original.message_text;
       audiences = original.audiences || [];
+      // If the resend doesn't override the image, reuse the original announcement's image
+      if (!imageUrl && (original as any).image_url) imageUrl = (original as any).image_url;
 
       const { data: prevRecipients } = await supabase
         .from("telegram_announcement_recipients")
@@ -73,7 +76,7 @@ Deno.serve(async (req) => {
 
     // ─── Test-only: send to @system_reset ───
     if (testOnly) {
-      const result = await sendTgMessage(botToken, SYSTEM_RESET_TG_ID, message);
+      const result = await sendTgMessage(botToken, SYSTEM_RESET_TG_ID, message, imageUrl);
 
       // Log the announcement
       const { data: logEntry, error: logErr } = await supabase
@@ -83,6 +86,7 @@ Deno.serve(async (req) => {
           audiences: ["test_system_reset"],
           sent_count: result ? 1 : 0,
           failed_count: result ? 0 : 1,
+          image_url: imageUrl,
         })
         .select("id")
         .single();
@@ -200,6 +204,7 @@ Deno.serve(async (req) => {
         sent_count: 0,
         failed_count: 0,
         resend_of_id: resendOfAnnouncementId || null,
+        image_url: imageUrl,
       })
       .select("id")
       .single();
@@ -217,7 +222,7 @@ Deno.serve(async (req) => {
 
     for (const [tgId, linkedUserId] of targets) {
       try {
-        const ok = await sendTgMessage(botToken, tgId, message);
+        const ok = await sendTgMessage(botToken, tgId, message, imageUrl);
         if (ok) {
           sent++;
           recipientRows.push({
@@ -278,8 +283,58 @@ Deno.serve(async (req) => {
   }
 });
 
-async function sendTgMessage(botToken: string, chatId: string, text: string): Promise<boolean> {
+async function sendTgMessage(botToken: string, chatId: string, text: string, imageUrl?: string | null): Promise<boolean> {
   try {
+    // If an image is attached, use sendPhoto with caption (caption max 1024 chars).
+    // If text is too long for a caption, send the photo with no caption then send the text as a follow-up message.
+    if (imageUrl) {
+      const CAPTION_MAX = 1024;
+      const useCaption = text.length <= CAPTION_MAX;
+      const photoBody: Record<string, unknown> = {
+        chat_id: chatId,
+        photo: imageUrl,
+      };
+      if (useCaption) {
+        photoBody.caption = text;
+        photoBody.parse_mode = "Markdown";
+      }
+      const photoRes = await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(photoBody),
+      });
+      if (!photoRes.ok) {
+        // Markdown failure or photo fetch failure → retry without parse_mode
+        const retry = await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: chatId,
+            photo: imageUrl,
+            caption: useCaption ? text : undefined,
+          }),
+        });
+        if (!retry.ok) return false;
+      }
+      // Caption couldn't fit — send the body as a follow-up message
+      if (!useCaption) {
+        const followUp = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: chatId, text, parse_mode: "Markdown" }),
+        });
+        if (!followUp.ok) {
+          // retry without markdown
+          await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: chatId, text }),
+          });
+        }
+      }
+      return true;
+    }
+
     const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

@@ -287,11 +287,24 @@ export default function AllDrafts() {
                 </Button>
               )}
               {r.status === 'failed' && (
-                <Button size="sm" variant="outline" disabled={busy === r.id} onClick={() => retry(r)}>
-                  {busy === r.id
-                    ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Retrying…</>
-                    : <><RefreshCw className="h-3 w-3 mr-1" /> Retry</>}
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy === r.id}
+                    onClick={() => regenerate(r)}
+                    className="border-amber-500 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
+                  >
+                    {busy === r.id
+                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-generating…</>
+                      : <><RefreshCw className="h-3 w-3 mr-1" /> Re-generate (replace)</>}
+                  </Button>
+                  <Button size="sm" variant="outline" disabled={busy === r.id} onClick={() => retry(r)}>
+                    {busy === r.id
+                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Retrying…</>
+                      : <><RefreshCw className="h-3 w-3 mr-1" /> Retry</>}
+                  </Button>
+                </>
               )}
           </div>
 
