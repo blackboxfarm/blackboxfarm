@@ -297,6 +297,11 @@ export interface DevDossier {
   };
   reputation_verdict?: 'clean' | 'mixed' | 'repeat_offender' | 'serial_rugger';
   primary_evidence_strings?: string[];
+  cluster_marketing_spend?: {
+    lifetime_boost_peak: number;
+    tokens_with_boosts: number;
+    tokens_with_dex_paid: number;
+  };
 }
 
 /**
