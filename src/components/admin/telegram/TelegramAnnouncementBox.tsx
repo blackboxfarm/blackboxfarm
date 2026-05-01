@@ -6,8 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Megaphone, Send, Loader2, AlertTriangle, UserCheck, CreditCard, Gift, UserX, History, SquarePen, ChevronDown, ChevronUp, RotateCw, ImagePlus, X, Globe } from 'lucide-react';
+import { Megaphone, Send, Loader2, AlertTriangle, UserCheck, CreditCard, Gift, UserX, History, SquarePen, ChevronDown, ChevronUp, RotateCw, ImagePlus, X, Globe, Crop as CropIcon, ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
+import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
+import { GalleryPickerButton } from '@/components/admin/social/GalleryPickerButton';
 
 interface TelegramAnnouncementBoxProps {
   audience: 'accounts' | 'hosted';
@@ -56,6 +58,11 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Crop flow: when a file is chosen, open the crop dialog with a local object URL
+  // for the original file, then upload the cropped Blob.
+  const [pendingCropSrc, setPendingCropSrc] = useState<string | null>(null);
+  const [pendingFileName, setPendingFileName] = useState<string>('announcement.jpg');
+  const [cropOpen, setCropOpen] = useState(false);
   const [eligibleCount, setEligibleCount] = useState<number | null>(null);
   const [countingEligible, setCountingEligible] = useState(false);
 
@@ -99,23 +106,55 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
       toast.error('Image must be under 5MB (Telegram URL limit)');
       return;
     }
+    // Open crop dialog instead of uploading directly. Upload happens after crop.
+    const objectUrl = URL.createObjectURL(file);
+    setPendingFileName(file.name || 'announcement.jpg');
+    setPendingCropSrc(objectUrl);
+    setCropOpen(true);
+  };
+
+  // Upload the cropped blob into the SHARED Intel Briefings gallery bucket /
+  // table so it's reusable from the gallery picker (and Intel side).
+  const handleCropComplete = async (_blobUrl: string, blob: Blob) => {
     setUploadingImage(true);
     try {
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-      const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const fileName = `gallery_tg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
       const { error: upErr } = await supabase.storage
-        .from('announcement-images')
-        .upload(path, file, { contentType: file.type, upsert: false });
+        .from('social-gallery')
+        .upload(fileName, blob, { contentType: 'image/jpeg', upsert: false });
       if (upErr) throw upErr;
-      const { data: pub } = supabase.storage.from('announcement-images').getPublicUrl(path);
-      setImageUrl(pub.publicUrl);
-      toast.success('Image attached');
+
+      const { data: pub } = supabase.storage.from('social-gallery').getPublicUrl(fileName);
+      const publicUrl = pub?.publicUrl;
+      if (!publicUrl) throw new Error('Could not resolve public URL');
+
+      // Insert into the same gallery used by Intel Briefings so it shows up there too.
+      await (supabase as any).from('social_media_gallery').insert({
+        file_name: fileName,
+        display_name: (pendingFileName || 'announcement').replace(/\.[^.]+$/, ''),
+        file_url: publicUrl,
+        source_type: 'uploaded',
+        mime_type: 'image/jpeg',
+        file_size_bytes: blob.size,
+        image_usage_context: 'telegram_announcement',
+        tags: ['telegram', 'announcement'],
+      });
+
+      setImageUrl(publicUrl);
+      toast.success('Cropped image attached & saved to gallery');
     } catch (err: any) {
       console.error('Image upload failed:', err);
       toast.error(err.message || 'Image upload failed');
     } finally {
       setUploadingImage(false);
+      if (pendingCropSrc) URL.revokeObjectURL(pendingCropSrc);
+      setPendingCropSrc(null);
     }
+  };
+
+  const handleGalleryPick = (url: string) => {
+    setImageUrl(url);
+    toast.success('Image selected from gallery');
   };
 
   const clearImage = () => setImageUrl(null);
@@ -323,6 +362,7 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
               uploading={uploadingImage}
               onPick={() => fileInputRef.current?.click()}
               onClear={clearImage}
+              onPickFromGallery={handleGalleryPick}
             />
             <input
               ref={fileInputRef}
@@ -412,6 +452,7 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
               uploading={uploadingImage}
               onPick={() => fileInputRef.current?.click()}
               onClear={clearImage}
+              onPickFromGallery={handleGalleryPick}
             />
             <input
               ref={fileInputRef}
