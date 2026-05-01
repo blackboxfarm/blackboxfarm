@@ -521,35 +521,43 @@ Write the full markdown now. No preamble, no code fence — start with "# Token 
         'autopsy_candidates'
       );
 
-      // ── Banner overlay (best-effort, non-blocking) ──────────
-      try {
-        const overlayRes = await fetch(
-          `${Deno.env.get('SUPABASE_URL')}/functions/v1/autopsy-banner-overlay`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-            },
-            body: JSON.stringify({
-              slug: drafted.slug,
-              token_mint: c.token_mint,
-              ticker,
-              report_id: drafted.id,
-            }),
-            signal: AbortSignal.timeout(8000),
+      // ── Banner overlay (fire-and-forget, must NOT block response) ──
+      // Previously this was awaited, which kept the request open and pushed
+      // the writer past the 150s edge-runtime idle timeout. We now hand the
+      // promise to EdgeRuntime.waitUntil so the request returns immediately
+      // while the overlay continues to run in the background.
+      const bannerPromise = fetch(
+        `${Deno.env.get('SUPABASE_URL')}/functions/v1/autopsy-banner-overlay`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
           },
-        );
+          body: JSON.stringify({
+            slug: drafted.slug,
+            token_mint: c.token_mint,
+            ticker,
+            report_id: drafted.id,
+          }),
+        },
+      ).then(async (overlayRes) => {
         if (!overlayRes.ok) {
           console.warn(`[autopsy-writer] banner overlay non-OK ${overlayRes.status} for ${drafted.slug}`);
-        } else {
-          const ovr = await overlayRes.json();
-          console.log(`[autopsy-writer] banner ready: ${ovr.hero_image_url}`);
+          return;
         }
-      } catch (bannerErr: any) {
+        const ovr = await overlayRes.json().catch(() => null);
+        if (ovr?.hero_image_url) console.log(`[autopsy-writer] banner ready: ${ovr.hero_image_url}`);
+      }).catch((bannerErr: any) => {
         console.warn(`[autopsy-writer] banner overlay failed for ${drafted.slug}:`, bannerErr?.message);
-        // Don't fail the draft — admin can retry banner from the queue.
-      }
+      });
+      try {
+        // @ts-ignore EdgeRuntime is provided by the Supabase edge runtime.
+        if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) {
+          // @ts-ignore
+          EdgeRuntime.waitUntil(bannerPromise);
+        }
+      } catch { /* ignore */ }
 
       results.push({ candidate_id: c.id, slug: drafted.slug, status: autoPublish ? 'approved' : 'drafted' });
     } catch (e: any) {
