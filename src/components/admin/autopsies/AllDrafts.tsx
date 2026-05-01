@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ExternalLink, RefreshCw, FileText, AlertTriangle, Send, Search, Rocket, Skull, Flame } from 'lucide-react';
+import { ExternalLink, RefreshCw, FileText, AlertTriangle, Send, Search, Rocket, Skull, Flame, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
@@ -243,8 +243,12 @@ export default function AllDrafts() {
                 onClick={() => communitySweep(r)}
                 className={r.vulture_swept_at ? 'border-red-500/40' : ''}
               >
-                <Skull className="h-3 w-3 mr-1" />
-                {r.vulture_swept_at || r.dissent_swept_at ? 'Re-sweep community' : 'Sweep community'}
+                {busy === r.id
+                  ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  : <Skull className="h-3 w-3 mr-1" />}
+                {busy === r.id
+                  ? 'Sweeping…'
+                  : (r.vulture_swept_at || r.dissent_swept_at ? 'Re-sweep community' : 'Sweep community')}
               </Button>
               {r.published_slug && (
                 <Button size="sm" variant="outline" asChild>
@@ -260,7 +264,9 @@ export default function AllDrafts() {
                     onClick={() => regenerate(r)}
                     className="border-amber-500 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
                   >
-                    <RefreshCw className="h-3 w-3 mr-1" /> Re-generate (replace)
+                    {busy === r.id
+                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-generating…</>
+                      : <><RefreshCw className="h-3 w-3 mr-1" /> Re-generate (replace)</>}
                   </Button>
                   <Button size="sm" disabled={busy === r.id} onClick={() => approve(r)}>
                     Approve & Publish
@@ -275,12 +281,16 @@ export default function AllDrafts() {
                   onClick={() => regenerate(r)}
                   className="border-amber-500 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
                 >
-                  <RefreshCw className="h-3 w-3 mr-1" /> Re-generate (replace)
+                  {busy === r.id
+                    ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-generating…</>
+                    : <><RefreshCw className="h-3 w-3 mr-1" /> Re-generate (replace)</>}
                 </Button>
               )}
               {r.status === 'failed' && (
                 <Button size="sm" variant="outline" disabled={busy === r.id} onClick={() => retry(r)}>
-                  <RefreshCw className="h-3 w-3 mr-1" /> Retry
+                  {busy === r.id
+                    ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Retrying…</>
+                    : <><RefreshCw className="h-3 w-3 mr-1" /> Retry</>}
                 </Button>
               )}
           </div>
