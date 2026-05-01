@@ -263,6 +263,27 @@ function extractPreferredName(messages: any[]): string | null {
   return null;
 }
 
+// ─── Detect referral phrases ("Dave sent me", "Tom told me", etc.) ───
+// Returns the lowercase referral tag ('dave' | 'tom') or null.
+function detectReferral(messages: any[]): string | null {
+  // Only scan recent USER messages so we don't pick up the bot echoing names.
+  const recentUser = messages.filter((m: any) => m?.role === 'user').slice(-4);
+  // Verb that implies a referral by that person.
+  const VERBS = '(?:sent|told|invited|referred|brought|pointed|recommended)';
+  const NAMES: Record<string, RegExp> = {
+    dave: new RegExp(`\\bdave\\b[^.?!\\n]{0,30}\\b${VERBS}\\b|\\b${VERBS}\\b[^.?!\\n]{0,20}\\bby\\s+dave\\b|\\bbecause\\s+of\\s+dave\\b|\\bdave's\\s+(?:guest|friend|crew|family)\\b`, 'i'),
+    tom:  new RegExp(`\\btom\\b[^.?!\\n]{0,30}\\b${VERBS}\\b|\\b${VERBS}\\b[^.?!\\n]{0,20}\\bby\\s+tom\\b|\\bbecause\\s+of\\s+tom\\b|\\btom's\\s+(?:guest|friend|crew|family)\\b`, 'i'),
+  };
+  for (const msg of recentUser) {
+    const text = String(msg?.content || '');
+    if (!text) continue;
+    for (const [tag, rx] of Object.entries(NAMES)) {
+      if (rx.test(text)) return tag;
+    }
+  }
+  return null;
+}
+
 // ─── Build System Prompt ───
 async function buildSystemPrompt(userContext: {
   tier: string;
