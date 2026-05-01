@@ -582,3 +582,22 @@ function ImageAttacher({
     </Button>
   );
 }
+
+function EligibleBadge({ count, loading }: { count: number | null; loading: boolean }) {
+  if (loading) {
+    return (
+      <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+        <Loader2 className="w-3 h-3 animate-spin" /> counting…
+      </span>
+    );
+  }
+  if (count === null) {
+    return <span className="text-[10px] text-muted-foreground">— select audience —</span>;
+  }
+  return (
+    <Badge variant="secondary" className="text-[10px] gap-1">
+      <Send className="w-2.5 h-2.5" />
+      → {count.toLocaleString()} recipient{count === 1 ? '' : 's'}
+    </Badge>
+  );
+}
