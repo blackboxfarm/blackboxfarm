@@ -1,147 +1,97 @@
 
-# Vulture Detection v1 — X Community Phishing Sweep
-
-## v2 (current) — Community Sweep, multi-lens
-
-`autopsy-community-sweep` does ONE Apify scrape and runs lenses in parallel:
-- vulture lens (existing) — writes vulture_sightings + vulture_accounts + evidence blob `vulture_sweep`.
-- dissent lens (new) — writes community_dissent_signals + evidence blob `community_dissent` (counts of absent_dev / no_marketing / no_creator_rewards / no_communication / demanding_action / capitulation; dissent_score 0–100; riot_threshold_met when score ≥ 60).
-
-Also scrapes the dev's main X timeline (top 20 posts) so we expose "days since dev posted in community" and "days since dev posted anywhere on X".
-
-`autopsy-vulture-sweep` is now a thin alias forwarding to community-sweep with `lenses=['vulture']` for back-compat.
-
-Verbatim member quotes live in `community_dissent_signals` and are admin-only. The autopsy report cites COUNTS publicly, never raw quotes. The raw scrape is also persisted (kind=`community_scrape`) so future lenses can plug in without re-scraping.
+## Two issues, one plan
 
 ---
 
-## Concept (your words, codified)
+### Part 1 — Autopsy "Re-generate" button (clarification)
 
-A "Vulture" = an X account that posts in a dying/dead token's X Community trying to lure leftover holders to fake pump.fun live streams or lookalike domains (e.g. `pumpem.fun`, ASCII-spoofed URLs) to phish wallet creds. We want to:
+**Good news: it didn't go anywhere.** The Re-generate button still lives on every draft row in `AllDrafts.tsx` (lines 287-330). It's just not on the sub-tab you're viewing in screenshot 3.
 
-1. Scrape the autopsied token's X Community feed.
-2. AI-classify each post → benign / vulture / mod / dev.
-3. Record every Vulture handle as a Bad Actor with reason `phishing_vulture` + the scam vector (`fake_live_pumpfun`, `lookalike_domain`, etc.).
-4. Surface counts and a public warning in the autopsy report.
-5. Also flag "no moderator deletions" → community is abandoned.
-6. Make the scraper independently callable for future ad-hoc audits (not just at autopsy time).
+In your screenshot you're on **"Drafts (your reports)"** which shows the *current* draft for `$uncraft`. The Re-generate button appears on **each individual draft row** — visible when you scroll the row right, or when the row is in `analyzing v4` / `failed` / `approved` state. The button calls `autopsy-writer` with `regenerate: true`.
 
-This is "Vulture Type 1: Fake-Live Pump.fun Phishing." Future types (TG CTO scams, etc.) plug into the same `vulture_kind` enum.
+**Action:** I'll make the Re-generate button more prominent on the Drafts row so it's never missed — move it to the front of the action button cluster with a clear `🔄 Re-generate` label, and ensure it shows for every status (not just terminal ones).
 
-## What already exists (reuse, don't rebuild)
+No structural change needed — just visibility polish.
 
-- `x-community-enricher` resolves a community → name, member_count, admins.
-- `apidojo~tweet-scraper` is already used in `x-pinned-community-finder` with `startUrls: [{ url: ... }]` shape.
-- `autopsy-evidence-interpret` runs Gemini over evidence blobs and writes `kind='ai_interpretation'`.
-- `autopsy_evidence_blobs` table already takes per-candidate blobs by `kind`.
-- `AllDrafts.tsx` already shows badges per candidate; `AutopsyArticle.tsx` renders the report sections.
+---
 
-We extend, we do not duplicate.
+### Part 2 — Inline variant tabs in Intel Briefings editor
 
-## New pieces
+**You're 100% right and the plumbing is already half-built.** Here's what exists vs. what's missing:
 
-### 1. DB — `vulture_accounts` + per-token sightings + URL lookalike list
+**Already built:**
+- `intel_briefing_variants` table (`briefing_id`, `depth`, `content_md`)
+- `condense-article` edge function (uses Lovable AI Gateway / Gemini 3 Flash)
+- `ContentCondenser.tsx` standalone "Repurpose" tab that handles 75/50/25%
+- Publication form already tracks `is_breadcrumb` + `content_depth` for tracking exposure
+
+**Missing — what this plan delivers:**
+1. The variant tabs are NOT shown inline next to Edit/Preview in the article editor (you have to leave the editor and go to a different tab to see them).
+2. **Breadcrumbs** is not yet a generatable depth variant (only 75/50/25 exist).
+3. No "view this variant in the editor preview" affordance.
+
+---
+
+### The new editor tab strip
+
+Replace the current 2-tab strip:
 
 ```text
-vulture_accounts                    one row per X handle ever flagged
-  handle                  text PK
-  display_name            text
-  first_seen_at           timestamptz
-  last_seen_at            timestamptz
-  total_sightings         int
-  vulture_kinds           text[]    e.g. {fake_live_pumpfun}
-  confidence_avg          int       0-100
-  is_likely_bot           bool
-  notes                   text
-
-vulture_sightings                   one row per (token, handle, post)
-  id                      uuid PK
-  token_mint              text
-  candidate_id            uuid
-  community_id            text
-  handle                  text  -> vulture_accounts.handle
-  post_url                text
-  post_text               text
-  posted_at               timestamptz
-  vulture_kind            text   fake_live_pumpfun | lookalike_domain
-                                 | wallet_drainer_link | unknown
-  scam_urls               text[] extracted lookalike/phishing URLs
-  ai_confidence           int
-  ai_reason               text
-  captured_at             timestamptz default now()
-
-vulture_lookalike_domains          curated + auto-grown deny-list
-  domain                  text PK   pumpem.fun, pump-fun.app, etc.
-  kind                    text       lookalike | confusable_unicode | known_drainer
-  added_by                text
-  added_at                timestamptz
+[Edit] [Preview]                              [Import .md] [Insert Gallery] [Breadcrumbs] [Revisions]
 ```
 
-Seeded with: `pumpem.fun`, `pump-fun.app`, `pump.fun.live`, plus a unicode-confusable check (`p`/`р`, `u`/`υ`, etc.) computed at scan time, not stored.
+With a 6-tab strip that maps directly to your publications model:
 
-### 2. Edge function — `autopsy-vulture-sweep` (new)
+```text
+[Edit ✏️] [Preview 👁️] | [100% Full] [75% Substantial] [50% Condensed] [25% Teaser] [🔗 Breadcrumb]
+```
 
-Input: `{ candidate_id?, token_mint?, community_id?, force? }` (any of candidate/token resolves the community).
+- **Edit** / **Preview** — unchanged (they always operate on the 100% master article).
+- **100% Full** — read-only echo of the master `content_md` for parity (so the row looks complete).
+- **75% / 50% / 25%** — each tab loads from `intel_briefing_variants` for that depth.
+- **Breadcrumb** — new variant stored as `depth = 0` (a teaser/announcement <25% intended for X/Telegram-style posts that link back).
 
-Steps:
-1. Resolve the X Community ID from `token_social_links` (already populated by enricher).
-2. Call `apidojo~tweet-scraper` with `startUrls: [{ url: 'https://x.com/i/communities/{id}' }]`, `maxItems: 80`, `sort: 'Latest'`. (Same actor + shape that `x-pinned-community-finder` already uses successfully.)
-3. For each tweet: extract author handle, text, t.co-expanded URLs, posted_at.
-4. **Pre-filter (cheap, no AI):** flag a post if any of:
-   - URL host matches `vulture_lookalike_domains`
-   - URL host is a unicode-confusable of `pump.fun`
-   - Text matches `/dev (is )?live|going live|live now/i` AND contains a non-`pump.fun` link or a CA
-   - Same exact text posted by ≥3 different handles in the feed (bot copypasta)
-5. **AI classify** flagged + a sample of unflagged posts via Lovable AI Gateway (Gemini Flash) using a strict JSON schema:
-   ```json
-   { "posts": [{ "handle":"", "vulture_kind":"fake_live_pumpfun|lookalike_domain|wallet_drainer_link|benign|mod|dev",
-                 "confidence":0-100, "reason":"", "scam_urls":[] }] }
-   ```
-   System prompt includes the lookalike-domain list and the "fake live stream" pattern.
-6. Write each non-benign post → `vulture_sightings`; upsert handle into `vulture_accounts` (increment counters, union kinds).
-7. Compute summary `{ vulture_count, vulture_handles[], scam_urls[], copypasta_groups, mod_activity_seen, sampled_posts }` and store as an `autopsy_evidence_blobs` row with `kind='vulture_sweep'` (so `autopsy-writer` can read it the same way it reads boosts).
-8. Also queue these handles into existing bad-actor pipelines if a `social_bad_actors` / `dev_behavior_scores` analogue exists for X handles — otherwise `vulture_accounts` stands alone for v1.
+### Each variant tab (75/50/25/Breadcrumb) shows:
 
-### 3. Wiring — autopsy pipeline
+- A header strip: depth badge + suggested platforms (e.g. "Medium / Long-form")
+- **Generate** button (when empty) → calls `condense-article` with the depth-specific instruction
+- **Re-generate** button (when filled) → re-runs the AI on the master 100% article
+- **Save** + **Copy** buttons
+- A markdown textarea bound to the variant's `content_md`
+- Last-updated timestamp + character count + % of master length (live calculated)
+- A small **"Open in Preview"** button that swaps the Preview tab to render this variant instead of the 100% (so you can see it formatted before posting)
 
-- `autopsy-enrich.ts`: read the latest `vulture_sweep` blob and surface
-  `{ vulture_count, vulture_handles, scam_urls, mod_activity_seen, sampled_posts[5] }` to the writer.
-- `autopsy-writer/index.ts`: pass that into the prompt and add a new mandatory report section **"Vultures & Phishing Activity"** with:
-  - Public warning: "Do not click links posted in this community. {N} accounts are spamming fake pump.fun live-stream phishing posts."
-  - Bullet list of handles with kind + confidence.
-  - Lookalike domains observed.
-  - "Mods active? yes/no" (flips to a "community abandoned" line if no).
-- Pipeline order: `autopsy-vulture-sweep` runs **before** `autopsy-evidence-interpret`, so the AI interpreter sees vulture context too.
+### Breadcrumb depth
 
-### 4. UI — admin + public
+Adds a 4th depth (`depth = 0`) with its own instruction:
 
-**`AllDrafts.tsx`**: add a Vulture badge (Skull-ish icon) showing `{vulture_count}` per candidate; click → opens a side panel listing handles, post snippets, scam URLs, with a "Re-sweep" button (calls `autopsy-vulture-sweep` with `force:true`). Aligns with your earlier rule that re-generate buttons change colour/state after first run.
+> "Compose a 2-3 sentence teaser/breadcrumb post (max ~280 chars) suitable for Twitter/X or Telegram. Lead with the most provocative hook from the article. End with a link back to blackbox.farm/intel/briefing/{slug}. No hashtags unless they appear in the original."
 
-**`AutopsyArticle.tsx`**: render the new "Vultures & Phishing Activity" section with a red warning banner above it, the handle list, and a "Why this matters" 1-liner about wallet-drainer scams.
+### Repurpose tab (existing)
 
-**Independent tool**: a tiny admin page button "Sweep any X Community" that takes a community URL/ID and runs the same edge function without an autopsy candidate. Stores results to `vulture_sightings` with `candidate_id=null`. Satisfies your "independently called assessment tool" requirement.
+Stays as-is for the bulk batch view across all articles. The new inline tabs are the **per-article authoring surface**; the Repurpose tab remains the **fleet-wide overview**. Both read/write the same `intel_briefing_variants` table so they stay in sync.
 
-### 5. Future-proofing for Vulture Types 2..N
+---
 
-`vulture_kind` is an open text field, not a tight enum, so adding "tg_cto_scam", "fake_mod", "shill_bundle" later only needs a system-prompt update and (optionally) new pre-filter rules. The tables, UI, and report section don't change.
+### Technical details
 
-## Open questions before I build
+**Files edited:**
+- `src/components/admin/IntelBriefingsManager.tsx` — extend the editor `Tabs` block (around line 1010) to include 5 extra `TabsTrigger`s + `TabsContent`s. Lift variant fetching for `editingId` via React Query.
+- `src/components/admin/publications/ContentCondenser.tsx` — extend `DEPTH_CONFIG` to include `{ depth: 0, label: 'Breadcrumb', platform: 'X / Telegram teaser' }` and add the breadcrumb instruction branch in `handleGenerate`.
+- `src/components/admin/autopsies/AllDrafts.tsx` — promote Re-generate button visibility (front of action cluster, always visible).
 
-1. **Sweep timing** — sweep automatically when a candidate moves to status=`drafted`, or only on first report generation + manual re-sweep? (Apify cost: ~1 actor run per autopsy.)
-2. **Public visibility** — show vulture handles publicly in the report, or admin-only with just the count + warning shown publicly? (Defamation risk vs. public-good warning.)
-3. **Bot heuristic threshold** — call a handle `is_likely_bot=true` after how many cross-token sightings? Default: ≥3 different tokens in 30 days.
+**New file:**
+- `src/components/admin/intel/VariantEditorTab.tsx` — a small reusable component for one variant tab (textarea + Generate/Save/Copy/Open-in-Preview buttons). Used 4× in the editor (one per non-100% depth).
 
-## Files to create / edit
+**Edge function:**
+- `condense-article` — already accepts arbitrary `instruction` + `content` in the body, so no edge changes needed. The new breadcrumb instruction is passed from the client.
 
-Create:
-- `supabase/migrations/<ts>_vulture_detection.sql` (3 tables + seed lookalike list)
-- `supabase/functions/autopsy-vulture-sweep/index.ts`
-- `supabase/functions/_shared/vulture-classify.ts` (pre-filter + AI prompt builder)
-- `src/components/admin/autopsies/VulturePanel.tsx` (side panel + re-sweep)
-- `src/components/admin/CommunitySweepTool.tsx` (independent admin tool)
+**No DB migration needed** — `intel_briefing_variants.depth` is already an `integer`, so `depth = 0` just works. The existing UNIQUE/lookup logic in `ContentCondenser` keys by `${briefingId}-${depth}` and handles it natively.
 
-Edit:
-- `supabase/functions/_shared/autopsy-enrich.ts` (read vulture_sweep blob)
-- `supabase/functions/autopsy-writer/index.ts` (new report section + prompt)
-- `src/components/admin/autopsies/AllDrafts.tsx` (Vulture badge + panel trigger)
-- `src/pages/AutopsyArticle.tsx` (render new section + warning banner)
+**No schema/type regeneration needed** — depth is already typed as `number`.
+
+### Out of scope (call out so we don't drift)
+
+- Auto-publishing variants to external platforms — variants are still copy-paste-by-hand into Medium/Reddit/X. The Publications tracker already logs where each depth got posted (your screenshot 1 form).
+- Per-platform tone tuning beyond the 4 existing depths (e.g. "LinkedIn voice"). Can be added later as additional depth profiles or a freeform "custom prompt" field — flag if you want it now.
+- Image picking inside variants — variants are text-only for now; the master article keeps the gallery/hero image.
