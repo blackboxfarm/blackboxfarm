@@ -170,6 +170,30 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
+    // ── Skip if banner already exists in storage ──
+    // The treatment is deterministic per slug — never regenerate.
+    const path = `${slug}-autopsy-v2.jpg`;
+    try {
+      const { data: existing } = await supabase.storage.from(BUCKET).list('', {
+        search: path, limit: 1,
+      });
+      if (existing && existing.some((f: any) => f.name === path)) {
+        const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
+        const heroImageUrl = pub.publicUrl;
+        if (report_id) {
+          await supabase.from('autopsy_reports').update({
+            hero_image_path: heroImageUrl,
+          }).eq('id', report_id);
+        }
+        console.log(`[autopsy-banner-overlay] reusing existing banner: ${heroImageUrl}`);
+        return new Response(JSON.stringify({
+          success: true, skipped: 'already_exists', slug, hero_image_url: heroImageUrl,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    } catch (e) {
+      console.warn('[autopsy-banner-overlay] existence check failed, continuing:', (e as any)?.message);
+    }
+
     // 1. Source banner — curve deaths use pump.fun mint image only.
     const isCurveDeath = source_feed === 'pumpfun_curve_death';
     const { url: sourceBannerUrl, visualDesc } = await fetchSourceBanner(token_mint, {
@@ -191,7 +215,6 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
     // 3. Upload to bucket
     const base64 = editedDataUri.replace(/^data:image\/\w+;base64,/, '');
     const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-    const path = `${slug}-autopsy-v2.jpg`;
     const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, bytes, {
       contentType: 'image/jpeg', upsert: true, cacheControl: '86400',
     });
