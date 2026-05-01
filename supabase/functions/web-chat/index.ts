@@ -591,6 +591,29 @@ serve(async (req) => {
       }
     }
 
+    // Detect referral phrases ("Dave/Tom sent me") and persist the tag.
+    // Persists across return visits via session_id (anon) or user_id (logged in).
+    if (!memory?.referral_tag && messages?.length >= 1) {
+      const referralTag = detectReferral(messages);
+      if (referralTag) {
+        const refUpdate: Record<string, any> = {
+          referral_tag: referralTag,
+          referral_first_seen_at: new Date().toISOString(),
+        };
+        if (userId) refUpdate.user_id = userId;
+        else if (sessionId) refUpdate.session_id = sessionId;
+        if (refUpdate.user_id || refUpdate.session_id) {
+          await upsertMemory(memory, refUpdate);
+          // Reflect locally so this turn's profile picks it up immediately
+          if (memory) {
+            memory.referral_tag = referralTag;
+            memory.referral_first_seen_at = refUpdate.referral_first_seen_at;
+          }
+          console.log(`[web-chat] referral detected: ${referralTag} (user=${userId || 'anon'} session=${sessionId || '-'})`);
+        }
+      }
+    }
+
     // Ensure memory record exists for returning users
     if (!memory) {
       const memoryInsert: Record<string, any> = {};
