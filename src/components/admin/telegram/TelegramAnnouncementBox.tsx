@@ -6,16 +6,17 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Megaphone, Send, Loader2, AlertTriangle, UserCheck, CreditCard, Gift, UserX, History, SquarePen, ChevronDown, ChevronUp, RotateCw, ImagePlus, X } from 'lucide-react';
+import { Megaphone, Send, Loader2, AlertTriangle, UserCheck, CreditCard, Gift, UserX, History, SquarePen, ChevronDown, ChevronUp, RotateCw, ImagePlus, X, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface TelegramAnnouncementBoxProps {
   audience: 'accounts' | 'hosted';
 }
 
-type AudienceKey = 'all_registered' | 'subscribers_only' | 'free_only' | 'unregistered';
+type AudienceKey = 'global' | 'all_registered' | 'subscribers_only' | 'free_only' | 'unregistered';
 
 const AUDIENCE_OPTIONS: { value: AudienceKey; label: string; icon: React.ReactNode; desc: string }[] = [
+  { value: 'global', label: 'GLOBAL — every DM user', icon: <Globe className="w-3 h-3" />, desc: 'Every TG user who ever DM\'d the bot (hosts + subs + free + unregistered). Overrides other selections.' },
   { value: 'all_registered', label: 'All Registered', icon: <UserCheck className="w-3 h-3" />, desc: 'All users with a web account' },
   { value: 'subscribers_only', label: 'Subscribers', icon: <CreditCard className="w-3 h-3" />, desc: 'Paid/subscribed users only' },
   { value: 'free_only', label: 'Free Users', icon: <Gift className="w-3 h-3" />, desc: 'Registered but not subscribed' },
