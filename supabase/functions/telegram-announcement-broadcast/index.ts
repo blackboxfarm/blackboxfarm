@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { assertInsert, assertUpdate } from "../_shared/db-assert.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -79,7 +80,7 @@ Deno.serve(async (req) => {
       const result = await sendTgMessage(botToken, SYSTEM_RESET_TG_ID, message, imageUrl);
 
       // Log the announcement
-      const { data: logEntry, error: logErr } = await supabase
+      const logEntry = await assertInsert(supabase
         .from("telegram_announcement_log")
         .insert({
           message_text: message,
@@ -89,20 +90,16 @@ Deno.serve(async (req) => {
           image_url: imageUrl,
         })
         .select("id")
-        .single();
-
-      if (logErr) {
-        console.error("[announcement] Failed to log test send:", logErr);
-      }
+        .single(), "telegram_announcement_log");
 
       // Log recipient
       if (logEntry?.id) {
-        await supabase.from("telegram_announcement_recipients").insert({
+        await assertInsert(supabase.from("telegram_announcement_recipients").insert({
           announcement_id: logEntry.id,
           telegram_user_id: SYSTEM_RESET_TG_ID,
           linked_user_id: null,
           delivery_status: result ? "sent" : "failed",
-        });
+        }), "telegram_announcement_recipients");
       }
 
       return new Response(JSON.stringify({ sent: result ? 1 : 0, failed: result ? 0 : 1, skipped: 0 }), {
@@ -110,76 +107,15 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ─── Build target list ───
-    const { data: installations } = await supabase
-      .from("channel_installations")
-      .select("user_id")
-      .eq("is_active", true);
-    const hostedUserIds = new Set((installations || []).map((i: any) => i.user_id).filter(Boolean));
+    // ─── Build target list from the DB helper so counts/sends use the same source ───
+    const { data: recipientRows, error: recipientErr } = await supabase.rpc(
+      "get_telegram_announcement_recipients",
+      { p_audiences: audiences }
+    );
+    if (recipientErr) throw recipientErr;
 
-    const { data: interactions } = await supabase
-      .from("telegram_bot_interactions")
-      .select("telegram_user_id, linked_user_id, chat_type")
-      .eq("chat_type", "private")
-      .not("telegram_user_id", "is", null);
-
-    const userMap = new Map<string, { tgId: string; linkedUserId: string | null }>();
-    for (const row of interactions || []) {
-      const existing = userMap.get(row.telegram_user_id);
-      if (!existing) {
-        userMap.set(row.telegram_user_id, {
-          tgId: row.telegram_user_id,
-          linkedUserId: row.linked_user_id,
-        });
-      } else if (row.linked_user_id && !existing.linkedUserId) {
-        existing.linkedUserId = row.linked_user_id;
-      }
-    }
-
-    let subscriberUserIds = new Set<string>();
-    if (audiences.some(a => ["subscribers_only", "free_only", "all_registered"].includes(a))) {
-      const { data: subs } = await supabase
-        .from("stripe_customers")
-        .select("user_id, subscription_status")
-        .in("subscription_status", ["active", "trialing"]);
-      subscriberUserIds = new Set((subs || []).map((s: any) => s.user_id).filter(Boolean));
-    }
-
-    // Collect targets with their linked user IDs
-    const targetMap = new Map<string, string | null>(); // tgId -> linkedUserId
-    for (const [tgId, info] of userMap) {
-      const isHostedAdmin = info.linkedUserId && hostedUserIds.has(info.linkedUserId);
-      const isRegistered = !!info.linkedUserId;
-      const isSubscriber = info.linkedUserId ? subscriberUserIds.has(info.linkedUserId) : false;
-
-      for (const audience of audiences) {
-        let match = false;
-        switch (audience) {
-          case "hosted":
-            if (isHostedAdmin) match = true;
-            break;
-          case "accounts":
-          case "all_registered":
-            if (isRegistered && !isHostedAdmin) match = true;
-            break;
-          case "subscribers_only":
-            if (isRegistered && isSubscriber && !isHostedAdmin) match = true;
-            break;
-          case "free_only":
-            if (isRegistered && !isSubscriber && !isHostedAdmin) match = true;
-            break;
-          case "unregistered":
-            if (!isRegistered && !isHostedAdmin) match = true;
-            break;
-        }
-        if (match) {
-          targetMap.set(tgId, info.linkedUserId);
-          break;
-        }
-      }
-    }
-
-    let targets = Array.from(targetMap.entries());
+    let targets = ((recipientRows || []) as { telegram_user_id: string; linked_user_id: string | null }[])
+      .map((r) => [r.telegram_user_id, r.linked_user_id] as [string, string | null]);
     if (resendOfAnnouncementId && alreadySentTgIds.size > 0) {
       const before = targets.length;
       targets = targets.filter(([tgId]) => !alreadySentTgIds.has(tgId));
