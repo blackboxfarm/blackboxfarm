@@ -71,9 +71,9 @@ export function TelegramInteractionsPanel() {
     today.setHours(0, 0, 0, 0);
     const todayISO = today.toISOString();
 
-    // Fetch recent interactions for display + separate count queries for accurate stats
+    // Fetch private bot DMs for the directory + separate count queries for accurate stats
     const [intRes, memRes, statsRes, joinsRes, leavesRes, totalUsersRes, registeredUsersRes] = await Promise.all([
-      supabase.from("telegram_bot_interactions").select("*").order("created_at", { ascending: false }).limit(1000),
+      supabase.from("telegram_bot_interactions").select("*").eq("chat_type", "private").order("created_at", { ascending: false }).limit(5000),
       supabase.from("telegram_channel_members").select("*").order("created_at", { ascending: false }).limit(100),
       supabase.from("telegram_bot_interactions").select("id", { count: "exact", head: true }).gte("created_at", todayISO),
       supabase.from("telegram_channel_members").select("id", { count: "exact", head: true }).gte("created_at", todayISO).eq("event_type", "joined"),
@@ -177,11 +177,11 @@ export function TelegramInteractionsPanel() {
         {/* Stats row */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
           <div className="rounded-md border p-2 text-center">
-            <p className="text-xs text-muted-foreground">Total TG Users</p>
+            <p className="text-xs text-muted-foreground">Bot DM Users</p>
             <p className="text-lg font-bold">{stats.totalUsers}</p>
           </div>
           <div className="rounded-md border p-2 text-center">
-            <p className="text-xs text-muted-foreground">Registered (Web)</p>
+            <p className="text-xs text-muted-foreground">Web Linked</p>
             <p className="text-lg font-bold text-green-500">{stats.registeredUsers}</p>
           </div>
           <div className="rounded-md border p-2 text-center">
