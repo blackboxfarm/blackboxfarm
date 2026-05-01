@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ExternalLink, RefreshCw, FileText, AlertTriangle, Send, Search, Rocket, Skull, Flame, Loader2 } from 'lucide-react';
+import { ExternalLink, RefreshCw, FileText, AlertTriangle, Send, Search, Rocket, Skull, Flame, Loader2, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
@@ -53,6 +53,7 @@ export default function AllDrafts() {
   const [busy, setBusy] = useState<string | null>(null);
   const isBusy = (rowId: string, action: string) => busy === `${rowId}:${action}`;
   const rowBusy = (rowId: string) => !!busy && busy.startsWith(`${rowId}:`);
+  const [reloading, setReloading] = useState(false);
 
   async function load() {
     const { data, error } = await supabase
@@ -156,6 +157,22 @@ export default function AllDrafts() {
 
   useEffect(() => { load(); }, []);
 
+  async function handleReload() {
+    setReloading(true);
+    await load();
+    setReloading(false);
+    toast({ title: 'Reloaded', description: `${rows?.length ?? 0} drafts refreshed from DB` });
+  }
+
+  async function dismissError(r: RowWithTg) {
+    const { error } = await supabase
+      .from('autopsy_candidates')
+      .update({ status_reason: null })
+      .eq('id', r.id);
+    if (error) toast({ title: 'Could not clear error', description: error.message, variant: 'destructive' });
+    else { toast({ title: 'Error cleared' }); load(); }
+  }
+
   async function retry(r: RowWithTg) {
     setBusy(`${r.id}:retry`);
     await supabase.from('autopsy_candidates').update({ status: 'pending', status_reason: null }).eq('id', r.id);
@@ -167,6 +184,8 @@ export default function AllDrafts() {
 
   async function regenerate(r: RowWithTg) {
     setBusy(`${r.id}:regenerate`);
+    // Clear any stale status_reason before regenerating so old errors don't linger
+    await supabase.from('autopsy_candidates').update({ status_reason: null }).eq('id', r.id);
     const { error } = await supabase.functions.invoke('autopsy-writer', { body: { candidate_id: r.id, regenerate: true } });
     setBusy(null);
     if (error) toast({ title: 'Re-generate failed', description: error.message, variant: 'destructive' });
@@ -223,7 +242,11 @@ export default function AllDrafts() {
     <div className="space-y-2">
       <div className="flex justify-between items-center">
         <p className="text-xs text-muted-foreground">{rows.length} drafts · status: analyzing / drafted / approved / failed</p>
-        <Button variant="outline" size="sm" onClick={load}><RefreshCw className="h-3 w-3 mr-1" /> Reload</Button>
+        <Button variant="outline" size="sm" onClick={handleReload} disabled={reloading}>
+          {reloading
+            ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Reloading…</>
+            : <><RefreshCw className="h-3 w-3 mr-1" /> Reload</>}
+        </Button>
       </div>
       {rows.map(r => (
         <Card key={r.id} className="p-3 space-y-3">
@@ -374,9 +397,21 @@ export default function AllDrafts() {
               {r.decided_at && <> · Decided {formatDistanceToNow(new Date(r.decided_at), { addSuffix: true })}</>}
             </div>
             {r.status === 'failed' && r.status_reason && (
-              <div className="text-[10px] text-destructive mt-1 flex items-start gap-1">
+              <div className="text-[10px] text-destructive mt-1 flex items-start gap-2 bg-destructive/5 border border-destructive/20 rounded px-2 py-1.5">
                 <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
-                <span className="break-all">{r.status_reason}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold mb-0.5">
+                    Last error{r.decided_at ? ` · ${formatDistanceToNow(new Date(r.decided_at), { addSuffix: true })}` : ''}
+                  </div>
+                  <div className="break-all opacity-80">{r.status_reason}</div>
+                </div>
+                <button
+                  onClick={() => dismissError(r)}
+                  className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                  title="Dismiss this error"
+                >
+                  <X className="h-3 w-3" />
+                </button>
               </div>
             )}
           </div>
