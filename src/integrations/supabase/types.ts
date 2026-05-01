@@ -355,6 +355,8 @@ export type Database = {
           last_platform: string | null
           notes: Json | null
           preferred_name: string | null
+          referral_first_seen_at: string | null
+          referral_tag: string | null
           session_id: string | null
           telegram_user_id: string | null
           updated_at: string
@@ -369,6 +371,8 @@ export type Database = {
           last_platform?: string | null
           notes?: Json | null
           preferred_name?: string | null
+          referral_first_seen_at?: string | null
+          referral_tag?: string | null
           session_id?: string | null
           telegram_user_id?: string | null
           updated_at?: string
@@ -383,6 +387,8 @@ export type Database = {
           last_platform?: string | null
           notes?: Json | null
           preferred_name?: string | null
+          referral_first_seen_at?: string | null
+          referral_tag?: string | null
           session_id?: string | null
           telegram_user_id?: string | null
           updated_at?: string
