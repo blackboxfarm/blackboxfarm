@@ -65,6 +65,18 @@ async function buildUserProfile(userId?: string, memory?: any): Promise<string> 
     profile += `- Name: ${memory.preferred_name} (they prefer this)\n`;
   }
 
+  if (memory?.referral_tag === 'dave') {
+    profile += `- 🔑 REFERRAL: This visitor said "Dave sent them". Dave is the founder's real name. Treat them with warm continuity ("welcome back — Dave's guest"). Do NOT explain that Dave is the founder; just honor the signal silently/warmly.\n`;
+    if (memory?.referral_first_seen_at) {
+      profile += `- Referral first seen: ${new Date(memory.referral_first_seen_at).toLocaleDateString()}\n`;
+    }
+  } else if (memory?.referral_tag === 'tom') {
+    profile += `- 🔑 REFERRAL: This visitor said "Tom sent them". Tom is a family member of the founder who rides a OneWheel (also called an EUC / electric unicycle). Treat them warmly. If hobbies or who Tom is comes up naturally, you may reference the OneWheel/EUC connection — otherwise just honor the signal silently.\n`;
+    if (memory?.referral_first_seen_at) {
+      profile += `- Referral first seen: ${new Date(memory.referral_first_seen_at).toLocaleDateString()}\n`;
+    }
+  }
+
   if (memory?.language_preference && memory.language_preference !== 'en') {
     profile += `- Preferred language: ${memory.language_preference}\n`;
   }
@@ -258,6 +270,27 @@ function extractPreferredName(messages: any[]): string | null {
           return content;
         }
       }
+    }
+  }
+  return null;
+}
+
+// ─── Detect referral phrases ("Dave sent me", "Tom told me", etc.) ───
+// Returns the lowercase referral tag ('dave' | 'tom') or null.
+function detectReferral(messages: any[]): string | null {
+  // Only scan recent USER messages so we don't pick up the bot echoing names.
+  const recentUser = messages.filter((m: any) => m?.role === 'user').slice(-4);
+  // Verb that implies a referral by that person.
+  const VERBS = '(?:sent|told|invited|referred|brought|pointed|recommended)';
+  const NAMES: Record<string, RegExp> = {
+    dave: new RegExp(`\\bdave\\b[^.?!\\n]{0,30}\\b${VERBS}\\b|\\b${VERBS}\\b[^.?!\\n]{0,20}\\bby\\s+dave\\b|\\bbecause\\s+of\\s+dave\\b|\\bdave's\\s+(?:guest|friend|crew|family)\\b`, 'i'),
+    tom:  new RegExp(`\\btom\\b[^.?!\\n]{0,30}\\b${VERBS}\\b|\\b${VERBS}\\b[^.?!\\n]{0,20}\\bby\\s+tom\\b|\\bbecause\\s+of\\s+tom\\b|\\btom's\\s+(?:guest|friend|crew|family)\\b`, 'i'),
+  };
+  for (const msg of recentUser) {
+    const text = String(msg?.content || '');
+    if (!text) continue;
+    for (const [tag, rx] of Object.entries(NAMES)) {
+      if (rx.test(text)) return tag;
     }
   }
   return null;
@@ -519,7 +552,29 @@ serve(async (req) => {
     // Load user memory
     const memory = await loadUserMemory(userId || undefined, sessionId || undefined);
 
-    // Build user profile block
+    // Detect referral phrases ("Dave/Tom sent me") BEFORE building profile so
+    // the very turn it's said gets reflected in the system prompt.
+    if (!memory?.referral_tag && messages?.length >= 1) {
+      const referralTag = detectReferral(messages);
+      if (referralTag) {
+        const refUpdate: Record<string, any> = {
+          referral_tag: referralTag,
+          referral_first_seen_at: new Date().toISOString(),
+        };
+        if (userId) refUpdate.user_id = userId;
+        else if (sessionId) refUpdate.session_id = sessionId;
+        if (refUpdate.user_id || refUpdate.session_id) {
+          await upsertMemory(memory, refUpdate);
+          if (memory) {
+            memory.referral_tag = referralTag;
+            memory.referral_first_seen_at = refUpdate.referral_first_seen_at;
+          }
+          console.log(`[web-chat] referral detected: ${referralTag} (user=${userId || 'anon'} session=${sessionId || '-'})`);
+        }
+      }
+    }
+
+    // Build user profile block (now includes referral_tag if just detected)
     const userProfile = await buildUserProfile(userId || undefined, memory);
 
     // Detect intent and do live data lookup from the last user message

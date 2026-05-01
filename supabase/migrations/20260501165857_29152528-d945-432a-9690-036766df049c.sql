@@ -1,0 +1,2 @@
+ALTER TABLE public.ai_user_memory ADD COLUMN IF NOT EXISTS referral_tag text, ADD COLUMN IF NOT EXISTS referral_first_seen_at timestamptz;
+CREATE INDEX IF NOT EXISTS idx_ai_user_memory_referral_tag ON public.ai_user_memory (referral_tag) WHERE referral_tag IS NOT NULL;
