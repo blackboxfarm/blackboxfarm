@@ -56,6 +56,36 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [eligibleCount, setEligibleCount] = useState<number | null>(null);
+  const [countingEligible, setCountingEligible] = useState(false);
+
+  // Live recipient count whenever audience selection (or hosted view) changes.
+  useEffect(() => {
+    let cancelled = false;
+    async function run() {
+      const audienceList = audience === 'hosted' ? ['hosted'] : Array.from(selectedAudiences);
+      if (audienceList.length === 0) {
+        setEligibleCount(null);
+        return;
+      }
+      setCountingEligible(true);
+      try {
+        const { data, error } = await supabase.rpc(
+          'count_telegram_announcement_recipients' as any,
+          { p_audiences: audienceList } as any,
+        );
+        if (cancelled) return;
+        if (error) throw error;
+        setEligibleCount(typeof data === 'number' ? data : Number(data ?? 0));
+      } catch (err) {
+        if (!cancelled) setEligibleCount(null);
+      } finally {
+        if (!cancelled) setCountingEligible(false);
+      }
+    }
+    run();
+    return () => { cancelled = true; };
+  }, [selectedAudiences, audience]);
 
   const handleImagePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
