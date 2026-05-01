@@ -18930,6 +18930,129 @@ export type Database = {
           },
         ]
       }
+      vulture_accounts: {
+        Row: {
+          confidence_avg: number
+          created_at: string
+          display_name: string | null
+          distinct_tokens: number
+          first_seen_at: string
+          handle: string
+          is_likely_bot: boolean
+          last_seen_at: string
+          notes: string | null
+          total_sightings: number
+          updated_at: string
+          vulture_kinds: string[]
+        }
+        Insert: {
+          confidence_avg?: number
+          created_at?: string
+          display_name?: string | null
+          distinct_tokens?: number
+          first_seen_at?: string
+          handle: string
+          is_likely_bot?: boolean
+          last_seen_at?: string
+          notes?: string | null
+          total_sightings?: number
+          updated_at?: string
+          vulture_kinds?: string[]
+        }
+        Update: {
+          confidence_avg?: number
+          created_at?: string
+          display_name?: string | null
+          distinct_tokens?: number
+          first_seen_at?: string
+          handle?: string
+          is_likely_bot?: boolean
+          last_seen_at?: string
+          notes?: string | null
+          total_sightings?: number
+          updated_at?: string
+          vulture_kinds?: string[]
+        }
+        Relationships: []
+      }
+      vulture_lookalike_domains: {
+        Row: {
+          added_at: string
+          added_by: string | null
+          domain: string
+          kind: string
+          notes: string | null
+        }
+        Insert: {
+          added_at?: string
+          added_by?: string | null
+          domain: string
+          kind?: string
+          notes?: string | null
+        }
+        Update: {
+          added_at?: string
+          added_by?: string | null
+          domain?: string
+          kind?: string
+          notes?: string | null
+        }
+        Relationships: []
+      }
+      vulture_sightings: {
+        Row: {
+          ai_confidence: number
+          ai_reason: string | null
+          candidate_id: string | null
+          captured_at: string
+          community_id: string | null
+          display_name: string | null
+          handle: string
+          id: string
+          post_text: string | null
+          post_url: string | null
+          posted_at: string | null
+          raw_post: Json | null
+          scam_urls: string[]
+          token_mint: string | null
+          vulture_kind: string
+        }
+        Insert: {
+          ai_confidence?: number
+          ai_reason?: string | null
+          candidate_id?: string | null
+          captured_at?: string
+          community_id?: string | null
+          display_name?: string | null
+          handle: string
+          id?: string
+          post_text?: string | null
+          post_url?: string | null
+          posted_at?: string | null
+          raw_post?: Json | null
+          scam_urls?: string[]
+          token_mint?: string | null
+          vulture_kind: string
+        }
+        Update: {
+          ai_confidence?: number
+          ai_reason?: string | null
+          candidate_id?: string | null
+          captured_at?: string
+          community_id?: string | null
+          display_name?: string | null
+          handle?: string
+          id?: string
+          post_text?: string | null
+          post_url?: string | null
+          posted_at?: string | null
+          raw_post?: Json | null
+          scam_urls?: string[]
+          token_mint?: string | null
+          vulture_kind?: string
+        }
+        Relationships: []
+      }
       wallet_backups: {
         Row: {
           backup_reason: string
