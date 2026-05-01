@@ -16668,6 +16668,57 @@ export type Database = {
         }
         Relationships: []
       }
+      token_boost_history: {
+        Row: {
+          boost_amount: number | null
+          captured_at: string
+          chain_id: string
+          created_at: string
+          delta_amount: number | null
+          description: string | null
+          header_url: string | null
+          icon_url: string | null
+          id: string
+          links: Json | null
+          raw: Json | null
+          source: string
+          token_mint: string
+          total_amount: number | null
+        }
+        Insert: {
+          boost_amount?: number | null
+          captured_at?: string
+          chain_id?: string
+          created_at?: string
+          delta_amount?: number | null
+          description?: string | null
+          header_url?: string | null
+          icon_url?: string | null
+          id?: string
+          links?: Json | null
+          raw?: Json | null
+          source: string
+          token_mint: string
+          total_amount?: number | null
+        }
+        Update: {
+          boost_amount?: number | null
+          captured_at?: string
+          chain_id?: string
+          created_at?: string
+          delta_amount?: number | null
+          description?: string | null
+          header_url?: string | null
+          icon_url?: string | null
+          id?: string
+          links?: Json | null
+          raw?: Json | null
+          source?: string
+          token_mint?: string
+          total_amount?: number | null
+        }
+        Relationships: []
+      }
       token_dex_status_history: {
         Row: {
           active_boosts: number | null
@@ -17312,6 +17363,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      token_paid_orders: {
+        Row: {
+          amount: number | null
+          captured_at: string
+          chain_id: string
+          id: string
+          order_type: string
+          payment_timestamp: string | null
+          raw: Json | null
+          status: string | null
+          token_mint: string
+        }
+        Insert: {
+          amount?: number | null
+          captured_at?: string
+          chain_id?: string
+          id?: string
+          order_type: string
+          payment_timestamp?: string | null
+          raw?: Json | null
+          status?: string | null
+          token_mint: string
+        }
+        Update: {
+          amount?: number | null
+          captured_at?: string
+          chain_id?: string
+          id?: string
+          order_type?: string
+          payment_timestamp?: string | null
+          raw?: Json | null
+          status?: string | null
+          token_mint?: string
+        }
+        Relationships: []
       }
       token_pattern_rules: {
         Row: {
