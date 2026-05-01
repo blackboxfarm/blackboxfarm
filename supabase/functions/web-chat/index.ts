@@ -552,7 +552,29 @@ serve(async (req) => {
     // Load user memory
     const memory = await loadUserMemory(userId || undefined, sessionId || undefined);
 
-    // Build user profile block
+    // Detect referral phrases ("Dave/Tom sent me") BEFORE building profile so
+    // the very turn it's said gets reflected in the system prompt.
+    if (!memory?.referral_tag && messages?.length >= 1) {
+      const referralTag = detectReferral(messages);
+      if (referralTag) {
+        const refUpdate: Record<string, any> = {
+          referral_tag: referralTag,
+          referral_first_seen_at: new Date().toISOString(),
+        };
+        if (userId) refUpdate.user_id = userId;
+        else if (sessionId) refUpdate.session_id = sessionId;
+        if (refUpdate.user_id || refUpdate.session_id) {
+          await upsertMemory(memory, refUpdate);
+          if (memory) {
+            memory.referral_tag = referralTag;
+            memory.referral_first_seen_at = refUpdate.referral_first_seen_at;
+          }
+          console.log(`[web-chat] referral detected: ${referralTag} (user=${userId || 'anon'} session=${sessionId || '-'})`);
+        }
+      }
+    }
+
+    // Build user profile block (now includes referral_tag if just detected)
     const userProfile = await buildUserProfile(userId || undefined, memory);
 
     // Detect intent and do live data lookup from the last user message
@@ -588,29 +610,6 @@ serve(async (req) => {
         if (userId) memoryUpdate.user_id = userId;
         else if (sessionId) memoryUpdate.session_id = sessionId;
         await upsertMemory(memory, memoryUpdate);
-      }
-    }
-
-    // Detect referral phrases ("Dave/Tom sent me") and persist the tag.
-    // Persists across return visits via session_id (anon) or user_id (logged in).
-    if (!memory?.referral_tag && messages?.length >= 1) {
-      const referralTag = detectReferral(messages);
-      if (referralTag) {
-        const refUpdate: Record<string, any> = {
-          referral_tag: referralTag,
-          referral_first_seen_at: new Date().toISOString(),
-        };
-        if (userId) refUpdate.user_id = userId;
-        else if (sessionId) refUpdate.session_id = sessionId;
-        if (refUpdate.user_id || refUpdate.session_id) {
-          await upsertMemory(memory, refUpdate);
-          // Reflect locally so this turn's profile picks it up immediately
-          if (memory) {
-            memory.referral_tag = referralTag;
-            memory.referral_first_seen_at = refUpdate.referral_first_seen_at;
-          }
-          console.log(`[web-chat] referral detected: ${referralTag} (user=${userId || 'anon'} session=${sessionId || '-'})`);
-        }
       }
     }
 
