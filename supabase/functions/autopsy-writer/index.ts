@@ -381,6 +381,31 @@ ${JSON.stringify(blobs ?? [], null, 2)}
 No-admin-message hours: ${c.social_no_admin_hours ?? 'unchecked'}
 Spam %: ${c.social_spam_pct ?? 'unchecked'}
 
+## VULTURES & PHISHING ACTIVITY (X Community sweep)
+${(() => {
+  const v = enrichment.vulture_summary;
+  if (!v) return '(no community sweep on record)';
+  if (v.vulture_count === 0) return `(swept ${v.posts_scanned} posts in community ${v.community_id ?? '?'} — no vultures detected; mod_activity_seen=${v.mod_activity_seen})`;
+  const lines = [
+    `Posts scanned: ${v.posts_scanned}`,
+    `Distinct vulture handles: ${v.vulture_count}`,
+    `Total vulture sightings: ${v.sighting_count}`,
+    `Mod activity seen: ${v.mod_activity_seen}`,
+    `Lookalike/scam URLs observed: ${(v.scam_urls ?? []).slice(0, 8).join(' | ') || '(none)'}`,
+    `Copypasta groups: ${v.copypasta_groups?.length ?? 0}`,
+    'Top vulture posts:',
+    ...((v.sampled_posts ?? []).slice(0, 6).map(p => `  - @${p.handle} kind=${p.vulture_kind} conf=${p.confidence} :: ${p.text}`)),
+  ];
+  return lines.join('\n');
+})()}
+
+REPORT REQUIREMENT: If the vulture sweep shows vulture_count > 0, you MUST include a clearly-titled section "## 7. Vultures & Phishing Activity" with:
+  - A red-flag warning that readers should NOT click links inside the X Community.
+  - The specific count of vulture handles and the lookalike domains observed.
+  - A note on whether moderators are actively cleaning the feed (mod_activity_seen).
+  - A short explanation that fake "dev going live on pump.fun" posts linking to lookalike domains (pumpem.fun, etc.) are wallet-drainer phishing scams that steal Phantom/MetaMask credentials.
+If vulture_count is 0, omit the section entirely.
+
 Write the full markdown now. No preamble, no code fence — start with "# Token Autopsy — ...".`;
 
       let md = await callAI(userPrompt, systemPrompt);
