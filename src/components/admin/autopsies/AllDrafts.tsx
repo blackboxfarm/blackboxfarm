@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ExternalLink, RefreshCw, FileText, AlertTriangle, Send, Search, Rocket, Skull } from 'lucide-react';
+import { ExternalLink, RefreshCw, FileText, AlertTriangle, Send, Search, Rocket, Skull, Flame } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
@@ -35,6 +35,11 @@ type RowWithTg = Row & {
   vulture_swept_at?: string | null;
   vulture_handles?: string[];
   vulture_scam_urls?: string[];
+  dissent_score?: number | null;
+  dissent_swept_at?: string | null;
+  dissent_absent_dev?: number | null;
+  dissent_no_marketing?: number | null;
+  dissent_days_since_dev_anywhere?: number | null;
 };
 
 /**
@@ -94,6 +99,28 @@ export default function AllDrafts() {
         scam_urls: Array.isArray(p.scam_urls) ? p.scam_urls : [],
       });
     }
+    // Latest community_dissent blob per candidate
+    const { data: dBlobs } = candidateIds.length
+      ? await supabase
+          .from('autopsy_evidence_blobs')
+          .select('candidate_id, payload, captured_at')
+          .in('candidate_id', candidateIds)
+          .eq('kind', 'community_dissent')
+          .order('captured_at', { ascending: false })
+      : { data: [] as any[] };
+    const dissentByCand = new Map<string, { score: number; at: string; absent_dev: number; no_marketing: number; days_since_dev: number | null }>();
+    for (const d of (dBlobs ?? []) as any[]) {
+      if (dissentByCand.has(d.candidate_id)) continue;
+      const p = d.payload || {};
+      const counts = p.counts || {};
+      dissentByCand.set(d.candidate_id, {
+        score: Number(p.dissent_score ?? 0),
+        at: d.captured_at,
+        absent_dev: Number(counts.absent_dev ?? 0),
+        no_marketing: Number(counts.no_marketing ?? 0),
+        days_since_dev: p.days_since_dev_post_anywhere ?? null,
+      });
+    }
     const tgByMint = new Map<string, string>();
     for (const s of (socials ?? [])) tgByMint.set(s.token_mint, s.url);
     const versionByCand = new Map<string, number>();
@@ -116,6 +143,11 @@ export default function AllDrafts() {
       vulture_swept_at: vultureByCand.get(r.id)?.at ?? null,
       vulture_handles: vultureByCand.get(r.id)?.handles ?? [],
       vulture_scam_urls: vultureByCand.get(r.id)?.scam_urls ?? [],
+      dissent_score: dissentByCand.get(r.id)?.score ?? null,
+      dissent_swept_at: dissentByCand.get(r.id)?.at ?? null,
+      dissent_absent_dev: dissentByCand.get(r.id)?.absent_dev ?? null,
+      dissent_no_marketing: dissentByCand.get(r.id)?.no_marketing ?? null,
+      dissent_days_since_dev_anywhere: dissentByCand.get(r.id)?.days_since_dev ?? null,
     })));
   }
 
@@ -220,6 +252,16 @@ export default function AllDrafts() {
                   >
                     <Skull className="h-2.5 w-2.5 mr-1" />{r.vulture_count} vultures
                     {(r.vulture_scam_urls?.length ?? 0) > 0 ? ` · ${r.vulture_scam_urls!.length} scam URLs` : ''}
+                  </Badge>
+                )}
+                {typeof r.dissent_score === 'number' && r.dissent_score > 0 && (
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] ${r.dissent_score >= 60 ? 'border-orange-500/70 text-orange-600 dark:text-orange-400' : 'border-amber-500/40 text-amber-600 dark:text-amber-400'}`}
+                    title={`absent_dev=${r.dissent_absent_dev ?? 0}, no_marketing=${r.dissent_no_marketing ?? 0}, days since dev posted anywhere=${r.dissent_days_since_dev_anywhere ?? '?'}`}
+                  >
+                    <Flame className="h-2.5 w-2.5 mr-1" />dissent {r.dissent_score}/100
+                    {(r.dissent_absent_dev ?? 0) > 0 ? ` · ${r.dissent_absent_dev} "where's dev?"` : ''}
                   </Badge>
                 )}
               </div>
