@@ -1,0 +1,2 @@
+UPDATE autopsy_candidates SET ath_mcap_usd = NULL WHERE token_mint = '2pFFgMtw7GkE6Kr6Xpg81mqDvEihhoafg64HdheKpump';
+UPDATE token_lifecycle SET ath_24h_usd = NULL WHERE token_mint = '2pFFgMtw7GkE6Kr6Xpg81mqDvEihhoafg64HdheKpump' AND ath_24h_usd < 1;
