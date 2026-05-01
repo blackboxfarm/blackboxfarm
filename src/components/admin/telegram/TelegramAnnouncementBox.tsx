@@ -585,11 +585,13 @@ function ImageAttacher({
   uploading,
   onPick,
   onClear,
+  onPickFromGallery,
 }: {
   imageUrl: string | null;
   uploading: boolean;
   onPick: () => void;
   onClear: () => void;
+  onPickFromGallery?: (url: string) => void;
 }) {
   if (imageUrl) {
     return (
@@ -610,17 +612,26 @@ function ImageAttacher({
     );
   }
   return (
-    <Button
-      type="button"
-      size="sm"
-      variant="outline"
-      className="gap-1 text-xs h-7"
-      onClick={onPick}
-      disabled={uploading}
-    >
-      {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ImagePlus className="w-3 h-3" />}
-      {uploading ? 'Uploading…' : 'Attach image (optional)'}
-    </Button>
+    <div className="flex flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="gap-1 text-xs h-7"
+        onClick={onPick}
+        disabled={uploading}
+      >
+        {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <CropIcon className="w-3 h-3" />}
+        {uploading ? 'Uploading…' : 'Upload + Crop'}
+      </Button>
+      {onPickFromGallery && (
+        <GalleryPickerButton
+          onSelect={onPickFromGallery}
+          label="Pick from Gallery"
+          imageUsageContext="gallery"
+        />
+      )}
+    </div>
   );
 }
 
