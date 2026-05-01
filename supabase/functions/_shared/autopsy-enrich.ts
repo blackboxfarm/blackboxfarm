@@ -38,6 +38,17 @@ export interface EnrichResult {
   dev_holding_pct_at_death: number | null;
   boost_timeline?: Array<{ captured_at: string; total_amount: number | null; delta_amount: number | null; source: string }>;
   paid_orders?: Array<{ order_type: string; status: string | null; amount: number | null; payment_timestamp: string | null }>;
+  vulture_summary?: {
+    community_id: string | null;
+    posts_scanned: number;
+    vulture_count: number;
+    sighting_count: number;
+    vulture_handles: string[];
+    scam_urls: string[];
+    copypasta_groups: Array<{ handles: string[]; sample: string }>;
+    mod_activity_seen: boolean | null;
+    sampled_posts: Array<{ handle: string; vulture_kind: string; confidence: number; text: string; scam_urls: string[]; post_url: string | null }>;
+  } | null;
 }
 
 export async function enrichCandidate(
@@ -152,6 +163,20 @@ export async function enrichCandidate(
     } catch { /* ignore */ }
   }
 
+  // ── Vulture sweep summary (latest blob) ─────────────────────
+  let vultureSummary: EnrichResult['vulture_summary'] = null;
+  try {
+    const { data: vBlob } = await supabase
+      .from('autopsy_evidence_blobs')
+      .select('payload, captured_at')
+      .eq('token_mint', tokenMint)
+      .eq('kind', 'vulture_sweep')
+      .order('captured_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (vBlob?.payload) vultureSummary = vBlob.payload as any;
+  } catch (e) { console.warn('[autopsy-enrich] vulture blob read failed:', (e as Error).message); }
+
   return {
     social_completeness,
     x_community_member_count: xMembers,
@@ -164,5 +189,6 @@ export async function enrichCandidate(
     dev_holding_pct_at_death: devHoldPct,
     boost_timeline: boostTimeline,
     paid_orders: paidOrders,
+    vulture_summary: vultureSummary,
   };
 }
