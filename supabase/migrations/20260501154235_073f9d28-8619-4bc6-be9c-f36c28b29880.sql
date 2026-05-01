@@ -1,0 +1,2 @@
+ALTER TABLE public.autopsy_candidates
+ADD COLUMN IF NOT EXISTS boost_timeline BOOLEAN NOT NULL DEFAULT FALSE;

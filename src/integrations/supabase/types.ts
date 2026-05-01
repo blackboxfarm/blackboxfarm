@@ -1498,6 +1498,7 @@ export type Database = {
           analyzed_at: string | null
           ath_mcap_usd: number | null
           bonding_curve_pct: number | null
+          boost_timeline: boolean
           boosts_paid_usd: number | null
           candidate_score: number | null
           created_at: string | null
@@ -1545,6 +1546,7 @@ export type Database = {
           analyzed_at?: string | null
           ath_mcap_usd?: number | null
           bonding_curve_pct?: number | null
+          boost_timeline?: boolean
           boosts_paid_usd?: number | null
           candidate_score?: number | null
           created_at?: string | null
@@ -1592,6 +1594,7 @@ export type Database = {
           analyzed_at?: string | null
           ath_mcap_usd?: number | null
           bonding_curve_pct?: number | null
+          boost_timeline?: boolean
           boosts_paid_usd?: number | null
           candidate_score?: number | null
           created_at?: string | null
