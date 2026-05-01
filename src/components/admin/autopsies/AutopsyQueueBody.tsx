@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Skull, RefreshCw, Play } from 'lucide-react';
+import { Skull, RefreshCw, Play, Plus } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
@@ -58,6 +59,59 @@ export default function AutopsyQueueBody() {
   const [filter, setFilter] = useState<'all' | 'A' | 'B' | 'C'>('all');
   const [sortKey, setSortKey] = useState<SortKey>('score_desc');
   const [lastAutoRunAt, setLastAutoRunAt] = useState<string | null>(null);
+  const [manualMint, setManualMint] = useState('');
+  const [manualBusy, setManualBusy] = useState(false);
+
+  async function addManualCandidate() {
+    const mint = manualMint.trim();
+    if (!mint || mint.length < 32 || mint.length > 64) {
+      toast({ title: 'Invalid mint', description: 'Paste a Solana token mint address.', variant: 'destructive' });
+      return;
+    }
+    setManualBusy(true);
+    try {
+      // Check for existing candidate first
+      const { data: existing } = await supabase
+        .from('autopsy_candidates')
+        .select('id, status, published_slug')
+        .eq('token_mint', mint)
+        .maybeSingle();
+
+      let candidateId = existing?.id;
+      if (!candidateId) {
+        const { data: inserted, error: insErr } = await supabase
+          .from('autopsy_candidates')
+          .insert({
+            token_mint: mint,
+            source_feed: 'admin_manual',
+            status: 'pending',
+            tier: 'B',
+            candidate_score: 100,
+          })
+          .select('id')
+          .single();
+        if (insErr) throw insErr;
+        candidateId = inserted.id;
+      }
+
+      // Kick the writer immediately
+      const { error: wErr } = await supabase.functions.invoke('autopsy-writer', {
+        body: { candidate_id: candidateId },
+      });
+      if (wErr) throw wErr;
+
+      toast({
+        title: existing ? 'Re-queued for drafting' : 'Added to funnel',
+        description: `${mint.slice(0, 6)}…${mint.slice(-4)} sent to autopsy-writer.`,
+      });
+      setManualMint('');
+      load();
+    } catch (e: any) {
+      toast({ title: 'Manual add failed', description: e?.message ?? String(e), variant: 'destructive' });
+    } finally {
+      setManualBusy(false);
+    }
+  }
 
   async function load() {
     setItems(null);
@@ -172,6 +226,22 @@ export default function AutopsyQueueBody() {
           <DeathTaxonomyModal />
         </div>
       </header>
+
+      <Card className="p-3 flex items-center gap-2 flex-wrap border-dashed">
+        <Plus className="h-4 w-4 text-muted-foreground shrink-0" />
+        <span className="text-xs font-medium text-muted-foreground">Manual add to funnel:</span>
+        <Input
+          placeholder="Paste token mint address…"
+          value={manualMint}
+          onChange={(e) => setManualMint(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') addManualCandidate(); }}
+          className="h-8 text-xs font-mono flex-1 min-w-[260px]"
+          disabled={manualBusy}
+        />
+        <Button size="sm" onClick={addManualCandidate} disabled={manualBusy || !manualMint.trim()}>
+          {manualBusy ? 'Queuing…' : 'Add & Draft'}
+        </Button>
+      </Card>
 
       <Tabs defaultValue="drafts" className="mt-4">
         <TabsList>
