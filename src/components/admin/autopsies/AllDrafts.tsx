@@ -223,63 +223,24 @@ export default function AllDrafts() {
         <Button variant="outline" size="sm" onClick={load}><RefreshCw className="h-3 w-3 mr-1" /> Reload</Button>
       </div>
       {rows.map(r => (
-        <Card key={r.id} className="p-3">
+        <Card key={r.id} className="p-3 space-y-3">
+          {/* Header row: title + status pills (left) · actions (right) */}
           <div className="flex items-start justify-between gap-3 flex-wrap">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <FileText className="h-4 w-4 text-muted-foreground" />
-                <span className="font-semibold">{r.ticker ? `$${r.ticker}` : <span className="italic text-muted-foreground">no ticker</span>}</span>
-                <Badge variant={r.status === 'approved' ? 'default' : r.status === 'failed' ? 'destructive' : r.status === 'drafted' ? 'secondary' : 'outline'} className="text-[10px]">
-                  {r.status}{r.current_version && r.current_version > 1 ? ` v${r.current_version}` : ''}
-                </Badge>
-                {r.tier && <Badge variant="outline" className="text-[10px]">Tier {r.tier}</Badge>}
-                {r.source_feed && <Badge variant="outline" className="text-[10px]">{r.source_feed}</Badge>}
-                {r.death_cause && <Badge variant="outline" className="text-[10px]">{r.death_cause}</Badge>}
-                {typeof r.social_completeness === 'number' && r.social_completeness > 0 && (
-                  <Badge variant="outline" className="text-[10px]">socials {r.social_completeness}/6</Badge>
-                )}
-                {r.manual_tg_join_completed && <Badge variant="outline" className="text-[10px]">TG✓</Badge>}
-                {typeof r.boost_peak === 'number' && r.boost_peak > 0 && (
-                  <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-600 dark:text-amber-400">
-                    <Rocket className="h-2.5 w-2.5 mr-1" />boost peak {r.boost_peak}x
-                    {r.boost_events ? ` · ${r.boost_events} events` : ''}
-                  </Badge>
-                )}
-                {typeof r.vulture_count === 'number' && r.vulture_count > 0 && (
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] border-red-500/60 text-red-600 dark:text-red-400"
-                    title={(r.vulture_handles ?? []).slice(0, 10).map(h => `@${h}`).join(', ')}
-                  >
-                    <Skull className="h-2.5 w-2.5 mr-1" />{r.vulture_count} vultures
-                    {(r.vulture_scam_urls?.length ?? 0) > 0 ? ` · ${r.vulture_scam_urls!.length} scam URLs` : ''}
-                  </Badge>
-                )}
-                {typeof r.dissent_score === 'number' && r.dissent_score > 0 && (
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] ${r.dissent_score >= 60 ? 'border-orange-500/70 text-orange-600 dark:text-orange-400' : 'border-amber-500/40 text-amber-600 dark:text-amber-400'}`}
-                    title={`absent_dev=${r.dissent_absent_dev ?? 0}, no_marketing=${r.dissent_no_marketing ?? 0}, days since dev posted anywhere=${r.dissent_days_since_dev_anywhere ?? '?'}`}
-                  >
-                    <Flame className="h-2.5 w-2.5 mr-1" />dissent {r.dissent_score}/100
-                    {(r.dissent_absent_dev ?? 0) > 0 ? ` · ${r.dissent_absent_dev} "where's dev?"` : ''}
-                  </Badge>
-                )}
-              </div>
-              <div className="text-[11px] text-muted-foreground mt-1 font-mono truncate">{r.token_mint}</div>
-              <div className="text-[10px] text-muted-foreground mt-1">
-                {r.funneled_at && <>Queued {formatDistanceToNow(new Date(r.funneled_at), { addSuffix: true })}</>}
-                {r.drafted_at && <> · Drafted {formatDistanceToNow(new Date(r.drafted_at), { addSuffix: true })}</>}
-                {r.decided_at && <> · Decided {formatDistanceToNow(new Date(r.decided_at), { addSuffix: true })}</>}
-              </div>
-              {r.status === 'failed' && r.status_reason && (
-                <div className="text-[10px] text-destructive mt-1 flex items-start gap-1">
-                  <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
-                  <span className="break-all">{r.status_reason}</span>
-                </div>
+            <div className="min-w-0 flex-1 flex items-center gap-2 flex-wrap">
+              <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="font-semibold">{r.ticker ? `$${r.ticker}` : <span className="italic text-muted-foreground">no ticker</span>}</span>
+              <Badge variant={r.status === 'approved' ? 'default' : r.status === 'failed' ? 'destructive' : r.status === 'drafted' ? 'secondary' : 'outline'} className="text-[10px]">
+                {r.status}{r.current_version && r.current_version > 1 ? ` v${r.current_version}` : ''}
+              </Badge>
+              {r.tier && <Badge variant="outline" className="text-[10px]">Tier {r.tier}</Badge>}
+              {r.source_feed && <Badge variant="outline" className="text-[10px]">{r.source_feed}</Badge>}
+              {r.death_cause && <Badge variant="outline" className="text-[10px]">{r.death_cause}</Badge>}
+              {typeof r.social_completeness === 'number' && r.social_completeness > 0 && (
+                <Badge variant="outline" className="text-[10px]">socials {r.social_completeness}/6</Badge>
               )}
+              {r.manual_tg_join_completed && <Badge variant="outline" className="text-[10px]">TG✓</Badge>}
             </div>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap shrink-0">
               {r.tg_url && (
                 <Button size="sm" variant="ghost" asChild>
                   <a href={r.tg_url} target="_blank" rel="noreferrer"><Send className="h-3 w-3 mr-1" /> Open TG</a>
@@ -338,6 +299,56 @@ export default function AllDrafts() {
                 </Button>
               )}
             </div>
+          </div>
+
+          {/* Intel row: boost / vultures / dissent — full width, breathing room */}
+          {(typeof r.boost_peak === 'number' && r.boost_peak > 0) ||
+           (typeof r.vulture_count === 'number' && r.vulture_count > 0) ||
+           (typeof r.dissent_score === 'number' && r.dissent_score > 0) ? (
+            <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-border/40">
+              {typeof r.boost_peak === 'number' && r.boost_peak > 0 && (
+                <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-600 dark:text-amber-400">
+                  <Rocket className="h-2.5 w-2.5 mr-1" />boost peak {r.boost_peak}x
+                  {r.boost_events ? ` · ${r.boost_events} events` : ''}
+                </Badge>
+              )}
+              {typeof r.vulture_count === 'number' && r.vulture_count > 0 && (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] border-red-500/60 text-red-600 dark:text-red-400"
+                  title={(r.vulture_handles ?? []).slice(0, 10).map(h => `@${h}`).join(', ')}
+                >
+                  <Skull className="h-2.5 w-2.5 mr-1" />{r.vulture_count} vultures
+                  {(r.vulture_scam_urls?.length ?? 0) > 0 ? ` · ${r.vulture_scam_urls!.length} scam URLs` : ''}
+                </Badge>
+              )}
+              {typeof r.dissent_score === 'number' && r.dissent_score > 0 && (
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] ${r.dissent_score >= 60 ? 'border-orange-500/70 text-orange-600 dark:text-orange-400' : 'border-amber-500/40 text-amber-600 dark:text-amber-400'}`}
+                  title={`absent_dev=${r.dissent_absent_dev ?? 0}, no_marketing=${r.dissent_no_marketing ?? 0}, days since dev posted anywhere=${r.dissent_days_since_dev_anywhere ?? '?'}`}
+                >
+                  <Flame className="h-2.5 w-2.5 mr-1" />dissent {r.dissent_score}/100
+                  {(r.dissent_absent_dev ?? 0) > 0 ? ` · ${r.dissent_absent_dev} "where's dev?"` : ''}
+                </Badge>
+              )}
+            </div>
+          ) : null}
+
+          {/* Footer: mint + timestamps */}
+          <div className="pt-1">
+            <div className="text-[11px] text-muted-foreground font-mono truncate">{r.token_mint}</div>
+            <div className="text-[10px] text-muted-foreground mt-1">
+              {r.funneled_at && <>Queued {formatDistanceToNow(new Date(r.funneled_at), { addSuffix: true })}</>}
+              {r.drafted_at && <> · Drafted {formatDistanceToNow(new Date(r.drafted_at), { addSuffix: true })}</>}
+              {r.decided_at && <> · Decided {formatDistanceToNow(new Date(r.decided_at), { addSuffix: true })}</>}
+            </div>
+            {r.status === 'failed' && r.status_reason && (
+              <div className="text-[10px] text-destructive mt-1 flex items-start gap-1">
+                <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                <span className="break-all">{r.status_reason}</span>
+              </div>
+            )}
           </div>
         </Card>
       ))}
