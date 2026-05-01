@@ -318,6 +318,22 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
       const nextVersion = ((existingReports?.[0]?.version as number | undefined) ?? 0) + 1;
       const slug = baseSlug;
 
+      // ── Reuse banner if one was already generated for this slug ──
+      // Banner generation is expensive (Gemini image edit, ~30-90s) and the
+      // visual treatment is deterministic per token. If ANY prior report row
+      // for this slug already has a hero_image_path, reuse it verbatim and
+      // skip the overlay call entirely.
+      const { data: priorBanner } = await supabase
+        .from('autopsy_reports')
+        .select('hero_image_path, source_banner_url')
+        .eq('slug', slug)
+        .not('hero_image_path', 'is', null)
+        .order('version', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const existingHeroImage = (priorBanner as any)?.hero_image_path ?? null;
+      const existingSourceBanner = (priorBanner as any)?.source_banner_url ?? null;
+
       // ── AI prompt ────────────────────────────────────────────
       const intent = causeDef.intent;
       const fewShot = fewShotForIntent(intent);
@@ -500,6 +516,8 @@ Write the full markdown now. No preamble, no code fence — start with "# Token 
           md_path: `/autopsies/${slug}.md`,
           tags: [causeDef.intent, causeDef.id],
           candidate_id: c.id,
+          hero_image_path: existingHeroImage,
+          source_banner_url: existingSourceBanner,
         }).select('id, slug').single() as any,
         'autopsy_reports'
       );
@@ -522,10 +540,15 @@ Write the full markdown now. No preamble, no code fence — start with "# Token 
       );
 
       // ── Banner overlay (fire-and-forget, must NOT block response) ──
-      // Previously this was awaited, which kept the request open and pushed
-      // the writer past the 150s edge-runtime idle timeout. We now hand the
-      // promise to EdgeRuntime.waitUntil so the request returns immediately
-      // while the overlay continues to run in the background.
+      // Skip entirely when a banner already exists for this slug — the visual
+      // treatment is deterministic per token, regenerating wastes AI credits
+      // and adds ~60s of unnecessary work on every re-draft.
+      if (existingHeroImage) {
+        console.log(`[autopsy-writer] reusing existing banner for ${slug}: ${existingHeroImage}`);
+        results.push({ candidate_id: c.id, slug: drafted.slug, status: autoPublish ? 'approved' : 'drafted' });
+        continue;
+      }
+
       const bannerPromise = fetch(
         `${Deno.env.get('SUPABASE_URL')}/functions/v1/autopsy-banner-overlay`,
         {
