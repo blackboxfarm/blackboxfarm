@@ -65,6 +65,18 @@ async function buildUserProfile(userId?: string, memory?: any): Promise<string> 
     profile += `- Name: ${memory.preferred_name} (they prefer this)\n`;
   }
 
+  if (memory?.referral_tag === 'dave') {
+    profile += `- 🔑 REFERRAL: This visitor said "Dave sent them". Dave is the founder's real name. Treat them with warm continuity ("welcome back — Dave's guest"). Do NOT explain that Dave is the founder; just honor the signal silently/warmly.\n`;
+    if (memory?.referral_first_seen_at) {
+      profile += `- Referral first seen: ${new Date(memory.referral_first_seen_at).toLocaleDateString()}\n`;
+    }
+  } else if (memory?.referral_tag === 'tom') {
+    profile += `- 🔑 REFERRAL: This visitor said "Tom sent them". Tom is a family member of the founder who rides a OneWheel (also called an EUC / electric unicycle). Treat them warmly. If hobbies or who Tom is comes up naturally, you may reference the OneWheel/EUC connection — otherwise just honor the signal silently.\n`;
+    if (memory?.referral_first_seen_at) {
+      profile += `- Referral first seen: ${new Date(memory.referral_first_seen_at).toLocaleDateString()}\n`;
+    }
+  }
+
   if (memory?.language_preference && memory.language_preference !== 'en') {
     profile += `- Preferred language: ${memory.language_preference}\n`;
   }
