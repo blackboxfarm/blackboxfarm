@@ -490,3 +490,47 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
     </Card>
   );
 }
+
+function ImageAttacher({
+  imageUrl,
+  uploading,
+  onPick,
+  onClear,
+}: {
+  imageUrl: string | null;
+  uploading: boolean;
+  onPick: () => void;
+  onClear: () => void;
+}) {
+  if (imageUrl) {
+    return (
+      <div className="relative inline-block rounded-md border border-border overflow-hidden bg-muted/40">
+        <img src={imageUrl} alt="attachment preview" className="max-h-32 w-auto object-contain" />
+        <button
+          type="button"
+          onClick={onClear}
+          aria-label="Remove image"
+          className="absolute top-1 right-1 rounded-full bg-background/80 hover:bg-background border border-border p-0.5"
+        >
+          <X className="w-3 h-3" />
+        </button>
+        <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[10px] text-white px-1.5 py-0.5 truncate">
+          📎 photo will send as caption (≤1024 chars) or follow-up message
+        </div>
+      </div>
+    );
+  }
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      className="gap-1 text-xs h-7"
+      onClick={onPick}
+      disabled={uploading}
+    >
+      {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ImagePlus className="w-3 h-3" />}
+      {uploading ? 'Uploading…' : 'Attach image (optional)'}
+    </Button>
+  );
+}
