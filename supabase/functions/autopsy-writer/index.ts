@@ -221,18 +221,17 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         });
       } catch (e) { console.warn('[autopsy-writer] evidence interpret skipped:', (e as Error).message); }
 
-      // Trigger X-Community vulture sweep (best effort — populates vulture_sightings
-      // and an autopsy_evidence_blobs row of kind='vulture_sweep' that enrichCandidate
-      // will pick up on the next read).
+      // Trigger one X-Community sweep that runs vulture + dissent lenses in
+      // parallel off a single Apify scrape. Populates vulture_sightings,
+      // community_dissent_signals, and the matching autopsy_evidence_blobs
+      // rows that enrichCandidate will pick up on the next read.
       try {
-        await supabase.functions.invoke('autopsy-vulture-sweep', {
-          body: { candidate_id: c.id, token_mint: c.token_mint, force: isRegenerate },
+        await supabase.functions.invoke('autopsy-community-sweep', {
+          body: { candidate_id: c.id, token_mint: c.token_mint, force: isRegenerate, lenses: ['vulture', 'dissent'] },
         });
-        // Re-run enrichment so the freshly written vulture_summary is available
-        // to the prompt below.
         const refreshed = await enrichCandidate(supabase, c.token_mint, creatorWallet);
         Object.assign(enrichment, refreshed);
-      } catch (e) { console.warn('[autopsy-writer] vulture sweep skipped:', (e as Error).message); }
+      } catch (e) { console.warn('[autopsy-writer] community sweep skipped:', (e as Error).message); }
 
       const { data: blobs } = await supabase
         .from('autopsy_evidence_blobs')
@@ -405,6 +404,31 @@ REPORT REQUIREMENT: If the vulture sweep shows vulture_count > 0, you MUST inclu
   - A note on whether moderators are actively cleaning the feed (mod_activity_seen).
   - A short explanation that fake "dev going live on pump.fun" posts linking to lookalike domains (pumpem.fun, etc.) are wallet-drainer phishing scams that steal Phantom/MetaMask credentials.
 If vulture_count is 0, omit the section entirely.
+
+## COMMUNITY SENTIMENT & DISSENT (X Community sweep — same scrape)
+${(() => {
+  const d = (enrichment as any).dissent_summary;
+  if (!d) return '(no dissent sweep on record)';
+  const lines = [
+    `Posts scanned: ${d.posts_scanned}`,
+    `Dissent score: ${d.dissent_score}/100  (riot threshold met: ${d.riot_threshold_met ? 'YES' : 'no'})`,
+    `Signal counts: ${JSON.stringify(d.counts ?? {})}`,
+    `Dev handle: ${d.dev_handle ?? '(unresolved)'}`,
+    `Days since dev posted IN community: ${d.days_since_dev_post_in_community ?? 'unknown'}`,
+    `Days since dev posted ANYWHERE on X: ${d.days_since_dev_post_anywhere ?? 'unknown'}`,
+    'Top verbatim quotes (admin-only — counts may be cited publicly, full quotes are admin-only):',
+    ...((d.top_quotes ?? []).slice(0, 5).map((q: any) => `  - [${q.kind}] @${q.handle} (conf ${q.conf}): "${q.quote}"`)),
+  ];
+  return lines.join('\n');
+})()}
+
+REPORT REQUIREMENT — Community Sentiment section:
+If posts_scanned > 0, include a section "## 8. Community Sentiment & Dissent" with:
+  - The dissent score (X/100) and a 1-line summary of what the community was complaining about (using counts, not raw quotes).
+  - "Days since the dev last spoke in the community" and "days since the dev last posted publicly anywhere on X" — quote both numbers if known.
+  - A single sentence describing the loudest signal (absent_dev / no_marketing / no_creator_rewards / no_communication / demanding_action / capitulation), again citing counts only. Do NOT print verbatim member quotes — those are admin-only evidence.
+  - If riot_threshold_met=true (dissent_score >= 60), shift the section's tone to reflect that holders openly demanded action and the dev was unresponsive. If false, write a calmer "community frustration was limited" paragraph.
+If posts_scanned = 0, omit the section entirely.
 
 Write the full markdown now. No preamble, no code fence — start with "# Token Autopsy — ...".`;
 
