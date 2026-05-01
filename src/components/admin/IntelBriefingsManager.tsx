@@ -29,6 +29,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { GalleryPickerButton } from './social/GalleryPickerButton';
 import { BreadcrumbUploadButton } from './social/BreadcrumbUploadButton';
+import { VariantEditorTab } from './intel/VariantEditorTab';
 import { stripExifAndBrand, generateImageName } from '@/utils/imageMetadata';
 import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
 import { InlineImageManagerModal } from './InlineImageManagerModal';
@@ -1012,6 +1013,14 @@ function IntelBriefingsArticlesManager() {
           <TabsList>
             <TabsTrigger value="edit">✏️ Edit</TabsTrigger>
             <TabsTrigger value="preview">👁️ Preview</TabsTrigger>
+            {editingId && (
+              <>
+                <TabsTrigger value="v75" className="text-blue-400 data-[state=active]:text-blue-400">75%</TabsTrigger>
+                <TabsTrigger value="v50" className="text-amber-400 data-[state=active]:text-amber-400">50%</TabsTrigger>
+                <TabsTrigger value="v25" className="text-red-400 data-[state=active]:text-red-400">25%</TabsTrigger>
+                <TabsTrigger value="vbc" className="text-violet-400 data-[state=active]:text-violet-400">🔗 Breadcrumb</TabsTrigger>
+              </>
+            )}
           </TabsList>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
@@ -1088,6 +1097,55 @@ function IntelBriefingsArticlesManager() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {editingId && (
+          <>
+            <TabsContent value="v75" className="mt-2">
+              <VariantEditorTab
+                briefingId={editingId}
+                briefingSlug={form.slug}
+                masterContent={form.content_md}
+                depth={75}
+                label="75% Substantial"
+                platform="Medium / Long-form republish"
+                badgeColor="bg-blue-500/20 text-blue-400"
+              />
+            </TabsContent>
+            <TabsContent value="v50" className="mt-2">
+              <VariantEditorTab
+                briefingId={editingId}
+                briefingSlug={form.slug}
+                masterContent={form.content_md}
+                depth={50}
+                label="50% Condensed"
+                platform="Twitter Articles / Fiverr / Substack"
+                badgeColor="bg-amber-500/20 text-amber-400"
+              />
+            </TabsContent>
+            <TabsContent value="v25" className="mt-2">
+              <VariantEditorTab
+                briefingId={editingId}
+                briefingSlug={form.slug}
+                masterContent={form.content_md}
+                depth={25}
+                label="25% Teaser"
+                platform="Reddit / LinkedIn short-form"
+                badgeColor="bg-red-500/20 text-red-400"
+              />
+            </TabsContent>
+            <TabsContent value="vbc" className="mt-2">
+              <VariantEditorTab
+                briefingId={editingId}
+                briefingSlug={form.slug}
+                masterContent={form.content_md}
+                depth={0}
+                label="Breadcrumb"
+                platform="X / Telegram teaser (≤280 chars, links back)"
+                badgeColor="bg-violet-500/20 text-violet-400"
+              />
+            </TabsContent>
+          </>
+        )}
       </Tabs>
 
       {/* Revision History */}

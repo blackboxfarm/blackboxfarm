@@ -14,6 +14,7 @@ const DEPTH_CONFIG = [
   { depth: 75, label: '75%', platform: 'Medium / Long-form', color: 'bg-blue-500/20 text-blue-400' },
   { depth: 50, label: '50%', platform: 'Twitter Articles / Fiverr', color: 'bg-amber-500/20 text-amber-400' },
   { depth: 25, label: '25%', platform: 'Reddit / Short-form', color: 'bg-red-500/20 text-red-400' },
+  { depth: 0,  label: 'Breadcrumb', platform: 'X / Telegram teaser', color: 'bg-violet-500/20 text-violet-400' },
 ] as const;
 
 interface Briefing {
@@ -65,7 +66,7 @@ export function ContentCondenser() {
   const variantMap = new Map<string, Variant>();
   variants.forEach(v => variantMap.set(`${v.briefing_id}-${v.depth}`, v));
 
-  const totalSlots = briefings.length * 3;
+  const totalSlots = briefings.length * DEPTH_CONFIG.length;
   const filledSlots = variants.length;
   const progressPct = totalSlots > 0 ? Math.round((filledSlots / totalSlots) * 100) : 0;
 
@@ -104,8 +105,11 @@ export function ContentCondenser() {
       instruction = `Rewrite the following article at approximately 75% of its original length. Preserve all key arguments, data points, statistics, and structure. Maintain the same authoritative tone. Do NOT add any new information. End the article with this exact backlink:\n${backlink}`;
     } else if (depth === 50) {
       instruction = `Condense the following article to approximately 50% of its original length. Keep the core thesis, key statistics, and the 2-3 strongest points. Use a slightly more conversational tone suitable for social media articles. Do NOT add new information. End with this exact backlink:\n${backlink}`;
-    } else {
+    } else if (depth === 25) {
       instruction = `Create a punchy summary of the following article at approximately 25% of its original length. Lead with the hook, include 1-2 key insights and the most impactful statistic. Make it compelling for Reddit/short-form platforms. Do NOT add new information. End with this exact backlink:\n${backlink}`;
+    } else {
+      // breadcrumb (depth = 0)
+      instruction = `Compose a 2-3 sentence teaser/breadcrumb post (max ~280 characters total) suitable for Twitter/X or Telegram. Lead with the most provocative hook from the article. End with this exact link back: https://blackbox.farm/intel/briefing/${briefing.slug}. No hashtags unless they appear in the original article. Output ONLY the teaser text — no preamble.`;
     }
 
     try {
@@ -168,7 +172,7 @@ export function ContentCondenser() {
                   <div className="flex items-center gap-3 text-left flex-1 min-w-0">
                     <span className="text-xs text-muted-foreground w-5 shrink-0">{idx + 1}</span>
                     <span className="text-sm font-medium truncate">{b.title}</span>
-                    {hasAll && <Badge variant="secondary" className="text-[10px] shrink-0">✓ All 3</Badge>}
+                    {hasAll && <Badge variant="secondary" className="text-[10px] shrink-0">✓ All {DEPTH_CONFIG.length}</Badge>}
                   </div>
                 </AccordionTrigger>
                 <AccordionContent className="pb-3">
