@@ -240,7 +240,22 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         .order('captured_at', { ascending: false })
         .limit(10);
 
-      const athMcap = num(c.ath_mcap_usd, liveDeath?.ath_usd, backlog?.ath_usd, lifecycle?.ath_24h_usd, pf?.ath_market_cap_usd, Number(pf?.price_ath_usd ?? 0) * 1_000_000_000, pf?.market_cap_usd);
+      // ATH source priority (most accurate first):
+      //  1. lifecycle.ath_24h_usd  — populated by ath-backfill via GeckoTerminal hourly OHLCV (true historical peak)
+      //  2. liveDeath.ath_usd / backlog.ath_usd — death-watch snapshots
+      //  3. pf.ath_market_cap_usd — Pump.fun reported ATH mcap
+      //  4. c.ath_mcap_usd — last persisted value (only if nothing fresher)
+      //  5. pf.market_cap_usd — current mcap as last-resort floor
+      // ⚠️ Removed: `price_ath_usd × 1_000_000_000` — that fallback assumed exactly 1B supply
+      // and produced wildly inflated ATHs (e.g. $4.7M for a token whose real peak was ~$760k).
+      const athMcap = num(
+        lifecycle?.ath_24h_usd,
+        liveDeath?.ath_usd,
+        backlog?.ath_usd,
+        pf?.ath_market_cap_usd,
+        c.ath_mcap_usd,
+        pf?.market_cap_usd,
+      );
       const currentMcap = num(c.current_mcap_usd, liveDeath?.current_mcap_usd, backlog?.current_mcap_usd, lifecycle?.market_cap, pf?.market_cap_usd);
       const liquidityUsd = num(c.liquidity_usd, liveDeath?.liquidity_usd, backlog?.liquidity_usd, lifecycle?.liquidity_usd, pf?.liquidity_usd);
       const ageHours = num(c.age_hours) ?? (liveDeath?.first_seen_at ? (Date.now() - new Date(liveDeath.first_seen_at).getTime()) / 3600000 : null);
