@@ -178,20 +178,21 @@ export default function AllDrafts() {
     else { toast({ title: 'TG scrape captured', description: 'Re-generate to use the new evidence.' }); load(); }
   }
 
-  async function vultureSweep(r: RowWithTg) {
+  async function communitySweep(r: RowWithTg) {
     setBusy(r.id);
-    const { data, error } = await supabase.functions.invoke('autopsy-vulture-sweep', {
-      body: { candidate_id: r.id, token_mint: r.token_mint, force: true },
+    const { data, error } = await supabase.functions.invoke('autopsy-community-sweep', {
+      body: { candidate_id: r.id, token_mint: r.token_mint, force: true, lenses: ['vulture', 'dissent'] },
     });
     setBusy(null);
     if (error) {
-      toast({ title: 'Vulture sweep failed', description: error.message, variant: 'destructive' });
+      toast({ title: 'Community sweep failed', description: error.message, variant: 'destructive' });
       return;
     }
-    const count = (data as any)?.vulture_count ?? 0;
+    const v = (data as any)?.lenses?.vulture ?? {};
+    const d = (data as any)?.lenses?.dissent ?? {};
     toast({
-      title: `Vulture sweep complete — ${count} flagged`,
-      description: count > 0 ? 'Re-generate to include in the report.' : 'No vultures detected.',
+      title: `Community sweep complete`,
+      description: `vultures: ${v.vulture_count ?? 0} · dissent score: ${d.dissent_score ?? 0}/100${d.riot_threshold_met ? ' (RIOT)' : ''}. Re-generate to include in the report.`,
     });
     load();
   }
