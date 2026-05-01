@@ -213,6 +213,14 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
       // ── v2: enrichment + dev dossier + evidence blobs ───────
       const enrichment = await enrichCandidate(supabase, c.token_mint, creatorWallet);
       const dossier = await buildDevDossier(supabase, creatorWallet);
+
+      // Trigger AI interpretation of any raw TG/X scrape blobs (best effort)
+      try {
+        await supabase.functions.invoke('autopsy-evidence-interpret', {
+          body: { candidate_id: c.id, token_mint: c.token_mint },
+        });
+      } catch (e) { console.warn('[autopsy-writer] evidence interpret skipped:', (e as Error).message); }
+
       const { data: blobs } = await supabase
         .from('autopsy_evidence_blobs')
         .select('kind, payload, captured_at')
@@ -321,6 +329,16 @@ Creator wallet: ${creatorWallet ?? 'unknown'}
 - DexScreener paid: ${enrichment.dex_paid ?? 'unknown'}
 - Holders at peak: ${enrichment.holders_at_ath ?? 'unknown'}
 - Dev holdings at death: ${enrichment.dev_holding_pct_at_death ?? 'unknown'}%
+
+## BOOST TIMELINE (DexScreener — every recorded change in totalAmount)
+${(enrichment.boost_timeline ?? []).length === 0
+  ? '(no boost activity captured)'
+  : (enrichment.boost_timeline ?? []).map(b => `- ${b.captured_at} total=${b.total_amount ?? '?'} delta=${b.delta_amount ?? 0} src=${b.source}`).join('\n')}
+
+## PAID ORDERS (DexScreener)
+${(enrichment.paid_orders ?? []).length === 0
+  ? '(no paid orders recorded)'
+  : (enrichment.paid_orders ?? []).map(o => `- ${o.payment_timestamp ?? 'unknown'} ${o.order_type} ${o.status ?? ''} amount=${o.amount ?? '?'}`).join('\n')}
 
 ## DEV DOSSIER (cluster-aware)
 - Reputation verdict: ${dossier.reputation_verdict}
