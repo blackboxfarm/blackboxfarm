@@ -99,23 +99,42 @@ async function resolveDevTwitterHandle(supabase: any, tokenMint: string): Promis
 }
 
 function normalizeTweet(t: any): RawPost {
+  // powerai actor returns raw X GraphQL Tweet objects: { legacy, core.user_results.result.legacy, ... }
+  // Other actors return flatter shapes. Support both.
+  const legacy = t.legacy ?? {};
+  const userLegacy = t.core?.user_results?.result?.legacy ?? {};
   const handle = String(
-    t.author?.userName ?? t.author?.screen_name ?? t.user?.screen_name ?? t.username ?? '',
+    userLegacy.screen_name ??
+    t.author?.userName ?? t.author?.screen_name ??
+    t.user?.screen_name ?? t.username ?? t.authorUsername ?? '',
   ).replace(/^@/, '').toLowerCase();
-  const display = t.author?.name ?? t.user?.name ?? null;
-  const text = String(t.text ?? t.full_text ?? '').trim();
+  const display = userLegacy.name ?? t.author?.name ?? t.user?.name ?? t.authorName ?? null;
+  const text = String(
+    legacy.full_text ?? t.fullText ?? t.full_text ?? t.text ?? t.tweetText ?? t.content ?? '',
+  ).trim();
   const urls: string[] = [];
-  const urlEntities = t.entities?.urls || t.urls || [];
-  for (const e of urlEntities) {
-    const u = e.expanded_url || e.unwound_url || e.url;
-    if (u) urls.push(u);
+  const urlEntitiesSources = [
+    legacy.entities?.urls,
+    t.entities?.urls,
+    t.urls,
+  ];
+  for (const src of urlEntitiesSources) {
+    if (!Array.isArray(src)) continue;
+    for (const e of src) {
+      const u = typeof e === 'string' ? e : (e?.expanded_url || e?.unwound_url || e?.url);
+      if (u) urls.push(u);
+    }
   }
   const bareMatches = text.match(/https?:\/\/[^\s)]+/g);
   if (bareMatches) urls.push(...bareMatches);
+  const restId = t.rest_id ?? legacy.id_str ?? t.id_str ?? t.id ?? null;
+  const postUrl = t.url ?? t.twitterUrl ?? t.tweetUrl
+    ?? (handle && restId ? `https://x.com/${handle}/status/${restId}` : null);
+  const postedAt = legacy.created_at ?? t.createdAt ?? t.created_at ?? t.tweetCreatedAt ?? t.timestamp ?? null;
   return {
     handle, display_name: display, text, urls: [...new Set(urls)],
-    posted_at: t.createdAt ?? t.created_at ?? null,
-    post_url: t.url ?? t.twitterUrl ?? null,
+    posted_at: postedAt,
+    post_url: postUrl,
     raw: t,
   };
 }
@@ -137,34 +156,25 @@ async function scrapeCommunityPosts(communityId: string, apifyKey: string, fnNam
       body: JSON.stringify({
         communityId,
         searchType: 'Default',
-        rankingMode: 'RelevanceRecencyLikes',
+        rankingMode: 'Recency',
         maxResults: 80,
       }),
     },
   );
   await logger.complete(res.status);
   if (!res.ok) {
-    console.warn(`[autopsy-community-sweep] community scrape ${res.status}`);
+    const errText = await res.text().catch(() => '');
+    console.warn(`[autopsy-community-sweep] community scrape ${res.status}: ${errText.slice(0, 500)}`);
     return [];
   }
   const tweets = await res.json();
-  if (!Array.isArray(tweets)) return [];
+  if (!Array.isArray(tweets)) {
+    console.warn(`[autopsy-community-sweep] non-array response, keys=${Object.keys(tweets || {}).join(',')}`);
+    return [];
+  }
+  console.log(`[autopsy-community-sweep] raw apify returned ${tweets.length} items; sample keys=${tweets[0] ? Object.keys(tweets[0]).join(',') : 'none'}`);
   return tweets
-    .map((tweet) => normalizeTweet({
-      ...tweet,
-      text: tweet.text ?? tweet.fullText ?? tweet.full_text ?? tweet.content ?? tweet.tweetText ?? '',
-      createdAt: tweet.createdAt ?? tweet.created_at ?? tweet.tweetCreatedAt ?? tweet.timestamp ?? null,
-      url: tweet.url ?? tweet.tweetUrl ?? tweet.tweet_url ?? null,
-      author: tweet.author ?? {
-        userName: tweet.authorUsername ?? tweet.username ?? tweet.handle ?? null,
-        name: tweet.authorName ?? tweet.displayName ?? null,
-      },
-      entities: tweet.entities ?? {
-        urls: Array.isArray(tweet.urls)
-          ? tweet.urls.map((u: any) => typeof u === 'string' ? { expanded_url: u } : u)
-          : [],
-      },
-    }))
+    .map(normalizeTweet)
     .filter((p) => p.handle && p.text);
 }
 
