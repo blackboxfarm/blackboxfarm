@@ -20873,6 +20873,10 @@ export type Database = {
       }
       count_distinct_tg_users: { Args: never; Returns: number }
       count_registered_tg_users: { Args: never; Returns: number }
+      count_telegram_announcement_recipients: {
+        Args: { p_audiences: string[] }
+        Returns: number
+      }
       create_wallet_backup: {
         Args: {
           p_pubkey: string
@@ -21094,6 +21098,13 @@ export type Database = {
         Args: never
         Returns: {
           user_id: string
+        }[]
+      }
+      get_telegram_announcement_recipients: {
+        Args: { p_audiences: string[] }
+        Returns: {
+          linked_user_id: string
+          telegram_user_id: string
         }[]
       }
       get_token_search_analytics: {
