@@ -336,6 +336,20 @@ export default function AllDrafts() {
                   </Button>
                 </>
               )}
+              {r.status !== 'drafted' && r.status !== 'approved' && r.status !== 'failed' && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={rowBusy(r.id)}
+                  onClick={() => regenerate(r)}
+                  className="border-amber-500 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
+                  title="Force-regenerate even while analyzing"
+                >
+                  {isBusy(r.id, 'regenerate')
+                    ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-generating…</>
+                    : <><RefreshCw className="h-3 w-3 mr-1" /> Re-generate</>}
+                </Button>
+              )}
           </div>
 
           {/* Title + status pills — full width, no compression */}
