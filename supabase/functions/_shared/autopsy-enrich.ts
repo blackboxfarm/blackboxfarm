@@ -36,6 +36,8 @@ export interface EnrichResult {
   dex_paid: boolean | null;
   holders_at_ath: number | null;
   dev_holding_pct_at_death: number | null;
+  boost_timeline?: Array<{ captured_at: string; total_amount: number | null; delta_amount: number | null; source: string }>;
+  paid_orders?: Array<{ order_type: string; status: string | null; amount: number | null; payment_timestamp: string | null }>;
 }
 
 export async function enrichCandidate(
@@ -83,28 +85,46 @@ export async function enrichCandidate(
     if (Number.isFinite(count) && count > 0) tgSubs = count;
   } catch { /* ignore */ }
 
-  // ── Paid boosts (sum) ───────────────────────────────────────
+  // ── Paid boosts: live timeline from token_boost_history ────
   let boosts: number | null = null;
+  let boostTimeline: EnrichResult['boost_timeline'] = [];
   try {
-    const { data: b } = await supabase
+    const { data: bh } = await supabase
+      .from('token_boost_history')
+      .select('captured_at, total_amount, delta_amount, source')
+      .eq('token_mint', tokenMint)
+      .order('captured_at', { ascending: true });
+    if (bh && bh.length > 0) {
+      boostTimeline = bh as any;
+      // Peak totalAmount across the timeline = lifetime boost tier reached
+      const peak = bh.reduce((m: number, r: any) => Math.max(m, Number(r.total_amount ?? 0)), 0);
+      boosts = peak || null;
+    }
+    // Manual admin entries still count as a fallback / override
+    const { data: be } = await supabase
       .from('boost_entries')
       .select('amount, link_url')
       .ilike('link_url', `%${tokenMint}%`);
-    if (b && b.length > 0) {
-      boosts = b.reduce((a: number, r: any) => a + Number(r.amount ?? 0), 0);
+    if (be && be.length > 0) {
+      const manual = be.reduce((a: number, r: any) => a + Number(r.amount ?? 0), 0);
+      boosts = Math.max(boosts ?? 0, manual) || null;
     }
-  } catch { /* ignore */ }
+  } catch (e) { console.warn('[autopsy-enrich] boost history read failed:', (e as Error).message); }
 
-  // ── DexScreener paid status ────────────────────────────────
+  // ── DexScreener paid status from token_paid_orders ─────────
   let dexPaid: boolean | null = null;
+  let paidOrders: EnrichResult['paid_orders'] = [];
   try {
-    const { data: dp } = await supabase
-      .from('dex_paid_status')
-      .select('is_paid')
+    const { data: po } = await supabase
+      .from('token_paid_orders')
+      .select('order_type, status, amount, payment_timestamp')
       .eq('token_mint', tokenMint)
-      .maybeSingle();
-    if (dp) dexPaid = !!dp.is_paid;
-  } catch { /* ignore */ }
+      .order('payment_timestamp', { ascending: true });
+    if (po && po.length > 0) {
+      paidOrders = po as any;
+      dexPaid = po.some((o: any) => o.status === 'approved' && (o.order_type === 'tokenProfile' || o.order_type === 'communityTakeover'));
+    }
+  } catch (e) { console.warn('[autopsy-enrich] paid orders read failed:', (e as Error).message); }
 
   // ── Holders at ATH (closest snapshot) ──────────────────────
   let holdersAtAth: number | null = null;
@@ -142,5 +162,7 @@ export async function enrichCandidate(
     dex_paid: dexPaid,
     holders_at_ath: holdersAtAth,
     dev_holding_pct_at_death: devHoldPct,
+    boost_timeline: boostTimeline,
+    paid_orders: paidOrders,
   };
 }
