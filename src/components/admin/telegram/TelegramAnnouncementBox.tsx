@@ -276,6 +276,19 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
               rows={4}
               className="text-sm"
             />
+            <ImageAttacher
+              imageUrl={imageUrl}
+              uploading={uploadingImage}
+              onPick={() => fileInputRef.current?.click()}
+              onClear={clearImage}
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="hidden"
+              onChange={handleImagePick}
+            />
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <Checkbox checked={testOnly} onCheckedChange={(v) => setTestOnly(v === true)} />
@@ -348,6 +361,19 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
               onChange={(e) => setMessage(e.target.value)}
               rows={4}
               className="text-sm"
+            />
+            <ImageAttacher
+              imageUrl={imageUrl}
+              uploading={uploadingImage}
+              onPick={() => fileInputRef.current?.click()}
+              onClear={clearImage}
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="hidden"
+              onChange={handleImagePick}
             />
 
             <div className="flex items-center justify-between mt-3">
