@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ExternalLink, RefreshCw, FileText, AlertTriangle, Send, Search } from 'lucide-react';
+import { ExternalLink, RefreshCw, FileText, AlertTriangle, Send, Search, Rocket } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
@@ -26,7 +26,12 @@ type Row = {
   manual_tg_join_completed?: boolean | null;
 };
 
-type RowWithTg = Row & { tg_url?: string | null; current_version?: number | null };
+type RowWithTg = Row & {
+  tg_url?: string | null;
+  current_version?: number | null;
+  boost_peak?: number | null;
+  boost_events?: number | null;
+};
 
 /**
  * Drafts tab — every autopsy candidate the writer touched, regardless of feed.
@@ -62,15 +67,27 @@ export default function AllDrafts() {
         ? supabase.from('autopsy_reports').select('candidate_id, version').in('candidate_id', candidateIds).eq('is_current', true)
         : Promise.resolve({ data: [] as any[] }),
     ]);
+    const { data: boosts } = mints.length
+      ? await supabase.from('token_boost_history').select('token_mint, total_amount, delta_amount').in('token_mint', mints)
+      : { data: [] as any[] };
     const tgByMint = new Map<string, string>();
     for (const s of (socials ?? [])) tgByMint.set(s.token_mint, s.url);
     const versionByCand = new Map<string, number>();
     for (const r of (reps ?? [])) versionByCand.set(r.candidate_id, r.version);
+    const peakByMint = new Map<string, number>();
+    const eventsByMint = new Map<string, number>();
+    for (const b of (boosts ?? []) as any[]) {
+      const v = Number(b.total_amount ?? 0);
+      if (v > (peakByMint.get(b.token_mint) ?? 0)) peakByMint.set(b.token_mint, v);
+      if (Number(b.delta_amount ?? 0) > 0) eventsByMint.set(b.token_mint, (eventsByMint.get(b.token_mint) ?? 0) + 1);
+    }
 
     setRows(baseRows.map(r => ({
       ...r,
       tg_url: tgByMint.get(r.token_mint) ?? null,
       current_version: versionByCand.get(r.id) ?? null,
+      boost_peak: peakByMint.get(r.token_mint) ?? null,
+      boost_events: eventsByMint.get(r.token_mint) ?? null,
     })));
   }
 
@@ -143,6 +160,12 @@ export default function AllDrafts() {
                   <Badge variant="outline" className="text-[10px]">socials {r.social_completeness}/6</Badge>
                 )}
                 {r.manual_tg_join_completed && <Badge variant="outline" className="text-[10px]">TG✓</Badge>}
+                {typeof r.boost_peak === 'number' && r.boost_peak > 0 && (
+                  <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-600 dark:text-amber-400">
+                    <Rocket className="h-2.5 w-2.5 mr-1" />boost peak {r.boost_peak}x
+                    {r.boost_events ? ` · ${r.boost_events} events` : ''}
+                  </Badge>
+                )}
               </div>
               <div className="text-[11px] text-muted-foreground mt-1 font-mono truncate">{r.token_mint}</div>
               <div className="text-[10px] text-muted-foreground mt-1">
