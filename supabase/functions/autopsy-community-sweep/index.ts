@@ -39,6 +39,7 @@ const corsHeaders = {
 
 const LOVABLE_AI_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 const COMMUNITY_RX = /x\.com\/i\/communities\/(\d+)/i;
+const RESERVED_X_PATHS = new Set(['i', 'home', 'explore', 'search', 'notifications', 'messages', 'compose', 'settings']);
 
 function extractCommunityId(input: string | null | undefined): string | null {
   if (!input) return null;
@@ -64,14 +65,35 @@ async function resolveCommunityForToken(supabase: any, tokenMint: string): Promi
 async function resolveDevTwitterHandle(supabase: any, tokenMint: string): Promise<string | null> {
   const { data } = await supabase
     .from('token_social_links')
-    .select('extracted_handle, platform, link_type, is_community')
+    .select('extracted_handle, platform, link_type, is_community, url, community_id')
     .eq('token_mint', tokenMint)
     .eq('platform', 'twitter')
     .neq('is_current', false);
-  // pick first non-community handle
+
+  const normalizeHandle = (value: string | null | undefined): string | null => {
+    if (!value) return null;
+    const cleaned = String(value).replace(/^@/, '').trim().toLowerCase();
+    if (!cleaned || RESERVED_X_PATHS.has(cleaned) || /^communit(y|ies)$/i.test(cleaned)) return null;
+    return cleaned;
+  };
+
+  const handleFromUrl = (url: string | null | undefined): string | null => {
+    if (!url) return null;
+    if (extractCommunityId(url)) return null;
+    try {
+      const parsed = new URL(url);
+      const first = parsed.pathname.split('/').filter(Boolean)[0] ?? null;
+      return normalizeHandle(first);
+    } catch {
+      return null;
+    }
+  };
+
+  // pick first non-community twitter profile handle
   for (const r of data ?? []) {
-    if (r.is_community) continue;
-    if (r.extracted_handle) return String(r.extracted_handle).replace(/^@/, '').toLowerCase();
+    if (r.is_community || r.community_id || extractCommunityId(r.url)) continue;
+    const handle = normalizeHandle(r.extracted_handle) ?? handleFromUrl(r.url);
+    if (handle) return handle;
   }
   return null;
 }
@@ -99,7 +121,7 @@ function normalizeTweet(t: any): RawPost {
 }
 
 async function scrapeCommunityPosts(communityId: string, apifyKey: string, fnName: string): Promise<RawPost[]> {
-  const actorId = 'apidojo~tweet-scraper';
+  const actorId = 'powerai~twitter-community-tweets-scraper';
   const logger = createApiLogger({
     serviceName: 'apify',
     endpoint: `${actorId}/community-feed`,
@@ -113,10 +135,10 @@ async function scrapeCommunityPosts(communityId: string, apifyKey: string, fnNam
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        startUrls: [{ url: `https://x.com/i/communities/${communityId}` }],
-        maxItems: 80,
-        sort: 'Latest',
-        tweetLanguage: 'en',
+        communityId,
+        searchType: 'Default',
+        rankingMode: 'RelevanceRecencyLikes',
+        maxResults: 80,
       }),
     },
   );
@@ -127,7 +149,23 @@ async function scrapeCommunityPosts(communityId: string, apifyKey: string, fnNam
   }
   const tweets = await res.json();
   if (!Array.isArray(tweets)) return [];
-  return tweets.map(normalizeTweet).filter((p) => p.handle && p.text);
+  return tweets
+    .map((tweet) => normalizeTweet({
+      ...tweet,
+      text: tweet.text ?? tweet.fullText ?? tweet.full_text ?? tweet.content ?? tweet.tweetText ?? '',
+      createdAt: tweet.createdAt ?? tweet.created_at ?? tweet.tweetCreatedAt ?? tweet.timestamp ?? null,
+      url: tweet.url ?? tweet.tweetUrl ?? tweet.tweet_url ?? null,
+      author: tweet.author ?? {
+        userName: tweet.authorUsername ?? tweet.username ?? tweet.handle ?? null,
+        name: tweet.authorName ?? tweet.displayName ?? null,
+      },
+      entities: tweet.entities ?? {
+        urls: Array.isArray(tweet.urls)
+          ? tweet.urls.map((u: any) => typeof u === 'string' ? { expanded_url: u } : u)
+          : [],
+      },
+    }))
+    .filter((p) => p.handle && p.text);
 }
 
 async function scrapeDevTimelineLastPostAt(handle: string, apifyKey: string, fnName: string): Promise<{ last_post_at: string | null; sample_count: number }> {
