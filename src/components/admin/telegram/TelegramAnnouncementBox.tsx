@@ -340,6 +340,7 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
   // ─── Hosted view (simple) ───
   if (audience === 'hosted') {
     return (
+      <>
       <Card className="border-dashed border-yellow-500/30">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
@@ -396,11 +397,23 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
           </div>
         </CardContent>
       </Card>
+      {pendingCropSrc && (
+        <ImageCropDialog
+          open={cropOpen}
+          onOpenChange={(o) => { setCropOpen(o); if (!o && pendingCropSrc) { URL.revokeObjectURL(pendingCropSrc); setPendingCropSrc(null); } }}
+          imageSrc={pendingCropSrc}
+          onCropComplete={handleCropComplete}
+          defaultAspect="free"
+          title="Crop announcement image"
+        />
+      )}
+      </>
     );
   }
 
   // ─── Accounts view with checkboxes + history ───
   return (
+    <>
     <Card className="border-dashed border-yellow-500/30">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm flex items-center gap-2">
@@ -577,6 +590,17 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
         </Tabs>
       </CardContent>
     </Card>
+    {pendingCropSrc && (
+      <ImageCropDialog
+        open={cropOpen}
+        onOpenChange={(o) => { setCropOpen(o); if (!o && pendingCropSrc) { URL.revokeObjectURL(pendingCropSrc); setPendingCropSrc(null); } }}
+        imageSrc={pendingCropSrc}
+        onCropComplete={handleCropComplete}
+        defaultAspect="free"
+        title="Crop announcement image"
+      />
+    )}
+    </>
   );
 }
 
