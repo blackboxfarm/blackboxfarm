@@ -24,7 +24,7 @@ import { getCachedToken } from '../_shared/mesh-cache.ts';
 import { ingestPublicCAQuery } from '../_shared/mesh-ingest.ts';
 import { resolveTokenCreator } from '../_shared/creator-resolver.ts';
 import { fetchDexScreenerData } from '../_shared/dexscreener-api.ts';
-import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
+import { fetchLaunchpadCoin, detectLaunchpad } from '../_shared/launchpad-fetch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -150,64 +150,62 @@ async function handle(req: Request): Promise<Response> {
         detail: `${identity.ticker ?? '?'} · mcap=$${Math.round(identity.marketCapUsd ?? 0)} · liq=$${Math.round(identity.liquidityUsd ?? 0)}`,
       });
     } else {
-      // Fallback: Pump.fun
-      const pf = await timed(() => fetchPumpFunCoin(mint, 'token-mesh-hydrate'));
-      if (pf.result) {
-        identity.ticker ||= pf.result.symbol ?? null;
-        identity.name ||= pf.result.name ?? null;
-        identity.twitterUrl ||= pf.result.twitter ?? null;
-        identity.telegramUrl ||= pf.result.telegram ?? null;
-        identity.websiteUrl ||= pf.result.website ?? null;
-        identity.marketCapUsd ||= (typeof pf.result.usd_market_cap === 'number' ? pf.result.usd_market_cap : null);
-        identity.athMcapUsd ||= (typeof pf.result.ath_market_cap === 'number' ? pf.result.ath_market_cap : null);
-        identity.imageUrl ||= pf.result.image_uri ?? null;
-        identity.createdAt ||= pf.result.created_timestamp
-          ? new Date(pf.result.created_timestamp).toISOString()
-          : null;
-        creatorWallet ||= pf.result.creator ?? null;
+      // Fallback: unified launchpad resolver (Pump.fun / Bags.fm / Bonk / Meteora)
+      const lp = await timed(() => fetchLaunchpadCoin(mint, 'token-mesh-hydrate'));
+      if (lp.result?.data) {
+        const d = lp.result.data;
+        identity.ticker ||= d.symbol ?? null;
+        identity.name ||= d.name ?? null;
+        identity.twitterUrl ||= d.twitter ?? null;
+        identity.telegramUrl ||= d.telegram ?? null;
+        identity.websiteUrl ||= d.website ?? null;
+        identity.marketCapUsd ||= d.marketCapUsd ?? null;
+        identity.athMcapUsd ||= d.athMarketCapUsd ?? null;
+        identity.imageUrl ||= d.imageUri ?? null;
+        identity.createdAt ||= d.createdAt ?? null;
+        creatorWallet ||= d.creator ?? null;
         steps.push({
           step: 'identity',
           ok: true,
-          source: 'pumpfun',
-          ms: dx.ms + pf.ms,
-          detail: `${identity.ticker ?? '?'} (DexScreener empty — Pump.fun fallback)`,
+          source: d.launchpad,
+          ms: dx.ms + lp.ms,
+          detail: `${identity.ticker ?? '?'} (DexScreener empty — ${d.launchpad} fallback)`,
         });
       } else {
         steps.push({
           step: 'identity',
           ok: false,
-          ms: dx.ms + pf.ms,
-          reason: `DexScreener: ${dx.error ?? 'no pairs'} · Pump.fun: ${pf.error ?? 'no record'}`,
+          ms: dx.ms + lp.ms,
+          reason: `DexScreener: ${dx.error ?? 'no pairs'} · launchpad(${lp.result?.launchpad ?? '?'}): ${lp.result?.reason ?? lp.error ?? 'no record'}`,
         });
       }
     }
   }
 
-  // -- Step 2b: opportunistic Pump.fun enrichment --
-  // If DexScreener handled identity but didn't give us ATH / image / created_at,
-  // and the mint looks like a pump.fun mint (ends with "pump"), fetch the Pump.fun
-  // payload anyway. Same call powers ATH everywhere downstream.
+  // -- Step 2b: opportunistic launchpad enrichment --
+  // DexScreener handled identity but didn't fill ATH / image / createdAt.
+  // Route through the unified resolver — Pump.fun returns full data,
+  // Bags.fm returns creator/socials, Bonk/Meteora return null cleanly.
   if (
     (identity.athMcapUsd == null || identity.imageUrl == null || identity.createdAt == null) &&
-    (mint.endsWith('pump') || mint.endsWith('PUMP'))
+    detectLaunchpad(mint) !== 'unknown'
   ) {
-    const pf2 = await timed(() => fetchPumpFunCoin(mint, 'token-mesh-hydrate-enrich'));
-    if (pf2.result) {
-      identity.athMcapUsd ||= (typeof pf2.result.ath_market_cap === 'number' ? pf2.result.ath_market_cap : null);
-      identity.marketCapUsd ||= (typeof pf2.result.usd_market_cap === 'number' ? pf2.result.usd_market_cap : null);
-      identity.imageUrl ||= pf2.result.image_uri ?? null;
-      identity.createdAt ||= pf2.result.created_timestamp
-        ? new Date(pf2.result.created_timestamp).toISOString()
-        : null;
-      identity.twitterUrl ||= pf2.result.twitter ?? null;
-      identity.telegramUrl ||= pf2.result.telegram ?? null;
-      identity.websiteUrl ||= pf2.result.website ?? null;
-      creatorWallet ||= pf2.result.creator ?? null;
+    const lp2 = await timed(() => fetchLaunchpadCoin(mint, 'token-mesh-hydrate-enrich'));
+    if (lp2.result?.data) {
+      const d = lp2.result.data;
+      identity.athMcapUsd ||= d.athMarketCapUsd ?? null;
+      identity.marketCapUsd ||= d.marketCapUsd ?? null;
+      identity.imageUrl ||= d.imageUri ?? null;
+      identity.createdAt ||= d.createdAt ?? null;
+      identity.twitterUrl ||= d.twitter ?? null;
+      identity.telegramUrl ||= d.telegram ?? null;
+      identity.websiteUrl ||= d.website ?? null;
+      creatorWallet ||= d.creator ?? null;
       steps.push({
-        step: 'pumpfun-enrich',
+        step: 'launchpad-enrich',
         ok: true,
-        source: 'pumpfun',
-        ms: pf2.ms,
+        source: d.launchpad,
+        ms: lp2.ms,
         detail: `ath=${identity.athMcapUsd ?? '—'} · img=${identity.imageUrl ? 'yes' : 'no'}`,
       });
     }
