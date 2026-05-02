@@ -1,97 +1,103 @@
+## Why $UNCRAFT and $MCUNC came out thin
 
-## Two issues, one plan
+You and I co-wrote the $GPT report by hand. Then we built the funnel + writer to mass-produce reports in that style. The writer prompt and few-shot are correct — what's missing is the **evidence**.
 
----
+Look at what makes the GPT report rich:
+- Funder → dev SOL transfer with exact timestamp ("89.1 SOL, 17 min PRE-launch")
+- Launch transaction decoded: dev-buy 791M (79%) + sniper 207M (21%) inside the same atomic tx
+- Dev wallet's final on-chain action ("CloseAccount at 14:03:07 UTC")
+- Dump cascade reconstructed: 20+ txs in 6 seconds at 14:12:34
+- USDC consolidation pattern post-dump (1,061 USDC chunks)
+- Holders count, exact ATH timestamp, exact death timestamp
 
-### Part 1 — Autopsy "Re-generate" button (clarification)
+Now look at what `autopsy-writer` actually feeds Gemini:
+- `lifecycle` row, `dev_behavior_scores` (just aggregate numbers like `dump_velocity_score: 80`)
+- `dev_wallet_reputation` row
+- `token_social_links` rows
+- `enrichCandidate` (socials, boosts, holders_at_ath, dev_holding_pct)
+- `dev_dossier` (cluster history)
+- TG/X scrape blobs
 
-**Good news: it didn't go anywhere.** The Re-generate button still lives on every draft row in `AllDrafts.tsx` (lines 287-330). It's just not on the sub-tab you're viewing in screenshot 3.
+**Zero transaction-level forensics.** No funder resolution, no launch tx decode, no signature timeline, no dump-cascade reconstruction. So Gemini fills the gap with vague prose — which is exactly what you saw in #2 and #3.
 
-In your screenshot you're on **"Drafts (your reports)"** which shows the *current* draft for `$uncraft`. The Re-generate button appears on **each individual draft row** — visible when you scroll the row right, or when the row is in `analyzing v4` / `failed` / `approved` state. The button calls `autopsy-writer` with `regenerate: true`.
+Plus: the new `admin_manual` button kicks `autopsy-writer` immediately, before any community sweep / TG pull / vulture sweep has had a chance to run on a brand-new candidate. That's why $MCUNC was the worst of the three.
 
-**Action:** I'll make the Re-generate button more prominent on the Drafts row so it's never missed — move it to the front of the action button cluster with a clear `🔄 Re-generate` label, and ensure it shows for every status (not just terminal ones).
+## The plan — close the gap in 4 changes
 
-No structural change needed — just visibility polish.
+### 1. New edge function `autopsy-tx-timeline`
 
----
+Pulls the deterministic on-chain forensics every report needs. Helius RPC only — no AI.
 
-### Part 2 — Inline variant tabs in Intel Briefings editor
+For a given `token_mint` + `creator_wallet`:
 
-**You're 100% right and the plumbing is already half-built.** Here's what exists vs. what's missing:
+- **Launch tx**: find the `CreateV2`/initialize tx, decode inner instructions to extract every buy that landed in the same tx (dev_buy_amount, sniper buys, % of bonding curve consumed).
+- **Funder resolution**: walk the dev wallet's first inbound SOL transfer → record funder address, amount, timestamp, "minutes before launch".
+- **Dev wallet activity**: full signature list with timestamps, classified (token-buy, token-sell, close-account, transfer-out, idle).
+- **Dump cascade**: scan AMM swap txs against the pair, find the largest 60s window of net-sell volume → record start time, tx count, SOL out, price impact.
+- **Post-dump flow**: track funder/dev outbound transfers for 30 min after cascade — flag USDC swaps, exchange deposits, mixer addresses.
+- **Final on-chain trade**: last swap on the pair → that's "Time of Death".
 
-**Already built:**
-- `intel_briefing_variants` table (`briefing_id`, `depth`, `content_md`)
-- `condense-article` edge function (uses Lovable AI Gateway / Gemini 3 Flash)
-- `ContentCondenser.tsx` standalone "Repurpose" tab that handles 75/50/25%
-- Publication form already tracks `is_breadcrumb` + `content_depth` for tracking exposure
+Persist to a new `autopsy_tx_evidence` row keyed on `candidate_id` (jsonb columns for each section + a denormalized summary). Write the same payload to `autopsy_evidence_blobs` kind `tx_timeline` so existing readers pick it up.
 
-**Missing — what this plan delivers:**
-1. The variant tabs are NOT shown inline next to Edit/Preview in the article editor (you have to leave the editor and go to a different tab to see them).
-2. **Breadcrumbs** is not yet a generatable depth variant (only 75/50/25 exist).
-3. No "view this variant in the editor preview" affordance.
+### 2. Wire `autopsy-writer` to consume it
 
----
+Before the AI call:
+- Invoke `autopsy-tx-timeline` (await, not fire-and-forget — this IS the substance).
+- Read back the evidence row.
+- Inject 3 new structured sections into the user prompt:
+  - `## LAUNCH TX FORENSICS` — funder, dev-buy %, sniper(s), atomic-snipe verdict
+  - `## DEV WALLET TIMELINE` — chronological actions with UTC timestamps
+  - `## DUMP CASCADE` — start time, tx count, SOL extracted, price impact, post-dump consolidation pattern
+- Tighten the system prompt: "Section 3 (Timeline) and Section 4 (Mechanic) MUST cite specific UTC timestamps and SOL amounts from LAUNCH TX FORENSICS and DEV WALLET TIMELINE. If those sections are empty, write 'on-chain forensics unavailable' rather than inventing prose."
 
-### The new editor tab strip
+### 3. Fix the `admin_manual` shortcut
 
-Replace the current 2-tab strip:
+In `AutopsyQueueBody.tsx` the manual-add button currently invokes `autopsy-writer` immediately. Change it to invoke a small orchestrator order:
 
-```text
-[Edit] [Preview]                              [Import .md] [Insert Gallery] [Breadcrumbs] [Revisions]
+```
+autopsy-tx-timeline   (new — deterministic, ~10s)
+autopsy-tg-deep-pull  (existing)
+autopsy-community-sweep (existing — vulture + dissent)
+autopsy-writer        (existing)
 ```
 
-With a 6-tab strip that maps directly to your publications model:
+Run them sequentially with status updates so the admin sees progress. Manual entries get the same enrichment depth as funnel-fed ones.
 
-```text
-[Edit ✏️] [Preview 👁️] | [100% Full] [75% Substantial] [50% Condensed] [25% Teaser] [🔗 Breadcrumb]
+### 4. Add a "Re-Forensics" admin button
+
+Next to the existing "Re-generate" button on each draft row in `/super-admin/autopsy-queue`, add **"🔬 Re-Forensics"** that re-runs `autopsy-tx-timeline` then `autopsy-writer` with `regenerate=true`. This lets you fix any of the existing thin reports ($UNCRAFT, $MCUNC) by replaying them against the new evidence layer.
+
+## Technical details
+
+**New table**: `autopsy_tx_evidence`
+```
+candidate_id uuid PK references autopsy_candidates(id)
+token_mint text not null
+creator_wallet text
+funder_wallet text
+funder_funded_amount_sol numeric
+funder_funded_at timestamptz
+launch_tx_signature text
+launch_tx_at timestamptz
+dev_buy_amount_tokens numeric
+dev_buy_pct_of_curve numeric
+co_snipers jsonb            -- [{wallet, amount, pct}, ...]
+dev_signatures jsonb        -- [{sig, ts, kind, summary}, ...]
+dev_final_action_at timestamptz
+dev_final_action_kind text
+dump_cascade jsonb          -- {start_at, end_at, tx_count, sol_out, pct_drop}
+post_dump_flow jsonb        -- [{ts, kind, amount, dest}, ...]
+time_of_death_at timestamptz
+collected_at timestamptz default now()
 ```
 
-- **Edit** / **Preview** — unchanged (they always operate on the 100% master article).
-- **100% Full** — read-only echo of the master `content_md` for parity (so the row looks complete).
-- **75% / 50% / 25%** — each tab loads from `intel_briefing_variants` for that depth.
-- **Breadcrumb** — new variant stored as `depth = 0` (a teaser/announcement <25% intended for X/Telegram-style posts that link back).
+**Helius calls budgeted per token**: ~6-10 RPC calls (getSignaturesForAddress on dev + funder, getTransaction on launch + cascade window, getTokenAccountBalance). Well inside your 10M monthly quota even at 100 reports/day.
 
-### Each variant tab (75/50/25/Breadcrumb) shows:
+**Order of build**: (1) edge function + table, (2) writer integration + prompt update, (3) UI buttons, (4) replay $UNCRAFT and $MCUNC to verify quality lift.
 
-- A header strip: depth badge + suggested platforms (e.g. "Medium / Long-form")
-- **Generate** button (when empty) → calls `condense-article` with the depth-specific instruction
-- **Re-generate** button (when filled) → re-runs the AI on the master 100% article
-- **Save** + **Copy** buttons
-- A markdown textarea bound to the variant's `content_md`
-- Last-updated timestamp + character count + % of master length (live calculated)
-- A small **"Open in Preview"** button that swaps the Preview tab to render this variant instead of the 100% (so you can see it formatted before posting)
+**Out of scope here** (separate plan if you want):
+- Cluster-wide tx-flow graph
+- Cross-token funder reuse detection
+- Image-based banner forensics
 
-### Breadcrumb depth
-
-Adds a 4th depth (`depth = 0`) with its own instruction:
-
-> "Compose a 2-3 sentence teaser/breadcrumb post (max ~280 chars) suitable for Twitter/X or Telegram. Lead with the most provocative hook from the article. End with a link back to blackbox.farm/intel/briefing/{slug}. No hashtags unless they appear in the original."
-
-### Repurpose tab (existing)
-
-Stays as-is for the bulk batch view across all articles. The new inline tabs are the **per-article authoring surface**; the Repurpose tab remains the **fleet-wide overview**. Both read/write the same `intel_briefing_variants` table so they stay in sync.
-
----
-
-### Technical details
-
-**Files edited:**
-- `src/components/admin/IntelBriefingsManager.tsx` — extend the editor `Tabs` block (around line 1010) to include 5 extra `TabsTrigger`s + `TabsContent`s. Lift variant fetching for `editingId` via React Query.
-- `src/components/admin/publications/ContentCondenser.tsx` — extend `DEPTH_CONFIG` to include `{ depth: 0, label: 'Breadcrumb', platform: 'X / Telegram teaser' }` and add the breadcrumb instruction branch in `handleGenerate`.
-- `src/components/admin/autopsies/AllDrafts.tsx` — promote Re-generate button visibility (front of action cluster, always visible).
-
-**New file:**
-- `src/components/admin/intel/VariantEditorTab.tsx` — a small reusable component for one variant tab (textarea + Generate/Save/Copy/Open-in-Preview buttons). Used 4× in the editor (one per non-100% depth).
-
-**Edge function:**
-- `condense-article` — already accepts arbitrary `instruction` + `content` in the body, so no edge changes needed. The new breadcrumb instruction is passed from the client.
-
-**No DB migration needed** — `intel_briefing_variants.depth` is already an `integer`, so `depth = 0` just works. The existing UNIQUE/lookup logic in `ContentCondenser` keys by `${briefingId}-${depth}` and handles it natively.
-
-**No schema/type regeneration needed** — depth is already typed as `number`.
-
-### Out of scope (call out so we don't drift)
-
-- Auto-publishing variants to external platforms — variants are still copy-paste-by-hand into Medium/Reddit/X. The Publications tracker already logs where each depth got posted (your screenshot 1 form).
-- Per-platform tone tuning beyond the 4 existing depths (e.g. "LinkedIn voice"). Can be added later as additional depth profiles or a freeform "custom prompt" field — flag if you want it now.
-- Image picking inside variants — variants are text-only for now; the master article keeps the gallery/hero image.
+After approval I'll switch to build mode and ship 1→4 in order.

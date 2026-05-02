@@ -1766,6 +1766,98 @@ export type Database = {
           },
         ]
       }
+      autopsy_tx_evidence: {
+        Row: {
+          atomic_snipe_pct: number | null
+          candidate_id: string
+          co_snipers: Json | null
+          collected_at: string
+          creator_wallet: string | null
+          dev_buy_amount_tokens: number | null
+          dev_buy_pct_of_curve: number | null
+          dev_buy_sol: number | null
+          dev_final_action_at: string | null
+          dev_final_action_kind: string | null
+          dev_final_action_signature: string | null
+          dev_signatures: Json | null
+          dump_cascade: Json | null
+          funder_funded_amount_sol: number | null
+          funder_funded_at: string | null
+          funder_minutes_before_launch: number | null
+          funder_wallet: string | null
+          launch_tx_at: string | null
+          launch_tx_signature: string | null
+          notes: string | null
+          post_dump_flow: Json | null
+          time_of_death_at: string | null
+          token_mint: string
+          updated_at: string
+          usdc_consolidation_observed: boolean | null
+        }
+        Insert: {
+          atomic_snipe_pct?: number | null
+          candidate_id: string
+          co_snipers?: Json | null
+          collected_at?: string
+          creator_wallet?: string | null
+          dev_buy_amount_tokens?: number | null
+          dev_buy_pct_of_curve?: number | null
+          dev_buy_sol?: number | null
+          dev_final_action_at?: string | null
+          dev_final_action_kind?: string | null
+          dev_final_action_signature?: string | null
+          dev_signatures?: Json | null
+          dump_cascade?: Json | null
+          funder_funded_amount_sol?: number | null
+          funder_funded_at?: string | null
+          funder_minutes_before_launch?: number | null
+          funder_wallet?: string | null
+          launch_tx_at?: string | null
+          launch_tx_signature?: string | null
+          notes?: string | null
+          post_dump_flow?: Json | null
+          time_of_death_at?: string | null
+          token_mint: string
+          updated_at?: string
+          usdc_consolidation_observed?: boolean | null
+        }
+        Update: {
+          atomic_snipe_pct?: number | null
+          candidate_id?: string
+          co_snipers?: Json | null
+          collected_at?: string
+          creator_wallet?: string | null
+          dev_buy_amount_tokens?: number | null
+          dev_buy_pct_of_curve?: number | null
+          dev_buy_sol?: number | null
+          dev_final_action_at?: string | null
+          dev_final_action_kind?: string | null
+          dev_final_action_signature?: string | null
+          dev_signatures?: Json | null
+          dump_cascade?: Json | null
+          funder_funded_amount_sol?: number | null
+          funder_funded_at?: string | null
+          funder_minutes_before_launch?: number | null
+          funder_wallet?: string | null
+          launch_tx_at?: string | null
+          launch_tx_signature?: string | null
+          notes?: string | null
+          post_dump_flow?: Json | null
+          time_of_death_at?: string | null
+          token_mint?: string
+          updated_at?: string
+          usdc_consolidation_observed?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "autopsy_tx_evidence_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: true
+            referencedRelation: "autopsy_candidates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       banker_pool: {
         Row: {
           created_at: string
