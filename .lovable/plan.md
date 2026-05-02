@@ -109,3 +109,33 @@ Bonk.fun has no public REST. Reaching parity requires either:
 
 Decision deferred. The resolver returns `null` with a clear reason so callers
 behave correctly regardless.
+
+---
+
+## Pass 3 — follow-on fixes (this turn)
+
+1. **token-mesh-hydrate migrated** to `fetchLaunchpadCoin`. Pump-only
+   `fetchPumpFunCoin` calls replaced with the unified resolver. Now Bags.fm
+   mints get creator + socials in the same hydration pass; Bonk/Meteora fall
+   through cleanly.
+
+2. **MCUNC TG deep-pull silent skip — fixed.** Root cause: DexScreener
+   returned the pair without socials, so `identity.telegramUrl` stayed null,
+   and the autopsy queue's `if (ident.telegramUrl)` gate skipped the call.
+   Added a `socials-backfill` step to `token-mesh-hydrate` that reads from
+   `token_social_links` after the harvest step, so identity always reflects
+   discovered socials regardless of which provider surfaced them.
+
+3. **Weak-theme copycat detector** added at
+   `_shared/copycat-detector.ts`. Pulls the creator's prior Pump.fun launches
+   via `fetchPumpFunCreatorCoins`, finds shared-word clusters of ≥3 tokens,
+   and emits one of: `weak_theme_copycat`, `low_effort_serial`,
+   `mixed_history`, `clean`, `insufficient_history`. Verdict + caution
+   message persisted to `dev_wallet_reputation.metadata.copycat` and returned
+   in `token-mesh-hydrate` response so /holders + /bubblemap pre-scan can
+   show "Dev shipped 5 'UNC' variants in 11 days, all under $30k" banners.
+
+### Files changed
+- `supabase/functions/token-mesh-hydrate/index.ts`
+- `supabase/functions/_shared/copycat-detector.ts` (new)
+- `.lovable/plan.md`

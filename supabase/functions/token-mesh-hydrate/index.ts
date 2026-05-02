@@ -24,7 +24,8 @@ import { getCachedToken } from '../_shared/mesh-cache.ts';
 import { ingestPublicCAQuery } from '../_shared/mesh-ingest.ts';
 import { resolveTokenCreator } from '../_shared/creator-resolver.ts';
 import { fetchDexScreenerData } from '../_shared/dexscreener-api.ts';
-import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
+import { fetchLaunchpadCoin, detectLaunchpad } from '../_shared/launchpad-fetch.ts';
+import { detectCopycatPattern, type CopycatVerdict } from '../_shared/copycat-detector.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -106,6 +107,7 @@ async function handle(req: Request): Promise<Response> {
     createdAt?: string | null;
   } = {};
   let creatorWallet: string | null = null;
+  let copycatVerdict: CopycatVerdict | null = null;
 
   // -- Step 1: cache --
   if (!force) {
@@ -150,64 +152,62 @@ async function handle(req: Request): Promise<Response> {
         detail: `${identity.ticker ?? '?'} · mcap=$${Math.round(identity.marketCapUsd ?? 0)} · liq=$${Math.round(identity.liquidityUsd ?? 0)}`,
       });
     } else {
-      // Fallback: Pump.fun
-      const pf = await timed(() => fetchPumpFunCoin(mint, 'token-mesh-hydrate'));
-      if (pf.result) {
-        identity.ticker ||= pf.result.symbol ?? null;
-        identity.name ||= pf.result.name ?? null;
-        identity.twitterUrl ||= pf.result.twitter ?? null;
-        identity.telegramUrl ||= pf.result.telegram ?? null;
-        identity.websiteUrl ||= pf.result.website ?? null;
-        identity.marketCapUsd ||= (typeof pf.result.usd_market_cap === 'number' ? pf.result.usd_market_cap : null);
-        identity.athMcapUsd ||= (typeof pf.result.ath_market_cap === 'number' ? pf.result.ath_market_cap : null);
-        identity.imageUrl ||= pf.result.image_uri ?? null;
-        identity.createdAt ||= pf.result.created_timestamp
-          ? new Date(pf.result.created_timestamp).toISOString()
-          : null;
-        creatorWallet ||= pf.result.creator ?? null;
+      // Fallback: unified launchpad resolver (Pump.fun / Bags.fm / Bonk / Meteora)
+      const lp = await timed(() => fetchLaunchpadCoin(mint, 'token-mesh-hydrate'));
+      if (lp.result?.data) {
+        const d = lp.result.data;
+        identity.ticker ||= d.symbol ?? null;
+        identity.name ||= d.name ?? null;
+        identity.twitterUrl ||= d.twitter ?? null;
+        identity.telegramUrl ||= d.telegram ?? null;
+        identity.websiteUrl ||= d.website ?? null;
+        identity.marketCapUsd ||= d.marketCapUsd ?? null;
+        identity.athMcapUsd ||= d.athMarketCapUsd ?? null;
+        identity.imageUrl ||= d.imageUri ?? null;
+        identity.createdAt ||= d.createdAt ?? null;
+        creatorWallet ||= d.creator ?? null;
         steps.push({
           step: 'identity',
           ok: true,
-          source: 'pumpfun',
-          ms: dx.ms + pf.ms,
-          detail: `${identity.ticker ?? '?'} (DexScreener empty — Pump.fun fallback)`,
+          source: d.launchpad,
+          ms: dx.ms + lp.ms,
+          detail: `${identity.ticker ?? '?'} (DexScreener empty — ${d.launchpad} fallback)`,
         });
       } else {
         steps.push({
           step: 'identity',
           ok: false,
-          ms: dx.ms + pf.ms,
-          reason: `DexScreener: ${dx.error ?? 'no pairs'} · Pump.fun: ${pf.error ?? 'no record'}`,
+          ms: dx.ms + lp.ms,
+          reason: `DexScreener: ${dx.error ?? 'no pairs'} · launchpad(${lp.result?.launchpad ?? '?'}): ${lp.result?.reason ?? lp.error ?? 'no record'}`,
         });
       }
     }
   }
 
-  // -- Step 2b: opportunistic Pump.fun enrichment --
-  // If DexScreener handled identity but didn't give us ATH / image / created_at,
-  // and the mint looks like a pump.fun mint (ends with "pump"), fetch the Pump.fun
-  // payload anyway. Same call powers ATH everywhere downstream.
+  // -- Step 2b: opportunistic launchpad enrichment --
+  // DexScreener handled identity but didn't fill ATH / image / createdAt.
+  // Route through the unified resolver — Pump.fun returns full data,
+  // Bags.fm returns creator/socials, Bonk/Meteora return null cleanly.
   if (
     (identity.athMcapUsd == null || identity.imageUrl == null || identity.createdAt == null) &&
-    (mint.endsWith('pump') || mint.endsWith('PUMP'))
+    detectLaunchpad(mint) !== 'unknown'
   ) {
-    const pf2 = await timed(() => fetchPumpFunCoin(mint, 'token-mesh-hydrate-enrich'));
-    if (pf2.result) {
-      identity.athMcapUsd ||= (typeof pf2.result.ath_market_cap === 'number' ? pf2.result.ath_market_cap : null);
-      identity.marketCapUsd ||= (typeof pf2.result.usd_market_cap === 'number' ? pf2.result.usd_market_cap : null);
-      identity.imageUrl ||= pf2.result.image_uri ?? null;
-      identity.createdAt ||= pf2.result.created_timestamp
-        ? new Date(pf2.result.created_timestamp).toISOString()
-        : null;
-      identity.twitterUrl ||= pf2.result.twitter ?? null;
-      identity.telegramUrl ||= pf2.result.telegram ?? null;
-      identity.websiteUrl ||= pf2.result.website ?? null;
-      creatorWallet ||= pf2.result.creator ?? null;
+    const lp2 = await timed(() => fetchLaunchpadCoin(mint, 'token-mesh-hydrate-enrich'));
+    if (lp2.result?.data) {
+      const d = lp2.result.data;
+      identity.athMcapUsd ||= d.athMarketCapUsd ?? null;
+      identity.marketCapUsd ||= d.marketCapUsd ?? null;
+      identity.imageUrl ||= d.imageUri ?? null;
+      identity.createdAt ||= d.createdAt ?? null;
+      identity.twitterUrl ||= d.twitter ?? null;
+      identity.telegramUrl ||= d.telegram ?? null;
+      identity.websiteUrl ||= d.website ?? null;
+      creatorWallet ||= d.creator ?? null;
       steps.push({
-        step: 'pumpfun-enrich',
+        step: 'launchpad-enrich',
         ok: true,
-        source: 'pumpfun',
-        ms: pf2.ms,
+        source: d.launchpad,
+        ms: lp2.ms,
         detail: `ath=${identity.athMcapUsd ?? '—'} · img=${identity.imageUrl ? 'yes' : 'no'}`,
       });
     }
@@ -328,6 +328,79 @@ async function handle(req: Request): Promise<Response> {
     });
   }
 
+  // -- Step 6a: weak-theme copycat detection (Pump.fun-only — needs creator history) --
+  if (creatorWallet && detectLaunchpad(mint) === 'pumpfun') {
+    const cc = await timed(() => detectCopycatPattern(creatorWallet!, 'token-mesh-hydrate', mint));
+    if (cc.result) {
+      copycatVerdict = cc.result;
+      // Persist to dev_wallet_reputation.metadata for downstream surfaces
+      await supabase
+        .from('dev_wallet_reputation')
+        .update({
+          metadata: {
+            copycat: {
+              verdict: cc.result.verdict,
+              caution: cc.result.cautionMessage,
+              clusters: cc.result.clusters.map(c => ({ theme: c.theme, count: c.members.length })),
+              failureRate: cc.result.failureRate,
+              medianAthUsd: cc.result.medianAthUsd,
+              launchesLast30d: cc.result.launchesLast30d,
+              totalPriorTokens: cc.result.totalPriorTokens,
+              analyzedAt: new Date().toISOString(),
+            },
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('wallet_address', creatorWallet);
+      steps.push({
+        step: 'copycat-scan',
+        ok: true,
+        source: 'pumpfun-creator-history',
+        ms: cc.ms,
+        detail: `${cc.result.verdict}${cc.result.cautionMessage ? ' — ' + cc.result.cautionMessage : ''}`,
+      });
+    } else {
+      steps.push({
+        step: 'copycat-scan',
+        ok: false,
+        ms: cc.ms,
+        reason: cc.error ?? 'no creator history available',
+      });
+    }
+  }
+
+  // -- Step 6b: backfill identity socials from token_social_links --
+  // Harvest may discover TG/X/website that DexScreener/Pump.fun didn't surface.
+  // Without this, downstream callers (autopsy queue) gate features like
+  // tg-deep-pull on identity.telegramUrl and silently skip them. The MCUNC bug.
+  if (!identity.twitterUrl || !identity.telegramUrl || !identity.websiteUrl) {
+    const { data: links } = await supabase
+      .from('token_social_links')
+      .select('platform, link_type, url, is_current')
+      .eq('token_mint', mint)
+      .neq('is_current', false);
+    for (const l of links ?? []) {
+      const blob = `${l.platform ?? ''} ${l.link_type ?? ''} ${l.url ?? ''}`.toLowerCase();
+      if (!l.url) continue;
+      if (!identity.twitterUrl && (blob.includes('twitter') || blob.includes('x.com') || blob.includes('/x/'))) {
+        identity.twitterUrl = l.url;
+      }
+      if (!identity.telegramUrl && (blob.includes('telegram') || blob.includes('t.me'))) {
+        identity.telegramUrl = l.url;
+      }
+      if (!identity.websiteUrl && (blob.includes('website') || blob.includes('homepage'))) {
+        identity.websiteUrl = l.url;
+      }
+    }
+    steps.push({
+      step: 'socials-backfill',
+      ok: true,
+      source: 'token_social_links',
+      ms: 0,
+      detail: `tw=${identity.twitterUrl ? 'y' : 'n'} tg=${identity.telegramUrl ? 'y' : 'n'} web=${identity.websiteUrl ? 'y' : 'n'}`,
+    });
+  }
+
   // -- Step 7: write-back to autopsy_candidates if requested --
   if (candidate_id) {
     const social_completeness =
@@ -382,6 +455,7 @@ async function handle(req: Request): Promise<Response> {
       mint,
       identity,
       creatorWallet,
+      copycat: copycatVerdict,
       surface,
       steps,
     }),
