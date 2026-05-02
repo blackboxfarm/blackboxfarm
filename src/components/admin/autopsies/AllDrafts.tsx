@@ -307,220 +307,132 @@ export default function AllDrafts() {
       </div>
       {rows.map(r => (
         <Card key={r.id} className="p-3 space-y-3">
-          {/* Action row — full width, top */}
+          {/* Action row 1 (primary): Re-Hydrate / Re-Forensics / Re-Generate / View Draft / Approve & Publish */}
           <div className="flex gap-2 flex-wrap justify-end">
-              {r.tg_url ? (
-                <Button size="sm" variant="ghost" asChild>
-                  <a href={r.tg_url} target="_blank" rel="noreferrer"><Send className="h-3 w-3 mr-1" /> Open TG</a>
-                </Button>
-              ) : (
-                <TooltipProvider delayDuration={150}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span tabIndex={0}>
-                        <Button size="sm" variant="ghost" disabled className="opacity-50 pointer-events-none">
-                          <Send className="h-3 w-3 mr-1" /> Open TG
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>no tg detected</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-              {r.tg_url ? (
-                <Button size="sm" variant="outline" disabled={rowBusy(r.id)} onClick={() => tgDeepScrape(r)}>
-                  {isBusy(r.id, 'tgscrape')
-                    ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Scraping…</>
-                    : <><Search className="h-3 w-3 mr-1" /> I'm in — deep scrape</>}
-                </Button>
-              ) : (
-                <TooltipProvider delayDuration={150}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span tabIndex={0}>
-                        <Button size="sm" variant="outline" disabled className="opacity-50 pointer-events-none">
-                          <Search className="h-3 w-3 mr-1" /> I'm in — deep scrape
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>no tg detected</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={rowBusy(r.id)}
+              onClick={() => reHydrate(r)}
+              className="border-blue-500 text-blue-600 hover:bg-blue-500/10 dark:text-blue-400"
+              title="Re-pull identity, creator, socials, holders — full mesh hydration"
+            >
+              {isBusy(r.id, 'hydrate')
+                ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-hydrating…</>
+                : <><Droplet className="h-3 w-3 mr-1" /> Re-Hydrate</>}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={rowBusy(r.id)}
+              onClick={() => reForensics(r)}
+              className="border-cyan-500 text-cyan-600 hover:bg-cyan-500/10 dark:text-cyan-400"
+              title="Re-pull on-chain forensics, then rewrite the report"
+            >
+              {isBusy(r.id, 'forensics')
+                ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-forensics…</>
+                : <><Microscope className="h-3 w-3 mr-1" /> Re-Forensics</>}
+            </Button>
+            {r.status === 'failed' ? (
+              <Button size="sm" variant="outline" disabled={rowBusy(r.id)} onClick={() => retry(r)}
+                className="border-amber-500 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400">
+                {isBusy(r.id, 'retry')
+                  ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Retrying…</>
+                  : <><RefreshCw className="h-3 w-3 mr-1" /> Retry</>}
+              </Button>
+            ) : (
               <Button
                 size="sm"
                 variant="outline"
                 disabled={rowBusy(r.id)}
-                onClick={() => communitySweep(r)}
-                className={r.vulture_swept_at ? 'border-red-500/40' : ''}
+                onClick={() => regenerate(r)}
+                className="border-amber-500 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
               >
-                {isBusy(r.id, 'sweep')
-                  ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                  : <Skull className="h-3 w-3 mr-1" />}
-                {isBusy(r.id, 'sweep')
-                  ? 'Sweeping…'
-                  : (r.vulture_swept_at || r.dissent_swept_at ? 'Re-sweep community' : 'Sweep community')}
+                {isBusy(r.id, 'regenerate')
+                  ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-generating…</>
+                  : <><RefreshCw className="h-3 w-3 mr-1" /> Re-Generate</>}
               </Button>
-              {r.published_slug && (
-                <Button size="sm" variant="outline" asChild>
-                  <Link to={`/autopsy/${r.published_slug}`} target="_blank"><ExternalLink className="h-3 w-3 mr-1" /> View draft</Link>
-                </Button>
-              )}
-              {r.status === 'drafted' && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={rowBusy(r.id)}
-                    onClick={() => regenerate(r)}
-                    className="border-amber-500 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
-                  >
-                    {isBusy(r.id, 'regenerate')
-                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-generating…</>
-                      : <><RefreshCw className="h-3 w-3 mr-1" /> Re-generate (replace)</>}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={rowBusy(r.id)}
-                    onClick={() => reHydrate(r)}
-                    className="border-blue-500 text-blue-600 hover:bg-blue-500/10 dark:text-blue-400"
-                    title="Re-pull identity, creator, socials, holders — full mesh hydration"
-                  >
-                    {isBusy(r.id, 'hydrate')
-                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-hydrating…</>
-                      : <><Droplet className="h-3 w-3 mr-1" /> Re-Hydrate</>}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={rowBusy(r.id)}
-                    onClick={() => reForensics(r)}
-                    className="border-cyan-500 text-cyan-600 hover:bg-cyan-500/10 dark:text-cyan-400"
-                    title="Re-pull on-chain forensics, then rewrite the report"
-                  >
-                    {isBusy(r.id, 'forensics')
-                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-forensics…</>
-                      : <><Microscope className="h-3 w-3 mr-1" /> Re-Forensics</>}
-                  </Button>
-                  <Button size="sm" disabled={rowBusy(r.id)} onClick={() => approve(r)}>
-                    {isBusy(r.id, 'approve')
-                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Approving…</>
-                      : <>Approve & Publish</>}
-                  </Button>
-                </>
-              )}
-              {r.status === 'approved' && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={rowBusy(r.id)}
-                    onClick={() => regenerate(r)}
-                    className="border-amber-500 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
-                  >
-                    {isBusy(r.id, 'regenerate')
-                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-generating…</>
-                      : <><RefreshCw className="h-3 w-3 mr-1" /> Re-generate (replace)</>}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={rowBusy(r.id)}
-                    onClick={() => reHydrate(r)}
-                    className="border-blue-500 text-blue-600 hover:bg-blue-500/10 dark:text-blue-400"
-                    title="Re-pull identity, creator, socials, holders — full mesh hydration"
-                  >
-                    {isBusy(r.id, 'hydrate')
-                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-hydrating…</>
-                      : <><Droplet className="h-3 w-3 mr-1" /> Re-Hydrate</>}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={rowBusy(r.id)}
-                    onClick={() => reForensics(r)}
-                    className="border-cyan-500 text-cyan-600 hover:bg-cyan-500/10 dark:text-cyan-400"
-                    title="Re-pull on-chain forensics, then rewrite the report"
-                  >
-                    {isBusy(r.id, 'forensics')
-                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-forensics…</>
-                      : <><Microscope className="h-3 w-3 mr-1" /> Re-Forensics</>}
-                  </Button>
-                </>
-              )}
-              {r.status === 'failed' && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={rowBusy(r.id)}
-                    onClick={() => regenerate(r)}
-                    className="border-amber-500 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
-                  >
-                    {isBusy(r.id, 'regenerate')
-                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-generating…</>
-                      : <><RefreshCw className="h-3 w-3 mr-1" /> Re-generate (replace)</>}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={rowBusy(r.id)}
-                    onClick={() => reHydrate(r)}
-                    className="border-blue-500 text-blue-600 hover:bg-blue-500/10 dark:text-blue-400"
-                    title="Re-pull identity, creator, socials, holders — full mesh hydration"
-                  >
-                    {isBusy(r.id, 'hydrate')
-                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-hydrating…</>
-                      : <><Droplet className="h-3 w-3 mr-1" /> Re-Hydrate</>}
-                  </Button>
-                  <Button size="sm" variant="outline" disabled={rowBusy(r.id)} onClick={() => retry(r)}>
-                    {isBusy(r.id, 'retry')
-                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Retrying…</>
-                      : <><RefreshCw className="h-3 w-3 mr-1" /> Retry</>}
-                  </Button>
-                </>
-              )}
-              {r.status !== 'drafted' && r.status !== 'approved' && r.status !== 'failed' && (
-                <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={rowBusy(r.id)}
-                  onClick={() => regenerate(r)}
-                  className="border-amber-500 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
-                  title="Force-regenerate even while analyzing"
-                >
-                  {isBusy(r.id, 'regenerate')
-                    ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-generating…</>
-                    : <><RefreshCw className="h-3 w-3 mr-1" /> Re-generate</>}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={rowBusy(r.id)}
-                  onClick={() => reHydrate(r)}
-                  className="border-blue-500 text-blue-600 hover:bg-blue-500/10 dark:text-blue-400"
-                  title="Re-pull identity, creator, socials, holders — full mesh hydration"
-                >
-                  {isBusy(r.id, 'hydrate')
-                    ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-hydrating…</>
-                    : <><Droplet className="h-3 w-3 mr-1" /> Re-Hydrate</>}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={rowBusy(r.id)}
-                  onClick={() => reForensics(r)}
-                  className="border-cyan-500 text-cyan-600 hover:bg-cyan-500/10 dark:text-cyan-400"
-                  title="Re-pull on-chain forensics, then rewrite the report"
-                >
-                  {isBusy(r.id, 'forensics')
-                    ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-forensics…</>
-                    : <><Microscope className="h-3 w-3 mr-1" /> Re-Forensics</>}
-                </Button>
-                </>
-              )}
+            )}
+            {r.published_slug && (
+              <Button size="sm" variant="outline" asChild>
+                <Link to={`/autopsy/${r.published_slug}`} target="_blank"><ExternalLink className="h-3 w-3 mr-1" /> View Draft</Link>
+              </Button>
+            )}
+            {r.status === 'drafted' && (
+              <Button size="sm" disabled={rowBusy(r.id)} onClick={() => approve(r)}>
+                {isBusy(r.id, 'approve')
+                  ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Approving…</>
+                  : <>Approve &amp; Publish</>}
+              </Button>
+            )}
+          </div>
+
+          {/* Action row 2 (secondary): TG buttons + community sweep */}
+          <div className="flex gap-2 flex-wrap justify-end">
+            {r.tg_url ? (
+              <Button
+                size="sm"
+                variant="outline"
+                asChild
+                className="border-emerald-500/70 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400 animate-pulse"
+                title="Telegram detected — open and review"
+              >
+                <a href={r.tg_url} target="_blank" rel="noreferrer"><Send className="h-3 w-3 mr-1" /> Open TG</a>
+              </Button>
+            ) : (
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span tabIndex={0}>
+                      <Button size="sm" variant="ghost" disabled className="opacity-50 pointer-events-none">
+                        <Send className="h-3 w-3 mr-1" /> Open TG
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>no tg detected</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            {r.tg_url ? (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={rowBusy(r.id)}
+                onClick={() => tgDeepScrape(r)}
+                className={r.manual_tg_join_completed ? '' : 'border-emerald-500/70 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400 animate-pulse'}
+              >
+                {isBusy(r.id, 'tgscrape')
+                  ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Scraping…</>
+                  : <><Search className="h-3 w-3 mr-1" /> I'm in — deep scrape</>}
+              </Button>
+            ) : (
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span tabIndex={0}>
+                      <Button size="sm" variant="outline" disabled className="opacity-50 pointer-events-none">
+                        <Search className="h-3 w-3 mr-1" /> I'm in — deep scrape
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>no tg detected</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={rowBusy(r.id)}
+              onClick={() => communitySweep(r)}
+              className={r.vulture_swept_at ? 'border-red-500/40' : ''}
+            >
+              {isBusy(r.id, 'sweep')
+                ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                : <Skull className="h-3 w-3 mr-1" />}
+              {isBusy(r.id, 'sweep')
+                ? 'Sweeping…'
+                : (r.vulture_swept_at || r.dissent_swept_at ? 'Re-sweep community' : 'Sweep community')}
+            </Button>
           </div>
 
           {/* Title + status pills — full width, no compression */}
