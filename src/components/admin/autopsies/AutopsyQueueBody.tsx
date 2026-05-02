@@ -94,33 +94,77 @@ export default function AutopsyQueueBody() {
         candidateId = inserted.id;
       }
 
-      // Run the full enrichment chain BEFORE the writer so manual entries
-      // get the same depth as funnel-fed candidates. Each step is best-effort
-      // — the writer is the only mandatory step.
-      toast({ title: 'Step 1/4: on-chain forensics…', description: 'Pulling launch tx + dev timeline.' });
-      await supabase.functions.invoke('autopsy-tx-timeline', {
+      // Phase A — universal mesh hydration (same depth as /holders + /bubblemap).
+      // Single source of truth: token-mesh-hydrate. Streams a per-step verdict
+      // array we surface as toasts. NO silent .catch(() => null).
+      toast({ title: 'Hydrating mesh…', description: 'Identity → creator → mesh → socials → holders.' });
+      const { data: hydrate, error: hErr } = await supabase.functions.invoke('token-mesh-hydrate', {
+        body: { mint, candidate_id: candidateId, surface: 'autopsy_manual', force: true },
+      });
+      if (hErr) throw hErr;
+
+      const steps: Array<{ step: string; ok: boolean; source?: string; detail?: string; reason?: string }> =
+        hydrate?.steps ?? [];
+      for (const s of steps) {
+        const icon = s.ok ? '✓' : '⚠';
+        toast({
+          title: `${icon} ${s.step}${s.source ? ` (${s.source})` : ''}`,
+          description: s.ok ? (s.detail ?? 'ok') : (s.reason ?? 'no detail'),
+          variant: s.ok ? 'default' : 'destructive',
+        });
+      }
+
+      // Phase B — refusal guard: don't autopsy a vacuum.
+      const ident = hydrate?.identity ?? {};
+      const completeness = [ident.twitterUrl, ident.telegramUrl, ident.websiteUrl].filter(Boolean).length;
+      if (!hydrate?.creatorWallet && completeness < 1 && !ident.ticker) {
+        toast({
+          title: 'Refusing to autopsy empty object',
+          description: 'No creator + no socials + no ticker. Re-hydrate later when providers respond, or report a data gap.',
+          variant: 'destructive',
+        });
+        load();
+        return;
+      }
+
+      // Phase C — autopsy-specific forensics + writer.
+      toast({ title: 'Forensics: on-chain timeline…' });
+      const fx = await supabase.functions.invoke('autopsy-tx-timeline', {
         body: { candidate_id: candidateId, force: true },
-      }).catch(() => null);
+      });
+      toast({
+        title: fx.error ? '⚠ tx-timeline' : '✓ tx-timeline',
+        description: fx.error?.message ?? 'forensics captured',
+        variant: fx.error ? 'destructive' : 'default',
+      });
 
-      toast({ title: 'Step 2/4: Telegram deep pull…' });
-      await supabase.functions.invoke('autopsy-tg-deep-pull', {
-        body: { candidate_id: candidateId },
-      }).catch(() => null);
+      if (ident.telegramUrl) {
+        const tg = await supabase.functions.invoke('autopsy-tg-deep-pull', { body: { candidate_id: candidateId } });
+        toast({
+          title: tg.error ? '⚠ tg deep pull' : '✓ tg deep pull',
+          description: tg.error?.message ?? 'telegram scraped',
+          variant: tg.error ? 'destructive' : 'default',
+        });
+      }
 
-      toast({ title: 'Step 3/4: X-Community sweep…' });
-      await supabase.functions.invoke('autopsy-community-sweep', {
+      const cs = await supabase.functions.invoke('autopsy-community-sweep', {
         body: { candidate_id: candidateId, token_mint: mint, force: true, lenses: ['vulture', 'dissent'] },
-      }).catch(() => null);
+      });
+      toast({
+        title: cs.error ? '⚠ community sweep' : '✓ community sweep',
+        description: cs.error?.message ?? 'x-community swept',
+        variant: cs.error ? 'destructive' : 'default',
+      });
 
-      toast({ title: 'Step 4/4: writing report…' });
+      toast({ title: 'Writing report…' });
       const { error: wErr } = await supabase.functions.invoke('autopsy-writer', {
         body: { candidate_id: candidateId },
       });
       if (wErr) throw wErr;
 
       toast({
-        title: existing ? 'Re-queued with full enrichment' : 'Added with full enrichment',
-        description: `${mint.slice(0, 6)}…${mint.slice(-4)} drafted using forensics + socials.`,
+        title: existing ? '✓ Re-drafted with hydrated mesh' : '✓ Added & drafted with hydrated mesh',
+        description: `${ident.ticker ? '$' + ident.ticker + ' · ' : ''}${mint.slice(0, 6)}…${mint.slice(-4)}`,
       });
       setManualMint('');
       load();
