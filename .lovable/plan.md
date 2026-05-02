@@ -67,3 +67,45 @@ The Section 0 legend (✅/❌ for Mint/Dev/KYC/X/TG/Website/Discord/TikTok/DexPa
 - `supabase/functions/autopsy-writer/index.ts`
 
 No DB migrations. No new secrets. All four edits use existing helpers (`fetchPumpFunCoin`, `assertDbWrite`).
+
+---
+
+## Multi-launchpad metadata: `_shared/launchpad-fetch.ts`
+
+Added a unified `fetchLaunchpadCoin(mint, caller)` resolver that routes by mint
+suffix to the right launchpad API. Verified state of public APIs (May 2026):
+
+| Launchpad | Public API | Auth | Returns |
+|-----------|------------|------|---------|
+| Pump.fun  | `frontend-api-v3.pump.fun/coins/{mint}` | none | name/symbol/image/socials/creator/marketCap/**ATH** |
+| Bags.fm   | `public-api-v2.bags.fm/api/v1` | `x-api-key` (`BAGS_FM_API_KEY`) | creator (per-mint), feed metadata + IPFS socials (bulk) — **no live mcap, no ATH** |
+| Bonk.fun  | none | — | null + `reason: bonkfun_no_public_api` |
+| Meteora   | none (AMM only) | — | null + `reason: meteora_no_metadata_layer` |
+
+Returns a normalized `LaunchpadCoin` shape with stable field names
+(`imageUri`, `marketCapUsd`, `athMarketCapUsd`, etc.) regardless of launchpad.
+`null` data is expected for non-pump non-bags tokens — callers must fall
+through to Helius + DexScreener.
+
+### Migration policy (deliberate, not yet done)
+
+Do NOT bulk-rewrite the four `fetchPumpFunCoin` call sites in this same pass.
+The pump-only path was just stabilised after the $MCUNC bug; switching the
+consumed shape (`d.image_uri` → `data.imageUri`) in autopsy-writer +
+token-mesh-hydrate + ath-backfill + ath-24h-backfill in one go is high-risk
+for low marginal value (Bags.fm volume in our pipeline is currently <2%).
+
+Migrate one at a time, in priority order, with eyes on each diff:
+1. `token-mesh-hydrate` — biggest payoff (every newly-added token flows here)
+2. `autopsy-writer` — second biggest (Bags.fm autopsies will get socials/creator)
+3. ATH backfills — lowest priority (Bags.fm doesn't expose ATH anyway)
+
+### Bonk.fun gap (parked)
+
+Bonk.fun has no public REST. Reaching parity requires either:
+- Bitquery GraphQL (paid, ~$50/mo) — wires cleanly into `fetchLaunchpadCoin`
+- Helius `initialize_v2` instruction parser on program `LanMV9...` — free but
+  only gives at-mint metadata, not live mcap or socials updates
+
+Decision deferred. The resolver returns `null` with a clear reason so callers
+behave correctly regardless.
