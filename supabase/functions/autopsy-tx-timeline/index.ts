@@ -336,9 +336,30 @@ Deno.serve(withRunLog('autopsy-tx-timeline', async (req) => {
     const { data: pf } = await supabase.from('pumpfun_watchlist').select('creator_wallet').eq('token_mint', cand.token_mint).maybeSingle();
     creator = pf?.creator_wallet ?? null;
   }
+  // Last-resort: trigger an inline mesh hydrate so a manually-added candidate
+  // doesn't dead-end here. token-mesh-hydrate resolves creator via Helius/Pump.fun
+  // and writes it back onto autopsy_candidates.
   if (!creator) {
-    return new Response(JSON.stringify({ error: 'creator wallet unknown — cannot pull tx forensics' }), {
-      status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    try {
+      await supabase.functions.invoke('token-mesh-hydrate', {
+        body: { mint: cand.token_mint, candidate_id: candidateId, surface: 'autopsy_tx_timeline_autoresolve', force: true },
+      });
+      const { data: cand2 } = await supabase
+        .from('autopsy_candidates').select('creator_wallet').eq('id', candidateId).maybeSingle();
+      creator = cand2?.creator_wallet ?? null;
+    } catch (e) {
+      console.warn('[autopsy-tx-timeline] inline hydrate failed:', (e as Error).message);
+    }
+  }
+  if (!creator) {
+    // Return 200 with skipped reason so the JS client doesn't surface the
+    // misleading "Failed to send a request to the Edge Function" message.
+    return new Response(JSON.stringify({
+      skipped: 'creator_unknown',
+      reason: 'Creator wallet unresolved after mesh hydrate. Run Re-Hydrate once the token has at least a Pump.fun or Helius identity.',
+      candidate_id: candidateId,
+    }), {
+      status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
