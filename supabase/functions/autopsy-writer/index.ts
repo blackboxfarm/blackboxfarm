@@ -350,7 +350,7 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
           lifecyclePatch.market_cap = livePf.usd_market_cap;
         }
         if (typeof livePf.image_uri === 'string' && livePf.image_uri.length > 0) {
-          lifecyclePatch.image_uri = livePf.image_uri;
+          lifecyclePatch.image_url = livePf.image_uri;
         }
         if (Object.keys(lifecyclePatch).length > 0) {
           await supabase.from('token_lifecycle')
@@ -360,10 +360,13 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         // Mirror to pumpfun_watchlist (best-effort — row may not exist for non-watched mints)
         const wlPatch: Record<string, unknown> = {};
         if (typeof livePf.ath_market_cap === 'number' && livePf.ath_market_cap > 0) {
-          wlPatch.price_ath_usd = livePf.ath_market_cap;
+          wlPatch.ath_market_cap_usd = livePf.ath_market_cap;
+        }
+        if (typeof livePf.usd_market_cap === 'number' && livePf.usd_market_cap > 0) {
+          wlPatch.market_cap_usd = livePf.usd_market_cap;
         }
         if (typeof livePf.image_uri === 'string' && livePf.image_uri.length > 0) {
-          wlPatch.image_uri = livePf.image_uri;
+          wlPatch.image_url = livePf.image_uri;
         }
         if (Object.keys(wlPatch).length > 0) {
           await supabase.from('pumpfun_watchlist').update(wlPatch).eq('token_mint', c.token_mint);
