@@ -94,15 +94,33 @@ export default function AutopsyQueueBody() {
         candidateId = inserted.id;
       }
 
-      // Kick the writer immediately
+      // Run the full enrichment chain BEFORE the writer so manual entries
+      // get the same depth as funnel-fed candidates. Each step is best-effort
+      // — the writer is the only mandatory step.
+      toast({ title: 'Step 1/4: on-chain forensics…', description: 'Pulling launch tx + dev timeline.' });
+      await supabase.functions.invoke('autopsy-tx-timeline', {
+        body: { candidate_id: candidateId, force: true },
+      }).catch(() => null);
+
+      toast({ title: 'Step 2/4: Telegram deep pull…' });
+      await supabase.functions.invoke('autopsy-tg-deep-pull', {
+        body: { candidate_id: candidateId },
+      }).catch(() => null);
+
+      toast({ title: 'Step 3/4: X-Community sweep…' });
+      await supabase.functions.invoke('autopsy-community-sweep', {
+        body: { candidate_id: candidateId, token_mint: mint, force: true, lenses: ['vulture', 'dissent'] },
+      }).catch(() => null);
+
+      toast({ title: 'Step 4/4: writing report…' });
       const { error: wErr } = await supabase.functions.invoke('autopsy-writer', {
         body: { candidate_id: candidateId },
       });
       if (wErr) throw wErr;
 
       toast({
-        title: existing ? 'Re-queued for drafting' : 'Added to funnel',
-        description: `${mint.slice(0, 6)}…${mint.slice(-4)} sent to autopsy-writer.`,
+        title: existing ? 'Re-queued with full enrichment' : 'Added with full enrichment',
+        description: `${mint.slice(0, 6)}…${mint.slice(-4)} drafted using forensics + socials.`,
       });
       setManualMint('');
       load();
