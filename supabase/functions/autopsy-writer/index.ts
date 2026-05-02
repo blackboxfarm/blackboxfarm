@@ -705,6 +705,7 @@ Write the full markdown now. No preamble, no code fence — start with "# Token 
             token_mint: c.token_mint,
             ticker,
             report_id: drafted.id,
+            source_feed: c.source_feed ?? null,
           }),
         },
       ).then(async (overlayRes) => {
