@@ -26,6 +26,8 @@ import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 import { assertUpsert } from '../_shared/db-assert.ts';
 import { heliusRpcFetch } from '../_shared/helius-client.ts';
 import { discoverFunding } from '../_shared/funding-resolver.ts';
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
+import { resolveTokenCreator } from '../_shared/creator-resolver.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -336,27 +338,44 @@ Deno.serve(withRunLog('autopsy-tx-timeline', async (req) => {
     const { data: pf } = await supabase.from('pumpfun_watchlist').select('creator_wallet').eq('token_mint', cand.token_mint).maybeSingle();
     creator = pf?.creator_wallet ?? null;
   }
-  // Last-resort: trigger an inline mesh hydrate so a manually-added candidate
-  // doesn't dead-end here. token-mesh-hydrate resolves creator via Helius/Pump.fun
-  // and writes it back onto autopsy_candidates.
+
+  // DIRECT RESOLUTION CHAIN — creator is in the mint data, no excuses.
+  // 1) Pump.fun coin endpoint (authoritative for pump tokens).
   if (!creator) {
     try {
-      await supabase.functions.invoke('token-mesh-hydrate', {
-        body: { mint: cand.token_mint, candidate_id: candidateId, surface: 'autopsy_tx_timeline_autoresolve', force: true },
-      });
-      const { data: cand2 } = await supabase
-        .from('autopsy_candidates').select('creator_wallet').eq('id', candidateId).maybeSingle();
-      creator = cand2?.creator_wallet ?? null;
+      const pfCoin = await fetchPumpFunCoin(cand.token_mint, 'autopsy-tx-timeline');
+      if (pfCoin?.creator) {
+        creator = pfCoin.creator;
+        console.log(`[autopsy-tx-timeline] creator from pump.fun: ${creator}`);
+      }
     } catch (e) {
-      console.warn('[autopsy-tx-timeline] inline hydrate failed:', (e as Error).message);
+      console.warn('[autopsy-tx-timeline] pump.fun fetch failed:', (e as Error).message);
     }
   }
+  // 2) Full canonical resolver (Helius mint tx → DAS → on-chain → DB).
   if (!creator) {
-    // Return 200 with skipped reason so the JS client doesn't surface the
-    // misleading "Failed to send a request to the Edge Function" message.
+    try {
+      const r = await resolveTokenCreator(cand.token_mint, supabase, []);
+      if (r.creatorWallet) {
+        creator = r.creatorWallet;
+        console.log(`[autopsy-tx-timeline] creator via resolver: ${creator} (${r.source})`);
+      }
+    } catch (e) {
+      console.warn('[autopsy-tx-timeline] resolver failed:', (e as Error).message);
+    }
+  }
+  // 3) Persist back to the candidate so we never re-resolve.
+  if (creator) {
+    await supabase
+      .from('autopsy_candidates')
+      .update({ creator_wallet: creator })
+      .eq('id', candidateId)
+      .is('creator_wallet', null);
+  } else {
+    // Truly unrecoverable (non-pump token with no on-chain history reachable).
     return new Response(JSON.stringify({
       skipped: 'creator_unknown',
-      reason: 'Creator wallet unresolved after mesh hydrate. Run Re-Hydrate once the token has at least a Pump.fun or Helius identity.',
+      reason: `Creator unresolved for ${cand.token_mint}. Pump.fun + Helius DAS + on-chain RPC all returned nothing — token may be invalid or non-Solana.`,
       candidate_id: candidateId,
     }), {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
