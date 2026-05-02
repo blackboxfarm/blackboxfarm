@@ -197,10 +197,14 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
       console.warn('[autopsy-banner-overlay] existence check failed, continuing:', (e as any)?.message);
     }
 
-    // 1. Source banner — curve deaths use pump.fun mint image only.
-    const isCurveDeath = source_feed === 'pumpfun_curve_death';
+    // 1. Source banner — curve deaths AND admin-manual additions both go straight
+    // to the pump.fun mint image (square art) so we never let the AI fabricate a
+    // banner from a missing/empty DexScreener header. We pass squareSource=true
+    // to the prompt so the AI letterboxes the square art on a black canvas
+    // instead of inventing side artwork.
+    const useMintImage = source_feed === 'pumpfun_curve_death' || source_feed === 'admin_manual';
     const { url: sourceBannerUrl, visualDesc } = await fetchSourceBanner(token_mint, {
-      curveDeath: isCurveDeath,
+      curveDeath: useMintImage,
       supabase,
     });
     if (!sourceBannerUrl) {
@@ -211,7 +215,7 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
     console.log(`[autopsy-banner-overlay] source banner for ${ticker || token_mint}: ${sourceBannerUrl}`);
 
     // 2. Build prompt + edit
-    const prompt = buildOverlayPrompt(token_visual_description || visualDesc);
+    const prompt = buildOverlayPrompt(token_visual_description || visualDesc, { squareSource: useMintImage });
     const sourceDataUri = await urlToDataUri(sourceBannerUrl);
     const editedDataUri = await callImageEdit(sourceDataUri, prompt);
 
