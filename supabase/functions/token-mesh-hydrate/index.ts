@@ -326,6 +326,38 @@ async function handle(req: Request): Promise<Response> {
     });
   }
 
+  // -- Step 6b: backfill identity socials from token_social_links --
+  // Harvest may discover TG/X/website that DexScreener/Pump.fun didn't surface.
+  // Without this, downstream callers (autopsy queue) gate features like
+  // tg-deep-pull on identity.telegramUrl and silently skip them. The MCUNC bug.
+  if (!identity.twitterUrl || !identity.telegramUrl || !identity.websiteUrl) {
+    const { data: links } = await supabase
+      .from('token_social_links')
+      .select('platform, link_type, url, is_current')
+      .eq('token_mint', mint)
+      .neq('is_current', false);
+    for (const l of links ?? []) {
+      const blob = `${l.platform ?? ''} ${l.link_type ?? ''} ${l.url ?? ''}`.toLowerCase();
+      if (!l.url) continue;
+      if (!identity.twitterUrl && (blob.includes('twitter') || blob.includes('x.com') || blob.includes('/x/'))) {
+        identity.twitterUrl = l.url;
+      }
+      if (!identity.telegramUrl && (blob.includes('telegram') || blob.includes('t.me'))) {
+        identity.telegramUrl = l.url;
+      }
+      if (!identity.websiteUrl && (blob.includes('website') || blob.includes('homepage'))) {
+        identity.websiteUrl = l.url;
+      }
+    }
+    steps.push({
+      step: 'socials-backfill',
+      ok: true,
+      source: 'token_social_links',
+      ms: 0,
+      detail: `tw=${identity.twitterUrl ? 'y' : 'n'} tg=${identity.telegramUrl ? 'y' : 'n'} web=${identity.websiteUrl ? 'y' : 'n'}`,
+    });
+  }
+
   // -- Step 7: write-back to autopsy_candidates if requested --
   if (candidate_id) {
     const social_completeness =
