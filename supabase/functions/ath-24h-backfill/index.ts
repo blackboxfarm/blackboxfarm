@@ -1,6 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { isFunctionEnabled } from '../_shared/function-toggle.ts';
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,6 +20,16 @@ const corsHeaders = {
 
 async function fetchAth24h(tokenMint: string): Promise<number | null> {
   try {
+    // 1. Pump.fun first — it returns the canonical lifetime ATH market cap directly.
+    //    Skips GeckoTerminal entirely for the ~95% of tokens born on Pump.fun.
+    try {
+      const pf = await fetchPumpFunCoin(tokenMint, 'ath-24h-backfill');
+      const pfAth = Number(pf?.ath_market_cap);
+      if (Number.isFinite(pfAth) && pfAth > 0) {
+        return pfAth;
+      }
+    } catch (_e) { /* fall through to GeckoTerminal */ }
+
     // Step 1: Find the top pool
     const poolsRes = await fetch(
       `https://api.geckoterminal.com/api/v2/networks/solana/tokens/${tokenMint}/pools?page=1`,
