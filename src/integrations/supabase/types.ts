@@ -1522,6 +1522,9 @@ export type Database = {
           drafted_at: string | null
           funneled_at: string | null
           holders_at_ath: number | null
+          hydrated_at: string | null
+          hydration_attempts: number
+          hydration_status: Json | null
           id: string
           liquidity_usd: number | null
           manual_tg_join_completed: boolean | null
@@ -1570,6 +1573,9 @@ export type Database = {
           drafted_at?: string | null
           funneled_at?: string | null
           holders_at_ath?: number | null
+          hydrated_at?: string | null
+          hydration_attempts?: number
+          hydration_status?: Json | null
           id?: string
           liquidity_usd?: number | null
           manual_tg_join_completed?: boolean | null
@@ -1618,6 +1624,9 @@ export type Database = {
           drafted_at?: string | null
           funneled_at?: string | null
           holders_at_ath?: number | null
+          hydrated_at?: string | null
+          hydration_attempts?: number
+          hydration_status?: Json | null
           id?: string
           liquidity_usd?: number | null
           manual_tg_join_completed?: boolean | null

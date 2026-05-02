@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ExternalLink, RefreshCw, FileText, AlertTriangle, Send, Search, Rocket, Skull, Flame, Loader2, X, Microscope } from 'lucide-react';
+import { ExternalLink, RefreshCw, FileText, AlertTriangle, Send, Search, Rocket, Skull, Flame, Loader2, X, Microscope, Droplet } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
@@ -222,6 +222,33 @@ export default function AllDrafts() {
     }
   }
 
+  async function reHydrate(r: RowWithTg) {
+    setBusy(`${r.id}:hydrate`);
+    try {
+      toast({ title: 'Re-hydrating mesh…', description: 'Identity → creator → mesh → socials → holders.' });
+      const { data, error } = await supabase.functions.invoke('token-mesh-hydrate', {
+        body: { mint: r.token_mint, candidate_id: r.id, surface: 'autopsy_rehydrate', force: true },
+      });
+      if (error) {
+        toast({ title: 'Re-hydrate failed', description: error.message, variant: 'destructive' });
+        return;
+      }
+      const steps: Array<{ step: string; ok: boolean; source?: string; detail?: string; reason?: string }> =
+        (data as any)?.steps ?? [];
+      for (const s of steps) {
+        toast({
+          title: `${s.ok ? '✓' : '⚠'} ${s.step}${s.source ? ` (${s.source})` : ''}`,
+          description: s.ok ? (s.detail ?? 'ok') : (s.reason ?? 'no detail'),
+          variant: s.ok ? 'default' : 'destructive',
+        });
+      }
+      toast({ title: 'Re-hydrate complete', description: 'Row refreshed. Re-generate to use the new data.' });
+    } finally {
+      setBusy(null);
+      load();
+    }
+  }
+
   async function tgDeepScrape(r: RowWithTg) {
     setBusy(`${r.id}:tgscrape`);
     const { data, error } = await supabase.functions.invoke('autopsy-tg-deep-pull', { body: { candidate_id: r.id } });
@@ -356,6 +383,18 @@ export default function AllDrafts() {
                     size="sm"
                     variant="outline"
                     disabled={rowBusy(r.id)}
+                    onClick={() => reHydrate(r)}
+                    className="border-blue-500 text-blue-600 hover:bg-blue-500/10 dark:text-blue-400"
+                    title="Re-pull identity, creator, socials, holders — full mesh hydration"
+                  >
+                    {isBusy(r.id, 'hydrate')
+                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-hydrating…</>
+                      : <><Droplet className="h-3 w-3 mr-1" /> Re-Hydrate</>}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={rowBusy(r.id)}
                     onClick={() => reForensics(r)}
                     className="border-cyan-500 text-cyan-600 hover:bg-cyan-500/10 dark:text-cyan-400"
                     title="Re-pull on-chain forensics, then rewrite the report"
@@ -388,6 +427,18 @@ export default function AllDrafts() {
                     size="sm"
                     variant="outline"
                     disabled={rowBusy(r.id)}
+                    onClick={() => reHydrate(r)}
+                    className="border-blue-500 text-blue-600 hover:bg-blue-500/10 dark:text-blue-400"
+                    title="Re-pull identity, creator, socials, holders — full mesh hydration"
+                  >
+                    {isBusy(r.id, 'hydrate')
+                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-hydrating…</>
+                      : <><Droplet className="h-3 w-3 mr-1" /> Re-Hydrate</>}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={rowBusy(r.id)}
                     onClick={() => reForensics(r)}
                     className="border-cyan-500 text-cyan-600 hover:bg-cyan-500/10 dark:text-cyan-400"
                     title="Re-pull on-chain forensics, then rewrite the report"
@@ -411,6 +462,18 @@ export default function AllDrafts() {
                       ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-generating…</>
                       : <><RefreshCw className="h-3 w-3 mr-1" /> Re-generate (replace)</>}
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={rowBusy(r.id)}
+                    onClick={() => reHydrate(r)}
+                    className="border-blue-500 text-blue-600 hover:bg-blue-500/10 dark:text-blue-400"
+                    title="Re-pull identity, creator, socials, holders — full mesh hydration"
+                  >
+                    {isBusy(r.id, 'hydrate')
+                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-hydrating…</>
+                      : <><Droplet className="h-3 w-3 mr-1" /> Re-Hydrate</>}
+                  </Button>
                   <Button size="sm" variant="outline" disabled={rowBusy(r.id)} onClick={() => retry(r)}>
                     {isBusy(r.id, 'retry')
                       ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Retrying…</>
@@ -431,6 +494,18 @@ export default function AllDrafts() {
                   {isBusy(r.id, 'regenerate')
                     ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-generating…</>
                     : <><RefreshCw className="h-3 w-3 mr-1" /> Re-generate</>}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={rowBusy(r.id)}
+                  onClick={() => reHydrate(r)}
+                  className="border-blue-500 text-blue-600 hover:bg-blue-500/10 dark:text-blue-400"
+                  title="Re-pull identity, creator, socials, holders — full mesh hydration"
+                >
+                  {isBusy(r.id, 'hydrate')
+                    ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-hydrating…</>
+                    : <><Droplet className="h-3 w-3 mr-1" /> Re-Hydrate</>}
                 </Button>
                 <Button
                   size="sm"

@@ -1,103 +1,135 @@
-## Why $UNCRAFT and $MCUNC came out thin
+# Mesh-First Autopsy Hydration
 
-You and I co-wrote the $GPT report by hand. Then we built the funnel + writer to mass-produce reports in that style. The writer prompt and few-shot are correct — what's missing is the **evidence**.
+## The problem (why $UNCRAFT and MCUNC came out generic)
 
-Look at what makes the GPT report rich:
-- Funder → dev SOL transfer with exact timestamp ("89.1 SOL, 17 min PRE-launch")
-- Launch transaction decoded: dev-buy 791M (79%) + sniper 207M (21%) inside the same atomic tx
-- Dev wallet's final on-chain action ("CloseAccount at 14:03:07 UTC")
-- Dump cascade reconstructed: 20+ txs in 6 seconds at 14:12:34
-- USDC consolidation pattern post-dump (1,061 USDC chunks)
-- Holders count, exact ATH timestamp, exact death timestamp
+When you paste a mint into the **Autopsies → Manual Add** field, the current `addManualCandidate()` flow does:
 
-Now look at what `autopsy-writer` actually feeds Gemini:
-- `lifecycle` row, `dev_behavior_scores` (just aggregate numbers like `dump_velocity_score: 80`)
-- `dev_wallet_reputation` row
-- `token_social_links` rows
-- `enrichCandidate` (socials, boosts, holders_at_ath, dev_holding_pct)
-- `dev_dossier` (cluster history)
-- TG/X scrape blobs
+1. Insert a bare row into `autopsy_candidates` with only `token_mint` (no ticker, name, socials, creator, mcap, holders, dev dossier, x_community counts — all `NULL`).
+2. Fire 4 enrichment calls *that all assume the row is already populated*:
+   - `autopsy-tx-timeline` → needs creator_wallet (often null → bails)
+   - `autopsy-tg-deep-pull` → needs `tg_url` (null → no-op)
+   - `autopsy-community-sweep` → needs x community handle (null → no-op)
+   - `autopsy-writer` → AI prompt with 90% NULLs → produces a vacuum report
+3. Each `.catch(() => null)` swallows failures silently — violates the **zero-tolerance silent-fails** rule and leaves you with no idea what actually fired.
 
-**Zero transaction-level forensics.** No funder resolution, no launch tx decode, no signature timeline, no dump-cascade reconstruction. So Gemini fills the gap with vague prose — which is exactly what you saw in #2 and #3.
+Result: ticker stays `null`, no socials, no holders, no dev wallet, no x community map → AI has nothing to write about. That's why $GPT (which I researched manually before writing) is full and $UNCRAFT / MCUNC are vacuums.
 
-Plus: the new `admin_manual` button kicks `autopsy-writer` immediately, before any community sweep / TG pull / vulture sweep has had a chance to run on a brand-new candidate. That's why $MCUNC was the worst of the three.
+For comparison, `/holders` and `/bubblemap` both call `ingestPublicCAQuery()` first, which:
+- bumps `holders_intel_seen_tokens`,
+- calls `meshFeed.token()` (resolves creator from pump.fun/bonk.fun/bags, registers x/tg/website handles in mesh, links creator wallet),
+- queues the token for posting.
 
-## The plan — close the gap in 4 changes
+Manual autopsy adds bypass all of that.
 
-### 1. New edge function `autopsy-tx-timeline`
+## The fix — one shared waterfall, no surface bypasses it
 
-Pulls the deterministic on-chain forensics every report needs. Helius RPC only — no AI.
+Build a **single hydration orchestrator** (`token-mesh-hydrate`) that any surface (manual autopsy add, /holders, /bubblemap, telegram bot, oracle) can call to guarantee a fully populated mesh row for a given mint. Every step returns `{ ok, source, evidence | reason }` and emits a toast on the caller.
 
-For a given `token_mint` + `creator_wallet`:
-
-- **Launch tx**: find the `CreateV2`/initialize tx, decode inner instructions to extract every buy that landed in the same tx (dev_buy_amount, sniper buys, % of bonding curve consumed).
-- **Funder resolution**: walk the dev wallet's first inbound SOL transfer → record funder address, amount, timestamp, "minutes before launch".
-- **Dev wallet activity**: full signature list with timestamps, classified (token-buy, token-sell, close-account, transfer-out, idle).
-- **Dump cascade**: scan AMM swap txs against the pair, find the largest 60s window of net-sell volume → record start time, tx count, SOL out, price impact.
-- **Post-dump flow**: track funder/dev outbound transfers for 30 min after cascade — flag USDC swaps, exchange deposits, mixer addresses.
-- **Final on-chain trade**: last swap on the pair → that's "Time of Death".
-
-Persist to a new `autopsy_tx_evidence` row keyed on `candidate_id` (jsonb columns for each section + a denormalized summary). Write the same payload to `autopsy_evidence_blobs` kind `tx_timeline` so existing readers pick it up.
-
-### 2. Wire `autopsy-writer` to consume it
-
-Before the AI call:
-- Invoke `autopsy-tx-timeline` (await, not fire-and-forget — this IS the substance).
-- Read back the evidence row.
-- Inject 3 new structured sections into the user prompt:
-  - `## LAUNCH TX FORENSICS` — funder, dev-buy %, sniper(s), atomic-snipe verdict
-  - `## DEV WALLET TIMELINE` — chronological actions with UTC timestamps
-  - `## DUMP CASCADE` — start time, tx count, SOL extracted, price impact, post-dump consolidation pattern
-- Tighten the system prompt: "Section 3 (Timeline) and Section 4 (Mechanic) MUST cite specific UTC timestamps and SOL amounts from LAUNCH TX FORENSICS and DEV WALLET TIMELINE. If those sections are empty, write 'on-chain forensics unavailable' rather than inventing prose."
-
-### 3. Fix the `admin_manual` shortcut
-
-In `AutopsyQueueBody.tsx` the manual-add button currently invokes `autopsy-writer` immediately. Change it to invoke a small orchestrator order:
-
-```
-autopsy-tx-timeline   (new — deterministic, ~10s)
-autopsy-tg-deep-pull  (existing)
-autopsy-community-sweep (existing — vulture + dissent)
-autopsy-writer        (existing)
+```text
+INPUT: mint (anything else optional)
+  │
+  ├─[1] READ-BEFORE-FETCH cache (token_lifecycle, <5min)
+  │     hit  → seed result, skip to step 7
+  │     miss → continue
+  │
+  ├─[2] IDENTITY      DexScreener → Pump.fun → Helius getAsset → Bonk → Bags
+  │     resolves: ticker, name, creator_wallet, socials, mcap, fdv, liq, ath
+  │     fail-all → toast "identity: no provider responded — retry?"
+  │
+  ├─[3] MESH INGEST   ingestPublicCAQuery() (token + creator + socials + queue)
+  │
+  ├─[4] CREATOR CHAIN resolveTokenCreator + discoverFundingChain (Helius)
+  │     → upstream funders, KYC root, dev_wallet_reputation row
+  │
+  ├─[5] SOCIAL MESH   harvest-token-socials → x-community-enricher
+  │                   → backfill-x-community-members (member/mod/admin counts)
+  │     also: telegram-group-info if tg_url present
+  │
+  ├─[6] HOLDERS+ATH   capture-holder-snapshot, ath-backfill, holder-retention-analysis
+  │     (only the lightweight read paths — no AI yet)
+  │
+  └─[7] WRITE-BACK    upsert all derived fields into autopsy_candidates (or
+        token_lifecycle for non-autopsy callers) using assertUpsert.
+        Return per-step status array.
 ```
 
-Run them sequentially with status updates so the admin sees progress. Manual entries get the same enrichment depth as funnel-fed ones.
+Every step uses `assertDbWrite` (per the silent-fails rule). Per-step failures are **logged with a reason** and returned to the caller — not swallowed.
 
-### 4. Add a "Re-Forensics" admin button
+## Manual-add UX (Autopsies tab)
 
-Next to the existing "Re-generate" button on each draft row in `/super-admin/autopsy-queue`, add **"🔬 Re-Forensics"** that re-runs `autopsy-tx-timeline` then `autopsy-writer` with `regenerate=true`. This lets you fix any of the existing thin reports ($UNCRAFT, $MCUNC) by replaying them against the new evidence layer.
+`AutopsyQueueBody.addManualCandidate()` becomes:
+
+1. Insert blank candidate (as today).
+2. `await supabase.functions.invoke('token-mesh-hydrate', { body: { mint, candidate_id, surface: 'autopsy_manual' } })`.
+3. Stream the returned `steps[]` as toasts:
+   - `✓ Identity (DexScreener): $UNCRAFT — Uncraft Inc — creator 8rHc…WWnJ`
+   - `✓ Mesh ingest: 3 social handles linked`
+   - `✓ Creator chain: 4 hops, KYC root = Coinbase`
+   - `⚠ X community: handle not found — try manual link?`
+   - `✓ Holders snapshot: 412 holders, top10 = 38%`
+4. Only **after** hydration succeeds do we call the autopsy chain (`autopsy-tx-timeline` → `autopsy-tg-deep-pull` → `autopsy-community-sweep` → `autopsy-writer`).
+5. **Refusal guard:** if `social_completeness < 3` AND `creator_wallet IS NULL`, refuse to call the writer with toast *"Cannot autopsy an empty object — re-hydrate or report this as a data gap."*
+6. Refresh the row in `AllDrafts` from the response; ticker, mcap, socials should now be visible immediately.
+
+## Fail-with-resolution contract
+
+Every fetch wrapper returns one of:
+- `{ ok: true, source, data }`
+- `{ ok: false, reason, retry: 'auto'|'manual', alternatives: [...] }`
+
+Toast surface:
+- ✓ green = ok
+- ⚠ yellow = soft fail with alternative ("DexScreener 404 — retried via Pump.fun ✓")
+- ✗ red = hard fail with retry button ("Helius timeout — [Retry]")
+
+No empty/silent paths. Every call ends with a verdict.
+
+## Reuse — make every surface use it
+
+After `token-mesh-hydrate` ships, swap these surfaces to use it (one line each):
+- `oracle-unified-lookup` (replace inline fetch chain)
+- `bagless-holders-report` (replace its identity probe)
+- `check-bubble-quota` (currently calls `ingestPublicCAQuery` only — upgrade to full hydrate when a fresh CA is seen)
+- Telegram bot `/holders`, `/ca`, `/dev`
+- BubbleMap entry hook
+
+Single source of truth → no more drift between surfaces.
+
+## Re-Forensics + Re-Hydrate buttons in `AllDrafts`
+
+- **Re-Hydrate** (new, blue) — re-runs `token-mesh-hydrate` only. Cheap, fast, no AI. Use when a row shows `null` ticker.
+- **Re-Forensics** (existing) — re-runs `autopsy-tx-timeline` only.
+- **Re-Generate** (existing) — re-runs `autopsy-writer` only.
+- All three available in every status branch (drafted / analyzing / failed / approved).
+
+TG buttons: keep the disabled+tooltip pattern already shipped.
+
+---
 
 ## Technical details
 
-**New table**: `autopsy_tx_evidence`
-```
-candidate_id uuid PK references autopsy_candidates(id)
-token_mint text not null
-creator_wallet text
-funder_wallet text
-funder_funded_amount_sol numeric
-funder_funded_at timestamptz
-launch_tx_signature text
-launch_tx_at timestamptz
-dev_buy_amount_tokens numeric
-dev_buy_pct_of_curve numeric
-co_snipers jsonb            -- [{wallet, amount, pct}, ...]
-dev_signatures jsonb        -- [{sig, ts, kind, summary}, ...]
-dev_final_action_at timestamptz
-dev_final_action_kind text
-dump_cascade jsonb          -- {start_at, end_at, tx_count, sol_out, pct_drop}
-post_dump_flow jsonb        -- [{ts, kind, amount, dest}, ...]
-time_of_death_at timestamptz
-collected_at timestamptz default now()
-```
+**New edge function**: `supabase/functions/token-mesh-hydrate/index.ts`
+- Input: `{ mint, candidate_id?, surface, force? }`
+- Returns: `{ mint, identity, mesh, creatorChain, socialMesh, holders, steps: Array<{step, ok, source, ms, reason?}> }`
+- Uses `withRunLog`, `assertUpsert` everywhere.
+- Deduplicates against `token_lifecycle.updated_at < 5min` per `mesh-cache.ts`.
 
-**Helius calls budgeted per token**: ~6-10 RPC calls (getSignaturesForAddress on dev + funder, getTransaction on launch + cascade window, getTokenAccountBalance). Well inside your 10M monthly quota even at 100 reports/day.
+**Migration** (small):
+- Add to `autopsy_candidates`: `hydration_status jsonb` (last steps array), `hydrated_at timestamptz`, `hydration_attempts int default 0`.
+- Index `(token_mint)` on `autopsy_candidates` if missing.
 
-**Order of build**: (1) edge function + table, (2) writer integration + prompt update, (3) UI buttons, (4) replay $UNCRAFT and $MCUNC to verify quality lift.
+**Edits**:
+- `src/components/admin/autopsies/AutopsyQueueBody.tsx` — replace `addManualCandidate` body to call hydrate first, then writer; stream per-step toasts.
+- `src/components/admin/autopsies/AllDrafts.tsx` — add **Re-Hydrate** button (cyan/blue) next to Re-Forensics; show ticker/name/mcap pulled from row; if `hydration_status` shows failed steps, badge them.
+- New `src/hooks/useTokenMeshHydrate.ts` — thin wrapper that exposes `{ hydrate(mint), steps, isLoading }` for any future caller.
 
-**Out of scope here** (separate plan if you want):
-- Cluster-wide tx-flow graph
-- Cross-token funder reuse detection
-- Image-based banner forensics
+**Caller migration (follow-on, not blocking)**:
+- `oracle-unified-lookup`, `bagless-holders-report`, `check-bubble-quota` switch to `token-mesh-hydrate` for the identity+mesh portion. Their existing scoring/output logic stays.
 
-After approval I'll switch to build mode and ship 1→4 in order.
+**Silent-fails compliance**: every DB write inside `token-mesh-hydrate` uses `assertUpsert`/`assertInsert`. External fetches never `catch(() => null)` — they either return a structured fail or throw to `withRunLog`.
+
+## Out of scope (call out separately if you want them)
+
+- Rewriting `$UNCRAFT` and `MCUNC` reports — that happens automatically once you hit **Re-Hydrate → Re-Generate** on each row.
+- Bumping the writer prompt to refuse vacuum data — already covered by the refusal guard above; deeper prompt work is a separate task.
+- Killing the 504 `autopsy-tx-timeline` timeout on heavy mints (chunked Helius pagination) — separate task.
