@@ -383,6 +383,18 @@ export default function AllDrafts() {
                     size="sm"
                     variant="outline"
                     disabled={rowBusy(r.id)}
+                    onClick={() => reHydrate(r)}
+                    className="border-blue-500 text-blue-600 hover:bg-blue-500/10 dark:text-blue-400"
+                    title="Re-pull identity, creator, socials, holders — full mesh hydration"
+                  >
+                    {isBusy(r.id, 'hydrate')
+                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-hydrating…</>
+                      : <><Droplet className="h-3 w-3 mr-1" /> Re-Hydrate</>}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={rowBusy(r.id)}
                     onClick={() => reForensics(r)}
                     className="border-cyan-500 text-cyan-600 hover:bg-cyan-500/10 dark:text-cyan-400"
                     title="Re-pull on-chain forensics, then rewrite the report"
@@ -415,6 +427,18 @@ export default function AllDrafts() {
                     size="sm"
                     variant="outline"
                     disabled={rowBusy(r.id)}
+                    onClick={() => reHydrate(r)}
+                    className="border-blue-500 text-blue-600 hover:bg-blue-500/10 dark:text-blue-400"
+                    title="Re-pull identity, creator, socials, holders — full mesh hydration"
+                  >
+                    {isBusy(r.id, 'hydrate')
+                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-hydrating…</>
+                      : <><Droplet className="h-3 w-3 mr-1" /> Re-Hydrate</>}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={rowBusy(r.id)}
                     onClick={() => reForensics(r)}
                     className="border-cyan-500 text-cyan-600 hover:bg-cyan-500/10 dark:text-cyan-400"
                     title="Re-pull on-chain forensics, then rewrite the report"
@@ -438,6 +462,18 @@ export default function AllDrafts() {
                       ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-generating…</>
                       : <><RefreshCw className="h-3 w-3 mr-1" /> Re-generate (replace)</>}
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={rowBusy(r.id)}
+                    onClick={() => reHydrate(r)}
+                    className="border-blue-500 text-blue-600 hover:bg-blue-500/10 dark:text-blue-400"
+                    title="Re-pull identity, creator, socials, holders — full mesh hydration"
+                  >
+                    {isBusy(r.id, 'hydrate')
+                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-hydrating…</>
+                      : <><Droplet className="h-3 w-3 mr-1" /> Re-Hydrate</>}
+                  </Button>
                   <Button size="sm" variant="outline" disabled={rowBusy(r.id)} onClick={() => retry(r)}>
                     {isBusy(r.id, 'retry')
                       ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Retrying…</>
@@ -458,6 +494,18 @@ export default function AllDrafts() {
                   {isBusy(r.id, 'regenerate')
                     ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-generating…</>
                     : <><RefreshCw className="h-3 w-3 mr-1" /> Re-generate</>}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={rowBusy(r.id)}
+                  onClick={() => reHydrate(r)}
+                  className="border-blue-500 text-blue-600 hover:bg-blue-500/10 dark:text-blue-400"
+                  title="Re-pull identity, creator, socials, holders — full mesh hydration"
+                >
+                  {isBusy(r.id, 'hydrate')
+                    ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-hydrating…</>
+                    : <><Droplet className="h-3 w-3 mr-1" /> Re-Hydrate</>}
                 </Button>
                 <Button
                   size="sm"
