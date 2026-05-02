@@ -353,10 +353,18 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
       const hasDevWallet = !!creatorWallet;
       const hasKyc = !!(dossier?.kyc_root);
       const hasPumpfunProfile = !!(livePf?.creator || pf?.creator_wallet);
+      // Pump.fun's payload is the canonical source for socials of any pump.fun mint.
+      // Consult it FIRST, then fall back to the mesh DB. Otherwise the legend lies
+      // when hydration was partial / stale.
+      const pfTwitter  = livePf?.twitter  ?? pf?.twitter  ?? null;
+      const pfTelegram = livePf?.telegram ?? pf?.telegram ?? null;
+      const pfWebsite  = livePf?.website  ?? pf?.website  ?? null;
       const hasXCommunity = (enrichment.x_community_member_count ?? 0) > 0
-        || (socials ?? []).some((s: any) => s.is_community === true);
-      const hasWebsite = findSocial(/website|^www|http/i) && (socials ?? []).some((s: any) => /website|www/i.test(s.platform ?? s.link_type ?? ''));
-      const hasTelegram = findSocial(/telegram|t\.me/i);
+        || (socials ?? []).some((s: any) => s.is_community === true)
+        || !!pfTwitter;
+      const hasWebsite = !!pfWebsite
+        || (findSocial(/website|^www|http/i) && (socials ?? []).some((s: any) => /website|www/i.test(s.platform ?? s.link_type ?? '')));
+      const hasTelegram = !!pfTelegram || findSocial(/telegram|t\.me/i);
       const hasDiscord = !!enrichment.discord_present || findSocial(/discord/i);
       const hasTiktok = findSocial(/tiktok/i);
       const hasDexPaid = enrichment.dex_paid === true || (enrichment.paid_orders ?? []).length > 0;
