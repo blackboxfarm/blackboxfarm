@@ -392,6 +392,7 @@ export default function AllDrafts() {
                 </>
               )}
               {r.status !== 'drafted' && r.status !== 'approved' && r.status !== 'failed' && (
+                <>
                 <Button
                   size="sm"
                   variant="outline"
@@ -404,6 +405,19 @@ export default function AllDrafts() {
                     ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-generating…</>
                     : <><RefreshCw className="h-3 w-3 mr-1" /> Re-generate</>}
                 </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={rowBusy(r.id)}
+                  onClick={() => reForensics(r)}
+                  className="border-cyan-500 text-cyan-600 hover:bg-cyan-500/10 dark:text-cyan-400"
+                  title="Re-pull on-chain forensics, then rewrite the report"
+                >
+                  {isBusy(r.id, 'forensics')
+                    ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-forensics…</>
+                    : <><Microscope className="h-3 w-3 mr-1" /> Re-Forensics</>}
+                </Button>
+                </>
               )}
           </div>
 
