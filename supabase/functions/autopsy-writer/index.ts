@@ -233,6 +233,25 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         Object.assign(enrichment, refreshed);
       } catch (e) { console.warn('[autopsy-writer] community sweep skipped:', (e as Error).message); }
 
+      // ── On-chain forensics (launch tx + dev timeline + cascade) ──
+      // This is THE substance for Section 3/4 of the report. Awaited so the
+      // evidence is in autopsy_tx_evidence + autopsy_evidence_blobs before
+      // we build the user prompt.
+      let txEvidence: any = null;
+      try {
+        await supabase.functions.invoke('autopsy-tx-timeline', {
+          body: { candidate_id: c.id, force: isRegenerate },
+        });
+        const { data: txRow } = await supabase
+          .from('autopsy_tx_evidence')
+          .select('*')
+          .eq('candidate_id', c.id)
+          .maybeSingle();
+        txEvidence = txRow ?? null;
+      } catch (e) {
+        console.warn('[autopsy-writer] tx timeline skipped:', (e as Error).message);
+      }
+
       const { data: blobs } = await supabase
         .from('autopsy_evidence_blobs')
         .select('kind, payload, captured_at')
@@ -423,6 +442,60 @@ ${JSON.stringify(blobs ?? [], null, 2)}
 ## SOCIAL DEATH SIGNALS
 No-admin-message hours: ${c.social_no_admin_hours ?? 'unchecked'}
 Spam %: ${c.social_spam_pct ?? 'unchecked'}
+
+## LAUNCH TX FORENSICS (on-chain, deterministic)
+${(() => {
+  if (!txEvidence) return '(on-chain forensics unavailable for this token)';
+  const lines: string[] = [];
+  lines.push(`Launch tx: ${txEvidence.launch_tx_signature ?? 'unknown'}`);
+  lines.push(`Launch time: ${txEvidence.launch_tx_at ?? 'unknown'}`);
+  lines.push(`Dev buy: ${txEvidence.dev_buy_amount_tokens ?? 'unknown'} tokens for ${txEvidence.dev_buy_sol ?? '?'} SOL`);
+  lines.push(`Dev % of curve consumed: ${txEvidence.dev_buy_pct_of_curve?.toFixed?.(2) ?? 'unknown'}%`);
+  lines.push(`Atomic snipe % (dev + top sniper, same tx): ${txEvidence.atomic_snipe_pct?.toFixed?.(2) ?? 'unknown'}%`);
+  const snipers = (txEvidence.co_snipers ?? []) as any[];
+  if (snipers.length === 0) lines.push('Co-snipers: none detected');
+  else {
+    lines.push(`Co-snipers (${snipers.length}):`);
+    for (const s of snipers.slice(0, 5)) {
+      lines.push(`  - ${s.wallet} bought ${s.amount_tokens?.toFixed?.(0) ?? '?'} tokens (${s.pct_of_curve?.toFixed?.(2) ?? '?'}% of curve)`);
+    }
+  }
+  lines.push(`Funder wallet: ${txEvidence.funder_wallet ?? 'unresolved'}`);
+  lines.push(`Funder amount: ${txEvidence.funder_funded_amount_sol ?? 'unknown'} SOL`);
+  if (txEvidence.funder_minutes_before_launch !== null && txEvidence.funder_minutes_before_launch !== undefined) {
+    lines.push(`Funded ${Math.round(txEvidence.funder_minutes_before_launch)} minutes BEFORE launch`);
+  }
+  return lines.join('\n');
+})()}
+
+## DEV WALLET TIMELINE (chronological, classified)
+${(() => {
+  if (!txEvidence?.dev_signatures?.length) return '(dev wallet timeline unavailable)';
+  const sigs = (txEvidence.dev_signatures as any[]).slice(0, 30);
+  return sigs.map((s: any) =>
+    `- ${s.ts ?? 'no-time'} [${s.kind}] ${s.summary} (sig: ${s.signature?.slice(0, 12)}…)`
+  ).join('\n');
+})()}
+Final dev action: ${txEvidence?.dev_final_action_at ?? 'unknown'} — ${txEvidence?.dev_final_action_kind ?? 'unknown'}
+
+## DUMP CASCADE
+${(() => {
+  const d = txEvidence?.dump_cascade;
+  if (!d) return '(no dump cascade detected — slow bleed or organic decay)';
+  return [
+    `Cascade start: ${d.start_at}`,
+    `Cascade end: ${d.end_at}`,
+    `Tx count in 60s window: ${d.tx_count}`,
+    `Estimated SOL extracted: ${d.est_sol_out ?? 'unknown'} SOL`,
+    `USDC consolidation pattern observed: ${txEvidence?.usdc_consolidation_observed ? 'YES — funds laundered into USDC chunks' : 'no'}`,
+  ].join('\n');
+})()}
+Time of Death (last on-chain activity): ${txEvidence?.time_of_death_at ?? 'unknown'}
+
+REPORT REQUIREMENT — Sections 3 and 4:
+- Section 3 (Timeline) MUST cite specific UTC timestamps from "DEV WALLET TIMELINE" and "LAUNCH TX FORENSICS" above. Reference the funder→dev SOL transfer, the launch tx, and the dump cascade window if those facts are populated.
+- Section 4 (Mechanic) MUST quantify the atomic-snipe percentage, dev SOL spent at launch, and cascade SOL out using the numbers above.
+- If "LAUNCH TX FORENSICS" reads "(on-chain forensics unavailable for this token)" you MUST write "On-chain forensics unavailable" in Section 3 instead of inventing prose. Never fabricate signatures, timestamps, or SOL amounts.
 
 ## VULTURES & PHISHING ACTIVITY (X Community sweep)
 ${(() => {
