@@ -1,135 +1,69 @@
-# Mesh-First Autopsy Hydration
+## Audit: where the "$MCUNC class" of bug repeats
 
-## The problem (why $UNCRAFT and MCUNC came out generic)
+The $MCUNC bug had two root causes:
+1. **ATH derived indirectly** (max of polled snapshots / 24h GeckoTerminal candles) instead of asking Pump.fun directly for `ath_market_cap`.
+2. **Creator wallet treated as hard-to-find** instead of read straight from the mint payload (`pumpData.creator`).
 
-When you paste a mint into the **Autopsies → Manual Add** field, the current `addManualCandidate()` flow does:
+Both were fixed in `autopsy-writer` and `autopsy-tx-timeline`. But the same pattern lives in several other functions. Here's where to apply the same treatment.
 
-1. Insert a bare row into `autopsy_candidates` with only `token_mint` (no ticker, name, socials, creator, mcap, holders, dev dossier, x_community counts — all `NULL`).
-2. Fire 4 enrichment calls *that all assume the row is already populated*:
-   - `autopsy-tx-timeline` → needs creator_wallet (often null → bails)
-   - `autopsy-tg-deep-pull` → needs `tg_url` (null → no-op)
-   - `autopsy-community-sweep` → needs x community handle (null → no-op)
-   - `autopsy-writer` → AI prompt with 90% NULLs → produces a vacuum report
-3. Each `.catch(() => null)` swallows failures silently — violates the **zero-tolerance silent-fails** rule and leaves you with no idea what actually fired.
+### 1. ATH backfill — both functions ignore Pump.fun's authoritative ATH
 
-Result: ticker stays `null`, no socials, no holders, no dev wallet, no x community map → AI has nothing to write about. That's why $GPT (which I researched manually before writing) is full and $UNCRAFT / MCUNC are vacuums.
+**Files:** `supabase/functions/ath-24h-backfill/index.ts`, `supabase/functions/ath-backfill/index.ts`
 
-For comparison, `/holders` and `/bubblemap` both call `ingestPublicCAQuery()` first, which:
-- bumps `holders_intel_seen_tokens`,
-- calls `meshFeed.token()` (resolves creator from pump.fun/bonk.fun/bags, registers x/tg/website handles in mesh, links creator wallet),
-- queues the token for posting.
+Today:
+- `ath-24h-backfill` only reads 24 GeckoTerminal hourly candles → "ATH" is really just a 24h high. Misnamed.
+- `ath-backfill` reads up to 1000 hourly candles (~41 days) and falls back to a DexScreener floor estimate.
+- **Neither asks Pump.fun**, even though `frontend-api-v3.pump.fun/coins/{mint}` returns `ath_market_cap` directly for every Pump.fun token (the majority of our pipeline).
 
-Manual autopsy adds bypass all of that.
-
-## The fix — one shared waterfall, no surface bypasses it
-
-Build a **single hydration orchestrator** (`token-mesh-hydrate`) that any surface (manual autopsy add, /holders, /bubblemap, telegram bot, oracle) can call to guarantee a fully populated mesh row for a given mint. Every step returns `{ ok, source, evidence | reason }` and emits a toast on the caller.
-
-```text
-INPUT: mint (anything else optional)
-  │
-  ├─[1] READ-BEFORE-FETCH cache (token_lifecycle, <5min)
-  │     hit  → seed result, skip to step 7
-  │     miss → continue
-  │
-  ├─[2] IDENTITY      DexScreener → Pump.fun → Helius getAsset → Bonk → Bags
-  │     resolves: ticker, name, creator_wallet, socials, mcap, fdv, liq, ath
-  │     fail-all → toast "identity: no provider responded — retry?"
-  │
-  ├─[3] MESH INGEST   ingestPublicCAQuery() (token + creator + socials + queue)
-  │
-  ├─[4] CREATOR CHAIN resolveTokenCreator + discoverFundingChain (Helius)
-  │     → upstream funders, KYC root, dev_wallet_reputation row
-  │
-  ├─[5] SOCIAL MESH   harvest-token-socials → x-community-enricher
-  │                   → backfill-x-community-members (member/mod/admin counts)
-  │     also: telegram-group-info if tg_url present
-  │
-  ├─[6] HOLDERS+ATH   capture-holder-snapshot, ath-backfill, holder-retention-analysis
-  │     (only the lightweight read paths — no AI yet)
-  │
-  └─[7] WRITE-BACK    upsert all derived fields into autopsy_candidates (or
-        token_lifecycle for non-autopsy callers) using assertUpsert.
-        Return per-step status array.
+Fix: prepend a Pump.fun-first step to both functions:
 ```
+1. fetchPumpFunCoin(mint) → if ath_market_cap > 0, use it. Done.
+2. Else fall through to GeckoTerminal OHLCV.
+3. Else DexScreener floor (ath-backfill only).
+```
+This makes ATH accurate for ~95% of our tokens and saves GeckoTerminal quota (which is throttled to 30 req/min).
 
-Every step uses `assertDbWrite` (per the silent-fails rule). Per-step failures are **logged with a reason** and returned to the caller — not swallowed.
+### 2. token-mesh-hydrate — already does Pump.fun-first for socials/creator, but doesn't capture ATH or mcap
 
-## Manual-add UX (Autopsies tab)
+**File:** `supabase/functions/token-mesh-hydrate/index.ts`
 
-`AutopsyQueueBody.addManualCandidate()` becomes:
+When we hydrate a freshly-added token (manual autopsy add, /holders entry, etc.), we already pull Pump.fun data for socials and creator. But we throw away `ath_market_cap`, `usd_market_cap`, `created_timestamp`, `image_uri`. So the next step has to re-fetch Pump.fun.
 
-1. Insert blank candidate (as today).
-2. `await supabase.functions.invoke('token-mesh-hydrate', { body: { mint, candidate_id, surface: 'autopsy_manual' } })`.
-3. Stream the returned `steps[]` as toasts:
-   - `✓ Identity (DexScreener): $UNCRAFT — Uncraft Inc — creator 8rHc…WWnJ`
-   - `✓ Mesh ingest: 3 social handles linked`
-   - `✓ Creator chain: 4 hops, KYC root = Coinbase`
-   - `⚠ X community: handle not found — try manual link?`
-   - `✓ Holders snapshot: 412 holders, top10 = 38%`
-4. Only **after** hydration succeeds do we call the autopsy chain (`autopsy-tx-timeline` → `autopsy-tg-deep-pull` → `autopsy-community-sweep` → `autopsy-writer`).
-5. **Refusal guard:** if `social_completeness < 3` AND `creator_wallet IS NULL`, refuse to call the writer with toast *"Cannot autopsy an empty object — re-hydrate or report this as a data gap."*
-6. Refresh the row in `AllDrafts` from the response; ticker, mcap, socials should now be visible immediately.
+Fix: while we have the Pump.fun payload in hand, write these into `token_lifecycle` (`ath_24h_usd`, `market_cap`, `image_uri`, `first_seen_at`) and `pumpfun_watchlist` (`price_ath_usd`, `image_uri`) in the same upsert. One fetch, full hydration.
 
-## Fail-with-resolution contract
+### 3. autopsy-writer — Pump.fun image_uri only used for banner, not for the lifecycle/watchlist row
 
-Every fetch wrapper returns one of:
-- `{ ok: true, source, data }`
-- `{ ok: false, reason, retry: 'auto'|'manual', alternatives: [...] }`
+Same payload, same waste. When `autopsy-writer` calls Pump.fun for `ath_market_cap` (the recent fix), it should also persist `image_uri` and `usd_market_cap` back to `token_lifecycle` if missing. This means manual queue entries get their banner thumbnail filled in at write time, not on a separate trigger.
 
-Toast surface:
-- ✓ green = ok
-- ⚠ yellow = soft fail with alternative ("DexScreener 404 — retried via Pump.fun ✓")
-- ✗ red = hard fail with retry button ("Helius timeout — [Retry]")
+### 4. Discovery Snapshot legend — currently rebuilt from DB each report
 
-No empty/silent paths. Every call ends with a verdict.
+**File:** `supabase/functions/autopsy-writer/index.ts`
 
-## Reuse — make every surface use it
+The Section 0 legend (✅/❌ for Mint/Dev/KYC/X/TG/Website/Discord/TikTok/DexPaid) reads the DB mesh. If hydration didn't run or was partial, the legend shows ❌ even though the data exists in Pump.fun's payload. Fix: in `autopsy-writer`, the same `livePf` fetch that powers ATH should be the source of truth for the legend's social columns (Pump.fun returns `twitter`, `telegram`, `website` directly). Falls back to DB only if the live call fails.
 
-After `token-mesh-hydrate` ships, swap these surfaces to use it (one line each):
-- `oracle-unified-lookup` (replace inline fetch chain)
-- `bagless-holders-report` (replace its identity probe)
-- `check-bubble-quota` (currently calls `ingestPublicCAQuery` only — upgrade to full hydrate when a fresh CA is seen)
-- Telegram bot `/holders`, `/ca`, `/dev`
-- BubbleMap entry hook
+### 5. Sanity checks (no change needed, just confirmed)
 
-Single source of truth → no more drift between surfaces.
+- `_shared/creator-resolver.ts` already does **Pump.fun → Helius DAS → on-chain**, in that order. Good.
+- `insiders-creator-backfill` and `audit-creator-integrity` already use `fetchPumpFunCoin` first. Good.
+- `creator-api.ts` (multi-launchpad) is already Pump.fun-first. Good.
 
-## Re-Forensics + Re-Hydrate buttons in `AllDrafts`
+### Plan of action
 
-- **Re-Hydrate** (new, blue) — re-runs `token-mesh-hydrate` only. Cheap, fast, no AI. Use when a row shows `null` ticker.
-- **Re-Forensics** (existing) — re-runs `autopsy-tx-timeline` only.
-- **Re-Generate** (existing) — re-runs `autopsy-writer` only.
-- All three available in every status branch (drafted / analyzing / failed / approved).
+1. Patch `ath-24h-backfill` and `ath-backfill` to try `fetchPumpFunCoin().ath_market_cap` first, GeckoTerminal only as fallback.
+2. Patch `token-mesh-hydrate` to persist `ath_market_cap`, `usd_market_cap`, `image_uri`, `created_timestamp` into `token_lifecycle` + `pumpfun_watchlist` in the same write.
+3. Patch `autopsy-writer` to (a) reuse its existing `livePf` fetch to populate the Section 0 legend and (b) write `image_uri`/`usd_market_cap` back to `token_lifecycle` when present.
+4. Rename the column comment for `token_lifecycle.ath_24h_usd` in code comments — it's actually "lifetime ATH" everywhere except the very first fetch. (No DB migration; just stop the misleading comments.)
 
-TG buttons: keep the disabled+tooltip pattern already shipped.
+### Out of scope
 
----
+- Renaming `ath_24h_usd` → `ath_lifetime_usd` (would require migration + types regen).
+- Touching CEX/KYC resolution paths — those are already correct and aggressive enough.
 
-## Technical details
+### Files to be edited
 
-**New edge function**: `supabase/functions/token-mesh-hydrate/index.ts`
-- Input: `{ mint, candidate_id?, surface, force? }`
-- Returns: `{ mint, identity, mesh, creatorChain, socialMesh, holders, steps: Array<{step, ok, source, ms, reason?}> }`
-- Uses `withRunLog`, `assertUpsert` everywhere.
-- Deduplicates against `token_lifecycle.updated_at < 5min` per `mesh-cache.ts`.
+- `supabase/functions/ath-24h-backfill/index.ts`
+- `supabase/functions/ath-backfill/index.ts`
+- `supabase/functions/token-mesh-hydrate/index.ts`
+- `supabase/functions/autopsy-writer/index.ts`
 
-**Migration** (small):
-- Add to `autopsy_candidates`: `hydration_status jsonb` (last steps array), `hydrated_at timestamptz`, `hydration_attempts int default 0`.
-- Index `(token_mint)` on `autopsy_candidates` if missing.
-
-**Edits**:
-- `src/components/admin/autopsies/AutopsyQueueBody.tsx` — replace `addManualCandidate` body to call hydrate first, then writer; stream per-step toasts.
-- `src/components/admin/autopsies/AllDrafts.tsx` — add **Re-Hydrate** button (cyan/blue) next to Re-Forensics; show ticker/name/mcap pulled from row; if `hydration_status` shows failed steps, badge them.
-- New `src/hooks/useTokenMeshHydrate.ts` — thin wrapper that exposes `{ hydrate(mint), steps, isLoading }` for any future caller.
-
-**Caller migration (follow-on, not blocking)**:
-- `oracle-unified-lookup`, `bagless-holders-report`, `check-bubble-quota` switch to `token-mesh-hydrate` for the identity+mesh portion. Their existing scoring/output logic stays.
-
-**Silent-fails compliance**: every DB write inside `token-mesh-hydrate` uses `assertUpsert`/`assertInsert`. External fetches never `catch(() => null)` — they either return a structured fail or throw to `withRunLog`.
-
-## Out of scope (call out separately if you want them)
-
-- Rewriting `$UNCRAFT` and `MCUNC` reports — that happens automatically once you hit **Re-Hydrate → Re-Generate** on each row.
-- Bumping the writer prompt to refuse vacuum data — already covered by the refusal guard above; deeper prompt work is a separate task.
-- Killing the 504 `autopsy-tx-timeline` timeout on heavy mints (chunked Helius pagination) — separate task.
+No DB migrations. No new secrets. All four edits use existing helpers (`fetchPumpFunCoin`, `assertDbWrite`).
