@@ -19,7 +19,7 @@
  */
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
-import { assertUpsert } from '../_shared/db-assert.ts';
+import { assertUpdate } from '../_shared/db-assert.ts';
 import { getCachedToken } from '../_shared/mesh-cache.ts';
 import { ingestPublicCAQuery } from '../_shared/mesh-ingest.ts';
 import { resolveTokenCreator } from '../_shared/creator-resolver.ts';
@@ -284,7 +284,7 @@ async function handle(req: Request): Promise<Response> {
         .maybeSingle();
       const attempts = (existing?.hydration_attempts ?? 0) + 1;
 
-      return assertUpsert(
+      return assertUpdate(
         supabase
           .from('autopsy_candidates')
           .update({
