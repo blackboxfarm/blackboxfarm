@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ExternalLink, RefreshCw, FileText, AlertTriangle, Send, Search, Rocket, Skull, Flame, Loader2, X } from 'lucide-react';
+import { ExternalLink, RefreshCw, FileText, AlertTriangle, Send, Search, Rocket, Skull, Flame, Loader2, X, Microscope } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
@@ -192,6 +192,35 @@ export default function AllDrafts() {
     else { toast({ title: 'Re-generating — replaces current draft' }); load(); }
   }
 
+  async function reForensics(r: RowWithTg) {
+    setBusy(`${r.id}:forensics`);
+    try {
+      // Force a fresh tx-timeline pull, then re-run the writer so the new
+      // evidence ends up in the prompt and the report.
+      toast({ title: 'Pulling on-chain forensics…', description: 'Launch tx + dev timeline + cascade.' });
+      const { error: txErr } = await supabase.functions.invoke('autopsy-tx-timeline', {
+        body: { candidate_id: r.id, force: true },
+      });
+      if (txErr) {
+        toast({ title: 'Forensics pull failed', description: txErr.message, variant: 'destructive' });
+        setBusy(null);
+        return;
+      }
+      await supabase.from('autopsy_candidates').update({ status_reason: null }).eq('id', r.id);
+      const { error: wErr } = await supabase.functions.invoke('autopsy-writer', {
+        body: { candidate_id: r.id, regenerate: true },
+      });
+      if (wErr) {
+        toast({ title: 'Writer failed after forensics', description: wErr.message, variant: 'destructive' });
+      } else {
+        toast({ title: 'Re-forensics complete', description: 'Report rewritten with on-chain evidence.' });
+      }
+    } finally {
+      setBusy(null);
+      load();
+    }
+  }
+
   async function tgDeepScrape(r: RowWithTg) {
     setBusy(`${r.id}:tgscrape`);
     const { data, error } = await supabase.functions.invoke('autopsy-tg-deep-pull', { body: { candidate_id: r.id } });
@@ -296,6 +325,18 @@ export default function AllDrafts() {
                       ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-generating…</>
                       : <><RefreshCw className="h-3 w-3 mr-1" /> Re-generate (replace)</>}
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={rowBusy(r.id)}
+                    onClick={() => reForensics(r)}
+                    className="border-cyan-500 text-cyan-600 hover:bg-cyan-500/10 dark:text-cyan-400"
+                    title="Re-pull on-chain forensics, then rewrite the report"
+                  >
+                    {isBusy(r.id, 'forensics')
+                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-forensics…</>
+                      : <><Microscope className="h-3 w-3 mr-1" /> Re-Forensics</>}
+                  </Button>
                   <Button size="sm" disabled={rowBusy(r.id)} onClick={() => approve(r)}>
                     {isBusy(r.id, 'approve')
                       ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Approving…</>
@@ -304,17 +345,31 @@ export default function AllDrafts() {
                 </>
               )}
               {r.status === 'approved' && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={rowBusy(r.id)}
-                  onClick={() => regenerate(r)}
-                  className="border-amber-500 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
-                >
-                  {isBusy(r.id, 'regenerate')
-                    ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-generating…</>
-                    : <><RefreshCw className="h-3 w-3 mr-1" /> Re-generate (replace)</>}
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={rowBusy(r.id)}
+                    onClick={() => regenerate(r)}
+                    className="border-amber-500 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
+                  >
+                    {isBusy(r.id, 'regenerate')
+                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-generating…</>
+                      : <><RefreshCw className="h-3 w-3 mr-1" /> Re-generate (replace)</>}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={rowBusy(r.id)}
+                    onClick={() => reForensics(r)}
+                    className="border-cyan-500 text-cyan-600 hover:bg-cyan-500/10 dark:text-cyan-400"
+                    title="Re-pull on-chain forensics, then rewrite the report"
+                  >
+                    {isBusy(r.id, 'forensics')
+                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Re-forensics…</>
+                      : <><Microscope className="h-3 w-3 mr-1" /> Re-Forensics</>}
+                  </Button>
+                </>
               )}
               {r.status === 'failed' && (
                 <>
