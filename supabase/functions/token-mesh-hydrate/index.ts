@@ -25,6 +25,7 @@ import { ingestPublicCAQuery } from '../_shared/mesh-ingest.ts';
 import { resolveTokenCreator } from '../_shared/creator-resolver.ts';
 import { fetchDexScreenerData } from '../_shared/dexscreener-api.ts';
 import { fetchLaunchpadCoin, detectLaunchpad } from '../_shared/launchpad-fetch.ts';
+import { detectCopycatPattern, type CopycatVerdict } from '../_shared/copycat-detector.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -106,6 +107,7 @@ async function handle(req: Request): Promise<Response> {
     createdAt?: string | null;
   } = {};
   let creatorWallet: string | null = null;
+  let copycatVerdict: CopycatVerdict | null = null;
 
   // -- Step 1: cache --
   if (!force) {
@@ -326,6 +328,47 @@ async function handle(req: Request): Promise<Response> {
     });
   }
 
+  // -- Step 6a: weak-theme copycat detection (Pump.fun-only — needs creator history) --
+  if (creatorWallet && detectLaunchpad(mint) === 'pumpfun') {
+    const cc = await timed(() => detectCopycatPattern(creatorWallet!, 'token-mesh-hydrate', mint));
+    if (cc.result) {
+      copycatVerdict = cc.result;
+      // Persist to dev_wallet_reputation.metadata for downstream surfaces
+      await supabase
+        .from('dev_wallet_reputation')
+        .update({
+          metadata: {
+            copycat: {
+              verdict: cc.result.verdict,
+              caution: cc.result.cautionMessage,
+              clusters: cc.result.clusters.map(c => ({ theme: c.theme, count: c.members.length })),
+              failureRate: cc.result.failureRate,
+              medianAthUsd: cc.result.medianAthUsd,
+              launchesLast30d: cc.result.launchesLast30d,
+              totalPriorTokens: cc.result.totalPriorTokens,
+              analyzedAt: new Date().toISOString(),
+            },
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('wallet_address', creatorWallet);
+      steps.push({
+        step: 'copycat-scan',
+        ok: true,
+        source: 'pumpfun-creator-history',
+        ms: cc.ms,
+        detail: `${cc.result.verdict}${cc.result.cautionMessage ? ' — ' + cc.result.cautionMessage : ''}`,
+      });
+    } else {
+      steps.push({
+        step: 'copycat-scan',
+        ok: false,
+        ms: cc.ms,
+        reason: cc.error ?? 'no creator history available',
+      });
+    }
+  }
+
   // -- Step 6b: backfill identity socials from token_social_links --
   // Harvest may discover TG/X/website that DexScreener/Pump.fun didn't surface.
   // Without this, downstream callers (autopsy queue) gate features like
@@ -412,6 +455,7 @@ async function handle(req: Request): Promise<Response> {
       mint,
       identity,
       creatorWallet,
+      copycat: copycatVerdict,
       surface,
       steps,
     }),
