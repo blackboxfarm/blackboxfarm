@@ -199,11 +199,31 @@ export default function AllDrafts() {
       // Force a fresh tx-timeline pull, then re-run the writer so the new
       // evidence ends up in the prompt and the report.
       toast({ title: 'Pulling on-chain forensics…', description: 'Launch tx + dev timeline + cascade.' });
-      const { error: txErr } = await supabase.functions.invoke('autopsy-tx-timeline', {
+      const { data: txData, error: txErr } = await supabase.functions.invoke('autopsy-tx-timeline', {
         body: { candidate_id: r.id, force: true },
       });
       if (txErr) {
-        toast({ title: 'Forensics pull failed', description: txErr.message, variant: 'destructive' });
+        // Try to read the function's actual JSON error body (FunctionsHttpError)
+        let detail = txErr.message;
+        try {
+          const ctx: any = (txErr as any).context;
+          if (ctx?.json) detail = ctx.json?.error || ctx.json?.reason || detail;
+          else if (ctx?.body) {
+            const parsed = JSON.parse(await ctx.body.text());
+            detail = parsed?.error || parsed?.reason || detail;
+          }
+        } catch { /* ignore */ }
+        toast({ title: 'Forensics pull failed', description: detail, variant: 'destructive' });
+        setBusy(null);
+        return;
+      }
+      // Server returns 200 with `skipped` when creator wallet is unresolved.
+      if ((txData as any)?.skipped) {
+        toast({
+          title: 'Forensics skipped',
+          description: (txData as any).reason ?? (txData as any).skipped,
+          variant: 'destructive',
+        });
         setBusy(null);
         return;
       }
