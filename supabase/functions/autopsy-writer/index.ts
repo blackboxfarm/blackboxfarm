@@ -339,6 +339,40 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         creator_wallet: creatorWallet,
       }).eq('id', c.id).select('id').single(), 'autopsy_candidates');
 
+      // Backfill the canonical mesh tables with anything Pump.fun handed us this run.
+      // Same payload that powered the ATH lookup — don't waste it.
+      if (livePf) {
+        const lifecyclePatch: Record<string, unknown> = {};
+        if (typeof livePf.ath_market_cap === 'number' && livePf.ath_market_cap > 0) {
+          lifecyclePatch.ath_24h_usd = livePf.ath_market_cap; // column = lifetime ATH
+        }
+        if (typeof livePf.usd_market_cap === 'number' && livePf.usd_market_cap > 0) {
+          lifecyclePatch.market_cap = livePf.usd_market_cap;
+        }
+        if (typeof livePf.image_uri === 'string' && livePf.image_uri.length > 0) {
+          lifecyclePatch.image_url = livePf.image_uri;
+        }
+        if (Object.keys(lifecyclePatch).length > 0) {
+          await supabase.from('token_lifecycle')
+            .update({ ...lifecyclePatch, updated_at: new Date().toISOString() })
+            .eq('token_mint', c.token_mint);
+        }
+        // Mirror to pumpfun_watchlist (best-effort — row may not exist for non-watched mints)
+        const wlPatch: Record<string, unknown> = {};
+        if (typeof livePf.ath_market_cap === 'number' && livePf.ath_market_cap > 0) {
+          wlPatch.ath_market_cap_usd = livePf.ath_market_cap;
+        }
+        if (typeof livePf.usd_market_cap === 'number' && livePf.usd_market_cap > 0) {
+          wlPatch.market_cap_usd = livePf.usd_market_cap;
+        }
+        if (typeof livePf.image_uri === 'string' && livePf.image_uri.length > 0) {
+          wlPatch.image_url = livePf.image_uri;
+        }
+        if (Object.keys(wlPatch).length > 0) {
+          await supabase.from('pumpfun_watchlist').update(wlPatch).eq('token_mint', c.token_mint);
+        }
+      }
+
       const ticker = c.ticker ?? pf?.token_symbol ?? liveDeath?.symbol ?? backlog?.symbol ?? c.token_mint.slice(0, 6);
       const tokenName = c.token_name ?? pf?.token_name ?? liveDeath?.name ?? backlog?.name ?? ticker;
       const baseSlug = slugify(`${ticker}-${tokenName}`);
@@ -353,10 +387,18 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
       const hasDevWallet = !!creatorWallet;
       const hasKyc = !!(dossier?.kyc_root);
       const hasPumpfunProfile = !!(livePf?.creator || pf?.creator_wallet);
+      // Pump.fun's payload is the canonical source for socials of any pump.fun mint.
+      // Consult it FIRST, then fall back to the mesh DB. Otherwise the legend lies
+      // when hydration was partial / stale.
+      const pfTwitter  = livePf?.twitter  ?? pf?.twitter  ?? null;
+      const pfTelegram = livePf?.telegram ?? pf?.telegram ?? null;
+      const pfWebsite  = livePf?.website  ?? pf?.website  ?? null;
       const hasXCommunity = (enrichment.x_community_member_count ?? 0) > 0
-        || (socials ?? []).some((s: any) => s.is_community === true);
-      const hasWebsite = findSocial(/website|^www|http/i) && (socials ?? []).some((s: any) => /website|www/i.test(s.platform ?? s.link_type ?? ''));
-      const hasTelegram = findSocial(/telegram|t\.me/i);
+        || (socials ?? []).some((s: any) => s.is_community === true)
+        || !!pfTwitter;
+      const hasWebsite = !!pfWebsite
+        || (findSocial(/website|^www|http/i) && (socials ?? []).some((s: any) => /website|www/i.test(s.platform ?? s.link_type ?? '')));
+      const hasTelegram = !!pfTelegram || findSocial(/telegram|t\.me/i);
       const hasDiscord = !!enrichment.discord_present || findSocial(/discord/i);
       const hasTiktok = findSocial(/tiktok/i);
       const hasDexPaid = enrichment.dex_paid === true || (enrichment.paid_orders ?? []).length > 0;

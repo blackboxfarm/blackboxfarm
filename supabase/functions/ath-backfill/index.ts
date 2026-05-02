@@ -17,6 +17,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { assertDbWrite } from '../_shared/db-assert.ts';
+import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -107,6 +108,15 @@ async function dexScreenerAth(mint: string): Promise<{ athUsd: number; athAt: st
 }
 
 async function resolveAth(mint: string): Promise<{ athUsd: number; athAt: string | null; source: string } | null> {
+  // 1. Pump.fun direct — canonical lifetime ATH market cap for any pump.fun mint.
+  try {
+    const pf = await fetchPumpFunCoin(mint, 'ath-backfill');
+    const pfAth = Number(pf?.ath_market_cap);
+    if (Number.isFinite(pfAth) && pfAth > 0) {
+      return { athUsd: pfAth, athAt: null, source: 'pumpfun_api' };
+    }
+  } catch (_e) { /* fall through */ }
+
   const gt = await geckoTerminalAth(mint);
   if (gt && gt.athUsd > 0) return { ...gt, source: 'geckoterminal_ohlcv' };
   const ds = await dexScreenerAth(mint);
