@@ -339,6 +339,37 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         creator_wallet: creatorWallet,
       }).eq('id', c.id).select('id').single(), 'autopsy_candidates');
 
+      // Backfill the canonical mesh tables with anything Pump.fun handed us this run.
+      // Same payload that powered the ATH lookup — don't waste it.
+      if (livePf) {
+        const lifecyclePatch: Record<string, unknown> = {};
+        if (typeof livePf.ath_market_cap === 'number' && livePf.ath_market_cap > 0) {
+          lifecyclePatch.ath_24h_usd = livePf.ath_market_cap; // column = lifetime ATH
+        }
+        if (typeof livePf.usd_market_cap === 'number' && livePf.usd_market_cap > 0) {
+          lifecyclePatch.market_cap = livePf.usd_market_cap;
+        }
+        if (typeof livePf.image_uri === 'string' && livePf.image_uri.length > 0) {
+          lifecyclePatch.image_uri = livePf.image_uri;
+        }
+        if (Object.keys(lifecyclePatch).length > 0) {
+          await supabase.from('token_lifecycle')
+            .update({ ...lifecyclePatch, updated_at: new Date().toISOString() })
+            .eq('token_mint', c.token_mint);
+        }
+        // Mirror to pumpfun_watchlist (best-effort — row may not exist for non-watched mints)
+        const wlPatch: Record<string, unknown> = {};
+        if (typeof livePf.ath_market_cap === 'number' && livePf.ath_market_cap > 0) {
+          wlPatch.price_ath_usd = livePf.ath_market_cap;
+        }
+        if (typeof livePf.image_uri === 'string' && livePf.image_uri.length > 0) {
+          wlPatch.image_uri = livePf.image_uri;
+        }
+        if (Object.keys(wlPatch).length > 0) {
+          await supabase.from('pumpfun_watchlist').update(wlPatch).eq('token_mint', c.token_mint);
+        }
+      }
+
       const ticker = c.ticker ?? pf?.token_symbol ?? liveDeath?.symbol ?? backlog?.symbol ?? c.token_mint.slice(0, 6);
       const tokenName = c.token_name ?? pf?.token_name ?? liveDeath?.name ?? backlog?.name ?? ticker;
       const baseSlug = slugify(`${ticker}-${tokenName}`);
