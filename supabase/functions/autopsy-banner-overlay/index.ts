@@ -28,9 +28,12 @@ const corsHeaders = {
 const LOVABLE_AI_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 const BUCKET = 'autopsy-banners';
 
-function buildOverlayPrompt(visualDesc: string): string {
+function buildOverlayPrompt(visualDesc: string, opts: { squareSource?: boolean } = {}): string {
   const desc = visualDesc?.trim() || 'the original token banner artwork';
-  return `EDIT this exact image — DO NOT redraw, replace, or generate the central artwork. Preserve the original banner (${desc}) at full visibility. Treat this as a TRANSPARENT FORENSIC OVERLAY decorating the EDGES and CORNERS only.
+  const squarePreamble = opts.squareSource
+    ? `The source image is SQUARE pump.fun mint artwork. Place it CENTERED on a 1536×512 black canvas at native aspect ratio (do not stretch, do not crop, do not "extend" or invent new artwork on the sides — fill the empty side panels with solid black, then layer the autopsy props described below over those black panels). Do NOT generate any new characters, mascots, or scenes anywhere on the canvas. The mint artwork in the center MUST remain pixel-faithful to the source.\n\n`
+    : '';
+  return `${squarePreamble}EDIT this exact image — DO NOT redraw, replace, or generate the central artwork. Preserve the original banner (${desc}) at full visibility. Treat this as a TRANSPARENT FORENSIC OVERLAY decorating the EDGES and CORNERS only.
 
 ABSOLUTELY DO NOT: add any blob/mascot/character/creature; cover the central 60% of the banner; replace or repaint the source banner; place the AUTOPSY stencil over the central subject.
 
