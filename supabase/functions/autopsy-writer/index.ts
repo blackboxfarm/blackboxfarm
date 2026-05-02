@@ -343,6 +343,42 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
       const tokenName = c.token_name ?? pf?.token_name ?? liveDeath?.name ?? backlog?.name ?? ticker;
       const baseSlug = slugify(`${ticker}-${tokenName}`);
 
+      // ── Discovery legend (top-of-report ✓/✗ snapshot) ──────
+      // Mirrors the data-points the analyst sees at a glance: which sources/socials
+      // we have on file vs which came up empty. Always rendered, in fixed order.
+      const findSocial = (re: RegExp) => (socials ?? []).some((s: any) =>
+        re.test(`${s.platform ?? ''} ${s.link_type ?? ''} ${s.url ?? ''}`)
+      );
+      const hasMint = !!c.token_mint;
+      const hasDevWallet = !!creatorWallet;
+      const hasKyc = !!(dossier?.kyc_root);
+      const hasPumpfunProfile = !!(livePf?.creator || pf?.creator_wallet);
+      const hasXCommunity = (enrichment.x_community_member_count ?? 0) > 0
+        || (socials ?? []).some((s: any) => s.is_community === true);
+      const hasWebsite = findSocial(/website|^www|http/i) && (socials ?? []).some((s: any) => /website|www/i.test(s.platform ?? s.link_type ?? ''));
+      const hasTelegram = findSocial(/telegram|t\.me/i);
+      const hasDiscord = !!enrichment.discord_present || findSocial(/discord/i);
+      const hasTiktok = findSocial(/tiktok/i);
+      const hasDexPaid = enrichment.dex_paid === true || (enrichment.paid_orders ?? []).length > 0;
+      const hasDexBoosts = (enrichment.boosts_paid_usd ?? 0) > 0 || (enrichment.boost_timeline ?? []).length > 0;
+      const yn = (b: boolean) => b ? '✅' : '❌';
+      const discoveryLegend = `## 0. Discovery Snapshot
+
+| Data Point | Status |
+|---|---|
+| Mint Data | ${yn(hasMint)} |
+| Dev Wallet | ${yn(hasDevWallet)} |
+| KYC Account (cluster root) | ${yn(hasKyc)} |
+| Pump.fun Profile | ${yn(hasPumpfunProfile)} |
+| X Community | ${yn(hasXCommunity)} |
+| WWW | ${yn(hasWebsite)} |
+| Telegram | ${yn(hasTelegram)} |
+| Discord | ${yn(hasDiscord)} |
+| TikTok | ${yn(hasTiktok)} |
+| DexScreener Paid | ${yn(hasDexPaid)} |
+| DexScreener Boosts | ${yn(hasDexBoosts)} |
+`;
+
       // Determine version for this candidate
       const { data: existingReports } = await supabase
         .from('autopsy_reports')
