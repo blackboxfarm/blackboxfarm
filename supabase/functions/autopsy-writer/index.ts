@@ -259,15 +259,30 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         .order('captured_at', { ascending: false })
         .limit(10);
 
+      // ── Live pump.fun snapshot (authoritative ATH source) ──
+      // pumpfun_watchlist.ath_market_cap_usd is just the max of polled snapshots,
+      // so it routinely under-reports the true intraday peak. Pump.fun's API
+      // returns the actual all-time-high market cap that the user sees in the
+      // pump.fun UI — that IS the canonical ATH and overrides the watchlist.
+      let livePf: any = null;
+      try {
+        const r = await fetch(`https://frontend-api-v3.pump.fun/coins/${c.token_mint}`);
+        if (r.ok) livePf = await r.json();
+      } catch (e) {
+        console.warn('[autopsy-writer] live pump.fun fetch failed:', (e as Error).message);
+      }
+
       // ATH source priority (most accurate first):
-      //  1. lifecycle.ath_24h_usd  — populated by ath-backfill via GeckoTerminal hourly OHLCV (true historical peak)
-      //  2. liveDeath.ath_usd / backlog.ath_usd — death-watch snapshots
-      //  3. pf.ath_market_cap_usd — Pump.fun reported ATH mcap
-      //  4. c.ath_mcap_usd — last persisted value (only if nothing fresher)
-      //  5. pf.market_cap_usd — current mcap as last-resort floor
+      //  1. livePf.ath_market_cap — LIVE pump.fun API ATH (canonical for pump.fun tokens)
+      //  2. lifecycle.ath_24h_usd  — populated by ath-backfill via GeckoTerminal hourly OHLCV
+      //  3. liveDeath.ath_usd / backlog.ath_usd — death-watch snapshots
+      //  4. pf.ath_market_cap_usd — pumpfun_watchlist (under-reports — only polled samples)
+      //  5. c.ath_mcap_usd — last persisted value
+      //  6. pf.market_cap_usd — current mcap as last-resort floor
       // ⚠️ Removed: `price_ath_usd × 1_000_000_000` — that fallback assumed exactly 1B supply
       // and produced wildly inflated ATHs (e.g. $4.7M for a token whose real peak was ~$760k).
       const athMcap = num(
+        livePf?.ath_market_cap,
         lifecycle?.ath_24h_usd,
         liveDeath?.ath_usd,
         backlog?.ath_usd,
