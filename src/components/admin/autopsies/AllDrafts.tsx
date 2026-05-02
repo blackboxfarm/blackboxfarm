@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ExternalLink, RefreshCw, FileText, AlertTriangle, Send, Search, Rocket, Skull, Flame, Loader2, X, Microscope } from 'lucide-react';
+import { ExternalLink, RefreshCw, FileText, AlertTriangle, Send, Search, Rocket, Skull, Flame, Loader2, X, Microscope, Droplet } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
@@ -216,6 +216,33 @@ export default function AllDrafts() {
       } else {
         toast({ title: 'Re-forensics complete', description: 'Report rewritten with on-chain evidence.' });
       }
+    } finally {
+      setBusy(null);
+      load();
+    }
+  }
+
+  async function reHydrate(r: RowWithTg) {
+    setBusy(`${r.id}:hydrate`);
+    try {
+      toast({ title: 'Re-hydrating mesh…', description: 'Identity → creator → mesh → socials → holders.' });
+      const { data, error } = await supabase.functions.invoke('token-mesh-hydrate', {
+        body: { mint: r.token_mint, candidate_id: r.id, surface: 'autopsy_rehydrate', force: true },
+      });
+      if (error) {
+        toast({ title: 'Re-hydrate failed', description: error.message, variant: 'destructive' });
+        return;
+      }
+      const steps: Array<{ step: string; ok: boolean; source?: string; detail?: string; reason?: string }> =
+        (data as any)?.steps ?? [];
+      for (const s of steps) {
+        toast({
+          title: `${s.ok ? '✓' : '⚠'} ${s.step}${s.source ? ` (${s.source})` : ''}`,
+          description: s.ok ? (s.detail ?? 'ok') : (s.reason ?? 'no detail'),
+          variant: s.ok ? 'default' : 'destructive',
+        });
+      }
+      toast({ title: 'Re-hydrate complete', description: 'Row refreshed. Re-generate to use the new data.' });
     } finally {
       setBusy(null);
       load();
