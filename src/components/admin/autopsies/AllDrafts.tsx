@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ExternalLink, RefreshCw, FileText, AlertTriangle, Send, Search, Rocket, Skull, Flame, Loader2, X, Microscope } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -281,17 +282,43 @@ export default function AllDrafts() {
         <Card key={r.id} className="p-3 space-y-3">
           {/* Action row — full width, top */}
           <div className="flex gap-2 flex-wrap justify-end">
-              {r.tg_url && (
+              {r.tg_url ? (
                 <Button size="sm" variant="ghost" asChild>
                   <a href={r.tg_url} target="_blank" rel="noreferrer"><Send className="h-3 w-3 mr-1" /> Open TG</a>
                 </Button>
+              ) : (
+                <TooltipProvider delayDuration={150}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span tabIndex={0}>
+                        <Button size="sm" variant="ghost" disabled className="opacity-50 pointer-events-none">
+                          <Send className="h-3 w-3 mr-1" /> Open TG
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>no tg detected</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
-              {r.tg_url && (
+              {r.tg_url ? (
                 <Button size="sm" variant="outline" disabled={rowBusy(r.id)} onClick={() => tgDeepScrape(r)}>
                   {isBusy(r.id, 'tgscrape')
                     ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Scraping…</>
                     : <><Search className="h-3 w-3 mr-1" /> I'm in — deep scrape</>}
                 </Button>
+              ) : (
+                <TooltipProvider delayDuration={150}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span tabIndex={0}>
+                        <Button size="sm" variant="outline" disabled className="opacity-50 pointer-events-none">
+                          <Search className="h-3 w-3 mr-1" /> I'm in — deep scrape
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>no tg detected</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
               <Button
                 size="sm"
