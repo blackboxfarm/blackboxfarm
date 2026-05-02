@@ -101,6 +101,9 @@ async function handle(req: Request): Promise<Response> {
     marketCapUsd?: number | null;
     liquidityUsd?: number | null;
     priceUsd?: number | null;
+    athMcapUsd?: number | null;
+    imageUrl?: string | null;
+    createdAt?: string | null;
   } = {};
   let creatorWallet: string | null = null;
 
@@ -155,6 +158,12 @@ async function handle(req: Request): Promise<Response> {
         identity.twitterUrl ||= pf.result.twitter ?? null;
         identity.telegramUrl ||= pf.result.telegram ?? null;
         identity.websiteUrl ||= pf.result.website ?? null;
+        identity.marketCapUsd ||= (typeof pf.result.usd_market_cap === 'number' ? pf.result.usd_market_cap : null);
+        identity.athMcapUsd ||= (typeof pf.result.ath_market_cap === 'number' ? pf.result.ath_market_cap : null);
+        identity.imageUrl ||= pf.result.image_uri ?? null;
+        identity.createdAt ||= pf.result.created_timestamp
+          ? new Date(pf.result.created_timestamp).toISOString()
+          : null;
         creatorWallet ||= pf.result.creator ?? null;
         steps.push({
           step: 'identity',
@@ -171,6 +180,55 @@ async function handle(req: Request): Promise<Response> {
           reason: `DexScreener: ${dx.error ?? 'no pairs'} · Pump.fun: ${pf.error ?? 'no record'}`,
         });
       }
+    }
+  }
+
+  // -- Step 2b: opportunistic Pump.fun enrichment --
+  // If DexScreener handled identity but didn't give us ATH / image / created_at,
+  // and the mint looks like a pump.fun mint (ends with "pump"), fetch the Pump.fun
+  // payload anyway. Same call powers ATH everywhere downstream.
+  if (
+    (identity.athMcapUsd == null || identity.imageUrl == null || identity.createdAt == null) &&
+    (mint.endsWith('pump') || mint.endsWith('PUMP'))
+  ) {
+    const pf2 = await timed(() => fetchPumpFunCoin(mint, 'token-mesh-hydrate-enrich'));
+    if (pf2.result) {
+      identity.athMcapUsd ||= (typeof pf2.result.ath_market_cap === 'number' ? pf2.result.ath_market_cap : null);
+      identity.marketCapUsd ||= (typeof pf2.result.usd_market_cap === 'number' ? pf2.result.usd_market_cap : null);
+      identity.imageUrl ||= pf2.result.image_uri ?? null;
+      identity.createdAt ||= pf2.result.created_timestamp
+        ? new Date(pf2.result.created_timestamp).toISOString()
+        : null;
+      identity.twitterUrl ||= pf2.result.twitter ?? null;
+      identity.telegramUrl ||= pf2.result.telegram ?? null;
+      identity.websiteUrl ||= pf2.result.website ?? null;
+      creatorWallet ||= pf2.result.creator ?? null;
+      steps.push({
+        step: 'pumpfun-enrich',
+        ok: true,
+        source: 'pumpfun',
+        ms: pf2.ms,
+        detail: `ath=${identity.athMcapUsd ?? '—'} · img=${identity.imageUrl ? 'yes' : 'no'}`,
+      });
+    }
+  }
+
+  // -- Step 2c: persist Pump.fun-derived facts to token_lifecycle + pumpfun_watchlist --
+  // Same write that autopsy-writer does, but we do it during initial hydration so
+  // any subsequent reader (autopsy, oracle, AI) sees a fully populated mesh row.
+  if (identity.athMcapUsd || identity.imageUrl || identity.marketCapUsd) {
+    const lifecyclePatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (identity.athMcapUsd && identity.athMcapUsd > 0) lifecyclePatch.ath_24h_usd = identity.athMcapUsd;
+    if (identity.marketCapUsd && identity.marketCapUsd > 0) lifecyclePatch.market_cap = identity.marketCapUsd;
+    if (identity.imageUrl) lifecyclePatch.image_url = identity.imageUrl;
+    await supabase.from('token_lifecycle').update(lifecyclePatch).eq('token_mint', mint);
+
+    const wlPatch: Record<string, unknown> = {};
+    if (identity.athMcapUsd && identity.athMcapUsd > 0) wlPatch.ath_market_cap_usd = identity.athMcapUsd;
+    if (identity.marketCapUsd && identity.marketCapUsd > 0) wlPatch.market_cap_usd = identity.marketCapUsd;
+    if (identity.imageUrl) wlPatch.image_url = identity.imageUrl;
+    if (Object.keys(wlPatch).length > 0) {
+      await supabase.from('pumpfun_watchlist').update(wlPatch).eq('token_mint', mint);
     }
   }
 
