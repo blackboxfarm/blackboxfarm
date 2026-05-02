@@ -259,15 +259,30 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         .order('captured_at', { ascending: false })
         .limit(10);
 
+      // ── Live pump.fun snapshot (authoritative ATH source) ──
+      // pumpfun_watchlist.ath_market_cap_usd is just the max of polled snapshots,
+      // so it routinely under-reports the true intraday peak. Pump.fun's API
+      // returns the actual all-time-high market cap that the user sees in the
+      // pump.fun UI — that IS the canonical ATH and overrides the watchlist.
+      let livePf: any = null;
+      try {
+        const r = await fetch(`https://frontend-api-v3.pump.fun/coins/${c.token_mint}`);
+        if (r.ok) livePf = await r.json();
+      } catch (e) {
+        console.warn('[autopsy-writer] live pump.fun fetch failed:', (e as Error).message);
+      }
+
       // ATH source priority (most accurate first):
-      //  1. lifecycle.ath_24h_usd  — populated by ath-backfill via GeckoTerminal hourly OHLCV (true historical peak)
-      //  2. liveDeath.ath_usd / backlog.ath_usd — death-watch snapshots
-      //  3. pf.ath_market_cap_usd — Pump.fun reported ATH mcap
-      //  4. c.ath_mcap_usd — last persisted value (only if nothing fresher)
-      //  5. pf.market_cap_usd — current mcap as last-resort floor
+      //  1. livePf.ath_market_cap — LIVE pump.fun API ATH (canonical for pump.fun tokens)
+      //  2. lifecycle.ath_24h_usd  — populated by ath-backfill via GeckoTerminal hourly OHLCV
+      //  3. liveDeath.ath_usd / backlog.ath_usd — death-watch snapshots
+      //  4. pf.ath_market_cap_usd — pumpfun_watchlist (under-reports — only polled samples)
+      //  5. c.ath_mcap_usd — last persisted value
+      //  6. pf.market_cap_usd — current mcap as last-resort floor
       // ⚠️ Removed: `price_ath_usd × 1_000_000_000` — that fallback assumed exactly 1B supply
       // and produced wildly inflated ATHs (e.g. $4.7M for a token whose real peak was ~$760k).
       const athMcap = num(
+        livePf?.ath_market_cap,
         lifecycle?.ath_24h_usd,
         liveDeath?.ath_usd,
         backlog?.ath_usd,
@@ -327,6 +342,42 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
       const ticker = c.ticker ?? pf?.token_symbol ?? liveDeath?.symbol ?? backlog?.symbol ?? c.token_mint.slice(0, 6);
       const tokenName = c.token_name ?? pf?.token_name ?? liveDeath?.name ?? backlog?.name ?? ticker;
       const baseSlug = slugify(`${ticker}-${tokenName}`);
+
+      // ── Discovery legend (top-of-report ✓/✗ snapshot) ──────
+      // Mirrors the data-points the analyst sees at a glance: which sources/socials
+      // we have on file vs which came up empty. Always rendered, in fixed order.
+      const findSocial = (re: RegExp) => (socials ?? []).some((s: any) =>
+        re.test(`${s.platform ?? ''} ${s.link_type ?? ''} ${s.url ?? ''}`)
+      );
+      const hasMint = !!c.token_mint;
+      const hasDevWallet = !!creatorWallet;
+      const hasKyc = !!(dossier?.kyc_root);
+      const hasPumpfunProfile = !!(livePf?.creator || pf?.creator_wallet);
+      const hasXCommunity = (enrichment.x_community_member_count ?? 0) > 0
+        || (socials ?? []).some((s: any) => s.is_community === true);
+      const hasWebsite = findSocial(/website|^www|http/i) && (socials ?? []).some((s: any) => /website|www/i.test(s.platform ?? s.link_type ?? ''));
+      const hasTelegram = findSocial(/telegram|t\.me/i);
+      const hasDiscord = !!enrichment.discord_present || findSocial(/discord/i);
+      const hasTiktok = findSocial(/tiktok/i);
+      const hasDexPaid = enrichment.dex_paid === true || (enrichment.paid_orders ?? []).length > 0;
+      const hasDexBoosts = (enrichment.boosts_paid_usd ?? 0) > 0 || (enrichment.boost_timeline ?? []).length > 0;
+      const yn = (b: boolean) => b ? '✅' : '❌';
+      const discoveryLegend = `## 0. Discovery Snapshot
+
+| Data Point | Status |
+|---|---|
+| Mint Data | ${yn(hasMint)} |
+| Dev Wallet | ${yn(hasDevWallet)} |
+| KYC Account (cluster root) | ${yn(hasKyc)} |
+| Pump.fun Profile | ${yn(hasPumpfunProfile)} |
+| X Community | ${yn(hasXCommunity)} |
+| WWW | ${yn(hasWebsite)} |
+| Telegram | ${yn(hasTelegram)} |
+| Discord | ${yn(hasDiscord)} |
+| TikTok | ${yn(hasTiktok)} |
+| DexScreener Paid | ${yn(hasDexPaid)} |
+| DexScreener Boosts | ${yn(hasDexBoosts)} |
+`;
 
       // Determine version for this candidate
       const { data: existingReports } = await supabase
@@ -561,6 +612,25 @@ Write the full markdown now. No preamble, no code fence — start with "# Token 
         }
       }
 
+      // Inject the Discovery Snapshot legend right after the verdict line.
+      // It's deterministic and built from real data — never let the AI write it.
+      {
+        const verdictLineMatch = md.match(/^\*\*Verdict:[^\n]*\n/m);
+        if (verdictLineMatch) {
+          const insertAt = (verdictLineMatch.index ?? 0) + verdictLineMatch[0].length;
+          md = md.slice(0, insertAt) + '\n' + discoveryLegend + '\n' + md.slice(insertAt);
+        } else {
+          // Fallback: prepend after the H1 title
+          const h1Match = md.match(/^#\s+[^\n]*\n/);
+          if (h1Match) {
+            const insertAt = (h1Match.index ?? 0) + h1Match[0].length;
+            md = md.slice(0, insertAt) + '\n' + discoveryLegend + '\n' + md.slice(insertAt);
+          } else {
+            md = discoveryLegend + '\n' + md;
+          }
+        }
+      }
+
       // ── If regenerating, mark prior reports as not current ──
       if (existingReports && existingReports.length > 0) {
         await supabase
@@ -635,6 +705,7 @@ Write the full markdown now. No preamble, no code fence — start with "# Token 
             token_mint: c.token_mint,
             ticker,
             report_id: drafted.id,
+            source_feed: c.source_feed ?? null,
           }),
         },
       ).then(async (overlayRes) => {

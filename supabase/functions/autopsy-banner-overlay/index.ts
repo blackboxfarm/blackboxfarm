@@ -28,9 +28,12 @@ const corsHeaders = {
 const LOVABLE_AI_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 const BUCKET = 'autopsy-banners';
 
-function buildOverlayPrompt(visualDesc: string): string {
+function buildOverlayPrompt(visualDesc: string, opts: { squareSource?: boolean } = {}): string {
   const desc = visualDesc?.trim() || 'the original token banner artwork';
-  return `EDIT this exact image — DO NOT redraw, replace, or generate the central artwork. Preserve the original banner (${desc}) at full visibility. Treat this as a TRANSPARENT FORENSIC OVERLAY decorating the EDGES and CORNERS only.
+  const squarePreamble = opts.squareSource
+    ? `The source image is SQUARE pump.fun mint artwork. Place it CENTERED on a 1536×512 black canvas at native aspect ratio (do not stretch, do not crop, do not "extend" or invent new artwork on the sides — fill the empty side panels with solid black, then layer the autopsy props described below over those black panels). Do NOT generate any new characters, mascots, or scenes anywhere on the canvas. The mint artwork in the center MUST remain pixel-faithful to the source.\n\n`
+    : '';
+  return `${squarePreamble}EDIT this exact image — DO NOT redraw, replace, or generate the central artwork. Preserve the original banner (${desc}) at full visibility. Treat this as a TRANSPARENT FORENSIC OVERLAY decorating the EDGES and CORNERS only.
 
 ABSOLUTELY DO NOT: add any blob/mascot/character/creature; cover the central 60% of the banner; replace or repaint the source banner; place the AUTOPSY stencil over the central subject.
 
@@ -194,10 +197,14 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
       console.warn('[autopsy-banner-overlay] existence check failed, continuing:', (e as any)?.message);
     }
 
-    // 1. Source banner — curve deaths use pump.fun mint image only.
-    const isCurveDeath = source_feed === 'pumpfun_curve_death';
+    // 1. Source banner — curve deaths AND admin-manual additions both go straight
+    // to the pump.fun mint image (square art) so we never let the AI fabricate a
+    // banner from a missing/empty DexScreener header. We pass squareSource=true
+    // to the prompt so the AI letterboxes the square art on a black canvas
+    // instead of inventing side artwork.
+    const useMintImage = source_feed === 'pumpfun_curve_death' || source_feed === 'admin_manual';
     const { url: sourceBannerUrl, visualDesc } = await fetchSourceBanner(token_mint, {
-      curveDeath: isCurveDeath,
+      curveDeath: useMintImage,
       supabase,
     });
     if (!sourceBannerUrl) {
@@ -208,7 +215,7 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
     console.log(`[autopsy-banner-overlay] source banner for ${ticker || token_mint}: ${sourceBannerUrl}`);
 
     // 2. Build prompt + edit
-    const prompt = buildOverlayPrompt(token_visual_description || visualDesc);
+    const prompt = buildOverlayPrompt(token_visual_description || visualDesc, { squareSource: useMintImage });
     const sourceDataUri = await urlToDataUri(sourceBannerUrl);
     const editedDataUri = await callImageEdit(sourceDataUri, prompt);
 
