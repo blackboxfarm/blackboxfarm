@@ -612,6 +612,25 @@ Write the full markdown now. No preamble, no code fence — start with "# Token 
         }
       }
 
+      // Inject the Discovery Snapshot legend right after the verdict line.
+      // It's deterministic and built from real data — never let the AI write it.
+      {
+        const verdictLineMatch = md.match(/^\*\*Verdict:[^\n]*\n/m);
+        if (verdictLineMatch) {
+          const insertAt = (verdictLineMatch.index ?? 0) + verdictLineMatch[0].length;
+          md = md.slice(0, insertAt) + '\n' + discoveryLegend + '\n' + md.slice(insertAt);
+        } else {
+          // Fallback: prepend after the H1 title
+          const h1Match = md.match(/^#\s+[^\n]*\n/);
+          if (h1Match) {
+            const insertAt = (h1Match.index ?? 0) + h1Match[0].length;
+            md = md.slice(0, insertAt) + '\n' + discoveryLegend + '\n' + md.slice(insertAt);
+          } else {
+            md = discoveryLegend + '\n' + md;
+          }
+        }
+      }
+
       // ── If regenerating, mark prior reports as not current ──
       if (existingReports && existingReports.length > 0) {
         await supabase
