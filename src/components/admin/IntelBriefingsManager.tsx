@@ -24,7 +24,7 @@ import { cn } from '@/lib/utils';
 import {
   Plus, ArrowLeft, Eye, Edit2, Trash2, Upload, Search,
   Save, Clock, FileText, Image as ImageIcon, ChevronDown, GalleryHorizontal, Globe, CalendarIcon,
-  Bot, Users, Activity, EyeOff, Images, Layers
+  Bot, Users, Activity, EyeOff, Images, Layers, ShieldCheck, Loader2
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
