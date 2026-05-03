@@ -272,6 +272,37 @@ Deno.serve(async (req) => {
     if (b.featured_image_url) targets.add(b.featured_image_url);
     for (const u of extractImageUrls(b.content_md || "")) targets.add(u);
 
+    // Discover derivative files (e.g. -cropped, -thumb, -1200x630) by listing
+    // the storage folder for each referenced image and matching the basename
+    // prefix. This catches files produced by the client-side cropper that are
+    // never directly referenced from content_md.
+    const derivativeTargets = new Set<string>();
+    for (const url of [...targets]) {
+      if (!isOurStorageUrl(url, SUPA_URL)) continue;
+      const loc = parseStoragePath(url, SUPA_URL);
+      if (!loc) continue;
+      const slashIdx = loc.path.lastIndexOf("/");
+      const folder = slashIdx >= 0 ? loc.path.slice(0, slashIdx) : "";
+      const filename = slashIdx >= 0 ? loc.path.slice(slashIdx + 1) : loc.path;
+      // Strip extension to get the base
+      const dotIdx = filename.lastIndexOf(".");
+      const base = dotIdx > 0 ? filename.slice(0, dotIdx) : filename;
+      try {
+        const list = await supabase.storage.from(loc.bucket).list(folder, { limit: 1000 });
+        if (list.error || !list.data) continue;
+        for (const item of list.data) {
+          if (!item.name) continue;
+          // Match files that start with same base (catches `${base}-cropped.jpg`, etc.)
+          if (item.name.startsWith(base) && item.name !== filename) {
+            const fullPath = folder ? `${folder}/${item.name}` : item.name;
+            const derivUrl = `${SUPA_URL}/storage/v1/object/public/${loc.bucket}/${fullPath}`;
+            derivativeTargets.add(derivUrl);
+          }
+        }
+      } catch (_e) { /* non-fatal: just means no derivatives processed for this URL */ }
+    }
+    for (const u of derivativeTargets) targets.add(u);
+
     const year = new Date().getFullYear();
     const fields: ExifFields = {
       imageDescription: (b.summary || b.title || "BlackBox Farm Intelligence").slice(0, 500),
@@ -286,21 +317,34 @@ Deno.serve(async (req) => {
     };
 
     const results: Array<{ url: string; status: string; size?: number }> = [];
+    const errors: string[] = [];
     for (const url of targets) {
       if (!isOurStorageUrl(url, SUPA_URL)) { results.push({ url, status: "skipped_external" }); continue; }
       const loc = parseStoragePath(url, SUPA_URL);
       if (!loc) { results.push({ url, status: "skipped_unparseable" }); continue; }
       try {
         const dl = await supabase.storage.from(loc.bucket).download(loc.path);
-        if (dl.error || !dl.data) { results.push({ url, status: `download_failed:${dl.error?.message}` }); continue; }
+        if (dl.error || !dl.data) {
+          const msg = `download_failed:${dl.error?.message}`;
+          results.push({ url, status: msg });
+          errors.push(`${url} → ${msg}`);
+          continue;
+        }
         const buf = new Uint8Array(await dl.data.arrayBuffer());
         const mime = dl.data.type || "image/jpeg";
         const { bytes, mime: outMime } = rebrand(buf, mime, fields);
         const up = await supabase.storage.from(loc.bucket).upload(loc.path, bytes, { contentType: outMime, upsert: true });
-        if (up.error) { results.push({ url, status: `upload_failed:${up.error.message}` }); continue; }
+        if (up.error) {
+          const msg = `upload_failed:${up.error.message}`;
+          results.push({ url, status: msg });
+          errors.push(`${url} → ${msg}`);
+          continue;
+        }
         results.push({ url, status: "rebranded", size: bytes.length });
       } catch (e) {
-        results.push({ url, status: `error:${(e as Error).message}` });
+        const msg = `error:${(e as Error).message}`;
+        results.push({ url, status: msg });
+        errors.push(`${url} → ${msg}`);
       }
     }
 
@@ -310,8 +354,14 @@ Deno.serve(async (req) => {
     );
 
     const ok = results.filter(r => r.status === "rebranded").length;
-    return new Response(JSON.stringify({ success: true, total: results.length, rebranded: ok, results }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const success = errors.length === 0 && ok > 0;
+    return new Response(
+      JSON.stringify({ success, total: results.length, rebranded: ok, errors, results }),
+      {
+        status: success ? 200 : 207, // 207 Multi-Status when partial failure
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   } catch (e) {
     return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
