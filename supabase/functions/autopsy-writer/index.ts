@@ -108,8 +108,8 @@ const FEW_SHOT_MALICIOUS = `# Token Autopsy — GPT "Greedy Pissing Testicle"
 | Mint | \`...\` |
 | Symbol | \`GPT\` |
 | ATH MCap | $265,346 |
-| Lifetime | 6.26h |
-| 🪦 Time of Death | ~14:45:33 UTC, 2026-04-29 |
+| Lifetime | 6h 16m |
+| 🪦 Time of Death | 2 hours ago (2026-04-29 14:45:33 UTC) |
 ## 2. Players
 | Role | Address | Behavior |
 |---|---|---|
