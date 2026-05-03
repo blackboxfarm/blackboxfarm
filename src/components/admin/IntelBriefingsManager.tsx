@@ -719,7 +719,27 @@ function IntelBriefingsArticlesManager() {
                 <TableRow key={b.id}>
                   <TableCell className="text-muted-foreground text-xs">{idx + 1}</TableCell>
                   <TableCell className="font-medium max-w-[300px] truncate">{b.title}</TableCell>
-                  <TableCell><Badge variant="secondary">{b.category}</Badge></TableCell>
+                  {showCategoryCol && <TableCell><Badge variant="secondary">{b.category}</Badge></TableCell>}
+                  <TableCell className="text-center">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex">
+                            <Checkbox
+                              checked={!!b.reviewed_at}
+                              onCheckedChange={(checked) => toggleReviewed.mutate({ id: b.id, reviewed: !!checked })}
+                              aria-label="Mark reviewed"
+                            />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="text-xs">
+                          {b.reviewed_at
+                            ? `Reviewed ${format(new Date(b.reviewed_at), 'MMM d, yyyy HH:mm')}`
+                            : 'Not yet reviewed (images, breadcrumbs 75/50/25)'}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Switch
@@ -823,9 +843,6 @@ function IntelBriefingsArticlesManager() {
                       </Tooltip>
                     </TooltipProvider>
                   </TableCell>
-                  <TableCell className="text-center">
-                    <ExposureCell briefingId={b.id} publications={allPublications} />
-                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex gap-1 justify-end">
                       <Button size="sm" variant="ghost" onClick={() => openEditor(b)}>
@@ -850,6 +867,11 @@ function IntelBriefingsArticlesManager() {
                       </Button>
                     </div>
                   </TableCell>
+                  {showExposureCol && (
+                    <TableCell className="text-center">
+                      <ExposureCell briefingId={b.id} publications={allPublications} />
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
