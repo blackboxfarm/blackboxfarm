@@ -16,8 +16,101 @@ const COPYRIGHT_LINES = [
   `Source: BlackBox Farm Intelligence Platform`,
 ];
 
-/** JPEG: strip APP1 (EXIF/XMP) + APP13 (IPTC) + existing COM, then inject our COM marker. */
-function rebrandJpeg(src: Uint8Array): Uint8Array {
+interface ExifFields {
+  imageDescription?: string;
+  software?: string;
+  artist?: string;
+  copyright?: string;
+  xpTitle?: string;
+  xpComment?: string;
+  xpAuthor?: string;
+  xpKeywords?: string;
+  xpSubject?: string;
+}
+
+/** Build a real APP1/EXIF segment (TIFF/IFD0) so Windows Explorer Details tab populates. */
+function buildExifApp1(fields: ExifFields): Uint8Array {
+  const enc = new TextEncoder();
+  type Entry = { tag: number; type: number; count: number; data: Uint8Array };
+  const entries: Entry[] = [];
+  const addAscii = (tag: number, val?: string) => {
+    if (!val) return;
+    const bytes = enc.encode(val + "\0");
+    entries.push({ tag, type: 2, count: bytes.length, data: bytes });
+  };
+  const addXP = (tag: number, val?: string) => {
+    if (!val) return;
+    const out = new Uint8Array((val.length + 1) * 2);
+    for (let i = 0; i < val.length; i++) {
+      const c = val.charCodeAt(i);
+      out[i * 2] = c & 0xff;
+      out[i * 2 + 1] = (c >> 8) & 0xff;
+    }
+    entries.push({ tag, type: 1, count: out.length, data: out });
+  };
+  addAscii(0x010E, fields.imageDescription);
+  addAscii(0x0131, fields.software);
+  addAscii(0x013B, fields.artist);
+  addAscii(0x8298, fields.copyright);
+  addXP(0x9C9B, fields.xpTitle);
+  addXP(0x9C9C, fields.xpComment);
+  addXP(0x9C9D, fields.xpAuthor);
+  addXP(0x9C9E, fields.xpKeywords);
+  addXP(0x9C9F, fields.xpSubject);
+  entries.sort((a, b) => a.tag - b.tag);
+
+  const ifdSize = 2 + entries.length * 12 + 4;
+  const sizeOf = (e: Entry) => e.count * ((e.type === 1 || e.type === 2) ? 1 : 4);
+  const dataTotal = entries.reduce((acc, e) => {
+    const bl = sizeOf(e);
+    return acc + (bl > 4 ? bl + (bl % 2) : 0);
+  }, 0);
+  const tiffSize = 8 + ifdSize + dataTotal;
+  const segLen = 6 + tiffSize + 2; // "Exif\0\0" + TIFF + 2-byte length itself
+  const out = new Uint8Array(2 + segLen); // marker + segment
+  out[0] = 0xff; out[1] = 0xe1;
+  out[2] = (segLen >> 8) & 0xff; out[3] = segLen & 0xff;
+  // "Exif\0\0"
+  out.set([0x45, 0x78, 0x69, 0x66, 0, 0], 4);
+  const tiff = 10;
+  out[tiff] = 0x49; out[tiff + 1] = 0x49;
+  out[tiff + 2] = 0x2a; out[tiff + 3] = 0x00;
+  // IFD0 offset = 8
+  out[tiff + 4] = 8;
+  const ifdStart = tiff + 8;
+  out[ifdStart] = entries.length & 0xff;
+  out[ifdStart + 1] = (entries.length >> 8) & 0xff;
+  const dataAreaStart = ifdStart + 2 + entries.length * 12 + 4;
+  let dataCursor = dataAreaStart;
+  let dataOffsetRel = dataAreaStart - tiff;
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    const eo = ifdStart + 2 + i * 12;
+    out[eo] = e.tag & 0xff; out[eo + 1] = (e.tag >> 8) & 0xff;
+    out[eo + 2] = e.type & 0xff; out[eo + 3] = (e.type >> 8) & 0xff;
+    out[eo + 4] = e.count & 0xff;
+    out[eo + 5] = (e.count >> 8) & 0xff;
+    out[eo + 6] = (e.count >> 16) & 0xff;
+    out[eo + 7] = (e.count >> 24) & 0xff;
+    const bl = sizeOf(e);
+    if (bl <= 4) {
+      for (let j = 0; j < bl; j++) out[eo + 8 + j] = e.data[j];
+    } else {
+      out[eo + 8] = dataOffsetRel & 0xff;
+      out[eo + 9] = (dataOffsetRel >> 8) & 0xff;
+      out[eo + 10] = (dataOffsetRel >> 16) & 0xff;
+      out[eo + 11] = (dataOffsetRel >> 24) & 0xff;
+      for (let j = 0; j < bl; j++) out[dataCursor + j] = e.data[j];
+      const padded = bl + (bl % 2);
+      dataCursor += padded;
+      dataOffsetRel += padded;
+    }
+  }
+  return out;
+}
+
+/** JPEG: strip APP1 (EXIF/XMP) + APP13 (IPTC) + existing COM, inject APP1/EXIF + COM. */
+function rebrandJpeg(src: Uint8Array, fields: ExifFields): Uint8Array {
   if (src[0] !== 0xff || src[1] !== 0xd8) return src;
   const out: number[] = [0xff, 0xd8];
   let i = 2;
@@ -40,16 +133,18 @@ function rebrandJpeg(src: Uint8Array): Uint8Array {
     }
     i += 2 + segLen;
   }
-  // Build COM marker
+  // Build APP1/EXIF + COM marker
+  const app1 = buildExifApp1(fields);
   const text = COPYRIGHT_LINES.join("\n");
   const tb = new TextEncoder().encode(text);
   const len = tb.length + 2;
   const com = [0xff, 0xfe, (len >> 8) & 0xff, len & 0xff, ...tb];
-  // Insert COM right after SOI
-  const result = new Uint8Array(2 + com.length + (out.length - 2));
+  // Insert APP1 + COM right after SOI
+  const result = new Uint8Array(2 + app1.length + com.length + (out.length - 2));
   result.set([0xff, 0xd8], 0);
-  result.set(com, 2);
-  result.set(out.slice(2), 2 + com.length);
+  result.set(app1, 2);
+  result.set(com, 2 + app1.length);
+  result.set(out.slice(2), 2 + app1.length + com.length);
   return result;
 }
 
@@ -129,10 +224,10 @@ function rebrandPng(src: Uint8Array): Uint8Array {
   return new Uint8Array(out);
 }
 
-function rebrand(bytes: Uint8Array, mime: string): { bytes: Uint8Array; mime: string } {
+function rebrand(bytes: Uint8Array, mime: string, fields: ExifFields): { bytes: Uint8Array; mime: string } {
   const isJpg = mime.includes("jpeg") || mime.includes("jpg") || (bytes[0] === 0xff && bytes[1] === 0xd8);
   const isPng = mime.includes("png") || (bytes[0] === 0x89 && bytes[1] === 0x50);
-  if (isJpg) return { bytes: rebrandJpeg(bytes), mime: "image/jpeg" };
+  if (isJpg) return { bytes: rebrandJpeg(bytes, fields), mime: "image/jpeg" };
   if (isPng) return { bytes: rebrandPng(bytes), mime: "image/png" };
   return { bytes, mime: mime || "application/octet-stream" };
 }
@@ -169,13 +264,26 @@ Deno.serve(async (req) => {
     const SUPA_URL = Deno.env.get("SUPABASE_URL")!;
     const supabase = createClient(SUPA_URL, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data: b, error } = await supabase.from("intel_briefings")
-      .select("id, content_md, featured_image_url").eq("id", briefingId).maybeSingle();
+      .select("id, title, slug, summary, content_md, featured_image_url").eq("id", briefingId).maybeSingle();
     if (error || !b) {
       return new Response(JSON.stringify({ error: error?.message || "not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const targets = new Set<string>();
     if (b.featured_image_url) targets.add(b.featured_image_url);
     for (const u of extractImageUrls(b.content_md || "")) targets.add(u);
+
+    const year = new Date().getFullYear();
+    const fields: ExifFields = {
+      imageDescription: (b.summary || b.title || "BlackBox Farm Intelligence").slice(0, 500),
+      software: "BlackBox Farm Intelligence Platform",
+      artist: "BlackBox Farm",
+      copyright: `Copyright (c) ${year} BlackBox Farm. All rights reserved. https://blackbox.farm`,
+      xpTitle: b.title || "BlackBox Farm Intelligence",
+      xpSubject: b.summary || b.title || "BlackBox Farm Intelligence Briefing",
+      xpAuthor: "BlackBox Farm",
+      xpKeywords: "BlackBox Farm;HoldersIntel;Solana;Intelligence;Mesh;Crypto",
+      xpComment: COPYRIGHT_LINES.join(" | "),
+    };
 
     const results: Array<{ url: string; status: string; size?: number }> = [];
     for (const url of targets) {
@@ -187,7 +295,7 @@ Deno.serve(async (req) => {
         if (dl.error || !dl.data) { results.push({ url, status: `download_failed:${dl.error?.message}` }); continue; }
         const buf = new Uint8Array(await dl.data.arrayBuffer());
         const mime = dl.data.type || "image/jpeg";
-        const { bytes, mime: outMime } = rebrand(buf, mime);
+        const { bytes, mime: outMime } = rebrand(buf, mime, fields);
         const up = await supabase.storage.from(loc.bucket).upload(loc.path, bytes, { contentType: outMime, upsert: true });
         if (up.error) { results.push({ url, status: `upload_failed:${up.error.message}` }); continue; }
         results.push({ url, status: "rebranded", size: bytes.length });
