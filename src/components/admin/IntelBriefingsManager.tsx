@@ -229,6 +229,14 @@ function IntelBriefingsArticlesManager() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [editorTab, setEditorTab] = useState('edit');
+  const [showCategoryCol, setShowCategoryCol] = useState<boolean>(() => {
+    try { return localStorage.getItem('intel-show-category') !== '0'; } catch { return true; }
+  });
+  const [showExposureCol, setShowExposureCol] = useState<boolean>(() => {
+    try { return localStorage.getItem('intel-show-exposure') !== '0'; } catch { return true; }
+  });
+  const toggleCategoryCol = () => setShowCategoryCol(v => { try { localStorage.setItem('intel-show-category', v ? '0' : '1'); } catch {} return !v; });
+  const toggleExposureCol = () => setShowExposureCol(v => { try { localStorage.setItem('intel-show-exposure', v ? '0' : '1'); } catch {} return !v; });
   const [showSeo, setShowSeo] = useState(false);
   const [showRevisions, setShowRevisions] = useState(false);
   const [revisionNote, setRevisionNote] = useState('');
