@@ -802,6 +802,32 @@ function IntelBriefingsArticlesManager() {
                       );
                     })()}
                   </TableCell>
+                  <TableCell className="text-center">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0"
+                            disabled={rebrandingId === b.id}
+                            onClick={() => rebrandImages(b)}
+                          >
+                            {rebrandingId === b.id
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <ShieldCheck className={cn('h-3.5 w-3.5', b.exif_branded_at ? 'text-primary' : 'text-muted-foreground/50')} />}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[260px]">
+                          <p className="text-xs">
+                            {b.exif_branded_at
+                              ? `Branded ${format(new Date(b.exif_branded_at), 'MMM d, yyyy HH:mm')}. Click to re-run on all images.`
+                              : 'Strip EXIF/personal data from hero + inline images and inject BlackBox Farm copyright, website, Telegram, X links.'}
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Switch
