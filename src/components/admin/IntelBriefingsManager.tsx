@@ -24,8 +24,9 @@ import { cn } from '@/lib/utils';
 import {
   Plus, ArrowLeft, Eye, Edit2, Trash2, Upload, Search,
   Save, Clock, FileText, Image as ImageIcon, ChevronDown, GalleryHorizontal, Globe, CalendarIcon,
-  Bot, Users, Activity
+  Bot, Users, Activity, CheckSquare, Eye as EyeIcon, EyeOff
 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { GalleryPickerButton } from './social/GalleryPickerButton';
 import { BreadcrumbUploadButton } from './social/BreadcrumbUploadButton';
@@ -55,6 +56,7 @@ interface Briefing {
   related_slugs: string[] | null;
   created_at: string;
   updated_at: string;
+  reviewed_at?: string | null;
 }
 
 interface Revision {
