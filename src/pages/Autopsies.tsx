@@ -68,6 +68,12 @@ export default function Autopsies() {
             Forensic post-mortems on coordinated rugs and exit-liquidity events.
             Every wallet, every transaction, every dollar — reconstructed from the Solana ledger.
           </p>
+          <div className="mt-5 max-w-2xl mx-auto rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs md:text-sm text-foreground/80 leading-relaxed">
+            <Badge variant="outline" className="text-[10px] uppercase tracking-wider bg-primary/15 text-primary border-primary/40 mr-2">
+              Beta
+            </Badge>
+            Manual autopsy submissions are currently in <span className="font-semibold">BETA testing with internal Pro accounts</span> and will roll out to all <span className="font-semibold">paid Pro accounts</span> soon — one-click submit, auto-generated, auto-published. In the meantime, everyone can enjoy reading our latest Coroner's Reports as they go live!
+          </div>
           <div className="mt-6 max-w-3xl mx-auto rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-left">
             <div className="flex items-start gap-3">
               <Badge variant="outline" className="text-[10px] uppercase tracking-wider bg-destructive/15 text-destructive border-destructive/30 mt-0.5 shrink-0">
