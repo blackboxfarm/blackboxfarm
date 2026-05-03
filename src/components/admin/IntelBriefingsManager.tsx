@@ -24,8 +24,9 @@ import { cn } from '@/lib/utils';
 import {
   Plus, ArrowLeft, Eye, Edit2, Trash2, Upload, Search,
   Save, Clock, FileText, Image as ImageIcon, ChevronDown, GalleryHorizontal, Globe, CalendarIcon,
-  Bot, Users, Activity
+  Bot, Users, Activity, EyeOff
 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { GalleryPickerButton } from './social/GalleryPickerButton';
 import { BreadcrumbUploadButton } from './social/BreadcrumbUploadButton';
@@ -55,6 +56,7 @@ interface Briefing {
   related_slugs: string[] | null;
   created_at: string;
   updated_at: string;
+  reviewed_at?: string | null;
 }
 
 interface Revision {
@@ -227,6 +229,14 @@ function IntelBriefingsArticlesManager() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [editorTab, setEditorTab] = useState('edit');
+  const [showCategoryCol, setShowCategoryCol] = useState<boolean>(() => {
+    try { return localStorage.getItem('intel-show-category') !== '0'; } catch { return true; }
+  });
+  const [showExposureCol, setShowExposureCol] = useState<boolean>(() => {
+    try { return localStorage.getItem('intel-show-exposure') !== '0'; } catch { return true; }
+  });
+  const toggleCategoryCol = () => setShowCategoryCol(v => { try { localStorage.setItem('intel-show-category', v ? '0' : '1'); } catch {} return !v; });
+  const toggleExposureCol = () => setShowExposureCol(v => { try { localStorage.setItem('intel-show-exposure', v ? '0' : '1'); } catch {} return !v; });
   const [showSeo, setShowSeo] = useState(false);
   const [showRevisions, setShowRevisions] = useState(false);
   const [revisionNote, setRevisionNote] = useState('');
@@ -421,6 +431,19 @@ function IntelBriefingsArticlesManager() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-intel-briefings'] });
       toast({ title: 'Date updated' });
+    },
+  });
+
+  // Toggle reviewed/completed flag
+  const toggleReviewed = useMutation({
+    mutationFn: async ({ id, reviewed }: { id: string; reviewed: boolean }) => {
+      const { error } = await supabase.from('intel_briefings').update({
+        reviewed_at: reviewed ? new Date().toISOString() : null,
+      } as any).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-intel-briefings'] });
     },
   });
 
@@ -636,6 +659,14 @@ function IntelBriefingsArticlesManager() {
               <SelectItem value="draft">Drafts</SelectItem>
             </SelectContent>
           </Select>
+          <Button variant="outline" size="sm" onClick={toggleCategoryCol} className="gap-1">
+            {showCategoryCol ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+            Category
+          </Button>
+          <Button variant="outline" size="sm" onClick={toggleExposureCol} className="gap-1">
+            {showExposureCol ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+            Exposure
+          </Button>
         </div>
 
         {/* Table */}
@@ -653,7 +684,8 @@ function IntelBriefingsArticlesManager() {
               <TableRow>
                 <TableHead className="w-[40px]">#</TableHead>
                 <TableHead>Title</TableHead>
-                <TableHead>Category</TableHead>
+                {showCategoryCol && <TableHead>Category</TableHead>}
+                <TableHead className="text-center w-[70px]" title="Reviewed / completed">✓</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead className="text-center">
@@ -678,8 +710,8 @@ function IntelBriefingsArticlesManager() {
                     </div>
                   </div>
                 </TableHead>
-                <TableHead className="text-center">Exposure</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
+                {showExposureCol && <TableHead className="text-center">Exposure</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -687,7 +719,27 @@ function IntelBriefingsArticlesManager() {
                 <TableRow key={b.id}>
                   <TableCell className="text-muted-foreground text-xs">{idx + 1}</TableCell>
                   <TableCell className="font-medium max-w-[300px] truncate">{b.title}</TableCell>
-                  <TableCell><Badge variant="secondary">{b.category}</Badge></TableCell>
+                  {showCategoryCol && <TableCell><Badge variant="secondary">{b.category}</Badge></TableCell>}
+                  <TableCell className="text-center">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex">
+                            <Checkbox
+                              checked={!!b.reviewed_at}
+                              onCheckedChange={(checked) => toggleReviewed.mutate({ id: b.id, reviewed: !!checked })}
+                              aria-label="Mark reviewed"
+                            />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="text-xs">
+                          {b.reviewed_at
+                            ? `Reviewed ${format(new Date(b.reviewed_at), 'MMM d, yyyy HH:mm')}`
+                            : 'Not yet reviewed (images, breadcrumbs 75/50/25)'}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Switch
@@ -791,9 +843,6 @@ function IntelBriefingsArticlesManager() {
                       </Tooltip>
                     </TooltipProvider>
                   </TableCell>
-                  <TableCell className="text-center">
-                    <ExposureCell briefingId={b.id} publications={allPublications} />
-                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex gap-1 justify-end">
                       <Button size="sm" variant="ghost" onClick={() => openEditor(b)}>
@@ -818,6 +867,11 @@ function IntelBriefingsArticlesManager() {
                       </Button>
                     </div>
                   </TableCell>
+                  {showExposureCol && (
+                    <TableCell className="text-center">
+                      <ExposureCell briefingId={b.id} publications={allPublications} />
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>

@@ -1,0 +1,1 @@
+ALTER TABLE public.intel_briefings ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
