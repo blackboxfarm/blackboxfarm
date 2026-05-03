@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Archive, FileText, Lock, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { runFullAutopsyPipeline } from './runFullAutopsyPipeline';
 
 interface BacklogRow {
   token_mint: string;
@@ -112,9 +113,9 @@ export default function CoolDeathsBacklog() {
     setBusy(r.token_mint);
     const ticker = cleanTokenText(r.symbol, 'symbol');
     const tokenName = cleanTokenText(r.name, 'name');
-    const { data: cand, error: insErr } = await supabase
-      .from('autopsy_candidates')
-      .upsert({
+    const result = await runFullAutopsyPipeline({
+      toast,
+      upsert: {
         token_mint: r.token_mint,
         ticker,
         token_name: tokenName,
@@ -126,22 +127,10 @@ export default function CoolDeathsBacklog() {
         current_mcap_usd: r.current_mcap_usd,
         liquidity_usd: r.liquidity_usd,
         creator_wallet: r.creator_wallet,
-        funneled_at: new Date().toISOString(),
-        status: 'pending',
-      }, { onConflict: 'token_mint' })
-      .select('id')
-      .single();
-    if (insErr || !cand) {
-      setBusy(null);
-      toast({ title: 'Queue failed', description: insErr?.message, variant: 'destructive' });
-      return;
-    }
-    const { error: wErr } = await supabase.functions.invoke('autopsy-writer', { body: { candidate_id: cand.id } });
+      },
+    });
     setBusy(null);
-    if (wErr) toast({ title: 'Writer failed', description: wErr.message, variant: 'destructive' });
-    else {
-      toast({ title: 'Draft queued' });
-      // mark drafted
+    if (result.ok) {
       await supabase.from('autopsy_backlog')
         .update({ drafted_at: new Date().toISOString() })
         .eq('token_mint', r.token_mint);
