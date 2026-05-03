@@ -686,6 +686,7 @@ function IntelBriefingsArticlesManager() {
                 <TableHead>Title</TableHead>
                 {showCategoryCol && <TableHead>Category</TableHead>}
                 <TableHead className="text-center w-[70px]" title="Reviewed / completed">✓</TableHead>
+                <TableHead className="text-center w-[110px]" title="Assets: Hero / Inline images / Breadcrumbs">Assets</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead className="text-center">
