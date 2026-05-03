@@ -660,11 +660,11 @@ function IntelBriefingsArticlesManager() {
             </SelectContent>
           </Select>
           <Button variant="outline" size="sm" onClick={toggleCategoryCol} className="gap-1">
-            {showCategoryCol ? <EyeIcon className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+            {showCategoryCol ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
             Category
           </Button>
           <Button variant="outline" size="sm" onClick={toggleExposureCol} className="gap-1">
-            {showExposureCol ? <EyeIcon className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+            {showExposureCol ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
             Exposure
           </Button>
         </div>
