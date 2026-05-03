@@ -559,8 +559,12 @@ HARD RULES:
 - The verdict at the top of the report MUST be exactly: "${causeDef.verdict}".
 ${highSocial ? `- This project shipped a real social stack (social_completeness=${enrichment.social_completeness}). You are FORBIDDEN from using any of these phrases: "on-chain ghost", "dead on arrival", "failed launch", "no community", "abandoned token creation attempt".` : ''}
 ${isOrganic ? '- Do NOT call the dev a rugger or grifter. Credit the social build-out explicitly. Frame retail rotation as a normal lifecycle event, not a failure.' : ''}
+${intent === 'negligent' ? '- Frame this as: the dev built and shipped, but went silent during the decline. Credit the build, then call out the inaction. The failure was the *absence of action* during the fade, not the original effort. Do NOT call this organic. Do NOT call this a coordinated rug. The verdict is "dev walked".' : ''}
 ${clusterRugs >= 3 ? `- The creator cluster has ${clusterRugs} prior rugs/abandonments. The report MUST name this as a repeat-pattern actor in the Fingerprint and Verdict sections, citing the prior mints by ticker + ATH. Even if the immediate on-chain footprint is gentle, this is a serial pattern.` : ''}
-- Always include a "🪦 Time of Death" row in the Subject table.`;
+- Always include a "🪦 Time of Death" row in the Subject table.
+- The Subject table MUST use the pre-formatted strings provided in PRESENTATION FIELDS below — copy them verbatim. Do NOT invent your own formats. Specifically:
+    - "Lifetime" row value = the "Lifetime (display)" string (e.g. "13d 4h"). NEVER write decimal hours like "315.76h".
+    - "🪦 Time of Death" row value = the "Time of Death (display)" string (e.g. "2 days ago (2026-04-28 17:49:43 UTC)"). NEVER print a raw ISO timestamp.`;
 
       const userPrompt = `Write a complete BlackBox Autopsy markdown report for the following dead Solana token, matching the reference structure for intent="${intent}".
 
@@ -580,6 +584,10 @@ Current MCap USD: ${currentMcap ?? 'unknown'}
 Liquidity USD: ${liquidityUsd ?? 'unknown'}
 Lifetime hours: ${ageHours?.toFixed(2) ?? 'unknown'}
 Creator wallet: ${creatorWallet ?? 'unknown'}
+
+## PRESENTATION FIELDS (use these strings verbatim in the Subject table)
+- Lifetime (display): ${ageHoursDisplay}
+- Time of Death (display): ${todDisplay}
 
 ## SOCIAL STACK (enrichment)
 - Social completeness: ${enrichment.social_completeness}/6 platforms
