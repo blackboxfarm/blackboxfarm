@@ -23,7 +23,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 import { assertInsert, assertUpdate } from '../_shared/db-assert.ts';
 import { classifyDeath, DEATH_TAXONOMY, shouldAutoPublish, type DeathCauseId } from '../_shared/autopsy-taxonomy.ts';
-import { enrichCandidate } from '../_shared/autopsy-enrich.ts';
+import { enrichCandidate, backfillDexBoostsLive } from '../_shared/autopsy-enrich.ts';
 import { buildDevDossier } from '../_shared/autopsy-dev-context.ts';
 
 const corsHeaders = {
@@ -46,6 +46,54 @@ function num(...values: unknown[]): number | null {
     if (Number.isFinite(n) && n > 0) return n;
   }
   return null;
+}
+
+/**
+ * Lifetime renderer: "13d 4h" / "5h 12m" / "37m". Never decimal hours.
+ */
+function formatLifetime(ageHours: number | null | undefined): string {
+  if (!ageHours || !Number.isFinite(ageHours) || ageHours <= 0) return 'unknown';
+  const totalMin = Math.round(ageHours * 60);
+  if (totalMin < 60) return `${totalMin}m`;
+  if (ageHours < 24) {
+    const h = Math.floor(ageHours);
+    const m = Math.round((ageHours - h) * 60);
+    return m === 0 ? `${h}h` : `${h}h ${m}m`;
+  }
+  const d = Math.floor(ageHours / 24);
+  const h = Math.round(ageHours - d * 24);
+  return h === 0 ? `${d}d` : `${d}d ${h}h`;
+}
+
+/**
+ * Time-of-Death renderer: "2 days ago (2026-04-28 17:49:43 UTC)".
+ */
+function formatTimeOfDeath(iso: string | null | undefined): string {
+  if (!iso) return 'unknown';
+  const t = new Date(iso);
+  if (isNaN(t.getTime())) return iso;
+  const diffMs = Date.now() - t.getTime();
+  const mins = Math.floor(diffMs / 60000);
+  let rel: string;
+  if (mins < 1) rel = 'just now';
+  else if (mins < 60) rel = `${mins} minute${mins === 1 ? '' : 's'} ago`;
+  else if (mins < 60 * 24) {
+    const h = Math.floor(mins / 60);
+    rel = `${h} hour${h === 1 ? '' : 's'} ago`;
+  } else {
+    const d = Math.floor(mins / (60 * 24));
+    rel = `${d} day${d === 1 ? '' : 's'} ago`;
+  }
+  const abs = t.toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC').replace(/Z$/, ' UTC');
+  return `${rel} (${abs})`;
+}
+
+/**
+ * Build a markdown link if URL exists, else plain label.
+ */
+function mdLink(label: string, url: string | null | undefined): string {
+  if (!url) return label;
+  return `[${label}](${url})`;
 }
 
 function meaningfulCause(cause: unknown): cause is DeathCauseId {
@@ -293,6 +341,9 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
       const currentMcap = num(c.current_mcap_usd, liveDeath?.current_mcap_usd, backlog?.current_mcap_usd, lifecycle?.market_cap, pf?.market_cap_usd);
       const liquidityUsd = num(c.liquidity_usd, liveDeath?.liquidity_usd, backlog?.liquidity_usd, lifecycle?.liquidity_usd, pf?.liquidity_usd);
       const ageHours = num(c.age_hours) ?? (liveDeath?.first_seen_at ? (Date.now() - new Date(liveDeath.first_seen_at).getTime()) / 3600000 : null);
+      const ageHoursDisplay = formatLifetime(ageHours);
+      const todIso = txEvidence?.time_of_death_at ?? null;
+      const todDisplay = formatTimeOfDeath(todIso);
       const freshClass = classifyDeath({
         ageHours: ageHours ?? 0,
         mcap: currentMcap ?? 0,
@@ -303,6 +354,10 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         devBuyPct: 100 - (devBehavior?.supply_retention_pct ?? 100),
         hasMaliciousDump: (devBehavior?.dump_velocity_score ?? 0) > 60,
         socialCompleteness: enrichment.social_completeness,
+        noAdminMessageHours: c.social_no_admin_hours ?? 0,
+        devWalletInactiveHours: txEvidence?.dev_final_action_at
+          ? Math.max(0, (Date.now() - new Date(txEvidence.dev_final_action_at).getTime()) / 3600000)
+          : 0,
         devDossier: dossier,
       });
       const existingCause: DeathCauseId = meaningfulCause(c.death_cause) ? c.death_cause : 'unknown';
