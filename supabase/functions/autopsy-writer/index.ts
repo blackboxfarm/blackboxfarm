@@ -458,22 +458,61 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
       const hasTiktok = findSocial(/tiktok/i);
       const hasDexPaid = enrichment.dex_paid === true || (enrichment.paid_orders ?? []).length > 0;
       const hasDexBoosts = (enrichment.boosts_paid_usd ?? 0) > 0 || (enrichment.boost_timeline ?? []).length > 0;
+      // Gap-fill: Paid ✅ but Boosts ❌ → call DexScreener boosts API on demand,
+      // upsert into token_boost_history, re-enrich.
+      let dexBoostFootnote: string | null = null;
+      if (hasDexPaid && !hasDexBoosts) {
+        try {
+          const liveBoost = await backfillDexBoostsLive(supabase, c.token_mint);
+          if (liveBoost.inserted > 0) {
+            const refreshed = await enrichCandidate(supabase, c.token_mint, creatorWallet);
+            Object.assign(enrichment, refreshed);
+          } else {
+            dexBoostFootnote = '_DexScreener paid order recorded but no boost-spend captured — boost API returned empty._';
+          }
+        } catch (e) {
+          console.warn('[autopsy-writer] live boost backfill failed:', (e as Error).message);
+        }
+      }
+      const hasDexBoostsFinal = (enrichment.boosts_paid_usd ?? 0) > 0 || (enrichment.boost_timeline ?? []).length > 0;
       const yn = (b: boolean) => b ? '✅' : '❌';
+
+      // ── Build link targets for the Discovery Snapshot ───────
+      const solscanMint = `https://solscan.io/token/${c.token_mint}`;
+      const dexUrl = `https://dexscreener.com/solana/${c.token_mint}`;
+      const solscanDev = creatorWallet ? `https://solscan.io/account/${creatorWallet}` : null;
+      const solscanKyc = dossier?.kyc_root ? `https://solscan.io/account/${dossier.kyc_root}` : null;
+      const pumpfunProfile = creatorWallet ? `https://pump.fun/profile/${creatorWallet}` : null;
+      const xCommunityRow = (socials ?? []).find((s: any) => s?.is_community || s?.community_id || /x\.com\/i\/communities\//i.test(s?.url ?? ''));
+      const xCommunityUrl = xCommunityRow?.url
+        ?? (xCommunityRow?.community_id ? `https://x.com/i/communities/${xCommunityRow.community_id}` : null)
+        ?? (pfTwitter ?? null);
+      const websiteUrl = pfWebsite
+        ?? (socials ?? []).find((s: any) => /website|www|^https?:/i.test(`${s?.platform ?? ''} ${s?.url ?? ''}`))?.url
+        ?? null;
+      const tgRow = (socials ?? []).find((s: any) => /telegram|t\.me/i.test(`${s?.platform ?? ''} ${s?.url ?? ''}`));
+      const telegramUrl = pfTelegram ?? tgRow?.url ?? null;
+      const discordRow = (socials ?? []).find((s: any) => /discord/i.test(`${s?.platform ?? ''} ${s?.url ?? ''}`));
+      const discordUrl = discordRow?.url ?? null;
+      const tiktokRow = (socials ?? []).find((s: any) => /tiktok/i.test(`${s?.platform ?? ''} ${s?.url ?? ''}`));
+      const tiktokUrl = tiktokRow?.url ?? null;
+
       const discoveryLegend = `## 0. Discovery Snapshot
 
 | Data Point | Status |
 |---|---|
-| Mint Data | ${yn(hasMint)} |
-| Dev Wallet | ${yn(hasDevWallet)} |
-| KYC Account (cluster root) | ${yn(hasKyc)} |
-| Pump.fun Profile | ${yn(hasPumpfunProfile)} |
-| X Community | ${yn(hasXCommunity)} |
-| WWW | ${yn(hasWebsite)} |
-| Telegram | ${yn(hasTelegram)} |
-| Discord | ${yn(hasDiscord)} |
-| TikTok | ${yn(hasTiktok)} |
-| DexScreener Paid | ${yn(hasDexPaid)} |
-| DexScreener Boosts | ${yn(hasDexBoosts)} |
+| ${mdLink('Mint Data', solscanMint)} | ${yn(hasMint)} |
+| ${mdLink('Dev Wallet', solscanDev)} | ${yn(hasDevWallet)} |
+| ${mdLink('KYC Account (cluster root)', solscanKyc)} | ${yn(hasKyc)} |
+| ${mdLink('Pump.fun Profile', pumpfunProfile)} | ${yn(hasPumpfunProfile)} |
+| ${mdLink('X Community', xCommunityUrl)} | ${yn(hasXCommunity)} |
+| ${mdLink('WWW', websiteUrl)} | ${yn(hasWebsite)} |
+| ${mdLink('Telegram', telegramUrl)} | ${yn(hasTelegram)} |
+| ${mdLink('Discord', discordUrl)} | ${yn(hasDiscord)} |
+| ${mdLink('TikTok', tiktokUrl)} | ${yn(hasTiktok)} |
+| ${mdLink('DexScreener Paid', dexUrl)} | ${yn(hasDexPaid)} |
+| ${mdLink('DexScreener Boosts', dexUrl)} | ${yn(hasDexBoostsFinal)} |
+${dexBoostFootnote ? `\n${dexBoostFootnote}\n` : ''}
 `;
 
       // Determine version for this candidate
