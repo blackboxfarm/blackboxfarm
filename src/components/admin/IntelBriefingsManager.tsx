@@ -24,7 +24,7 @@ import { cn } from '@/lib/utils';
 import {
   Plus, ArrowLeft, Eye, Edit2, Trash2, Upload, Search,
   Save, Clock, FileText, Image as ImageIcon, ChevronDown, GalleryHorizontal, Globe, CalendarIcon,
-  Bot, Users, Activity, EyeOff, Images, Layers
+  Bot, Users, Activity, EyeOff, Images, Layers, ShieldCheck, Loader2
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -57,6 +57,7 @@ interface Briefing {
   created_at: string;
   updated_at: string;
   reviewed_at?: string | null;
+  exif_branded_at?: string | null;
 }
 
 interface Revision {
@@ -249,6 +250,24 @@ function IntelBriefingsArticlesManager() {
   const [cropMode, setCropMode] = useState<'hero' | 'inline'>('hero');
   const [showCrop, setShowCrop] = useState(false);
   const [showImageManager, setShowImageManager] = useState(false);
+  const [rebrandingId, setRebrandingId] = useState<string | null>(null);
+
+  const rebrandImages = async (b: Briefing) => {
+    setRebrandingId(b.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('intel-exif-rebrand', { body: { briefingId: b.id } });
+      if (error) throw error;
+      toast({
+        title: 'EXIF rebranded',
+        description: `${data?.rebranded ?? 0}/${data?.total ?? 0} images stripped & branded with BlackBox copyright.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['admin-intel-briefings'] });
+    } catch (e: any) {
+      toast({ title: 'Rebrand failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setRebrandingId(null);
+    }
+  };
 
   // Fetch all briefings
   const { data: briefings = [], isLoading } = useQuery({
@@ -687,6 +706,7 @@ function IntelBriefingsArticlesManager() {
                 {showCategoryCol && <TableHead>Category</TableHead>}
                 <TableHead className="text-center w-[70px]" title="Reviewed / completed">✓</TableHead>
                 <TableHead className="text-center w-[110px]" title="Assets: Hero / Inline images / Breadcrumbs">Assets</TableHead>
+                <TableHead className="text-center w-[60px]" title="Strip EXIF/personal info from all images and inject BlackBox Farm copyright + links">EXIF</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead className="text-center">
@@ -781,6 +801,32 @@ function IntelBriefingsArticlesManager() {
                         </TooltipProvider>
                       );
                     })()}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0"
+                            disabled={rebrandingId === b.id}
+                            onClick={() => rebrandImages(b)}
+                          >
+                            {rebrandingId === b.id
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <ShieldCheck className={cn('h-3.5 w-3.5', b.exif_branded_at ? 'text-primary' : 'text-muted-foreground/50')} />}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[260px]">
+                          <p className="text-xs">
+                            {b.exif_branded_at
+                              ? `Branded ${format(new Date(b.exif_branded_at), 'MMM d, yyyy HH:mm')}. Click to re-run on all images.`
+                              : 'Strip EXIF/personal data from hero + inline images and inject BlackBox Farm copyright, website, Telegram, X links.'}
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
