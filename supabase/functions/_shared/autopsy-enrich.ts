@@ -220,3 +220,57 @@ export async function enrichCandidate(
     dissent_summary: dissentSummary,
   };
 }
+
+/**
+ * On-demand DexScreener boost fetch — used by autopsy-writer to fill the
+ * "Paid = ✅, Boosts = ❌" gap. Hits the live Dex boost endpoints, upserts
+ * any results into token_boost_history, and returns the inserted row count.
+ * Safe to call without the boost-poller cron running.
+ */
+export async function backfillDexBoostsLive(
+  supabase: any,
+  tokenMint: string,
+): Promise<{ inserted: number; checkedSources: string[] }> {
+  const checked: string[] = [];
+  let inserted = 0;
+  const endpoints: Array<{ url: string; source: string }> = [
+    { url: `https://api.dexscreener.com/token-boosts/latest/v1/solana/${tokenMint}`, source: 'dex_latest' },
+    { url: `https://api.dexscreener.com/token-boosts/top/v1/solana/${tokenMint}`, source: 'dex_top' },
+  ];
+  const capturedAt = new Date().toISOString();
+  for (const ep of endpoints) {
+    checked.push(ep.source);
+    try {
+      const r = await fetch(ep.url);
+      if (!r.ok) continue;
+      const payload = await r.json().catch(() => null);
+      const rows = Array.isArray(payload) ? payload : (payload ? [payload] : []);
+      for (const row of rows) {
+        const total = Number(row?.totalAmount ?? row?.total_amount ?? 0);
+        const amount = Number(row?.amount ?? 0);
+        if (!total && !amount) continue;
+        try {
+          await supabase.from('token_boost_history').upsert({
+            token_mint: tokenMint,
+            captured_at: capturedAt,
+            boost_amount: amount || null,
+            total_amount: total || null,
+            delta_amount: null,
+            source: ep.source,
+            icon_url: row?.icon ?? null,
+            header_url: row?.header ?? null,
+            description: row?.description ?? null,
+            links: row?.links ?? null,
+            raw: row,
+          }, { onConflict: 'token_mint,source,captured_at', ignoreDuplicates: false });
+          inserted++;
+        } catch (e) {
+          console.warn('[autopsy-enrich] live boost upsert failed:', (e as Error).message);
+        }
+      }
+    } catch (e) {
+      console.warn(`[autopsy-enrich] live boost fetch failed (${ep.source}):`, (e as Error).message);
+    }
+  }
+  return { inserted, checkedSources: checked };
+}

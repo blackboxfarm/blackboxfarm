@@ -23,7 +23,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 import { assertInsert, assertUpdate } from '../_shared/db-assert.ts';
 import { classifyDeath, DEATH_TAXONOMY, shouldAutoPublish, type DeathCauseId } from '../_shared/autopsy-taxonomy.ts';
-import { enrichCandidate } from '../_shared/autopsy-enrich.ts';
+import { enrichCandidate, backfillDexBoostsLive } from '../_shared/autopsy-enrich.ts';
 import { buildDevDossier } from '../_shared/autopsy-dev-context.ts';
 
 const corsHeaders = {
@@ -48,6 +48,54 @@ function num(...values: unknown[]): number | null {
   return null;
 }
 
+/**
+ * Lifetime renderer: "13d 4h" / "5h 12m" / "37m". Never decimal hours.
+ */
+function formatLifetime(ageHours: number | null | undefined): string {
+  if (!ageHours || !Number.isFinite(ageHours) || ageHours <= 0) return 'unknown';
+  const totalMin = Math.round(ageHours * 60);
+  if (totalMin < 60) return `${totalMin}m`;
+  if (ageHours < 24) {
+    const h = Math.floor(ageHours);
+    const m = Math.round((ageHours - h) * 60);
+    return m === 0 ? `${h}h` : `${h}h ${m}m`;
+  }
+  const d = Math.floor(ageHours / 24);
+  const h = Math.round(ageHours - d * 24);
+  return h === 0 ? `${d}d` : `${d}d ${h}h`;
+}
+
+/**
+ * Time-of-Death renderer: "2 days ago (2026-04-28 17:49:43 UTC)".
+ */
+function formatTimeOfDeath(iso: string | null | undefined): string {
+  if (!iso) return 'unknown';
+  const t = new Date(iso);
+  if (isNaN(t.getTime())) return iso;
+  const diffMs = Date.now() - t.getTime();
+  const mins = Math.floor(diffMs / 60000);
+  let rel: string;
+  if (mins < 1) rel = 'just now';
+  else if (mins < 60) rel = `${mins} minute${mins === 1 ? '' : 's'} ago`;
+  else if (mins < 60 * 24) {
+    const h = Math.floor(mins / 60);
+    rel = `${h} hour${h === 1 ? '' : 's'} ago`;
+  } else {
+    const d = Math.floor(mins / (60 * 24));
+    rel = `${d} day${d === 1 ? '' : 's'} ago`;
+  }
+  const abs = t.toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC').replace(/Z$/, ' UTC');
+  return `${rel} (${abs})`;
+}
+
+/**
+ * Build a markdown link if URL exists, else plain label.
+ */
+function mdLink(label: string, url: string | null | undefined): string {
+  if (!url) return label;
+  return `[${label}](${url})`;
+}
+
 function meaningfulCause(cause: unknown): cause is DeathCauseId {
   return typeof cause === 'string' && cause in DEATH_TAXONOMY && cause !== 'unknown';
 }
@@ -60,8 +108,8 @@ const FEW_SHOT_MALICIOUS = `# Token Autopsy — GPT "Greedy Pissing Testicle"
 | Mint | \`...\` |
 | Symbol | \`GPT\` |
 | ATH MCap | $265,346 |
-| Lifetime | 6.26h |
-| 🪦 Time of Death | ~14:45:33 UTC, 2026-04-29 |
+| Lifetime | 6h 16m |
+| 🪦 Time of Death | 2 hours ago (2026-04-29 14:45:33 UTC) |
 ## 2. Players
 | Role | Address | Behavior |
 |---|---|---|
@@ -293,6 +341,9 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
       const currentMcap = num(c.current_mcap_usd, liveDeath?.current_mcap_usd, backlog?.current_mcap_usd, lifecycle?.market_cap, pf?.market_cap_usd);
       const liquidityUsd = num(c.liquidity_usd, liveDeath?.liquidity_usd, backlog?.liquidity_usd, lifecycle?.liquidity_usd, pf?.liquidity_usd);
       const ageHours = num(c.age_hours) ?? (liveDeath?.first_seen_at ? (Date.now() - new Date(liveDeath.first_seen_at).getTime()) / 3600000 : null);
+      const ageHoursDisplay = formatLifetime(ageHours);
+      const todIso = txEvidence?.time_of_death_at ?? null;
+      const todDisplay = formatTimeOfDeath(todIso);
       const freshClass = classifyDeath({
         ageHours: ageHours ?? 0,
         mcap: currentMcap ?? 0,
@@ -303,6 +354,10 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         devBuyPct: 100 - (devBehavior?.supply_retention_pct ?? 100),
         hasMaliciousDump: (devBehavior?.dump_velocity_score ?? 0) > 60,
         socialCompleteness: enrichment.social_completeness,
+        noAdminMessageHours: c.social_no_admin_hours ?? 0,
+        devWalletInactiveHours: txEvidence?.dev_final_action_at
+          ? Math.max(0, (Date.now() - new Date(txEvidence.dev_final_action_at).getTime()) / 3600000)
+          : 0,
         devDossier: dossier,
       });
       const existingCause: DeathCauseId = meaningfulCause(c.death_cause) ? c.death_cause : 'unknown';
@@ -403,22 +458,61 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
       const hasTiktok = findSocial(/tiktok/i);
       const hasDexPaid = enrichment.dex_paid === true || (enrichment.paid_orders ?? []).length > 0;
       const hasDexBoosts = (enrichment.boosts_paid_usd ?? 0) > 0 || (enrichment.boost_timeline ?? []).length > 0;
+      // Gap-fill: Paid ✅ but Boosts ❌ → call DexScreener boosts API on demand,
+      // upsert into token_boost_history, re-enrich.
+      let dexBoostFootnote: string | null = null;
+      if (hasDexPaid && !hasDexBoosts) {
+        try {
+          const liveBoost = await backfillDexBoostsLive(supabase, c.token_mint);
+          if (liveBoost.inserted > 0) {
+            const refreshed = await enrichCandidate(supabase, c.token_mint, creatorWallet);
+            Object.assign(enrichment, refreshed);
+          } else {
+            dexBoostFootnote = '_DexScreener paid order recorded but no boost-spend captured — boost API returned empty._';
+          }
+        } catch (e) {
+          console.warn('[autopsy-writer] live boost backfill failed:', (e as Error).message);
+        }
+      }
+      const hasDexBoostsFinal = (enrichment.boosts_paid_usd ?? 0) > 0 || (enrichment.boost_timeline ?? []).length > 0;
       const yn = (b: boolean) => b ? '✅' : '❌';
+
+      // ── Build link targets for the Discovery Snapshot ───────
+      const solscanMint = `https://solscan.io/token/${c.token_mint}`;
+      const dexUrl = `https://dexscreener.com/solana/${c.token_mint}`;
+      const solscanDev = creatorWallet ? `https://solscan.io/account/${creatorWallet}` : null;
+      const solscanKyc = dossier?.kyc_root ? `https://solscan.io/account/${dossier.kyc_root}` : null;
+      const pumpfunProfile = creatorWallet ? `https://pump.fun/profile/${creatorWallet}` : null;
+      const xCommunityRow = (socials ?? []).find((s: any) => s?.is_community || s?.community_id || /x\.com\/i\/communities\//i.test(s?.url ?? ''));
+      const xCommunityUrl = xCommunityRow?.url
+        ?? (xCommunityRow?.community_id ? `https://x.com/i/communities/${xCommunityRow.community_id}` : null)
+        ?? (pfTwitter ?? null);
+      const websiteUrl = pfWebsite
+        ?? (socials ?? []).find((s: any) => /website|www|^https?:/i.test(`${s?.platform ?? ''} ${s?.url ?? ''}`))?.url
+        ?? null;
+      const tgRow = (socials ?? []).find((s: any) => /telegram|t\.me/i.test(`${s?.platform ?? ''} ${s?.url ?? ''}`));
+      const telegramUrl = pfTelegram ?? tgRow?.url ?? null;
+      const discordRow = (socials ?? []).find((s: any) => /discord/i.test(`${s?.platform ?? ''} ${s?.url ?? ''}`));
+      const discordUrl = discordRow?.url ?? null;
+      const tiktokRow = (socials ?? []).find((s: any) => /tiktok/i.test(`${s?.platform ?? ''} ${s?.url ?? ''}`));
+      const tiktokUrl = tiktokRow?.url ?? null;
+
       const discoveryLegend = `## 0. Discovery Snapshot
 
 | Data Point | Status |
 |---|---|
-| Mint Data | ${yn(hasMint)} |
-| Dev Wallet | ${yn(hasDevWallet)} |
-| KYC Account (cluster root) | ${yn(hasKyc)} |
-| Pump.fun Profile | ${yn(hasPumpfunProfile)} |
-| X Community | ${yn(hasXCommunity)} |
-| WWW | ${yn(hasWebsite)} |
-| Telegram | ${yn(hasTelegram)} |
-| Discord | ${yn(hasDiscord)} |
-| TikTok | ${yn(hasTiktok)} |
-| DexScreener Paid | ${yn(hasDexPaid)} |
-| DexScreener Boosts | ${yn(hasDexBoosts)} |
+| ${mdLink('Mint Data', solscanMint)} | ${yn(hasMint)} |
+| ${mdLink('Dev Wallet', solscanDev)} | ${yn(hasDevWallet)} |
+| ${mdLink('KYC Account (cluster root)', solscanKyc)} | ${yn(hasKyc)} |
+| ${mdLink('Pump.fun Profile', pumpfunProfile)} | ${yn(hasPumpfunProfile)} |
+| ${mdLink('X Community', xCommunityUrl)} | ${yn(hasXCommunity)} |
+| ${mdLink('WWW', websiteUrl)} | ${yn(hasWebsite)} |
+| ${mdLink('Telegram', telegramUrl)} | ${yn(hasTelegram)} |
+| ${mdLink('Discord', discordUrl)} | ${yn(hasDiscord)} |
+| ${mdLink('TikTok', tiktokUrl)} | ${yn(hasTiktok)} |
+| ${mdLink('DexScreener Paid', dexUrl)} | ${yn(hasDexPaid)} |
+| ${mdLink('DexScreener Boosts', dexUrl)} | ${yn(hasDexBoostsFinal)} |
+${dexBoostFootnote ? `\n${dexBoostFootnote}\n` : ''}
 `;
 
       // Determine version for this candidate
@@ -465,8 +559,12 @@ HARD RULES:
 - The verdict at the top of the report MUST be exactly: "${causeDef.verdict}".
 ${highSocial ? `- This project shipped a real social stack (social_completeness=${enrichment.social_completeness}). You are FORBIDDEN from using any of these phrases: "on-chain ghost", "dead on arrival", "failed launch", "no community", "abandoned token creation attempt".` : ''}
 ${isOrganic ? '- Do NOT call the dev a rugger or grifter. Credit the social build-out explicitly. Frame retail rotation as a normal lifecycle event, not a failure.' : ''}
+${intent === 'negligent' ? '- Frame this as: the dev built and shipped, but went silent during the decline. Credit the build, then call out the inaction. The failure was the *absence of action* during the fade, not the original effort. Do NOT call this organic. Do NOT call this a coordinated rug. The verdict is "dev walked".' : ''}
 ${clusterRugs >= 3 ? `- The creator cluster has ${clusterRugs} prior rugs/abandonments. The report MUST name this as a repeat-pattern actor in the Fingerprint and Verdict sections, citing the prior mints by ticker + ATH. Even if the immediate on-chain footprint is gentle, this is a serial pattern.` : ''}
-- Always include a "🪦 Time of Death" row in the Subject table.`;
+- Always include a "🪦 Time of Death" row in the Subject table.
+- The Subject table MUST use the pre-formatted strings provided in PRESENTATION FIELDS below — copy them verbatim. Do NOT invent your own formats. Specifically:
+    - "Lifetime" row value = the "Lifetime (display)" string (e.g. "13d 4h"). NEVER write decimal hours like "315.76h".
+    - "🪦 Time of Death" row value = the "Time of Death (display)" string (e.g. "2 days ago (2026-04-28 17:49:43 UTC)"). NEVER print a raw ISO timestamp.`;
 
       const userPrompt = `Write a complete BlackBox Autopsy markdown report for the following dead Solana token, matching the reference structure for intent="${intent}".
 
@@ -486,6 +584,10 @@ Current MCap USD: ${currentMcap ?? 'unknown'}
 Liquidity USD: ${liquidityUsd ?? 'unknown'}
 Lifetime hours: ${ageHours?.toFixed(2) ?? 'unknown'}
 Creator wallet: ${creatorWallet ?? 'unknown'}
+
+## PRESENTATION FIELDS (use these strings verbatim in the Subject table)
+- Lifetime (display): ${ageHoursDisplay}
+- Time of Death (display): ${todDisplay}
 
 ## SOCIAL STACK (enrichment)
 - Social completeness: ${enrichment.social_completeness}/6 platforms
