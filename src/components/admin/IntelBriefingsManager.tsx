@@ -706,6 +706,7 @@ function IntelBriefingsArticlesManager() {
                 {showCategoryCol && <TableHead>Category</TableHead>}
                 <TableHead className="text-center w-[70px]" title="Reviewed / completed">✓</TableHead>
                 <TableHead className="text-center w-[110px]" title="Assets: Hero / Inline images / Breadcrumbs">Assets</TableHead>
+                <TableHead className="text-center w-[60px]" title="Strip EXIF/personal info from all images and inject BlackBox Farm copyright + links">EXIF</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead className="text-center">
