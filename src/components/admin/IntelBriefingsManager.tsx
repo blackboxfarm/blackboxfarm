@@ -57,6 +57,7 @@ interface Briefing {
   created_at: string;
   updated_at: string;
   reviewed_at?: string | null;
+  exif_branded_at?: string | null;
 }
 
 interface Revision {
