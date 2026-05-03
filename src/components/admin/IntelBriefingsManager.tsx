@@ -684,7 +684,8 @@ function IntelBriefingsArticlesManager() {
               <TableRow>
                 <TableHead className="w-[40px]">#</TableHead>
                 <TableHead>Title</TableHead>
-                <TableHead>Category</TableHead>
+                {showCategoryCol && <TableHead>Category</TableHead>}
+                <TableHead className="text-center w-[70px]" title="Reviewed / completed">✓</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead className="text-center">
@@ -709,8 +710,8 @@ function IntelBriefingsArticlesManager() {
                     </div>
                   </div>
                 </TableHead>
-                <TableHead className="text-center">Exposure</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
+                {showExposureCol && <TableHead className="text-center">Exposure</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
