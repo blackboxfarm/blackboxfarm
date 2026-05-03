@@ -425,6 +425,18 @@ export function classifyDeath(input: {
     (repVerdict === 'clean' || repVerdict === 'mixed') &&
     clusterRugs < 3
   ) {
+    // Tiebreaker: if mods went silent for 24h+ BEFORE the chart cratered,
+    // the dev walked during the fade — that's negligent, not organic.
+    // "Built it, shipped it, then ghosted when it started to fade."
+    const chartCratered = athMcap > 0 && mcap < athMcap * 0.30; // ≥70% off ATH
+    if (noAdminMessageHours >= 24 && chartCratered) {
+      matched.push('social_completeness>=3', `no_admin_message_hours>=${noAdminMessageHours}`, 'mcap_decay_post_silence');
+      return { cause: 'mod_abandonment', confidence: 75, matchedSignals: matched };
+    }
+    if (devWalletInactiveHours >= 48 && chartCratered) {
+      matched.push('social_completeness>=3', `dev_wallet_inactive_hours>=${devWalletInactiveHours}`, 'mcap_decay_post_silence');
+      return { cause: 'dev_abandonment', confidence: 72, matchedSignals: matched };
+    }
     matched.push('ath_mcap_usd>=100000', `social_completeness>=${socialCompleteness}`, 'no_malicious_dump', `dev_reputation=${repVerdict}`);
     return { cause: 'natural_cycle', confidence: 80, matchedSignals: matched };
   }
