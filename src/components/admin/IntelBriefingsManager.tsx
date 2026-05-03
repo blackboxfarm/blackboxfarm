@@ -250,6 +250,24 @@ function IntelBriefingsArticlesManager() {
   const [cropMode, setCropMode] = useState<'hero' | 'inline'>('hero');
   const [showCrop, setShowCrop] = useState(false);
   const [showImageManager, setShowImageManager] = useState(false);
+  const [rebrandingId, setRebrandingId] = useState<string | null>(null);
+
+  const rebrandImages = async (b: Briefing) => {
+    setRebrandingId(b.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('intel-exif-rebrand', { body: { briefingId: b.id } });
+      if (error) throw error;
+      toast({
+        title: 'EXIF rebranded',
+        description: `${data?.rebranded ?? 0}/${data?.total ?? 0} images stripped & branded with BlackBox copyright.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['admin-intel-briefings'] });
+    } catch (e: any) {
+      toast({ title: 'Rebrand failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setRebrandingId(null);
+    }
+  };
 
   // Fetch all briefings
   const { data: briefings = [], isLoading } = useQuery({
