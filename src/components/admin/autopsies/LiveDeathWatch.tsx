@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Skull, FileText, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { runFullAutopsyPipeline } from './runFullAutopsyPipeline';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface DeathRow {
@@ -150,14 +151,12 @@ export default function LiveDeathWatch() {
 
   async function draftAutopsy(r: DeathRow) {
     setBusy(r.token_mint);
-    // All candidates start at Tier B (review state). Promotion to Tier A
-    // (auto-publish) is a separate manual step elsewhere.
     const ticker = cleanTokenText(r.symbol, 'symbol');
     const tokenName = cleanTokenText(r.name, 'name');
     const ageHours = r.first_seen_at ? (Date.now() - new Date(r.first_seen_at).getTime()) / 3600000 : null;
-    const { data: cand, error: insErr } = await supabase
-      .from('autopsy_candidates')
-      .upsert({
+    await runFullAutopsyPipeline({
+      toast,
+      upsert: {
         token_mint: r.token_mint,
         ticker,
         token_name: tokenName,
@@ -170,20 +169,10 @@ export default function LiveDeathWatch() {
         liquidity_usd: r.liquidity_usd,
         age_hours: ageHours,
         creator_wallet: r.creator_wallet,
-        funneled_at: new Date().toISOString(),
-        status: 'pending',
-      }, { onConflict: 'token_mint' })
-      .select('id')
-      .single();
-    if (insErr || !cand) {
-      setBusy(null);
-      toast({ title: 'Queue failed', description: insErr?.message, variant: 'destructive' });
-      return;
-    }
-    const { error: wErr } = await supabase.functions.invoke('autopsy-writer', { body: { candidate_id: cand.id } });
+      },
+    });
     setBusy(null);
-    if (wErr) toast({ title: 'Writer failed', description: wErr.message, variant: 'destructive' });
-    else { toast({ title: 'Report drafting started' }); load(); }
+    load();
   }
 
   const causes = useMemo(() => {
