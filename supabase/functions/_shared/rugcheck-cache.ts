@@ -113,6 +113,20 @@ export async function fetchRugCheckSummary(
   });
 
   try {
+    // 3a. Try GoPlus first (primary provider — free, reliable, similar shape).
+    const goPlus = await fetchGoPlusSummary(tokenMint, callerName).catch(() => null);
+    if (goPlus) {
+      console.log(`[RugCheckCache] GoPlus PRIMARY hit for ${tokenMint} (caller: ${callerName})`);
+      clearEscalation('rugcheck');
+      setInMemory(cacheKey, goPlus);
+      persistToDb(tokenMint, goPlus).catch(e =>
+        console.warn(`[RugCheckCache] DB write failed:`, e)
+      );
+      // Don't log as a rugcheck failure — just skip the rugcheck logger
+      return goPlus;
+    }
+
+    // 3b. Fall back to RugCheck.xyz (secondary).
     console.log(`[RugCheckCache] API fetch for ${tokenMint} (caller: ${callerName})`);
     const response = await fetch(
       `https://api.rugcheck.xyz/v1/tokens/${tokenMint}/report/summary`,
@@ -150,6 +164,127 @@ export async function fetchRugCheckSummary(
   } catch (e) {
     await logger.fail(e instanceof Error ? e.message : String(e));
     console.error(`[RugCheckCache] API error for ${tokenMint}:`, e);
+    return null;
+  }
+}
+
+// =====================================================================
+// GoPlus Security primary provider
+// Docs: https://docs.gopluslabs.io/reference/solanatokensecurityusingget
+// Free tier (no auth) is generous; with App Key + Secret we get a higher
+// rate limit. Auth is via short-lived Access Token from /token endpoint.
+// =====================================================================
+
+const GOPLUS_BASE = 'https://api.gopluslabs.io';
+const GOPLUS_TIMEOUT_MS = 8_000;
+let goPlusToken: { token: string; expiresAt: number } | null = null;
+
+async function getGoPlusToken(): Promise<string | null> {
+  const appKey = Deno.env.get('GOPLUS_APP_KEY');
+  const appSecret = Deno.env.get('GOPLUS_APP_SECRET');
+  if (!appKey || !appSecret) return null; // unauthenticated mode is fine
+  if (goPlusToken && goPlusToken.expiresAt > Date.now() + 60_000) return goPlusToken.token;
+  try {
+    // Per GoPlus docs: sign = sha1(app_key + time + app_secret); time in seconds
+    const time = Math.floor(Date.now() / 1000).toString();
+    const sigInput = `${appKey}${time}${appSecret}`;
+    const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(sigInput));
+    const sign = Array.from(new Uint8Array(buf))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    const res = await fetch(`${GOPLUS_BASE}/api/v1/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ app_key: appKey, time, sign }),
+      signal: AbortSignal.timeout(GOPLUS_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const j = await res.json();
+    const tok = j?.result?.access_token;
+    if (!tok) return null;
+    // GoPlus tokens last ~1h; refresh 1 min early
+    goPlusToken = { token: tok, expiresAt: Date.now() + 55 * 60_000 };
+    return tok;
+  } catch (e) {
+    console.warn('[GoPlus] auth failed:', e);
+    return null;
+  }
+}
+
+/** Map GoPlus Solana token security response → RugCheckSummary shape. */
+function mapGoPlusToRugCheck(raw: any, mint: string): RugCheckSummary | null {
+  if (!raw) return null;
+  // GoPlus returns { result: { [mint_lowercase]: {...} } }
+  const inner = raw?.result?.[mint] ?? raw?.result?.[mint?.toLowerCase?.()] ?? raw?.[mint];
+  const t = inner ?? raw;
+  if (!t || typeof t !== 'object') return null;
+
+  const risks: Array<{ name: string; description: string; level: string }> = [];
+  const flag = (cond: any, name: string, level: string) => {
+    if (cond === '1' || cond === 1 || cond === true) {
+      risks.push({ name, description: name, level });
+    }
+  };
+  flag(t.mintable, 'Mint Authority still enabled', 'danger');
+  flag(t.freezable, 'Freeze Authority still enabled', 'danger');
+  flag(t.is_proxy, 'Proxy contract', 'warn');
+  flag(t.is_blacklisted, 'Blacklist enabled', 'warn');
+  flag(t.is_whitelisted, 'Whitelist enabled', 'warn');
+  flag(t.is_anti_whale, 'Anti-whale enabled', 'info');
+  flag(t.transfer_pausable, 'Transfer pausable', 'warn');
+  flag(t.is_honeypot, 'Honeypot detected', 'danger');
+  flag(t.cannot_buy, 'Cannot buy', 'danger');
+  flag(t.cannot_sell_all, 'Cannot sell all', 'danger');
+
+  // Holder concentration heuristic
+  const holders = t.holders ?? t.lp_holders ?? [];
+  if (Array.isArray(holders) && holders.length > 0) {
+    const top = Number(holders[0]?.percent ?? 0);
+    if (top > 0.5) risks.push({ name: 'High holder concentration', description: `Top holder ${(top*100).toFixed(1)}%`, level: 'warn' });
+  }
+
+  // Map a normalised score: start at 100, subtract per risk
+  const danger = risks.filter(r => r.level === 'danger').length;
+  const warn = risks.filter(r => r.level === 'warn').length;
+  const score_normalised = Math.max(0, 100 - danger * 30 - warn * 10);
+
+  return {
+    score: score_normalised,
+    score_normalised,
+    rugged: danger >= 2 || t.is_honeypot === '1',
+    risks,
+    tokenMeta: {
+      provider: 'goplus',
+      symbol: t.symbol,
+      name: t.name,
+      decimals: t.decimals,
+    },
+    _provider: 'goplus',
+  };
+}
+
+async function fetchGoPlusSummary(mint: string, _caller: string): Promise<RugCheckSummary | null> {
+  const logger = createApiLogger({
+    serviceName: 'goplus',
+    endpoint: `/api/v1/solana/token_security/${mint}`,
+    tokenMint: mint,
+    functionName: _caller,
+    isCached: false,
+  });
+  try {
+    const token = await getGoPlusToken();
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (token) headers['Authorization'] = token;
+    const url = `${GOPLUS_BASE}/api/v1/solana/token_security/${mint}`;
+    const res = await fetch(url, { headers, signal: AbortSignal.timeout(GOPLUS_TIMEOUT_MS) });
+    await logger.complete(res.status);
+    if (!res.ok) return null;
+    const j = await res.json();
+    // GoPlus uses code: 1 for success
+    if (j?.code !== undefined && j.code !== 1) return null;
+    return mapGoPlusToRugCheck(j, mint);
+  } catch (e) {
+    await logger.fail(e instanceof Error ? e.message : String(e));
     return null;
   }
 }
