@@ -1,0 +1,1 @@
+ALTER TABLE public.intel_briefings ADD COLUMN IF NOT EXISTS exif_branded_at TIMESTAMPTZ NULL;

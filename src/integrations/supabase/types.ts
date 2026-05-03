@@ -7647,6 +7647,7 @@ export type Database = {
           category: string
           content_md: string
           created_at: string
+          exif_branded_at: string | null
           featured_image_url: string | null
           id: string
           is_published: boolean
@@ -7667,6 +7668,7 @@ export type Database = {
           category?: string
           content_md: string
           created_at?: string
+          exif_branded_at?: string | null
           featured_image_url?: string | null
           id?: string
           is_published?: boolean
@@ -7687,6 +7689,7 @@ export type Database = {
           category?: string
           content_md?: string
           created_at?: string
+          exif_branded_at?: string | null
           featured_image_url?: string | null
           id?: string
           is_published?: boolean
