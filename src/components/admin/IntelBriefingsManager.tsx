@@ -24,7 +24,7 @@ import { cn } from '@/lib/utils';
 import {
   Plus, ArrowLeft, Eye, Edit2, Trash2, Upload, Search,
   Save, Clock, FileText, Image as ImageIcon, ChevronDown, GalleryHorizontal, Globe, CalendarIcon,
-  Bot, Users, Activity, EyeOff
+  Bot, Users, Activity, EyeOff, Images, Layers
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -686,6 +686,7 @@ function IntelBriefingsArticlesManager() {
                 <TableHead>Title</TableHead>
                 {showCategoryCol && <TableHead>Category</TableHead>}
                 <TableHead className="text-center w-[70px]" title="Reviewed / completed">✓</TableHead>
+                <TableHead className="text-center w-[110px]" title="Assets: Hero / Inline images / Breadcrumbs">Assets</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead className="text-center">
@@ -739,6 +740,47 @@ function IntelBriefingsArticlesManager() {
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {(() => {
+                      const hasHero = !!b.featured_image_url;
+                      const inlineCount = (b.content_md.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length;
+                      const breadcrumbs = allPublications.filter(p => p.briefing_id === b.id && p.is_breadcrumb);
+                      const depths = new Set(breadcrumbs.map(p => p.content_depth).filter(Boolean));
+                      const breadcrumbCount = depths.size;
+                      return (
+                        <TooltipProvider>
+                          <div className="inline-flex items-center gap-2 text-xs">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className={cn('inline-flex items-center', hasHero ? 'text-primary' : 'text-muted-foreground/40')}>
+                                  <ImageIcon className="h-3.5 w-3.5" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top"><p className="text-xs">{hasHero ? 'Hero image set' : 'No hero image'}</p></TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className={cn('inline-flex items-center gap-0.5', inlineCount > 0 ? 'text-primary' : 'text-muted-foreground/40')}>
+                                  <Images className="h-3.5 w-3.5" />
+                                  {inlineCount > 0 && <span className="text-[10px] font-mono">({inlineCount})</span>}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top"><p className="text-xs">{inlineCount > 0 ? `${inlineCount} inline image${inlineCount === 1 ? '' : 's'}` : 'No inline images'}</p></TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className={cn('inline-flex items-center gap-0.5', breadcrumbCount > 0 ? 'text-primary' : 'text-muted-foreground/40')}>
+                                  <Layers className="h-3.5 w-3.5" />
+                                  {breadcrumbCount > 0 && <span className="text-[10px] font-mono">({breadcrumbCount})</span>}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top"><p className="text-xs">{breadcrumbCount > 0 ? `${breadcrumbCount}/3 breadcrumb sizes (75/50/25)` : 'No breadcrumb variants'}</p></TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TooltipProvider>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
