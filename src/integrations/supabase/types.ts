@@ -1692,6 +1692,42 @@ export type Database = {
           },
         ]
       }
+      autopsy_pipeline_events: {
+        Row: {
+          candidate_id: string
+          created_at: string
+          detail: string | null
+          id: number
+          outcome: string | null
+          phase: string
+          reason: string | null
+          status: string
+          step: string
+        }
+        Insert: {
+          candidate_id: string
+          created_at?: string
+          detail?: string | null
+          id?: number
+          outcome?: string | null
+          phase: string
+          reason?: string | null
+          status: string
+          step: string
+        }
+        Update: {
+          candidate_id?: string
+          created_at?: string
+          detail?: string | null
+          id?: number
+          outcome?: string | null
+          phase?: string
+          reason?: string | null
+          status?: string
+          step?: string
+        }
+        Relationships: []
+      }
       autopsy_reports: {
         Row: {
           candidate_id: string | null
