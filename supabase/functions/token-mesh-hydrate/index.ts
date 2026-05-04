@@ -64,6 +64,28 @@ async function timed<T>(fn: () => Promise<T>): Promise<{ result: T | null; ms: n
   }
 }
 
+/**
+ * Run `fn` with a hard timeout. Used to budget best-effort downstream invokes
+ * so the parent function can never hit the 150s edge idle-timeout cap.
+ */
+async function timedWithTimeout<T>(
+  fn: () => Promise<T>,
+  timeoutMs: number,
+): Promise<{ result: T | null; ms: number; error?: string }> {
+  const t0 = Date.now();
+  try {
+    const result = await Promise.race<T>([
+      fn(),
+      new Promise<T>((_, rej) =>
+        setTimeout(() => rej(new Error(`timeout after ${timeoutMs}ms`)), timeoutMs),
+      ),
+    ]);
+    return { result, ms: Date.now() - t0 };
+  } catch (e) {
+    return { result: null, ms: Date.now() - t0, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 async function handle(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
