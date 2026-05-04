@@ -349,6 +349,21 @@ function IntelBriefingsArticlesManager() {
     },
   });
 
+  // Fetch ALL briefing variants (75 / 50 / 25 / 0=breadcrumb) for the variant-count column.
+  // The list view previously looked at intel_publications.is_breadcrumb, which only counts
+  // *posted* breadcrumbs — not the AI-generated condensed variants. This query covers both:
+  // depth 75/50/25 = condensed sizes, depth 0 = the short breadcrumb teaser.
+  const { data: allVariants = [] } = useQuery({
+    queryKey: ['intel-briefing-variants', 'all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('intel_briefing_variants')
+        .select('briefing_id, depth, content_md');
+      if (error) throw error;
+      return (data || []) as Array<{ briefing_id: string; depth: number; content_md: string | null }>;
+    },
+  });
+
   // Get unique categories
   const categories = [...new Set(briefings.map(b => b.category))].sort();
   const currentBriefingIndex = editingId ? briefings.findIndex((b) => b.id === editingId) : -1;
@@ -765,9 +780,14 @@ function IntelBriefingsArticlesManager() {
                     {(() => {
                       const hasHero = !!b.featured_image_url;
                       const inlineCount = (b.content_md.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length;
-                      const breadcrumbs = allPublications.filter(p => p.briefing_id === b.id && p.is_breadcrumb);
-                      const depths = new Set(breadcrumbs.map(p => p.content_depth).filter(Boolean));
-                      const breadcrumbCount = depths.size;
+                      // Count actual condensed variants stored in intel_briefing_variants.
+                      // Depths: 75, 50, 25 (condensed sizes) + 0 (breadcrumb teaser) = 4 total.
+                      const variantDepths = new Set(
+                        allVariants
+                          .filter(v => v.briefing_id === b.id && (v.content_md || '').trim().length > 0)
+                          .map(v => v.depth)
+                      );
+                      const breadcrumbCount = variantDepths.size;
                       return (
                         <TooltipProvider>
                           <div className="inline-flex items-center gap-2 text-xs">
@@ -795,7 +815,7 @@ function IntelBriefingsArticlesManager() {
                                   {breadcrumbCount > 0 && <span className="text-[10px] font-mono">({breadcrumbCount})</span>}
                                 </span>
                               </TooltipTrigger>
-                              <TooltipContent side="top"><p className="text-xs">{breadcrumbCount > 0 ? `${breadcrumbCount}/3 breadcrumb sizes (75/50/25)` : 'No breadcrumb variants'}</p></TooltipContent>
+                              <TooltipContent side="top"><p className="text-xs">{breadcrumbCount > 0 ? `${breadcrumbCount}/4 variants (75/50/25/breadcrumb)` : 'No condensed variants yet'}</p></TooltipContent>
                             </Tooltip>
                           </div>
                         </TooltipProvider>

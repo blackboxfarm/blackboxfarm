@@ -1,6 +1,6 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Link2, Loader2 } from "lucide-react";
+import { Link2, Loader2, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -37,6 +37,27 @@ export function BreadcrumbUploadButton({
 }: BreadcrumbUploadButtonProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [hasExisting, setHasExisting] = useState(false);
+
+  // Check if a breadcrumb image already exists for this article.
+  // Shows a checkmark on the button so the user can see at a glance — re-uploading
+  // simply adds a new one (most-recent wins downstream).
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      if (!articleId && !articleSlug) { setHasExisting(false); return; }
+      const q = (supabase as any)
+        .from("social_media_gallery")
+        .select("id", { count: "exact", head: true })
+        .eq("is_breadcrumb", true);
+      const { count } = articleId
+        ? await q.eq("related_article_id", articleId)
+        : await q.eq("related_article_slug", articleSlug);
+      if (!cancelled) setHasExisting((count || 0) > 0);
+    };
+    check();
+    return () => { cancelled = true; };
+  }, [articleId, articleSlug, uploading]);
 
   const handleFiles = async (files: FileList) => {
     setUploading(true);
@@ -94,6 +115,7 @@ export function BreadcrumbUploadButton({
         }`,
       );
       if (firstUrl) onUploaded?.(firstUrl);
+      setHasExisting(true);
     }
     setUploading(false);
     if (inputRef.current) inputRef.current.value = "";
@@ -116,10 +138,16 @@ export function BreadcrumbUploadButton({
         className={className}
         disabled={uploading}
         onClick={() => inputRef.current?.click()}
-        title="Upload manually-prepared social breadcrumb image (no cropping)"
+        title={
+          hasExisting
+            ? "Breadcrumb image already uploaded — click to replace/add another"
+            : "Upload manually-prepared social breadcrumb image (no cropping)"
+        }
       >
         {uploading ? (
           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+        ) : hasExisting ? (
+          <Check className="h-4 w-4 mr-2 text-primary" />
         ) : (
           <Link2 className="h-4 w-4 mr-2" />
         )}
