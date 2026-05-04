@@ -15,6 +15,8 @@ import LiveDeathWatch from './LiveDeathWatch';
 import CoolDeathsBacklog from './CoolDeathsBacklog';
 import AllDrafts from './AllDrafts';
 import { runFullAutopsyPipeline } from './runFullAutopsyPipeline';
+import PipelineProgressDialog from './PipelineProgressDialog';
+import { usePipelineProgress } from './usePipelineProgress';
 
 type SortKey =
   | 'score_desc'
@@ -62,6 +64,7 @@ export default function AutopsyQueueBody() {
   const [lastAutoRunAt, setLastAutoRunAt] = useState<string | null>(null);
   const [manualMint, setManualMint] = useState('');
   const [manualBusy, setManualBusy] = useState(false);
+  const progress = usePipelineProgress();
 
   async function addManualCandidate() {
     const mint = manualMint.trim();
@@ -75,8 +78,10 @@ export default function AutopsyQueueBody() {
       .select('id')
       .eq('token_mint', mint)
       .maybeSingle();
+    progress.start(`Generating Autopsy — ${mint.slice(0, 6)}…${mint.slice(-4)}`);
     const result = await runFullAutopsyPipeline({
       toast,
+      onProgress: progress.onProgress,
       candidateId: existing?.id,
       mint,
       upsert: existing?.id ? undefined : {
@@ -86,6 +91,7 @@ export default function AutopsyQueueBody() {
         candidate_score: 100,
       },
     });
+    progress.finish(result.ok ? undefined : result.error);
     setManualBusy(false);
     if (result.ok) {
       setManualMint('');
@@ -148,7 +154,9 @@ export default function AutopsyQueueBody() {
 
   async function draft(id: string) {
     setBusy(id);
-    await runFullAutopsyPipeline({ toast, candidateId: id });
+    progress.start('Generating Autopsy');
+    const result = await runFullAutopsyPipeline({ toast, candidateId: id, onProgress: progress.onProgress });
+    progress.finish(result.ok ? undefined : result.error);
     setBusy(null);
     load();
   }
