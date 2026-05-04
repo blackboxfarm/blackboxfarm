@@ -243,8 +243,11 @@ export async function runFullAutopsyPipeline(args: RunPipelineArgs): Promise<Run
     let hydrate: any = null;
     const hydratePhase = addPhase('mesh-hydrate', 'Hydrate token mesh', maxAttempts);
     const hydrateRes = await runPhase(phases, emit, hydratePhase, async () => {
+      // Cache-first: surface='autopsy_pipeline' triggers a 30-day TTL inside
+      // token-mesh-hydrate. Dead tokens don't change — KYC/creator/identity/ATH
+      // are immutable, so we reuse anything <30d old.
       const { data, error } = await supabase.functions.invoke('token-mesh-hydrate', {
-        body: { mint, candidate_id: candidateId, surface: 'autopsy_pipeline', force: true },
+        body: { mint, candidate_id: candidateId, surface: 'autopsy_pipeline' },
       });
       if (error) return { ok: false, error: error.message };
       hydrate = data;
@@ -277,8 +280,10 @@ export async function runFullAutopsyPipeline(args: RunPipelineArgs): Promise<Run
     // 3. On-chain timeline — retried.
     const txPhase = addPhase('tx-timeline', 'On-chain transaction timeline', maxAttempts);
     const txRes = await runPhase(phases, emit, txPhase, async () => {
+      // Cache-first: tx-timeline self-skips when autopsy_tx_evidence <6h exists.
+      // On-chain history for a dead token is immutable, so reuse is safe.
       const { error } = await supabase.functions.invoke('autopsy-tx-timeline', {
-        body: { candidate_id: candidateId, force: true },
+        body: { candidate_id: candidateId },
       });
       if (error) return { ok: false, error: error.message };
       return { ok: true, detail: 'forensics captured' };
@@ -315,8 +320,9 @@ export async function runFullAutopsyPipeline(args: RunPipelineArgs): Promise<Run
     // 5. Community sweep — retried.
     const csPhase = addPhase('community-sweep', 'X community sweep (vulture + dissent)', maxAttempts);
     const csRes = await runPhase(phases, emit, csPhase, async () => {
+      // Cache-first: community-sweep self-skips when both lenses were swept <30min ago.
       const { error } = await supabase.functions.invoke('autopsy-community-sweep', {
-        body: { candidate_id: candidateId, token_mint: mint, force: true, lenses: ['vulture', 'dissent'] },
+        body: { candidate_id: candidateId, token_mint: mint, lenses: ['vulture', 'dissent'] },
       });
       if (error) return { ok: false, error: error.message };
       return { ok: true, detail: 'x-community swept' };
