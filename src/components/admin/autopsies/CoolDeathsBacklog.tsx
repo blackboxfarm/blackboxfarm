@@ -24,6 +24,7 @@ interface BacklogRow {
   death_cause: string | null;
   death_confidence: number | null;
   death_at: string | null;
+  ath_at: string | null;
   collapse_pct: number | null;
   drafted_slug: string | null;
   drafted_at: string | null;
@@ -38,6 +39,25 @@ function fmtUsd(n: number | null | undefined): string {
   return `$${n.toFixed(0)}`;
 }
 
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString(undefined, { year: '2-digit', month: 'short', day: 'numeric' });
+}
+
+function fmtAge(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso).getTime();
+  if (!isFinite(d)) return '';
+  const days = Math.floor((Date.now() - d) / 86400000);
+  if (days < 1) return 'today';
+  if (days === 1) return '1d ago';
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+}
+
 function cleanTokenText(value: string | null | undefined, kind: 'symbol' | 'name'): string | null {
   const v = value?.trim();
   if (!v) return null;
@@ -48,6 +68,7 @@ function cleanTokenText(value: string | null | undefined, kind: 'symbol' | 'name
 export default function CoolDeathsBacklog() {
   const { toast } = useToast();
   const [rows, setRows] = useState<BacklogRow[] | null>(null);
+  const [mintDates, setMintDates] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const hydratingRef = useRef(false);
@@ -67,6 +88,22 @@ export default function CoolDeathsBacklog() {
     }
     const list = (data ?? []) as BacklogRow[];
     setRows(list);
+    // Fetch real mint dates from token_lifecycle
+    const mints = list.map(r => r.token_mint);
+    if (mints.length > 0) {
+      supabase.from('token_lifecycle')
+        .select('token_mint, created_at')
+        .in('token_mint', mints)
+        .then(({ data }) => {
+          if (data) {
+            const map: Record<string, string> = {};
+            for (const t of data as any[]) {
+              if (t.created_at) map[t.token_mint] = t.created_at;
+            }
+            setMintDates(map);
+          }
+        });
+    }
     // Auto-resolve placeholders silently from live metadata sources. No manual button.
     const missingMetadata = list
       .filter(r => !cleanTokenText(r.symbol, 'symbol') || !cleanTokenText(r.name, 'name'))
@@ -223,6 +260,8 @@ export default function CoolDeathsBacklog() {
                 <Stat label="Now" value={fmtUsd(r.current_mcap_usd)} />
                 <Stat label="Liq" value={fmtUsd(r.liquidity_usd)} />
                 <Stat label="Holders" value={r.holder_count?.toLocaleString() ?? '—'} />
+                <Stat label="Minted" value={fmtDate(mintDates[r.token_mint] ?? r.ath_at)} hint={fmtAge(mintDates[r.token_mint] ?? r.ath_at)} />
+                <Stat label="Est. Death" value={fmtDate(r.death_at)} hint={fmtAge(r.death_at)} />
               </div>
               <div className="flex gap-1 flex-wrap">
                 <Button
@@ -249,11 +288,12 @@ export default function CoolDeathsBacklog() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div>
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className="font-mono">{value}</div>
+      {hint && <div className="text-[9px] text-muted-foreground/70">{hint}</div>}
     </div>
   );
 }

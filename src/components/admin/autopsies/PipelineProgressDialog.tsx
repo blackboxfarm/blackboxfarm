@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { CheckCircle2, XCircle, Loader2, AlertTriangle, RotateCw } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
@@ -164,11 +163,11 @@ export default function PipelineProgressDialog({ open, onClose, title, phases, d
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0 pr-4">
+        <div className="flex-1 min-h-0 overflow-y-auto pr-3 -mr-2">
           <div className="space-y-3 pb-2">
             {phases.map((p) => <PhaseCard key={p.key} p={p} />)}
           </div>
-        </ScrollArea>
+        </div>
 
         {finalError && (
           <div className="text-sm text-destructive border-t pt-3">
