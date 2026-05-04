@@ -121,6 +121,7 @@ export default function CoolDeathsBacklog() {
       toast,
       onProgress: progress.onProgress,
       onCandidateResolved: progress.bindCandidate,
+      signal: progress.signal,
       upsert: {
         token_mint: r.token_mint,
         ticker,
@@ -154,6 +155,7 @@ export default function CoolDeathsBacklog() {
         phases={progress.phases}
         done={progress.done}
         finalError={progress.finalError}
+        onCancel={progress.cancel}
       />
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
