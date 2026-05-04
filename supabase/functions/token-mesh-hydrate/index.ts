@@ -26,6 +26,7 @@ import { resolveTokenCreator } from '../_shared/creator-resolver.ts';
 import { fetchDexScreenerData } from '../_shared/dexscreener-api.ts';
 import { fetchLaunchpadCoin, detectLaunchpad } from '../_shared/launchpad-fetch.ts';
 import { detectCopycatPattern, type CopycatVerdict } from '../_shared/copycat-detector.ts';
+import { emitPipelineEvent } from '../_shared/pipeline-events.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -115,6 +116,24 @@ async function handle(req: Request): Promise<Response> {
   );
 
   const steps: HydrationStep[] = [];
+  const PHASE = 'mesh-hydrate';
+  const emit = (
+    step: string,
+    status: 'running' | 'ok' | 'fail' | 'skipped' | 'info',
+    detail?: string | null,
+    reason?: string | null,
+    outcome?: 'value_present' | 'confirmed_empty' | 'fetch_failed' | null,
+  ) => emitPipelineEvent(supabase, {
+    candidateId: candidate_id ?? null,
+    phase: PHASE,
+    step,
+    status,
+    detail,
+    reason,
+    outcome,
+  });
+
+  await emit('hydrate', 'running', `mint=${mint.slice(0, 6)}…${mint.slice(-4)} surface=${surface}`);
   const identity: {
     ticker?: string | null;
     name?: string | null;
@@ -133,6 +152,7 @@ async function handle(req: Request): Promise<Response> {
 
   // -- Step 1: cache --
   if (!force) {
+    await emit('cache', 'running', 'check token_lifecycle <5m');
     const t = await timed(() => getCachedToken(supabase, mint, 5 * 60 * 1000));
     if (t.result) {
       identity.ticker = t.result.symbol ?? null;
@@ -146,15 +166,19 @@ async function handle(req: Request): Promise<Response> {
         ms: t.ms,
         detail: `${identity.ticker ?? '?'} cached ${t.result.updated_at}`,
       });
+      await emit('cache', 'ok', `${identity.ticker ?? '?'} cached`, null, 'value_present');
     } else {
       steps.push({ step: 'cache', ok: false, ms: t.ms, reason: 'miss_or_stale' });
+      await emit('cache', 'skipped', 'miss_or_stale → falling through', null, 'confirmed_empty');
     }
   } else {
     steps.push({ step: 'cache', ok: false, ms: 0, reason: 'force=true bypassed cache' });
+    await emit('cache', 'skipped', 'force=true bypassed cache');
   }
 
   // -- Step 2: identity (DexScreener primary, Pump.fun fallback) --
   {
+    await emit('identity', 'running', 'DexScreener → Pump.fun fallback');
     const dx = await timed(() => fetchDexScreenerData(mint));
     if (dx.result && dx.result.pairs.length > 0) {
       const best = dx.result.pairs[0];
@@ -173,8 +197,10 @@ async function handle(req: Request): Promise<Response> {
         ms: dx.ms,
         detail: `${identity.ticker ?? '?'} · mcap=$${Math.round(identity.marketCapUsd ?? 0)} · liq=$${Math.round(identity.liquidityUsd ?? 0)}`,
       });
+      await emit('identity', 'ok', `${identity.ticker ?? '?'} via dexscreener · mcap=$${Math.round(identity.marketCapUsd ?? 0)}`, null, 'value_present');
     } else {
       // Fallback: unified launchpad resolver (Pump.fun / Bags.fm / Bonk / Meteora)
+      await emit('identity-launchpad', 'running', 'DexScreener empty → launchpad resolver');
       const lp = await timed(() => fetchLaunchpadCoin(mint, 'token-mesh-hydrate'));
       if (lp.result?.data) {
         const d = lp.result.data;
@@ -195,6 +221,7 @@ async function handle(req: Request): Promise<Response> {
           ms: dx.ms + lp.ms,
           detail: `${identity.ticker ?? '?'} (DexScreener empty — ${d.launchpad} fallback)`,
         });
+        await emit('identity-launchpad', 'ok', `${identity.ticker ?? '?'} via ${d.launchpad}`, null, 'value_present');
       } else {
         steps.push({
           step: 'identity',
@@ -202,6 +229,7 @@ async function handle(req: Request): Promise<Response> {
           ms: dx.ms + lp.ms,
           reason: `DexScreener: ${dx.error ?? 'no pairs'} · launchpad(${lp.result?.launchpad ?? '?'}): ${lp.result?.reason ?? lp.error ?? 'no record'}`,
         });
+        await emit('identity', 'fail', null, `DexScreener: ${dx.error ?? 'no pairs'} · launchpad: ${lp.result?.reason ?? lp.error ?? 'no record'}`, 'fetch_failed');
       }
     }
   }
@@ -214,6 +242,7 @@ async function handle(req: Request): Promise<Response> {
     (identity.athMcapUsd == null || identity.imageUrl == null || identity.createdAt == null) &&
     detectLaunchpad(mint) !== 'unknown'
   ) {
+    await emit('launchpad-enrich', 'running', 'fetching ATH / image / createdAt');
     const lp2 = await timed(() => fetchLaunchpadCoin(mint, 'token-mesh-hydrate-enrich'));
     if (lp2.result?.data) {
       const d = lp2.result.data;
@@ -232,6 +261,9 @@ async function handle(req: Request): Promise<Response> {
         ms: lp2.ms,
         detail: `ath=${identity.athMcapUsd ?? '—'} · img=${identity.imageUrl ? 'yes' : 'no'}`,
       });
+      await emit('launchpad-enrich', 'ok', `ath=${identity.athMcapUsd ?? '—'} · img=${identity.imageUrl ? 'y' : 'n'}`, null, 'value_present');
+    } else {
+      await emit('launchpad-enrich', 'skipped', 'no extra data returned', null, 'confirmed_empty');
     }
   }
 
@@ -256,6 +288,7 @@ async function handle(req: Request): Promise<Response> {
 
   // -- Step 3: creator resolution --
   if (!creatorWallet) {
+    await emit('creator', 'running', 'Pump.fun → Helius DAS → on-chain');
     const cr = await timed(() => resolveTokenCreator(mint, supabase));
     if (cr.result?.creatorWallet) {
       creatorWallet = cr.result.creatorWallet;
@@ -266,6 +299,7 @@ async function handle(req: Request): Promise<Response> {
         ms: cr.ms,
         detail: `${creatorWallet.slice(0, 6)}…${creatorWallet.slice(-4)} (conf ${cr.result.confidence})`,
       });
+      await emit('creator', 'ok', `${creatorWallet.slice(0, 6)}…${creatorWallet.slice(-4)} via ${cr.result.source} conf ${cr.result.confidence}`, null, 'value_present');
     } else {
       steps.push({
         step: 'creator',
@@ -273,13 +307,16 @@ async function handle(req: Request): Promise<Response> {
         ms: cr.ms,
         reason: cr.result?.errors?.join('; ') || cr.error || 'all sources empty',
       });
+      await emit('creator', 'fail', null, cr.result?.errors?.join('; ') || cr.error || 'all sources empty', 'fetch_failed');
     }
   } else {
     steps.push({ step: 'creator', ok: true, source: 'cache', ms: 0, detail: `${creatorWallet.slice(0, 6)}…${creatorWallet.slice(-4)}` });
+    await emit('creator', 'ok', `${creatorWallet.slice(0, 6)}…${creatorWallet.slice(-4)} (from cache)`, null, 'value_present');
   }
 
   // -- Step 4: mesh ingest --
   {
+    await emit('mesh-ingest', 'running', 'mesh + post-queue + bump_seen_token');
     const mi = await timed(() =>
       ingestPublicCAQuery(supabase, {
         mint,
@@ -302,10 +339,12 @@ async function handle(req: Request): Promise<Response> {
       detail: mi.error ? undefined : 'mesh + post-queue + bump_seen_token fired',
       reason: mi.error,
     });
+    await emit('mesh-ingest', mi.error ? 'fail' : 'ok', mi.error ? null : 'mesh + post-queue + bump_seen_token fired', mi.error, mi.error ? 'fetch_failed' : 'value_present');
   }
 
   // -- Step 5: social mesh enrichment (best-effort fire & verify) --
   {
+    await emit('socials', 'running', 'harvest-token-socials (45s timeout)');
     const hs = await timedWithTimeout(() =>
       supabase.functions.invoke('harvest-token-socials', { body: { mint, force: true } }),
     , 45_000);
@@ -317,8 +356,16 @@ async function handle(req: Request): Promise<Response> {
       detail: hs.result ? `harvested` : undefined,
       reason: hs.error ?? (hs.result as any)?.error?.message,
     });
+    {
+      const ok = !hs.error && !(hs.result as any)?.error;
+      await emit('socials', ok ? 'ok' : 'fail',
+        ok ? `harvested in ${hs.ms}ms` : null,
+        hs.error ?? (hs.result as any)?.error?.message,
+        ok ? 'value_present' : 'fetch_failed');
+    }
 
     if (identity.twitterUrl) {
+      await emit('x-community', 'running', `enriching ${identity.twitterUrl}`);
       const xc = await timedWithTimeout(() =>
         supabase.functions.invoke('x-community-enricher', { body: { mint, twitterUrl: identity.twitterUrl } }),
       , 45_000);
@@ -330,13 +377,16 @@ async function handle(req: Request): Promise<Response> {
         detail: xc.result ? 'enriched' : undefined,
         reason: xc.error,
       });
+      await emit('x-community', xc.error ? 'fail' : 'ok', xc.error ? null : `enriched in ${xc.ms}ms`, xc.error, xc.error ? 'fetch_failed' : 'value_present');
     } else {
       steps.push({ step: 'x-community', ok: false, ms: 0, reason: 'no twitter handle to enrich' });
+      await emit('x-community', 'skipped', 'no twitter handle on this token', null, 'confirmed_empty');
     }
   }
 
   // -- Step 6: holders snapshot (best-effort) --
   {
+    await emit('holders', 'running', 'capture-holder-snapshot (45s timeout)');
     const h = await timedWithTimeout(() =>
       supabase.functions.invoke('capture-holder-snapshot', { body: { token_mint: mint } }),
     , 45_000);
@@ -348,10 +398,12 @@ async function handle(req: Request): Promise<Response> {
       detail: h.result ? 'snapshot captured' : undefined,
       reason: h.error,
     });
+    await emit('holders', h.error ? 'fail' : 'ok', h.error ? null : `snapshot captured in ${h.ms}ms`, h.error, h.error ? 'fetch_failed' : 'value_present');
   }
 
   // -- Step 6a: weak-theme copycat detection (Pump.fun-only — needs creator history) --
   if (creatorWallet && detectLaunchpad(mint) === 'pumpfun') {
+    await emit('copycat-scan', 'running', 'analyzing creator history');
     const cc = await timed(() => detectCopycatPattern(creatorWallet!, 'token-mesh-hydrate', mint));
     if (cc.result) {
       copycatVerdict = cc.result;
@@ -381,6 +433,7 @@ async function handle(req: Request): Promise<Response> {
         ms: cc.ms,
         detail: `${cc.result.verdict}${cc.result.cautionMessage ? ' — ' + cc.result.cautionMessage : ''}`,
       });
+      await emit('copycat-scan', 'ok', `${cc.result.verdict}${cc.result.cautionMessage ? ' — ' + cc.result.cautionMessage : ''}`, null, 'value_present');
     } else {
       steps.push({
         step: 'copycat-scan',
@@ -388,6 +441,7 @@ async function handle(req: Request): Promise<Response> {
         ms: cc.ms,
         reason: cc.error ?? 'no creator history available',
       });
+      await emit('copycat-scan', 'skipped', null, cc.error ?? 'no creator history available', 'confirmed_empty');
     }
   }
 
@@ -396,6 +450,7 @@ async function handle(req: Request): Promise<Response> {
   // Without this, downstream callers (autopsy queue) gate features like
   // tg-deep-pull on identity.telegramUrl and silently skip them. The MCUNC bug.
   if (!identity.twitterUrl || !identity.telegramUrl || !identity.websiteUrl) {
+    await emit('socials-backfill', 'running', 'reading token_social_links');
     const { data: links } = await supabase
       .from('token_social_links')
       .select('platform, link_type, url, is_current')
@@ -421,10 +476,12 @@ async function handle(req: Request): Promise<Response> {
       ms: 0,
       detail: `tw=${identity.twitterUrl ? 'y' : 'n'} tg=${identity.telegramUrl ? 'y' : 'n'} web=${identity.websiteUrl ? 'y' : 'n'}`,
     });
+    await emit('socials-backfill', 'ok', `tw=${identity.twitterUrl ? 'y' : 'n'} tg=${identity.telegramUrl ? 'y' : 'n'} web=${identity.websiteUrl ? 'y' : 'n'}`, null, 'value_present');
   }
 
   // -- Step 7: write-back to autopsy_candidates if requested --
   if (candidate_id) {
+    await emit('write-back', 'running', 'updating autopsy_candidates');
     const social_completeness =
       [identity.twitterUrl, identity.telegramUrl, identity.websiteUrl].filter(Boolean).length;
 
@@ -466,10 +523,15 @@ async function handle(req: Request): Promise<Response> {
       detail: wb.error ? undefined : `social_completeness=${social_completeness}`,
       reason: wb.error,
     });
+    await emit('write-back', wb.error ? 'fail' : 'ok', wb.error ? null : `social_completeness=${social_completeness}/3`, wb.error, wb.error ? 'fetch_failed' : 'value_present');
   }
 
   const okCount = steps.filter(s => s.ok).length;
   const overallOk = okCount >= 4; // identity + mesh-ingest + at least 2 enrichments
+  await emit('hydrate', overallOk ? 'ok' : 'fail',
+    `${okCount}/${steps.length} sub-steps succeeded`,
+    overallOk ? null : 'too few enrichments succeeded',
+    overallOk ? 'value_present' : 'fetch_failed');
 
   return new Response(
     JSON.stringify({
