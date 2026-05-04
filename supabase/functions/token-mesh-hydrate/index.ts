@@ -308,7 +308,7 @@ async function handle(req: Request): Promise<Response> {
   {
     const hs = await timedWithTimeout(() =>
       supabase.functions.invoke('harvest-token-socials', { body: { mint, force: true } }),
-    , 25_000);
+    , 45_000);
     steps.push({
       step: 'socials',
       ok: !hs.error && !(hs.result as any)?.error,
@@ -321,7 +321,7 @@ async function handle(req: Request): Promise<Response> {
     if (identity.twitterUrl) {
       const xc = await timedWithTimeout(() =>
         supabase.functions.invoke('x-community-enricher', { body: { mint, twitterUrl: identity.twitterUrl } }),
-      , 25_000);
+      , 45_000);
       steps.push({
         step: 'x-community',
         ok: !xc.error,
@@ -339,7 +339,7 @@ async function handle(req: Request): Promise<Response> {
   {
     const h = await timedWithTimeout(() =>
       supabase.functions.invoke('capture-holder-snapshot', { body: { token_mint: mint } }),
-    , 30_000);
+    , 45_000);
     steps.push({
       step: 'holders',
       ok: !h.error,
