@@ -189,6 +189,14 @@ export default function LiveDeathWatch() {
 
   return (
     <div className="space-y-4">
+      <PipelineProgressDialog
+        open={progress.open}
+        onClose={progress.close}
+        title={progress.title}
+        phases={progress.phases}
+        done={progress.done}
+        finalError={progress.finalError}
+      />
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h3 className="text-lg font-semibold flex items-center gap-2">
