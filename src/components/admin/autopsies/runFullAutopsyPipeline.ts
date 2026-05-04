@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import type { PipelinePhase, PhaseStatus } from './PipelineProgressDialog';
+import type { PipelinePhase, PhaseStatus, PipelineLogLine } from './PipelineProgressDialog';
 
 type ToastFn = (args: { title: string; description?: string; variant?: 'default' | 'destructive' }) => void;
 
@@ -27,6 +27,8 @@ export type RunPipelineArgs = {
   mint?: string;
   /** Optional live progress reporter used by the manual-Generate dialog. */
   onProgress?: (phases: PipelinePhase[]) => void;
+  /** Called once the candidate row is resolved so the dialog can subscribe to live events. */
+  onCandidateResolved?: (candidateId: string) => void;
   /** Override default per-phase max attempts (default 10). */
   maxAttempts?: number;
 };
@@ -42,8 +44,21 @@ export type RunPipelineResult = {
 const DEFAULT_MAX_ATTEMPTS = 10;
 const RETRY_BASE_DELAY_MS = 2000;
 
+const PHASE_PURPOSE: Record<string, string> = {
+  'candidate':       'Find or create the autopsy_candidates row for this mint.',
+  'mesh-hydrate':    'Pull identity, creator wallet, socials and holder snapshot via token-mesh-hydrate (DexScreener → Pump.fun → Helius → harvest-token-socials → x-community → capture-holder-snapshot).',
+  'tx-timeline':     'Reconstruct the on-chain buy/sell timeline (autopsy-tx-timeline).',
+  'tg-deep-pull':    'Scrape the Telegram channel members + recent messages.',
+  'community-sweep': 'Run the X-community vulture + dissent lenses for sentiment forensics.',
+  'writer':          'Send the assembled mesh to the AI writer to draft the autopsy report.',
+};
+
 function sleep(ms: number) {
   return new Promise<void>((r) => setTimeout(r, ms));
+}
+
+function pushLog(phase: PipelinePhase, level: PipelineLogLine['level'], msg: string) {
+  phase.log = [...(phase.log ?? []), { ts: Date.now(), level, msg }];
 }
 
 /**
@@ -57,10 +72,12 @@ async function runPhase<T>(
   runner: () => Promise<{ ok: boolean; detail?: string; error?: string; data?: T; subSteps?: PipelinePhase['subSteps'] }>,
 ): Promise<{ ok: boolean; data?: T }> {
   phase.startedAt = Date.now();
+  pushLog(phase, 'info', `▶ Starting: ${phase.label}`);
   for (let attempt = 1; attempt <= phase.maxAttempts; attempt++) {
     phase.attempt = attempt;
     phase.status = attempt === 1 ? 'running' : 'retrying';
     phase.error = undefined;
+    pushLog(phase, 'info', `Attempt ${attempt}/${phase.maxAttempts} — invoking…`);
     emit([...phases]);
     try {
       const r = await runner();
@@ -69,21 +86,29 @@ async function runPhase<T>(
         phase.detail = r.detail;
         phase.subSteps = r.subSteps;
         phase.endedAt = Date.now();
+        const dur = ((phase.endedAt - phase.startedAt!) / 1000).toFixed(1);
+        pushLog(phase, 'success', `✓ Succeeded on attempt ${attempt} (${dur}s)${r.detail ? ' — ' + r.detail : ''}`);
         emit([...phases]);
         return { ok: true, data: r.data };
       }
       phase.error = r.error ?? 'phase reported not-ok';
       phase.subSteps = r.subSteps ?? phase.subSteps;
+      pushLog(phase, 'error', `✗ Attempt ${attempt} failed: ${phase.error}`);
     } catch (e: any) {
       phase.error = e?.message ?? String(e);
+      pushLog(phase, 'error', `✗ Attempt ${attempt} threw: ${phase.error}`);
     }
     emit([...phases]);
     if (attempt < phase.maxAttempts) {
-      await sleep(Math.min(RETRY_BASE_DELAY_MS * attempt, 10_000));
+      const backoff = Math.min(RETRY_BASE_DELAY_MS * attempt, 10_000);
+      pushLog(phase, 'warn', `↻ Backing off ${(backoff / 1000).toFixed(1)}s before retry…`);
+      emit([...phases]);
+      await sleep(backoff);
     }
   }
   phase.status = 'failed';
   phase.endedAt = Date.now();
+  pushLog(phase, 'error', `✗ All ${phase.maxAttempts} attempts exhausted — phase failed.`);
   emit([...phases]);
   return { ok: false };
 }
@@ -99,7 +124,14 @@ export async function runFullAutopsyPipeline(args: RunPipelineArgs): Promise<Run
   const phases: PipelinePhase[] = [];
   const emit = (p: PipelinePhase[]) => { onProgress?.(p); };
   const addPhase = (key: string, label: string, max = maxAttempts): PipelinePhase => {
-    const p: PipelinePhase = { key, label, status: 'pending', attempt: 0, maxAttempts: max };
+    const p: PipelinePhase = {
+      key, label,
+      purpose: PHASE_PURPOSE[key],
+      status: 'pending',
+      attempt: 0,
+      maxAttempts: max,
+      log: [],
+    };
     phases.push(p);
     emit([...phases]);
     return p;
@@ -156,6 +188,7 @@ export async function runFullAutopsyPipeline(args: RunPipelineArgs): Promise<Run
       return { ok: true, detail: `created/upserted ${candidateId.slice(0, 8)}` };
     });
     if (!candRes.ok) throw new Error('Could not establish candidate row');
+    if (candidateId) args.onCandidateResolved?.(candidateId);
 
     // 2. Hydrate mesh — retried because partial mesh poisons the autopsy.
     toast({ title: 'Hydrating mesh…', description: 'Identity → creator → mesh → socials → holders.' });
