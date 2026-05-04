@@ -164,8 +164,8 @@ export default function PipelineProgressDialog({ open, onClose, title, phases, d
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4">
-          <div className="space-y-3">
+        <ScrollArea className="flex-1 min-h-0 pr-4">
+          <div className="space-y-3 pb-2">
             {phases.map((p) => <PhaseCard key={p.key} p={p} />)}
           </div>
         </ScrollArea>
