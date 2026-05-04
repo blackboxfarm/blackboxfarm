@@ -19,10 +19,17 @@ export function usePipelineProgress() {
   const [finalError, setFinalError] = useState<string | undefined>();
   const [candidateId, setCandidateId] = useState<string | null>(null);
   const phasesRef = useRef<PipelinePhase[]>([]);
+  const controllerRef = useRef<AbortController | null>(null);
+  const [signal, setSignal] = useState<AbortSignal | undefined>();
 
   useEffect(() => { phasesRef.current = phases; }, [phases]);
 
   const start = useCallback((label: string) => {
+    // Abort any previous run before starting a new one.
+    controllerRef.current?.abort();
+    const ctrl = new AbortController();
+    controllerRef.current = ctrl;
+    setSignal(ctrl.signal);
     setTitle(label);
     setPhases([]);
     phasesRef.current = [];
@@ -60,6 +67,27 @@ export function usePipelineProgress() {
   }, []);
 
   const close = useCallback(() => setOpen(false), []);
+
+  const cancel = useCallback(() => {
+    controllerRef.current?.abort();
+    // Mark any in-flight phase as failed so the UI reflects cancellation immediately.
+    const next = phasesRef.current.map(ph => {
+      if (ph.status === 'running' || ph.status === 'retrying') {
+        return {
+          ...ph,
+          status: 'failed' as const,
+          error: 'Cancelled by user',
+          endedAt: Date.now(),
+          log: [...(ph.log ?? []), { ts: Date.now(), level: 'warn' as const, msg: '✗ Cancelled by user' }],
+        };
+      }
+      return ph;
+    });
+    phasesRef.current = next;
+    setPhases(next);
+    setFinalError('Cancelled by user');
+    setDone(true);
+  }, []);
 
   // Subscribe to autopsy_pipeline_events for live sub-step trace.
   useEffect(() => {
@@ -123,5 +151,5 @@ export function usePipelineProgress() {
     return () => { supabase.removeChannel(ch); };
   }, [open, candidateId]);
 
-  return { open, title, phases, done, finalError, start, onProgress, finish, close, bindCandidate };
+  return { open, title, phases, done, finalError, start, onProgress, finish, close, bindCandidate, cancel, signal };
 }

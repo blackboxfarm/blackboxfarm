@@ -48,6 +48,7 @@ interface Props {
   phases: PipelinePhase[];
   done: boolean;
   finalError?: string;
+  onCancel?: () => void;
 }
 
 function StatusIcon({ status }: { status: PhaseStatus }) {
@@ -145,9 +146,13 @@ function PhaseCard({ p }: { p: PipelinePhase }) {
   );
 }
 
-export default function PipelineProgressDialog({ open, onClose, title, phases, done, finalError }: Props) {
+export default function PipelineProgressDialog({ open, onClose, title, phases, done, finalError, onCancel }: Props) {
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v && done) onClose(); }}>
+    <Dialog open={open} onOpenChange={(v) => {
+      if (v) return;
+      if (done) onClose();
+      else if (onCancel) onCancel();
+    }}>
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -172,6 +177,11 @@ export default function PipelineProgressDialog({ open, onClose, title, phases, d
         )}
 
         <div className="flex justify-end gap-2 border-t pt-3">
+          {!done && onCancel && (
+            <Button variant="destructive" onClick={onCancel}>
+              Cancel
+            </Button>
+          )}
           <Button variant="outline" onClick={onClose} disabled={!done}>
             {done ? 'Close' : 'Running…'}
           </Button>

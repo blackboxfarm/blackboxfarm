@@ -83,6 +83,7 @@ export default function AutopsyQueueBody() {
       toast,
       onProgress: progress.onProgress,
       onCandidateResolved: progress.bindCandidate,
+      signal: progress.signal,
       candidateId: existing?.id,
       mint,
       upsert: existing?.id ? undefined : {
@@ -161,6 +162,7 @@ export default function AutopsyQueueBody() {
       candidateId: id,
       onProgress: progress.onProgress,
       onCandidateResolved: progress.bindCandidate,
+      signal: progress.signal,
     });
     progress.finish(result.ok ? undefined : result.error);
     setBusy(null);
@@ -212,6 +214,7 @@ export default function AutopsyQueueBody() {
         phases={progress.phases}
         done={progress.done}
         finalError={progress.finalError}
+        onCancel={progress.cancel}
       />
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
