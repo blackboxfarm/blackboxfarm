@@ -345,9 +345,10 @@ async function handle(req: Request): Promise<Response> {
   // -- Step 5: social mesh enrichment (best-effort fire & verify) --
   {
     await emit('socials', 'running', 'harvest-token-socials (45s timeout)');
-    const hs = await timedWithTimeout(() =>
-      supabase.functions.invoke('harvest-token-socials', { body: { mint, force: true } }),
-    , 45_000);
+    const hs = await timedWithTimeout(
+      () => supabase.functions.invoke('harvest-token-socials', { body: { mint, force: true } }),
+      45_000,
+    );
     steps.push({
       step: 'socials',
       ok: !hs.error && !(hs.result as any)?.error,
@@ -366,9 +367,10 @@ async function handle(req: Request): Promise<Response> {
 
     if (identity.twitterUrl) {
       await emit('x-community', 'running', `enriching ${identity.twitterUrl}`);
-      const xc = await timedWithTimeout(() =>
-        supabase.functions.invoke('x-community-enricher', { body: { mint, twitterUrl: identity.twitterUrl } }),
-      , 45_000);
+      const xc = await timedWithTimeout(
+        () => supabase.functions.invoke('x-community-enricher', { body: { mint, twitterUrl: identity.twitterUrl } }),
+        45_000,
+      );
       steps.push({
         step: 'x-community',
         ok: !xc.error,
@@ -387,9 +389,10 @@ async function handle(req: Request): Promise<Response> {
   // -- Step 6: holders snapshot (best-effort) --
   {
     await emit('holders', 'running', 'capture-holder-snapshot (45s timeout)');
-    const h = await timedWithTimeout(() =>
-      supabase.functions.invoke('capture-holder-snapshot', { body: { token_mint: mint } }),
-    , 45_000);
+    const h = await timedWithTimeout(
+      () => supabase.functions.invoke('capture-holder-snapshot', { body: { token_mint: mint } }),
+      45_000,
+    );
     steps.push({
       step: 'holders',
       ok: !h.error,
@@ -503,9 +506,6 @@ async function handle(req: Request): Promise<Response> {
             creator_wallet: creatorWallet ?? undefined,
             current_mcap_usd: identity.marketCapUsd ?? undefined,
             liquidity_usd: identity.liquidityUsd ?? undefined,
-            x_url: identity.twitterUrl ?? undefined,
-            tg_url: identity.telegramUrl ?? undefined,
-            website_url: identity.websiteUrl ?? undefined,
             social_completeness,
             hydration_status: { steps },
             hydrated_at: new Date().toISOString(),
