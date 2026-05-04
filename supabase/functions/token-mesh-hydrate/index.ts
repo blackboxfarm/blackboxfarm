@@ -306,9 +306,9 @@ async function handle(req: Request): Promise<Response> {
 
   // -- Step 5: social mesh enrichment (best-effort fire & verify) --
   {
-    const hs = await timed(() =>
+    const hs = await timedWithTimeout(() =>
       supabase.functions.invoke('harvest-token-socials', { body: { mint, force: true } }),
-    );
+    , 25_000);
     steps.push({
       step: 'socials',
       ok: !hs.error && !(hs.result as any)?.error,
@@ -319,9 +319,9 @@ async function handle(req: Request): Promise<Response> {
     });
 
     if (identity.twitterUrl) {
-      const xc = await timed(() =>
+      const xc = await timedWithTimeout(() =>
         supabase.functions.invoke('x-community-enricher', { body: { mint, twitterUrl: identity.twitterUrl } }),
-      );
+      , 25_000);
       steps.push({
         step: 'x-community',
         ok: !xc.error,
@@ -337,9 +337,9 @@ async function handle(req: Request): Promise<Response> {
 
   // -- Step 6: holders snapshot (best-effort) --
   {
-    const h = await timed(() =>
+    const h = await timedWithTimeout(() =>
       supabase.functions.invoke('capture-holder-snapshot', { body: { token_mint: mint } }),
-    );
+    , 30_000);
     steps.push({
       step: 'holders',
       ok: !h.error,
