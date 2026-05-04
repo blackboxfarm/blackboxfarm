@@ -82,6 +82,7 @@ export default function AutopsyQueueBody() {
     const result = await runFullAutopsyPipeline({
       toast,
       onProgress: progress.onProgress,
+      onCandidateResolved: progress.bindCandidate,
       candidateId: existing?.id,
       mint,
       upsert: existing?.id ? undefined : {
@@ -155,7 +156,12 @@ export default function AutopsyQueueBody() {
   async function draft(id: string) {
     setBusy(id);
     progress.start('Generating Autopsy');
-    const result = await runFullAutopsyPipeline({ toast, candidateId: id, onProgress: progress.onProgress });
+    const result = await runFullAutopsyPipeline({
+      toast,
+      candidateId: id,
+      onProgress: progress.onProgress,
+      onCandidateResolved: progress.bindCandidate,
+    });
     progress.finish(result.ok ? undefined : result.error);
     setBusy(null);
     load();
