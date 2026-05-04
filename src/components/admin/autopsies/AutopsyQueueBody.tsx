@@ -199,6 +199,14 @@ export default function AutopsyQueueBody() {
 
   return (
     <div className="space-y-4">
+      <PipelineProgressDialog
+        open={progress.open}
+        onClose={progress.close}
+        title={progress.title}
+        phases={progress.phases}
+        done={progress.done}
+        finalError={progress.finalError}
+      />
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h3 className="text-xl font-bold flex items-center gap-2">
