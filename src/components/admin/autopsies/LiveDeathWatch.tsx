@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Skull, FileText, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { runFullAutopsyPipeline } from './runFullAutopsyPipeline';
+import PipelineProgressDialog from './PipelineProgressDialog';
+import { usePipelineProgress } from './usePipelineProgress';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface DeathRow {
@@ -85,6 +87,7 @@ export default function LiveDeathWatch() {
   // mint → status of an existing autopsy_candidates row (analyzing/drafted/approved/failed)
   const [processed, setProcessed] = useState<Record<string, { status: string; slug: string | null }>>({});
   const hydratingRef = useRef(false);
+  const progress = usePipelineProgress();
 
   async function load() {
     setRows(null);
@@ -154,8 +157,10 @@ export default function LiveDeathWatch() {
     const ticker = cleanTokenText(r.symbol, 'symbol');
     const tokenName = cleanTokenText(r.name, 'name');
     const ageHours = r.first_seen_at ? (Date.now() - new Date(r.first_seen_at).getTime()) / 3600000 : null;
-    await runFullAutopsyPipeline({
+    progress.start(`Generating Autopsy${ticker ? ' — $' + ticker : ''}`);
+    const result = await runFullAutopsyPipeline({
       toast,
+      onProgress: progress.onProgress,
       upsert: {
         token_mint: r.token_mint,
         ticker,
@@ -171,6 +176,7 @@ export default function LiveDeathWatch() {
         creator_wallet: r.creator_wallet,
       },
     });
+    progress.finish(result.ok ? undefined : result.error);
     setBusy(null);
     load();
   }
