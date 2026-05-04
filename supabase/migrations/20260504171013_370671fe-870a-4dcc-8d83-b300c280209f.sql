@@ -1,0 +1,1 @@
+ALTER FUNCTION public.set_autopsy_updated_at() SET search_path = public;
