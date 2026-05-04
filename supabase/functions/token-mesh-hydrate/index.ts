@@ -151,9 +151,16 @@ async function handle(req: Request): Promise<Response> {
   let copycatVerdict: CopycatVerdict | null = null;
 
   // -- Step 1: cache --
+  // Autopsies analyse dead tokens whose identity/creator/ATH/socials never
+  // change. For that surface we widen the cache window to 30 days so we
+  // don't burn DexScreener/Pump.fun/Helius credits re-fetching immutable data.
+  const cacheTtlMs = surface === 'autopsy_pipeline'
+    ? 30 * 24 * 60 * 60 * 1000  // 30 days
+    : 5 * 60 * 1000;            // 5 minutes (live surfaces)
+  const cacheLabel = surface === 'autopsy_pipeline' ? '<30d (autopsy)' : '<5m';
   if (!force) {
-    await emit('cache', 'running', 'check token_lifecycle <5m');
-    const t = await timed(() => getCachedToken(supabase, mint, 5 * 60 * 1000));
+    await emit('cache', 'running', `check token_lifecycle ${cacheLabel}`);
+    const t = await timed(() => getCachedToken(supabase, mint, cacheTtlMs));
     if (t.result) {
       identity.ticker = t.result.symbol ?? null;
       identity.name = t.result.name ?? null;
