@@ -161,6 +161,7 @@ export default function LiveDeathWatch() {
     const result = await runFullAutopsyPipeline({
       toast,
       onProgress: progress.onProgress,
+      onCandidateResolved: progress.bindCandidate,
       upsert: {
         token_mint: r.token_mint,
         ticker,
