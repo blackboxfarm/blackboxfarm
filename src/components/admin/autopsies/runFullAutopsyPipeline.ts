@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import type { PipelinePhase, PhaseStatus } from './PipelineProgressDialog';
 
 type ToastFn = (args: { title: string; description?: string; variant?: 'default' | 'destructive' }) => void;
 
@@ -24,6 +25,10 @@ export type RunPipelineArgs = {
   upsert?: CandidateUpsert;
   /** Fallback when only candidateId is provided — looked up if missing. */
   mint?: string;
+  /** Optional live progress reporter used by the manual-Generate dialog. */
+  onProgress?: (phases: PipelinePhase[]) => void;
+  /** Override default per-phase max attempts (default 10). */
+  maxAttempts?: number;
 };
 
 export type RunPipelineResult = {
@@ -31,28 +36,98 @@ export type RunPipelineResult = {
   candidateId?: string;
   identity?: any;
   error?: string;
+  phases?: PipelinePhase[];
 };
 
+const DEFAULT_MAX_ATTEMPTS = 10;
+const RETRY_BASE_DELAY_MS = 2000;
+
+function sleep(ms: number) {
+  return new Promise<void>((r) => setTimeout(r, ms));
+}
+
 /**
- * Runs the full autopsy forensic pipeline in one shot:
- *   token-mesh-hydrate → autopsy-tx-timeline → (autopsy-tg-deep-pull) →
- *   autopsy-community-sweep → autopsy-writer
- *
- * Mirrors the manual "Add & Draft" flow from AutopsyQueueBody.handleManualAdd
- * so Live Death Watch / Cool Deaths Backlog / Lambs all behave identically.
+ * Run a single phase with up to `maxAttempts` retries. Caller's runner returns
+ * `{ ok, detail?, error?, subSteps? }`. If never ok after retries, phase fails.
+ */
+async function runPhase<T>(
+  phases: PipelinePhase[],
+  emit: (p: PipelinePhase[]) => void,
+  phase: PipelinePhase,
+  runner: () => Promise<{ ok: boolean; detail?: string; error?: string; data?: T; subSteps?: PipelinePhase['subSteps'] }>,
+): Promise<{ ok: boolean; data?: T }> {
+  phase.startedAt = Date.now();
+  for (let attempt = 1; attempt <= phase.maxAttempts; attempt++) {
+    phase.attempt = attempt;
+    phase.status = attempt === 1 ? 'running' : 'retrying';
+    phase.error = undefined;
+    emit([...phases]);
+    try {
+      const r = await runner();
+      if (r.ok) {
+        phase.status = 'success';
+        phase.detail = r.detail;
+        phase.subSteps = r.subSteps;
+        phase.endedAt = Date.now();
+        emit([...phases]);
+        return { ok: true, data: r.data };
+      }
+      phase.error = r.error ?? 'phase reported not-ok';
+      phase.subSteps = r.subSteps ?? phase.subSteps;
+    } catch (e: any) {
+      phase.error = e?.message ?? String(e);
+    }
+    emit([...phases]);
+    if (attempt < phase.maxAttempts) {
+      await sleep(Math.min(RETRY_BASE_DELAY_MS * attempt, 10_000));
+    }
+  }
+  phase.status = 'failed';
+  phase.endedAt = Date.now();
+  emit([...phases]);
+  return { ok: false };
+}
+
+/**
+ * Runs the full autopsy forensic pipeline with hard retries on every step.
+ * Order: candidate-upsert → mesh-hydrate → tx-timeline → tg-deep-pull (if TG) →
+ *        community-sweep → writer. Each step retries up to maxAttempts (default 10).
+ * AI stages (community-sweep + writer) refuse to run if any data stage failed.
  */
 export async function runFullAutopsyPipeline(args: RunPipelineArgs): Promise<RunPipelineResult> {
-  const { toast } = args;
+  const { toast, onProgress, maxAttempts = DEFAULT_MAX_ATTEMPTS } = args;
+  const phases: PipelinePhase[] = [];
+  const emit = (p: PipelinePhase[]) => { onProgress?.(p); };
+  const addPhase = (key: string, label: string, max = maxAttempts): PipelinePhase => {
+    const p: PipelinePhase = { key, label, status: 'pending', attempt: 0, maxAttempts: max };
+    phases.push(p);
+    emit([...phases]);
+    return p;
+  };
+
   try {
     // 1. Resolve / create candidate row.
     let candidateId = args.candidateId;
     let mint = args.mint;
 
-    if (!candidateId) {
-      if (!args.upsert) throw new Error('candidateId or upsert required');
+    const candidatePhase = addPhase('candidate', 'Resolve candidate row', 5);
+    const candRes = await runPhase(phases, emit, candidatePhase, async () => {
+      if (candidateId && mint) return { ok: true, detail: `existing candidate ${candidateId.slice(0, 8)}` };
+      if (candidateId && !mint) {
+        const { data: row, error } = await supabase
+          .from('autopsy_candidates')
+          .select('token_mint')
+          .eq('id', candidateId)
+          .maybeSingle();
+        if (error) return { ok: false, error: error.message };
+        if (!row?.token_mint) return { ok: false, error: 'candidate has no token_mint' };
+        mint = row.token_mint;
+        return { ok: true, detail: `loaded mint ${mint.slice(0, 6)}…` };
+      }
+      if (!args.upsert) return { ok: false, error: 'candidateId or upsert required' };
       const spec = args.upsert;
       mint = spec.token_mint;
-      const { data: cand, error: upErr } = await supabase
+      const { data: cand, error } = await supabase
         .from('autopsy_candidates')
         .upsert(
           {
@@ -75,98 +150,132 @@ export async function runFullAutopsyPipeline(args: RunPipelineArgs): Promise<Run
         )
         .select('id, token_mint')
         .single();
-      if (upErr || !cand) throw new Error(upErr?.message ?? 'candidate upsert failed');
+      if (error || !cand) return { ok: false, error: error?.message ?? 'candidate upsert failed' };
       candidateId = cand.id;
       mint = cand.token_mint;
-    } else if (!mint) {
-      const { data: row } = await supabase
-        .from('autopsy_candidates')
-        .select('token_mint')
-        .eq('id', candidateId)
-        .maybeSingle();
-      mint = row?.token_mint;
-      if (!mint) throw new Error('candidate has no token_mint');
-    }
+      return { ok: true, detail: `created/upserted ${candidateId.slice(0, 8)}` };
+    });
+    if (!candRes.ok) throw new Error('Could not establish candidate row');
 
-    // 2. Hydrate mesh.
+    // 2. Hydrate mesh — retried because partial mesh poisons the autopsy.
     toast({ title: 'Hydrating mesh…', description: 'Identity → creator → mesh → socials → holders.' });
-    const { data: hydrate, error: hErr } = await supabase.functions.invoke('token-mesh-hydrate', {
-      body: { mint, candidate_id: candidateId, surface: 'autopsy_pipeline', force: true },
-    });
-    if (hErr) throw hErr;
-
-    const steps: Array<{ step: string; ok: boolean; source?: string; detail?: string; reason?: string }> =
-      hydrate?.steps ?? [];
-    for (const s of steps) {
-      const icon = s.ok ? '✓' : '⚠';
-      toast({
-        title: `${icon} ${s.step}${s.source ? ` (${s.source})` : ''}`,
-        description: s.ok ? (s.detail ?? 'ok') : (s.reason ?? 'no detail'),
-        variant: s.ok ? 'default' : 'destructive',
+    let hydrate: any = null;
+    const hydratePhase = addPhase('mesh-hydrate', 'Hydrate token mesh', maxAttempts);
+    const hydrateRes = await runPhase(phases, emit, hydratePhase, async () => {
+      const { data, error } = await supabase.functions.invoke('token-mesh-hydrate', {
+        body: { mint, candidate_id: candidateId, surface: 'autopsy_pipeline', force: true },
       });
+      if (error) return { ok: false, error: error.message };
+      hydrate = data;
+      const steps = (data?.steps ?? []) as Array<{ step: string; ok: boolean; detail?: string; reason?: string; source?: string }>;
+      const ident = data?.identity ?? {};
+      // Require identity OR creator OR socials present before considering hydrate "ok"
+      const completeness = [ident.twitterUrl, ident.telegramUrl, ident.websiteUrl].filter(Boolean).length;
+      const dataPresent = !!data?.creatorWallet || completeness >= 1 || !!ident.ticker;
+      if (!dataPresent) {
+        return { ok: false, error: 'no creator + no socials + no ticker — providers empty', subSteps: steps };
+      }
+      return {
+        ok: true,
+        detail: `${ident.ticker ? '$' + ident.ticker : '?'} · creator=${data?.creatorWallet ? 'yes' : 'no'} · socials=${completeness}/3`,
+        subSteps: steps,
+      };
+    });
+    if (!hydrateRes.ok) {
+      return {
+        ok: false,
+        candidateId,
+        error: 'mesh hydration failed after all retries — refusing to autopsy without data',
+        phases,
+      };
     }
 
-    // 3. Refusal guard — don't autopsy a vacuum.
     const ident = hydrate?.identity ?? {};
-    const completeness = [ident.twitterUrl, ident.telegramUrl, ident.websiteUrl].filter(Boolean).length;
-    if (!hydrate?.creatorWallet && completeness < 1 && !ident.ticker) {
-      toast({
-        title: 'Refusing to autopsy empty object',
-        description: 'No creator + no socials + no ticker. Re-hydrate later when providers respond.',
-        variant: 'destructive',
+
+    // 3. On-chain timeline — retried.
+    const txPhase = addPhase('tx-timeline', 'On-chain transaction timeline', maxAttempts);
+    const txRes = await runPhase(phases, emit, txPhase, async () => {
+      const { error } = await supabase.functions.invoke('autopsy-tx-timeline', {
+        body: { candidate_id: candidateId, force: true },
       });
-      return { ok: false, candidateId, identity: ident, error: 'empty object' };
+      if (error) return { ok: false, error: error.message };
+      return { ok: true, detail: 'forensics captured' };
+    });
+    if (!txRes.ok) {
+      return {
+        ok: false,
+        candidateId,
+        identity: ident,
+        error: 'on-chain timeline failed after all retries',
+        phases,
+      };
     }
 
-    // 4. On-chain timeline.
-    toast({ title: 'Forensics: on-chain timeline…' });
-    const fx = await supabase.functions.invoke('autopsy-tx-timeline', {
-      body: { candidate_id: candidateId, force: true },
-    });
-    toast({
-      title: fx.error ? '⚠ tx-timeline' : '✓ tx-timeline',
-      description: fx.error?.message ?? 'forensics captured',
-      variant: fx.error ? 'destructive' : 'default',
-    });
-
-    // 5. Telegram deep pull (only when a TG URL exists).
+    // 4. Telegram deep pull (only when a TG URL exists).
     if (ident.telegramUrl) {
-      const tg = await supabase.functions.invoke('autopsy-tg-deep-pull', { body: { candidate_id: candidateId } });
-      toast({
-        title: tg.error ? '⚠ tg deep pull' : '✓ tg deep pull',
-        description: tg.error?.message ?? 'telegram scraped',
-        variant: tg.error ? 'destructive' : 'default',
+      const tgPhase = addPhase('tg-deep-pull', 'Telegram deep-pull', maxAttempts);
+      await runPhase(phases, emit, tgPhase, async () => {
+        const { error } = await supabase.functions.invoke('autopsy-tg-deep-pull', { body: { candidate_id: candidateId } });
+        if (error) return { ok: false, error: error.message };
+        return { ok: true, detail: 'telegram scraped' };
       });
+      // Non-fatal: continue even if TG pull ultimately fails.
+    } else {
+      const skipped = addPhase('tg-deep-pull', 'Telegram deep-pull', 1);
+      skipped.status = 'skipped';
+      skipped.detail = 'no telegram URL discovered';
+      skipped.endedAt = Date.now();
+      emit([...phases]);
     }
 
-    // 6. Community sweep (vulture + dissent lenses).
-    const cs = await supabase.functions.invoke('autopsy-community-sweep', {
-      body: { candidate_id: candidateId, token_mint: mint, force: true, lenses: ['vulture', 'dissent'] },
+    // 5. Community sweep — retried.
+    const csPhase = addPhase('community-sweep', 'X community sweep (vulture + dissent)', maxAttempts);
+    const csRes = await runPhase(phases, emit, csPhase, async () => {
+      const { error } = await supabase.functions.invoke('autopsy-community-sweep', {
+        body: { candidate_id: candidateId, token_mint: mint, force: true, lenses: ['vulture', 'dissent'] },
+      });
+      if (error) return { ok: false, error: error.message };
+      return { ok: true, detail: 'x-community swept' };
     });
-    toast({
-      title: cs.error ? '⚠ community sweep' : '✓ community sweep',
-      description: cs.error?.message ?? 'x-community swept',
-      variant: cs.error ? 'destructive' : 'default',
-    });
+    if (!csRes.ok) {
+      return {
+        ok: false,
+        candidateId,
+        identity: ident,
+        error: 'community sweep failed after all retries — refusing to send to AI writer',
+        phases,
+      };
+    }
 
-    // 7. Writer.
+    // 6. Writer (AI) — only runs after every data phase succeeded.
     toast({ title: 'Writing report…' });
-    const { error: wErr } = await supabase.functions.invoke('autopsy-writer', {
-      body: { candidate_id: candidateId },
+    const writerPhase = addPhase('writer', 'AI writer (report draft)', maxAttempts);
+    const writerRes = await runPhase(phases, emit, writerPhase, async () => {
+      const { error } = await supabase.functions.invoke('autopsy-writer', { body: { candidate_id: candidateId } });
+      if (error) return { ok: false, error: error.message };
+      return { ok: true, detail: 'autopsy drafted' };
     });
-    if (wErr) throw wErr;
+    if (!writerRes.ok) {
+      return {
+        ok: false,
+        candidateId,
+        identity: ident,
+        error: 'AI writer failed after all retries',
+        phases,
+      };
+    }
 
     toast({
       title: '✓ Autopsy drafted',
       description: `${ident.ticker ? '$' + ident.ticker + ' · ' : ''}${(mint ?? '').slice(0, 6)}…${(mint ?? '').slice(-4)}`,
     });
-    return { ok: true, candidateId, identity: ident };
+    return { ok: true, candidateId, identity: ident, phases };
   } catch (e: any) {
     args.toast({
       title: 'Pipeline failed',
       description: e?.message ?? String(e),
       variant: 'destructive',
     });
-    return { ok: false, error: e?.message ?? String(e) };
+    return { ok: false, error: e?.message ?? String(e), phases };
   }
 }
