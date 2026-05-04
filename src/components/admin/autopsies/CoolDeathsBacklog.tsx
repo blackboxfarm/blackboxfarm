@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Archive, FileText, Lock, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { runFullAutopsyPipeline } from './runFullAutopsyPipeline';
+import PipelineProgressDialog from './PipelineProgressDialog';
+import { usePipelineProgress } from './usePipelineProgress';
 
 interface BacklogRow {
   token_mint: string;
@@ -49,6 +51,7 @@ export default function CoolDeathsBacklog() {
   const [busy, setBusy] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const hydratingRef = useRef(false);
+  const progress = usePipelineProgress();
 
   async function load() {
     setRows(null);
@@ -113,8 +116,10 @@ export default function CoolDeathsBacklog() {
     setBusy(r.token_mint);
     const ticker = cleanTokenText(r.symbol, 'symbol');
     const tokenName = cleanTokenText(r.name, 'name');
+    progress.start(`Generating Autopsy${ticker ? ' — $' + ticker : ''}`);
     const result = await runFullAutopsyPipeline({
       toast,
+      onProgress: progress.onProgress,
       upsert: {
         token_mint: r.token_mint,
         ticker,
@@ -129,6 +134,7 @@ export default function CoolDeathsBacklog() {
         creator_wallet: r.creator_wallet,
       },
     });
+    progress.finish(result.ok ? undefined : result.error);
     setBusy(null);
     if (result.ok) {
       await supabase.from('autopsy_backlog')
@@ -140,6 +146,14 @@ export default function CoolDeathsBacklog() {
 
   return (
     <div className="space-y-4">
+      <PipelineProgressDialog
+        open={progress.open}
+        onClose={progress.close}
+        title={progress.title}
+        phases={progress.phases}
+        done={progress.done}
+        finalError={progress.finalError}
+      />
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h3 className="text-lg font-semibold flex items-center gap-2">
