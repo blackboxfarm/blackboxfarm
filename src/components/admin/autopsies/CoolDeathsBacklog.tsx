@@ -24,6 +24,7 @@ interface BacklogRow {
   death_cause: string | null;
   death_confidence: number | null;
   death_at: string | null;
+  ath_at: string | null;
   collapse_pct: number | null;
   drafted_slug: string | null;
   drafted_at: string | null;
@@ -36,6 +37,25 @@ function fmtUsd(n: number | null | undefined): string {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
   if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}k`;
   return `$${n.toFixed(0)}`;
+}
+
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString(undefined, { year: '2-digit', month: 'short', day: 'numeric' });
+}
+
+function fmtAge(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso).getTime();
+  if (!isFinite(d)) return '';
+  const days = Math.floor((Date.now() - d) / 86400000);
+  if (days < 1) return 'today';
+  if (days === 1) return '1d ago';
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
 }
 
 function cleanTokenText(value: string | null | undefined, kind: 'symbol' | 'name'): string | null {
@@ -223,6 +243,8 @@ export default function CoolDeathsBacklog() {
                 <Stat label="Now" value={fmtUsd(r.current_mcap_usd)} />
                 <Stat label="Liq" value={fmtUsd(r.liquidity_usd)} />
                 <Stat label="Holders" value={r.holder_count?.toLocaleString() ?? '—'} />
+                <Stat label="Mint Date" value={fmtDate(r.ath_at)} hint={fmtAge(r.ath_at)} />
+                <Stat label="Est. Death" value={fmtDate(r.death_at)} hint={fmtAge(r.death_at)} />
               </div>
               <div className="flex gap-1 flex-wrap">
                 <Button
@@ -249,11 +271,12 @@ export default function CoolDeathsBacklog() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div>
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className="font-mono">{value}</div>
+      {hint && <div className="text-[9px] text-muted-foreground/70">{hint}</div>}
     </div>
   );
 }
