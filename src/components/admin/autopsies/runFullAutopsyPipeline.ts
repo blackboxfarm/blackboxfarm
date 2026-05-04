@@ -31,6 +31,8 @@ export type RunPipelineArgs = {
   onCandidateResolved?: (candidateId: string) => void;
   /** Override default per-phase max attempts (default 10). */
   maxAttempts?: number;
+  /** Abort signal — when triggered, the pipeline stops between phases and bails out. */
+  signal?: AbortSignal;
 };
 
 export type RunPipelineResult = {
@@ -53,8 +55,23 @@ const PHASE_PURPOSE: Record<string, string> = {
   'writer':          'Send the assembled mesh to the AI writer to draft the autopsy report.',
 };
 
-function sleep(ms: number) {
-  return new Promise<void>((r) => setTimeout(r, ms));
+function sleep(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) return reject(new DOMException('Aborted', 'AbortError'));
+    const t = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(t);
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function isAbort(e: any): boolean {
+  return e?.name === 'AbortError' || /aborted/i.test(e?.message ?? '');
 }
 
 function pushLog(phase: PipelinePhase, level: PipelineLogLine['level'], msg: string) {
@@ -70,10 +87,19 @@ async function runPhase<T>(
   emit: (p: PipelinePhase[]) => void,
   phase: PipelinePhase,
   runner: () => Promise<{ ok: boolean; detail?: string; error?: string; data?: T; subSteps?: PipelinePhase['subSteps'] }>,
+  signal?: AbortSignal,
 ): Promise<{ ok: boolean; data?: T }> {
   phase.startedAt = Date.now();
   pushLog(phase, 'info', `▶ Starting: ${phase.label}`);
   for (let attempt = 1; attempt <= phase.maxAttempts; attempt++) {
+    if (signal?.aborted) {
+      phase.status = 'failed';
+      phase.error = 'Cancelled by user';
+      phase.endedAt = Date.now();
+      pushLog(phase, 'warn', '✗ Cancelled by user');
+      emit([...phases]);
+      return { ok: false };
+    }
     phase.attempt = attempt;
     phase.status = attempt === 1 ? 'running' : 'retrying';
     phase.error = undefined;
@@ -95,6 +121,14 @@ async function runPhase<T>(
       phase.subSteps = r.subSteps ?? phase.subSteps;
       pushLog(phase, 'error', `✗ Attempt ${attempt} failed: ${phase.error}`);
     } catch (e: any) {
+      if (isAbort(e)) {
+        phase.status = 'failed';
+        phase.error = 'Cancelled by user';
+        phase.endedAt = Date.now();
+        pushLog(phase, 'warn', '✗ Cancelled by user');
+        emit([...phases]);
+        return { ok: false };
+      }
       phase.error = e?.message ?? String(e);
       pushLog(phase, 'error', `✗ Attempt ${attempt} threw: ${phase.error}`);
     }
@@ -103,7 +137,19 @@ async function runPhase<T>(
       const backoff = Math.min(RETRY_BASE_DELAY_MS * attempt, 10_000);
       pushLog(phase, 'warn', `↻ Backing off ${(backoff / 1000).toFixed(1)}s before retry…`);
       emit([...phases]);
-      await sleep(backoff);
+      try {
+        await sleep(backoff, signal);
+      } catch (e) {
+        if (isAbort(e)) {
+          phase.status = 'failed';
+          phase.error = 'Cancelled by user';
+          phase.endedAt = Date.now();
+          pushLog(phase, 'warn', '✗ Cancelled by user');
+          emit([...phases]);
+          return { ok: false };
+        }
+        throw e;
+      }
     }
   }
   phase.status = 'failed';
@@ -120,9 +166,10 @@ async function runPhase<T>(
  * AI stages (community-sweep + writer) refuse to run if any data stage failed.
  */
 export async function runFullAutopsyPipeline(args: RunPipelineArgs): Promise<RunPipelineResult> {
-  const { toast, onProgress, maxAttempts = DEFAULT_MAX_ATTEMPTS } = args;
+  const { toast, onProgress, maxAttempts = DEFAULT_MAX_ATTEMPTS, signal } = args;
   const phases: PipelinePhase[] = [];
   const emit = (p: PipelinePhase[]) => { onProgress?.(p); };
+  const cancelled = (): RunPipelineResult => ({ ok: false, error: 'Cancelled by user', phases });
   const addPhase = (key: string, label: string, max = maxAttempts): PipelinePhase => {
     const p: PipelinePhase = {
       key, label,
@@ -186,9 +233,10 @@ export async function runFullAutopsyPipeline(args: RunPipelineArgs): Promise<Run
       candidateId = cand.id;
       mint = cand.token_mint;
       return { ok: true, detail: `created/upserted ${candidateId.slice(0, 8)}` };
-    });
+    }, signal);
     if (!candRes.ok) throw new Error('Could not establish candidate row');
     if (candidateId) args.onCandidateResolved?.(candidateId);
+    if (signal?.aborted) return cancelled();
 
     // 2. Hydrate mesh — retried because partial mesh poisons the autopsy.
     toast({ title: 'Hydrating mesh…', description: 'Identity → creator → mesh → socials → holders.' });
@@ -213,7 +261,8 @@ export async function runFullAutopsyPipeline(args: RunPipelineArgs): Promise<Run
         detail: `${ident.ticker ? '$' + ident.ticker : '?'} · creator=${data?.creatorWallet ? 'yes' : 'no'} · socials=${completeness}/3`,
         subSteps: steps,
       };
-    });
+    }, signal);
+    if (signal?.aborted) return cancelled();
     if (!hydrateRes.ok) {
       return {
         ok: false,
@@ -233,7 +282,8 @@ export async function runFullAutopsyPipeline(args: RunPipelineArgs): Promise<Run
       });
       if (error) return { ok: false, error: error.message };
       return { ok: true, detail: 'forensics captured' };
-    });
+    }, signal);
+    if (signal?.aborted) return cancelled();
     if (!txRes.ok) {
       return {
         ok: false,
@@ -251,7 +301,8 @@ export async function runFullAutopsyPipeline(args: RunPipelineArgs): Promise<Run
         const { error } = await supabase.functions.invoke('autopsy-tg-deep-pull', { body: { candidate_id: candidateId } });
         if (error) return { ok: false, error: error.message };
         return { ok: true, detail: 'telegram scraped' };
-      });
+      }, signal);
+      if (signal?.aborted) return cancelled();
       // Non-fatal: continue even if TG pull ultimately fails.
     } else {
       const skipped = addPhase('tg-deep-pull', 'Telegram deep-pull', 1);
@@ -269,7 +320,8 @@ export async function runFullAutopsyPipeline(args: RunPipelineArgs): Promise<Run
       });
       if (error) return { ok: false, error: error.message };
       return { ok: true, detail: 'x-community swept' };
-    });
+    }, signal);
+    if (signal?.aborted) return cancelled();
     if (!csRes.ok) {
       return {
         ok: false,
@@ -287,7 +339,8 @@ export async function runFullAutopsyPipeline(args: RunPipelineArgs): Promise<Run
       const { error } = await supabase.functions.invoke('autopsy-writer', { body: { candidate_id: candidateId } });
       if (error) return { ok: false, error: error.message };
       return { ok: true, detail: 'autopsy drafted' };
-    });
+    }, signal);
+    if (signal?.aborted) return cancelled();
     if (!writerRes.ok) {
       return {
         ok: false,
@@ -304,6 +357,9 @@ export async function runFullAutopsyPipeline(args: RunPipelineArgs): Promise<Run
     });
     return { ok: true, candidateId, identity: ident, phases };
   } catch (e: any) {
+    if (isAbort(e)) {
+      return { ok: false, error: 'Cancelled by user', phases };
+    }
     args.toast({
       title: 'Pipeline failed',
       description: e?.message ?? String(e),
