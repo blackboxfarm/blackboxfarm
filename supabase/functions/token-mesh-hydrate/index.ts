@@ -26,6 +26,7 @@ import { resolveTokenCreator } from '../_shared/creator-resolver.ts';
 import { fetchDexScreenerData } from '../_shared/dexscreener-api.ts';
 import { fetchLaunchpadCoin, detectLaunchpad } from '../_shared/launchpad-fetch.ts';
 import { detectCopycatPattern, type CopycatVerdict } from '../_shared/copycat-detector.ts';
+import { emitPipelineEvent } from '../_shared/pipeline-events.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -115,6 +116,24 @@ async function handle(req: Request): Promise<Response> {
   );
 
   const steps: HydrationStep[] = [];
+  const PHASE = 'mesh-hydrate';
+  const emit = (
+    step: string,
+    status: 'running' | 'ok' | 'fail' | 'skipped' | 'info',
+    detail?: string | null,
+    reason?: string | null,
+    outcome?: 'value_present' | 'confirmed_empty' | 'fetch_failed' | null,
+  ) => emitPipelineEvent(supabase, {
+    candidateId: candidate_id ?? null,
+    phase: PHASE,
+    step,
+    status,
+    detail,
+    reason,
+    outcome,
+  });
+
+  await emit('hydrate', 'running', `mint=${mint.slice(0, 6)}…${mint.slice(-4)} surface=${surface}`);
   const identity: {
     ticker?: string | null;
     name?: string | null;
