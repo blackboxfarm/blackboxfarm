@@ -148,7 +148,7 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
       return;
     }
     
-    if (!email || !password || password !== confirmPassword || !referralSource) {
+    if (!email || !password || password !== confirmPassword) {
       toast({
         title: "Sign Up Failed",
         description: "Please check your email and password fields",
@@ -491,7 +491,7 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
               <Button 
                 type="submit" 
                 className="w-full tech-button"
-                disabled={loading || !email || !password || password !== confirmPassword || isRateLimited || !referralSource || (referralSource === 'other' && !referralSourceOther.trim()) || !turnstileToken}
+                disabled={loading || !email || !password || password !== confirmPassword || isRateLimited || (referralSource === 'other' && !referralSourceOther.trim()) || !turnstileToken}
               >
                 {loading ? (
                   <>
