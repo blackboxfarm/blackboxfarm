@@ -38,7 +38,7 @@ export const ReferralSourceSelect = ({
 }: ReferralSourceSelectProps) => {
   return (
     <div className="space-y-2">
-      <Label className="text-foreground">How did you hear about us?</Label>
+      <Label className="text-foreground">How did you hear about us? <span className="text-xs text-muted-foreground font-normal">(optional)</span></Label>
       <Select value={value} onValueChange={onChange} disabled={disabled}>
         <SelectTrigger>
           <SelectValue placeholder="Select an option..." />
