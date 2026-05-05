@@ -357,7 +357,6 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
       const ageHours = tradeableHours ?? mintAgeFallback;
       const ageHoursDisplay = formatLifetime(ageHours);
       const todDisplay = formatTimeOfDeath(todIso);
-      const todDisplay = formatTimeOfDeath(todIso);
       const freshClass = classifyDeath({
         ageHours: ageHours ?? 0,
         mcap: currentMcap ?? 0,
