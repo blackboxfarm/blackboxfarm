@@ -1,10 +1,6 @@
-import { useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { PricingTable } from '@/components/premium/PricingTable';
 import { SocialIcon } from '@/components/token/SocialIcon';
 import { ExternalLink } from 'lucide-react';
-import { toast } from 'sonner';
-import { useUserTier } from '@/hooks/useUserTier';
 import { useAuth } from '@/hooks/useAuth';
 import { TelegramLinkCode } from '@/components/settings/TelegramLinkCode';
 import { SiteLayout } from '@/components/layout/SiteLayout';
@@ -12,20 +8,8 @@ import { XSuspendedPopover } from '@/components/XSuspendedPopover';
 import { TestimonialCarousel } from '@/components/testimonials/TestimonialCarousel';
 
 export default function Pricing() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const { checkSubscription } = useUserTier();
   const { user } = useAuth();
-
-  useEffect(() => {
-    if (searchParams.get('success') === 'true') {
-      toast.success('Subscription activated! Welcome aboard 🎉');
-      checkSubscription();
-      setSearchParams({}, { replace: true });
-    } else if (searchParams.get('canceled') === 'true') {
-      toast.info('Checkout canceled. No charges were made.');
-      setSearchParams({}, { replace: true });
-    }
-  }, [searchParams]);
+  // Post-checkout success/canceled handling lives in /onboarding (Stripe redirect target).
 
   return (
     <SiteLayout>
