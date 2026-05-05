@@ -103,12 +103,11 @@ export default function Onboarding() {
             </div>
             <div className="flex-1">
               <h3 className="font-semibold text-foreground text-sm">
-                📧 Check Your Email — Verify Within 48 Hours
+                📧 Check Your Email — Verify Within 7 Days
               </h3>
               <p className="text-xs text-muted-foreground mt-1">
                 We've sent a verification link to <span className="font-medium text-foreground">{user.email}</span>. 
-                Please click the link in the email to verify your account. 
-                Accounts that don't verify within 48 hours will be temporarily suspended.
+                You can keep using BlackBox right away — just verify within 7 days to keep full access.
               </p>
             </div>
             {verificationSent && (

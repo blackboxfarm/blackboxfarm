@@ -116,7 +116,7 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
       return;
     }
     
-    if (!email || !password || password !== confirmPassword || !referralSource) {
+    if (!email || !password || password !== confirmPassword) {
       toast({
         title: "Sign Up Failed",
         description: "Please check your email and password fields",
@@ -381,7 +381,7 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
               <Button 
                 type="submit" 
                 className="w-full tech-button"
-                disabled={loading || !email || !password || password !== confirmPassword || !referralSource || (referralSource === 'other' && !referralSourceOther.trim())}
+                disabled={loading || !email || !password || password !== confirmPassword || (referralSource === 'other' && !referralSourceOther.trim())}
               >
                 {loading ? (
                   <>

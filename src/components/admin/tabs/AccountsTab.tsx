@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Users, Search, Download, Filter, Mail } from "lucide-react";
 import { CreditCard } from "lucide-react";
 import { StripeCustomerDialog } from "@/components/admin/StripeCustomerDialog";
+import CheckoutTelemetryPanel from "@/components/admin/accounts/CheckoutTelemetryPanel";
 
 type AccountRow = {
   user_id: string;
@@ -305,6 +306,8 @@ export default function AccountsTab() {
         email={stripeTarget?.email}
         displayName={stripeTarget?.name ?? undefined}
       />
+
+      <CheckoutTelemetryPanel />
     </div>
   );
 }

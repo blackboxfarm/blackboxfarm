@@ -37,6 +37,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // Track login activity
         if (event === 'SIGNED_IN' && session?.user?.id) {
           supabase.rpc('track_user_login', { p_user_id: session.user.id }).then();
+          if (session.user.email) {
+            try { localStorage.setItem('bbx_last_email', session.user.email.toLowerCase().trim()); } catch {}
+          }
         }
       }
     );

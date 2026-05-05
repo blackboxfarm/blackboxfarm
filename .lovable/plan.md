@@ -1,109 +1,86 @@
-## Problem
+## Goals
 
-The progress dialog currently shows just the phase label ("Hydrate token mesh") with a spinner. There's no narration of what that phase is actually doing, no per-attempt log, and the internal sub-steps of `token-mesh-hydrate` only appear *after* the whole phase finishes. From the user's seat it looks like the app froze.
+Address each of the 6 items raised, then wire a checkout telemetry view inside the existing **👥 Accounts** admin tab.
 
-## Goal
+---
 
-Live, verbose, scrolling activity log inside the existing `PipelineProgressDialog` so every action is visible as it happens:
+### 1. Stripe opening in a new tab → switch to same-tab redirect
 
-```
-✓ Resolve candidate row (0.5s)
-   └ created/upserted 390589f2…
+`src/components/premium/PricingTable.tsx` (lines 119 + 171) currently does `window.open(data.url, '_blank')`. Mobile Safari + popup blockers kill this silently and the user never reaches Stripe.
 
-⟳ Hydrate token mesh — attempt 2/10
-   Purpose: pull identity, creator wallet, socials, and holder snapshot
-            from Helius + DexScreener + Pump.fun + harvest-token-socials.
-   ⏱ 14s elapsed
-   ✓ identity-resolve         ($REAPER · pump.fun)
-   ✓ creator-wallet           (Fjdx…vpump)
-   ⟳ harvest-token-socials    running… (12s)
-   ✗ x-community-enricher     timeout after 45s — retrying
-   ⋯ capture-holder-snapshot  pending
-   ⚠ attempt 1 failed: harvest-token-socials timeout — backing off 2s
-```
+**Fix:** replace with `window.location.assign(data.url)` for the checkout flow (same tab — Stripe handles return URL). Keep `_blank` only for `customer-portal` (manage subscription) since the user is already logged in mid-session and shouldn't lose state.
 
-## Changes
+### 2. Success URL mismatch
 
-### 1. Per-phase metadata (client-side, static)
+`create-checkout` redirects to `/onboarding?success=true`, but `Pricing.tsx` also has a `success=true` toast handler that never fires (user lands on /onboarding, not /pricing). `Onboarding.tsx` already handles success correctly (toast + checkSubscription + navigate to /dashboard).
 
-In `runFullAutopsyPipeline.ts`, attach a `purpose` string to every phase when it's added, e.g.:
+**Fix:** Remove the redundant success/canceled handler from `Pricing.tsx` (it's dead code). Onboarding.tsx remains the single source of truth for post-checkout handling. No behavior change for users — just removes a misleading code path.
 
-- `candidate` → "Find or create the autopsy_candidates row for this mint."
-- `mesh-hydrate` → "Pull identity, creator wallet, socials, holder snapshot via token-mesh-hydrate."
-- `tx-timeline` → "Reconstruct on-chain buy/sell timeline via autopsy-tx-timeline."
-- `tg-deep-pull` → "Scrape Telegram channel members + recent messages."
-- `community-sweep` → "Run X-community vulture + dissent lenses for sentiment forensics."
-- `writer` → "Send the assembled mesh to the AI writer to draft the autopsy report."
+### 3. AuthModal default tab — anon vs signed-in
 
-Show it under the phase title the moment the phase starts.
+In `PricingTable.tsx`, `AuthModal` is hard-coded to `defaultTab="signup"`. That's right for anon (they need an account), but if a user is *signed out mid-session* and clicks Subscribe, signup-first is wrong.
 
-### 2. Per-attempt activity log
+**Fix:** Track whether the email entered exists. Simpler approach: keep `signup` as default for the checkout flow (since !user means they need an account anyway), but add a clear "Already have an account? Sign in" link inside the modal. The modal already has tabs — just verify the user can switch freely. The actual asymmetry is in `AuthButton.tsx` which already passes `signin`/`signup` correctly. So the only fix needed is: when AuthModal is opened from PricingTable for an anon user, default tab should be **`signin`** if they've recently used the app (has a `bbx_last_email` localStorage), otherwise `signup`. Default to `signup` is fine for true anon.
 
-Extend `PipelinePhase` with `log: { ts: number; level: 'info'|'warn'|'error'|'success'; msg: string }[]`.
+### 4. Make referral source dropdown optional
 
-`runPhase` pushes a log line at every state change:
-- `info` — "Attempt N/Max — invoking token-mesh-hydrate…"
-- `error` — "Attempt N failed: <reason>"
-- `info` — "Backing off 2.0s before retry…"
-- `success` — "Attempt N succeeded in X.Ys"
+`AuthModal.tsx` line 119 + 384 + `SecureAuthModal.tsx` lines 161-ish enforce `!referralSource` as a blocker.
 
-Render the log as a small monospace tail inside the phase card (last 6 lines, full list expandable).
+**Fix:** Remove `referralSource` from the validation in both files. Update `ReferralSourceSelect.tsx` label to `"How did you hear about us? (optional)"`. Profile update only runs when `refValue` is set, which is already the case.
 
-### 3. Live sub-step streaming for `token-mesh-hydrate`
+### 5. Email casing — Stripe customer dedup
 
-This is the long phase that currently feels frozen. Two-pronged fix:
+`supabase/functions/create-checkout/index.ts` lookups Stripe by raw email. `User@x.com` and `user@x.com` create duplicate Stripe customers.
 
-**a. Server side** — `supabase/functions/token-mesh-hydrate/index.ts` already builds a `steps[]` array. Wrap each sub-step so it also writes a row to a new lightweight table `autopsy_pipeline_events`:
+**Fix:** Normalize with `const normalizedEmail = user.email.toLowerCase().trim();` and use that for both `customers.list({ email })` and `customer_email`. Also normalize in `check-subscription` and `customer-portal` for consistency.
 
-```sql
-create table public.autopsy_pipeline_events (
-  id bigserial primary key,
-  candidate_id uuid not null,
-  phase text not null,           -- 'mesh-hydrate'
-  step text not null,            -- 'harvest-token-socials'
-  status text not null,          -- 'running' | 'ok' | 'fail' | 'skipped'
-  detail text,
-  reason text,
-  created_at timestamptz not null default now()
-);
-create index on public.autopsy_pipeline_events (candidate_id, created_at desc);
--- realtime: alter publication supabase_realtime add table public.autopsy_pipeline_events;
-```
+### 6. Email verification — confirm grace period (no signup-time friction)
 
-Server inserts a `running` row when it starts a sub-step and updates/inserts an `ok`/`fail` row when it finishes. Wrapped through `assertDbWrite` per the zero-tolerance rule.
+Per memory `mem://constraints/email-verification-policy`: 7-day grace period, paid/telegram users exempt. Current `Onboarding.tsx` shows a banner saying **"48 hours"** which contradicts memory and adds psychological pressure.
 
-**b. Client side** — `usePipelineProgress` subscribes to `autopsy_pipeline_events` filtered by `candidate_id` via Supabase Realtime, and merges incoming rows into the active phase's `subSteps[]` and `log[]` immediately. The user sees each sub-step flip from ⋯ to ⟳ to ✓/✗ live.
+**Fix:**
+- Update Onboarding banner copy to **"Verify within 7 days"** (matches policy).
+- Confirm `signUp` does NOT block on email confirmation (`AuthContext.signUp` doesn't — Supabase project setting controls auto-confirm; we don't gate UI on it).
+- Confirm post-signup the user is dropped straight into the app (current flow already does — `onClose()` after toast). No code change needed to skip verification at signup.
+- Add a comment in `AuthContext.signUp` documenting "verification is deferred — do NOT block UX on email_confirmed_at".
 
-Same pattern applied to `autopsy-tx-timeline` and `autopsy-community-sweep` (they also have internal phases that take 30–60s).
+I'll also spot-check the `RequireAuth` and `useAuth` hook to make sure nothing currently blocks unverified users from paying. If something does, surface it in implementation.
 
-### 4. Empty-vs-unknown badge (per the standing rule)
+---
 
-When a sub-step finishes, the server records `outcome: 'confirmed_empty' | 'value_present' | 'fetch_failed'`. The dialog renders:
-- ✓ green for `value_present`
-- ◌ grey "no data (confirmed empty)" for `confirmed_empty`
-- ✗ red "fetch failed — retrying" for `fetch_failed`
+### 7. Checkout telemetry — under Accounts admin tab
 
-This makes the empty-vs-unknown distinction we agreed on visible to you in real time, not just enforced silently in the gate.
+Build a sub-section inside `AccountsTab.tsx` (since you said "stick that TAB under Accounts somewhere"). Use existing `checkout_intents` table — `create-checkout` already records `user_id`, `email`, `stripe_session_id`, `price_id`, `status` on every attempt.
 
-### 5. Elapsed-time ticker
+**New component:** `src/components/admin/accounts/CheckoutTelemetryPanel.tsx`
+- Table view of last 100 `checkout_intents` (newest first)
+- Columns: timestamp, email, tier (resolved from price_id via `STRIPE_TIERS`), status (pending/completed/abandoned), session_id (truncated, click to open Stripe dashboard)
+- Top-line stats: 24h attempt count, 24h completion rate, 24h abandoned count
+- Filter by status
 
-Replace the static `dur` (only shown after `endedAt` is set) with a `useEffect` interval that updates every 500ms while `status` is `running` or `retrying`, so you always see a live counter (e.g. "⏱ 17.4s").
+**Integration:** Add it as a section inside `AccountsTab.tsx` (collapsible card or a sub-tab within Accounts).
 
-## Files Touched
+No DB migration needed — `checkout_intents` already exists. RLS: confirm super-admin SELECT policy exists; if not, add one.
 
-**Edited**
-- `src/components/admin/autopsies/PipelineProgressDialog.tsx` — render purpose, log tail, live elapsed timer, outcome colours
-- `src/components/admin/autopsies/usePipelineProgress.ts` — Realtime subscription, log merge
-- `src/components/admin/autopsies/runFullAutopsyPipeline.ts` — purpose strings, log entries on every attempt/retry/backoff
-- `supabase/functions/token-mesh-hydrate/index.ts` — emit `autopsy_pipeline_events` rows around each sub-step
-- `supabase/functions/autopsy-tx-timeline/index.ts` — same
-- `supabase/functions/autopsy-community-sweep/index.ts` — same
+---
 
-**Created**
-- DB migration: `autopsy_pipeline_events` table + realtime publication
-- `supabase/functions/_shared/pipeline-events.ts` — `emitEvent(candidateId, phase, step, status, …)` helper using `assertDbWrite`
+## Files to Change
 
-## Out of scope
+| File | Change |
+|---|---|
+| `src/components/premium/PricingTable.tsx` | `window.location.assign` instead of `window.open`; smarter default AuthModal tab |
+| `src/pages/Pricing.tsx` | Remove dead success/canceled handler |
+| `src/components/auth/AuthModal.tsx` | Drop required referral validation |
+| `src/components/auth/SecureAuthModal.tsx` | Same |
+| `src/components/auth/ReferralSourceSelect.tsx` | Label "(optional)" |
+| `supabase/functions/create-checkout/index.ts` | Lowercase email for Stripe lookup |
+| `supabase/functions/check-subscription/index.ts` | Same |
+| `supabase/functions/customer-portal/index.ts` | Same |
+| `src/pages/Onboarding.tsx` | Banner copy: 48h → 7 days |
+| `src/contexts/AuthContext.tsx` | Comment documenting deferred verification |
+| `src/components/admin/accounts/CheckoutTelemetryPanel.tsx` | NEW — telemetry view |
+| `src/components/admin/tabs/AccountsTab.tsx` | Mount the new panel |
 
-- No change to retry counts, timeouts, or the writer-gate logic — those stay as-is.
-- No change to the AI writer or to the rugcheck/GoPlus path.
+Possible migration: super-admin SELECT policy on `checkout_intents` if missing.
+
+OK to proceed?
