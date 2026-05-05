@@ -1172,18 +1172,36 @@ function IntelBriefingsArticlesManager() {
       {/* Markdown Editor / Preview */}
       <Tabs value={editorTab} onValueChange={setEditorTab}>
         <div className="flex items-center justify-between">
-          <TabsList>
-            <TabsTrigger value="edit">✏️ Edit</TabsTrigger>
-            <TabsTrigger value="preview">👁️ Preview</TabsTrigger>
-            {editingId && (
-              <>
-                <TabsTrigger value="v75" className="text-blue-400 data-[state=active]:text-blue-400">75%</TabsTrigger>
-                <TabsTrigger value="v50" className="text-amber-400 data-[state=active]:text-amber-400">50%</TabsTrigger>
-                <TabsTrigger value="v25" className="text-red-400 data-[state=active]:text-red-400">25%</TabsTrigger>
-                <TabsTrigger value="vbc" className="text-violet-400 data-[state=active]:text-violet-400">🔗 Breadcrumb</TabsTrigger>
-              </>
-            )}
-          </TabsList>
+          {(() => {
+            const wc = (s: string | null | undefined) =>
+              s ? (s.trim().match(/\S+/g)?.length ?? 0) : 0;
+            const fmt = (n: number) => n.toLocaleString();
+            const masterWc = wc(form.content_md);
+            const variantWc = (depth: number) => {
+              const v = allVariants.find(
+                (x) => x.briefing_id === editingId && x.depth === depth
+              );
+              return wc(v?.content_md);
+            };
+            const w75 = variantWc(75);
+            const w50 = variantWc(50);
+            const w25 = variantWc(25);
+            const wbc = variantWc(0);
+            return (
+              <TabsList>
+                <TabsTrigger value="edit">✏️ Edit{masterWc > 0 ? ` (${fmt(masterWc)})` : ''}</TabsTrigger>
+                <TabsTrigger value="preview">👁️ Preview</TabsTrigger>
+                {editingId && (
+                  <>
+                    <TabsTrigger value="v75" className="text-blue-400 data-[state=active]:text-blue-400">75%{w75 > 0 ? ` (${fmt(w75)})` : ''}</TabsTrigger>
+                    <TabsTrigger value="v50" className="text-amber-400 data-[state=active]:text-amber-400">50%{w50 > 0 ? ` (${fmt(w50)})` : ''}</TabsTrigger>
+                    <TabsTrigger value="v25" className="text-red-400 data-[state=active]:text-red-400">25%{w25 > 0 ? ` (${fmt(w25)})` : ''}</TabsTrigger>
+                    <TabsTrigger value="vbc" className="text-violet-400 data-[state=active]:text-violet-400">🔗 Breadcrumb{wbc > 0 ? ` (${fmt(wbc)})` : ''}</TabsTrigger>
+                  </>
+                )}
+              </TabsList>
+            );
+          })()}
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
               <Upload className="h-4 w-4 mr-2" /> Import .md
