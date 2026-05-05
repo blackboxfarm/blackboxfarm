@@ -116,7 +116,8 @@ export function PricingTable() {
 
       if (error) throw error;
       if (data?.url) {
-        window.open(data.url, '_blank');
+        // Same-tab redirect — popup blockers (esp. mobile Safari) silently kill window.open
+        window.location.assign(data.url);
       }
     } catch (err) {
       console.error('Checkout error:', err);
@@ -134,6 +135,13 @@ export function PricingTable() {
     }
     await continueCheckoutAfterAuth(tierKey);
   };
+
+  // Smart default tab: returning visitors (have a stored email) default to sign in;
+  // truly anon users default to sign up.
+  const authModalDefaultTab: 'signin' | 'signup' =
+    typeof window !== 'undefined' && window.localStorage.getItem('bbx_last_email')
+      ? 'signin'
+      : 'signup';
 
   const handleAuthModalClose = () => {
     setShowAuthModal(false);
@@ -328,7 +336,7 @@ export function PricingTable() {
       <AuthModal
         isOpen={showAuthModal}
         onClose={handleAuthModalClose}
-        defaultTab="signup"
+        defaultTab={authModalDefaultTab}
       />
 
       {/* Transition modal between auth and Stripe */}
