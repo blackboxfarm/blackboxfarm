@@ -36,7 +36,8 @@ Deno.serve(withRunLog('create-checkout', async (req) => {
     const { data } = await supabaseClient.auth.getUser(token);
     const user = data.user;
     if (!user?.email) throw new Error("User not authenticated or email not available");
-    logStep("User authenticated", { userId: user.id, email: user.email });
+    const email = user.email.toLowerCase().trim();
+    logStep("User authenticated", { userId: user.id, email });
 
     const { priceId } = await req.json();
     if (!priceId) throw new Error("priceId is required");
@@ -46,7 +47,7 @@ Deno.serve(withRunLog('create-checkout', async (req) => {
       apiVersion: "2025-08-27.basil",
     });
 
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
+    const customers = await stripe.customers.list({ email, limit: 1 });
     let customerId;
     if (customers.data.length > 0) {
       customerId = customers.data[0].id;
@@ -55,7 +56,7 @@ Deno.serve(withRunLog('create-checkout', async (req) => {
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
-      customer_email: customerId ? undefined : user.email,
+      customer_email: customerId ? undefined : email,
       line_items: [{ price: priceId, quantity: 1 }],
       mode: "subscription",
       success_url: `${req.headers.get("origin")}/onboarding?success=true`,
@@ -68,7 +69,7 @@ Deno.serve(withRunLog('create-checkout', async (req) => {
     try {
       await supabaseAdmin.from('checkout_intents').insert({
         user_id: user.id,
-        email: user.email,
+        email,
         stripe_session_id: session.id,
         price_id: priceId,
         status: 'pending',
