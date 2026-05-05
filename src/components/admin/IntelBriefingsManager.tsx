@@ -773,6 +773,9 @@ function IntelBriefingsArticlesManager() {
                   <TableCell className="text-muted-foreground text-xs">{idx + 1}</TableCell>
                   <TableCell className="font-medium max-w-[300px] truncate">{b.title}</TableCell>
                   {showCategoryCol && <TableCell><Badge variant="secondary">{b.category}</Badge></TableCell>}
+                  <TableCell className="text-center text-xs text-muted-foreground tabular-nums">
+                    {((b.content_md || '').trim().match(/\S+/g)?.length ?? 0).toLocaleString()}
+                  </TableCell>
                   <TableCell className="text-center">
                     <TooltipProvider>
                       <Tooltip>
