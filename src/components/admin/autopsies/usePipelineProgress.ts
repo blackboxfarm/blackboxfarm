@@ -69,6 +69,14 @@ export function usePipelineProgress() {
   const close = useCallback(() => setOpen(false), []);
 
   const cancel = useCallback(() => {
+    // If the pipeline already finished (success OR failure), closing the dialog
+    // must NOT stamp "Cancelled by user" over a completed run. Just close.
+    if (phasesRef.current.length > 0 && phasesRef.current.every(ph =>
+      ph.status === 'success' || ph.status === 'failed' || ph.status === 'skipped'
+    )) {
+      setOpen(false);
+      return;
+    }
     controllerRef.current?.abort();
     // Mark any in-flight phase as failed so the UI reflects cancellation immediately.
     const next = phasesRef.current.map(ph => {

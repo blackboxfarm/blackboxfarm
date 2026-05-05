@@ -340,9 +340,22 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
       );
       const currentMcap = num(c.current_mcap_usd, liveDeath?.current_mcap_usd, backlog?.current_mcap_usd, lifecycle?.market_cap, pf?.market_cap_usd);
       const liquidityUsd = num(c.liquidity_usd, liveDeath?.liquidity_usd, backlog?.liquidity_usd, lifecycle?.liquidity_usd, pf?.liquidity_usd);
-      const ageHours = num(c.age_hours) ?? (liveDeath?.first_seen_at ? (Date.now() - new Date(liveDeath.first_seen_at).getTime()) / 3600000 : null);
-      const ageHoursDisplay = formatLifetime(ageHours);
       const todIso = txEvidence?.time_of_death_at ?? null;
+      // Tradeable lifespan = first on-chain trade → time of death.
+      // The token's mint timestamp is irrelevant for "how long did it live as a
+      // tradeable market" — a coin can be minted hours/days before it ever hits
+      // a DEX. Prefer launch_tx_at → time_of_death_at; fall back to dev's final
+      // action; only use mint→now as last-resort floor when no on-chain
+      // forensics exist.
+      const launchAt = txEvidence?.launch_tx_at ? new Date(txEvidence.launch_tx_at).getTime() : null;
+      const deathAt =
+        (todIso ? new Date(todIso).getTime() : null) ??
+        (txEvidence?.dev_final_action_at ? new Date(txEvidence.dev_final_action_at).getTime() : null) ??
+        Date.now();
+      const tradeableHours = launchAt ? Math.max(0, (deathAt - launchAt) / 3600000) : null;
+      const mintAgeFallback = num(c.age_hours) ?? (liveDeath?.first_seen_at ? (Date.now() - new Date(liveDeath.first_seen_at).getTime()) / 3600000 : null);
+      const ageHours = tradeableHours ?? mintAgeFallback;
+      const ageHoursDisplay = formatLifetime(ageHours);
       const todDisplay = formatTimeOfDeath(todIso);
       const freshClass = classifyDeath({
         ageHours: ageHours ?? 0,
