@@ -280,6 +280,10 @@ function IntelBriefingsArticlesManager() {
       if (error) throw error;
       return (data ?? []) as unknown as Briefing[];
     },
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   // Time range for the Views column (all-time / 30d / 7d / 24h)
@@ -319,6 +323,10 @@ function IntelBriefingsArticlesManager() {
       }
       return stats;
     },
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
 
@@ -347,6 +355,10 @@ function IntelBriefingsArticlesManager() {
       if (error) throw error;
       return (data || []) as PublicationLite[];
     },
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   // Fetch ALL briefing variants (75 / 50 / 25 / 0=breadcrumb) for the variant-count column.
@@ -362,6 +374,10 @@ function IntelBriefingsArticlesManager() {
       if (error) throw error;
       return (data || []) as Array<{ briefing_id: string; depth: number; content_md: string | null }>;
     },
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   // Get unique categories
