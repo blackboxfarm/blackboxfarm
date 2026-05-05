@@ -735,6 +735,7 @@ function IntelBriefingsArticlesManager() {
                 <TableHead className="w-[40px]">#</TableHead>
                 <TableHead>Title</TableHead>
                 {showCategoryCol && <TableHead>Category</TableHead>}
+                <TableHead className="text-center w-[80px]" title="Word count of the 100% master article">Words</TableHead>
                 <TableHead className="text-center w-[70px]" title="Reviewed / completed">✓</TableHead>
                 <TableHead className="text-center w-[110px]" title="Assets: Hero / Inline images / Breadcrumbs">Assets</TableHead>
                 <TableHead className="text-center w-[60px]" title="Strip EXIF/personal info from all images and inject BlackBox Farm copyright + links">EXIF</TableHead>
