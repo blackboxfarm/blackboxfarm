@@ -150,14 +150,14 @@ Deno.serve(async (req) => {
     // ─── Send with rate limiting + per-recipient logging ───
     let sent = 0;
     let failed = 0;
-    const recipientRows: any[] = [];
+    const recipientLogRows: any[] = [];
 
     for (const [tgId, linkedUserId] of targets) {
       try {
         const ok = await sendTgMessage(botToken, tgId, message, imageUrl);
         if (ok) {
           sent++;
-          recipientRows.push({
+          recipientLogRows.push({
             announcement_id: announcementId,
             telegram_user_id: tgId,
             linked_user_id: linkedUserId,
@@ -165,7 +165,7 @@ Deno.serve(async (req) => {
           });
         } else {
           failed++;
-          recipientRows.push({
+          recipientLogRows.push({
             announcement_id: announcementId,
             telegram_user_id: tgId,
             linked_user_id: linkedUserId,
@@ -174,7 +174,7 @@ Deno.serve(async (req) => {
         }
       } catch {
         failed++;
-        recipientRows.push({
+        recipientLogRows.push({
           announcement_id: announcementId,
           telegram_user_id: tgId,
           linked_user_id: linkedUserId,
