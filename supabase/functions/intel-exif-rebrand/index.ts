@@ -264,7 +264,7 @@ Deno.serve(async (req) => {
     const SUPA_URL = Deno.env.get("SUPABASE_URL")!;
     const supabase = createClient(SUPA_URL, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data: b, error } = await supabase.from("intel_briefings")
-      .select("id, title, slug, summary, content_md, featured_image_url").eq("id", briefingId).maybeSingle();
+      .select("id, title, slug, subtitle, seo_description, content_md, featured_image_url").eq("id", briefingId).maybeSingle();
     if (error || !b) {
       return new Response(JSON.stringify({ error: error?.message || "not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -305,12 +305,12 @@ Deno.serve(async (req) => {
 
     const year = new Date().getFullYear();
     const fields: ExifFields = {
-      imageDescription: (b.summary || b.title || "BlackBox Farm Intelligence").slice(0, 500),
+      imageDescription: (b.seo_description || b.subtitle || b.title || "BlackBox Farm Intelligence").slice(0, 500),
       software: "BlackBox Farm Intelligence Platform",
       artist: "BlackBox Farm",
       copyright: `Copyright (c) ${year} BlackBox Farm. All rights reserved. https://blackbox.farm`,
       xpTitle: b.title || "BlackBox Farm Intelligence",
-      xpSubject: b.summary || b.title || "BlackBox Farm Intelligence Briefing",
+      xpSubject: b.seo_description || b.subtitle || b.title || "BlackBox Farm Intelligence Briefing",
       xpAuthor: "BlackBox Farm",
       xpKeywords: "BlackBox Farm;HoldersIntel;Solana;Intelligence;Mesh;Crypto",
       xpComment: COPYRIGHT_LINES.join(" | "),
