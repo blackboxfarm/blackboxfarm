@@ -1,86 +1,40 @@
-## Goals
+## Problem
 
-Address each of the 6 items raised, then wire a checkout telemetry view inside the existing **👥 Accounts** admin tab.
+On `/super-admin` → Articles tab, the per-row exposure dots (the row of platform icons next to each article) don't reflect newly logged Twitter/X publications. But opening the article's edit drawer, the **Exposure History** panel correctly shows Twitter/X seeded.
 
----
+## Root cause
 
-### 1. Stripe opening in a new tab → switch to same-tab redirect
+`src/components/admin/IntelBriefingsManager.tsx` (line ~349) fetches **all publications** once for the list-view exposure column with these caching options:
 
-`src/components/premium/PricingTable.tsx` (lines 119 + 171) currently does `window.open(data.url, '_blank')`. Mobile Safari + popup blockers kill this silently and the user never reaches Stripe.
+```ts
+queryKey: ['intel-publications', 'exposure-all'],
+staleTime: 5 * 60_000,
+gcTime: 30 * 60_000,
+refetchOnWindowFocus: false,
+refetchOnMount: false,
+```
 
-**Fix:** replace with `window.location.assign(data.url)` for the checkout flow (same tab — Stripe handles return URL). Keep `_blank` only for `customer-portal` (manage subscription) since the user is already logged in mid-session and shouldn't lose state.
+The per-article `ExposurePanel` (inside the edit drawer) uses default React Query settings — so it always refetches and is fresh.
 
-### 2. Success URL mismatch
+When a publication is logged via the Publications tab, `PublicationForm`'s mutation invalidates `['intel-publications', 'exposure-all']`. That works fine if the Articles list is currently mounted. But if you're on another tab when invalidation fires, the cache is just marked stale; with `refetchOnMount: false` the Articles list never refetches when you come back, so the dot row keeps showing the old (empty) state.
 
-`create-checkout` redirects to `/onboarding?success=true`, but `Pricing.tsx` also has a `success=true` toast handler that never fires (user lands on /onboarding, not /pricing). `Onboarding.tsx` already handles success correctly (toast + checkSubscription + navigate to /dashboard).
+The same issue applies to the variant-count column (`['intel-briefing-variants', 'all']`), which uses identical settings.
 
-**Fix:** Remove the redundant success/canceled handler from `Pricing.tsx` (it's dead code). Onboarding.tsx remains the single source of truth for post-checkout handling. No behavior change for users — just removes a misleading code path.
+## Fix
 
-### 3. AuthModal default tab — anon vs signed-in
+In `src/components/admin/IntelBriefingsManager.tsx`, relax the cache settings on these two queries so they refresh after invalidation and on tab return:
 
-In `PricingTable.tsx`, `AuthModal` is hard-coded to `defaultTab="signup"`. That's right for anon (they need an account), but if a user is *signed out mid-session* and clicks Subscribe, signup-first is wrong.
+1. `['intel-publications', 'exposure-all']`
+   - Remove `refetchOnMount: false`
+   - Set `refetchOnWindowFocus: true` (or just remove the override — true is the default)
+   - Drop `staleTime` to ~30 s (so casual navigation still benefits from cache, but new publications appear quickly)
 
-**Fix:** Track whether the email entered exists. Simpler approach: keep `signup` as default for the checkout flow (since !user means they need an account anyway), but add a clear "Already have an account? Sign in" link inside the modal. The modal already has tabs — just verify the user can switch freely. The actual asymmetry is in `AuthButton.tsx` which already passes `signin`/`signup` correctly. So the only fix needed is: when AuthModal is opened from PricingTable for an anon user, default tab should be **`signin`** if they've recently used the app (has a `bbx_last_email` localStorage), otherwise `signup`. Default to `signup` is fine for true anon.
+2. `['intel-briefing-variants', 'all']` — apply the same change for parity, since variants have the same staleness symptom.
 
-### 4. Make referral source dropdown optional
+3. Also invalidate `['intel-publications', 'exposure-all']` from any other place a publication can be created/deleted (already done in `IntelPublicationsManager`'s add/delete mutations — confirmed). No additional invalidation calls needed; the cache settings change is sufficient.
 
-`AuthModal.tsx` line 119 + 384 + `SecureAuthModal.tsx` lines 161-ish enforce `!referralSource` as a blocker.
+## Files touched
 
-**Fix:** Remove `referralSource` from the validation in both files. Update `ReferralSourceSelect.tsx` label to `"How did you hear about us? (optional)"`. Profile update only runs when `refValue` is set, which is already the case.
+- `src/components/admin/IntelBriefingsManager.tsx` — adjust cache options on the two list-level queries.
 
-### 5. Email casing — Stripe customer dedup
-
-`supabase/functions/create-checkout/index.ts` lookups Stripe by raw email. `User@x.com` and `user@x.com` create duplicate Stripe customers.
-
-**Fix:** Normalize with `const normalizedEmail = user.email.toLowerCase().trim();` and use that for both `customers.list({ email })` and `customer_email`. Also normalize in `check-subscription` and `customer-portal` for consistency.
-
-### 6. Email verification — confirm grace period (no signup-time friction)
-
-Per memory `mem://constraints/email-verification-policy`: 7-day grace period, paid/telegram users exempt. Current `Onboarding.tsx` shows a banner saying **"48 hours"** which contradicts memory and adds psychological pressure.
-
-**Fix:**
-- Update Onboarding banner copy to **"Verify within 7 days"** (matches policy).
-- Confirm `signUp` does NOT block on email confirmation (`AuthContext.signUp` doesn't — Supabase project setting controls auto-confirm; we don't gate UI on it).
-- Confirm post-signup the user is dropped straight into the app (current flow already does — `onClose()` after toast). No code change needed to skip verification at signup.
-- Add a comment in `AuthContext.signUp` documenting "verification is deferred — do NOT block UX on email_confirmed_at".
-
-I'll also spot-check the `RequireAuth` and `useAuth` hook to make sure nothing currently blocks unverified users from paying. If something does, surface it in implementation.
-
----
-
-### 7. Checkout telemetry — under Accounts admin tab
-
-Build a sub-section inside `AccountsTab.tsx` (since you said "stick that TAB under Accounts somewhere"). Use existing `checkout_intents` table — `create-checkout` already records `user_id`, `email`, `stripe_session_id`, `price_id`, `status` on every attempt.
-
-**New component:** `src/components/admin/accounts/CheckoutTelemetryPanel.tsx`
-- Table view of last 100 `checkout_intents` (newest first)
-- Columns: timestamp, email, tier (resolved from price_id via `STRIPE_TIERS`), status (pending/completed/abandoned), session_id (truncated, click to open Stripe dashboard)
-- Top-line stats: 24h attempt count, 24h completion rate, 24h abandoned count
-- Filter by status
-
-**Integration:** Add it as a section inside `AccountsTab.tsx` (collapsible card or a sub-tab within Accounts).
-
-No DB migration needed — `checkout_intents` already exists. RLS: confirm super-admin SELECT policy exists; if not, add one.
-
----
-
-## Files to Change
-
-| File | Change |
-|---|---|
-| `src/components/premium/PricingTable.tsx` | `window.location.assign` instead of `window.open`; smarter default AuthModal tab |
-| `src/pages/Pricing.tsx` | Remove dead success/canceled handler |
-| `src/components/auth/AuthModal.tsx` | Drop required referral validation |
-| `src/components/auth/SecureAuthModal.tsx` | Same |
-| `src/components/auth/ReferralSourceSelect.tsx` | Label "(optional)" |
-| `supabase/functions/create-checkout/index.ts` | Lowercase email for Stripe lookup |
-| `supabase/functions/check-subscription/index.ts` | Same |
-| `supabase/functions/customer-portal/index.ts` | Same |
-| `src/pages/Onboarding.tsx` | Banner copy: 48h → 7 days |
-| `src/contexts/AuthContext.tsx` | Comment documenting deferred verification |
-| `src/components/admin/accounts/CheckoutTelemetryPanel.tsx` | NEW — telemetry view |
-| `src/components/admin/tabs/AccountsTab.tsx` | Mount the new panel |
-
-Possible migration: super-admin SELECT policy on `checkout_intents` if missing.
-
-OK to proceed?
+No DB or edge-function changes required.
