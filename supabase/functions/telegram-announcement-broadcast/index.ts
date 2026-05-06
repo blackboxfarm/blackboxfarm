@@ -185,10 +185,10 @@ Deno.serve(async (req) => {
     }
 
     // Batch insert recipient logs
-    if (announcementId && recipientRows.length > 0) {
+    if (announcementId && recipientLogRows.length > 0) {
       await assertInsert(supabase
         .from("telegram_announcement_recipients")
-        .insert(recipientRows), "telegram_announcement_recipients");
+        .insert(recipientLogRows), "telegram_announcement_recipients");
     }
 
     // Update announcement log with final counts
