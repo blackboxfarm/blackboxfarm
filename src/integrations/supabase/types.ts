@@ -7096,6 +7096,11 @@ export type Database = {
           created_at: string
           error_message: string | null
           id: string
+          manual_posted_at: string | null
+          manual_posted_by: string | null
+          manual_skip_reason: string | null
+          manual_status: string
+          manual_tweet_url: string | null
           market_cap: number | null
           name: string | null
           posted_at: string | null
@@ -7108,11 +7113,17 @@ export type Database = {
           trigger_comment: string | null
           trigger_source: string | null
           tweet_id: string | null
+          tweet_text: string | null
         }
         Insert: {
           created_at?: string
           error_message?: string | null
           id?: string
+          manual_posted_at?: string | null
+          manual_posted_by?: string | null
+          manual_skip_reason?: string | null
+          manual_status?: string
+          manual_tweet_url?: string | null
           market_cap?: number | null
           name?: string | null
           posted_at?: string | null
@@ -7125,11 +7136,17 @@ export type Database = {
           trigger_comment?: string | null
           trigger_source?: string | null
           tweet_id?: string | null
+          tweet_text?: string | null
         }
         Update: {
           created_at?: string
           error_message?: string | null
           id?: string
+          manual_posted_at?: string | null
+          manual_posted_by?: string | null
+          manual_skip_reason?: string | null
+          manual_status?: string
+          manual_tweet_url?: string | null
           market_cap?: number | null
           name?: string | null
           posted_at?: string | null
@@ -7142,6 +7159,7 @@ export type Database = {
           trigger_comment?: string | null
           trigger_source?: string | null
           tweet_id?: string | null
+          tweet_text?: string | null
         }
         Relationships: []
       }
