@@ -860,6 +860,12 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
       // Build tweet using the active template from database
       const tweetText = processTemplate(tweetTemplate, stats);
 
+      // Persist composed tweet text so admins can review/copy it for manual X posting
+      await supabase
+        .from('holders_intel_post_queue')
+        .update({ tweet_text: tweetText })
+        .eq('id', item.id);
+
       // Safety: if an operator emergency-stopped this queue item while we were processing,
       // do NOT post.
       const { data: latestItem, error: latestItemError } = await supabase
