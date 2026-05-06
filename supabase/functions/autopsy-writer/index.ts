@@ -471,10 +471,35 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
       const hasTiktok = findSocial(/tiktok/i);
       const hasDexPaid = enrichment.dex_paid === true || (enrichment.paid_orders ?? []).length > 0;
       const hasDexBoosts = (enrichment.boosts_paid_usd ?? 0) > 0 || (enrichment.boost_timeline ?? []).length > 0;
+      // Gap-fill: Paid ❌ → call dex-paid-checker live. New autopsy candidates
+      // often haven't been touched by the periodic checker, so enrichment.dex_paid
+      // is null and the legend lies (renders ✗ even though pair has paid profile/CTO).
+      let hasDexPaidFinal = hasDexPaid;
+      if (!hasDexPaid) {
+        try {
+          const { data: dpc, error: dpcErr } = await supabase.functions.invoke('dex-paid-checker', {
+            body: { tokenMints: [c.token_mint], updateDb: false },
+          });
+          const status = !dpcErr && Array.isArray(dpc?.results) ? dpc.results[0] : null;
+          if (status && (status.hasPaidProfile || status.hasActiveAds || status.hasCTO || (status.activeBoosts ?? 0) > 0)) {
+            hasDexPaidFinal = status.hasPaidProfile || status.hasActiveAds || status.hasCTO;
+            // Persist so future runs short-circuit, mirroring dex-paid-checker's
+            // own write (but to pumpfun_watchlist, not flip_positions).
+            await supabase
+              .from('pumpfun_watchlist')
+              .update({ dex_paid_status: status })
+              .eq('token_mint', c.token_mint);
+            // Reflect into the enrichment we already have so the legend matches.
+            (enrichment as any).dex_paid = hasDexPaidFinal;
+          }
+        } catch (e) {
+          console.warn('[autopsy-writer] live dex-paid gap-fill failed:', (e as Error).message);
+        }
+      }
       // Gap-fill: Paid ✅ but Boosts ❌ → call DexScreener boosts API on demand,
       // upsert into token_boost_history, re-enrich.
       let dexBoostFootnote: string | null = null;
-      if (hasDexPaid && !hasDexBoosts) {
+      if (hasDexPaidFinal && !hasDexBoosts) {
         try {
           const liveBoost = await backfillDexBoostsLive(supabase, c.token_mint);
           if (liveBoost.inserted > 0) {
@@ -523,7 +548,7 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
 | ${mdLink('Telegram', telegramUrl)} | ${yn(hasTelegram)} |
 | ${mdLink('Discord', discordUrl)} | ${yn(hasDiscord)} |
 | ${mdLink('TikTok', tiktokUrl)} | ${yn(hasTiktok)} |
-| ${mdLink('DexScreener Paid', dexUrl)} | ${yn(hasDexPaid)} |
+| ${mdLink('DexScreener Paid', dexUrl)} | ${yn(hasDexPaidFinal)} |
 | ${mdLink('DexScreener Boosts', dexUrl)} | ${yn(hasDexBoostsFinal)} |
 ${dexBoostFootnote ? `\n${dexBoostFootnote}\n` : ''}
 `;
