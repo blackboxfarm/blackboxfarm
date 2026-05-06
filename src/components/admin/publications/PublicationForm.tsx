@@ -10,7 +10,6 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { CalendarIcon, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { Checkbox } from '@/components/ui/checkbox';
 import { ALL_PLATFORMS, BREADCRUMB_PLATFORMS } from './exposure-shared';
 
 const PLATFORMS = ALL_PLATFORMS;
@@ -42,22 +41,22 @@ export const PublicationForm = ({ briefings, onSubmit, isSubmitting, initial }: 
   const [briefingId, setBriefingId] = useState(initial?.briefing_id || '');
   const [platform, setPlatform] = useState(initial?.platform || '');
   const [customPlatform, setCustomPlatform] = useState('');
-  const [contentDepth, setContentDepth] = useState(String(initial?.content_depth || 100));
+  const initialMode = initial?.is_breadcrumb
+    ? 'breadcrumb'
+    : String(initial?.content_depth || 100);
+  const [depthMode, setDepthMode] = useState<string>(initialMode);
   const [publishedUrl, setPublishedUrl] = useState(initial?.published_url || '');
   const [notes, setNotes] = useState(initial?.notes || '');
   const [date, setDate] = useState<Date>(initial?.published_at ? new Date(initial.published_at) : new Date());
   const [showCustom, setShowCustom] = useState(false);
-  const [isBreadcrumb, setIsBreadcrumb] = useState<boolean>(
-    initial?.is_breadcrumb ?? false,
-  );
 
   // Auto-suggest breadcrumb when user picks a typical breadcrumb platform.
   React.useEffect(() => {
     if (initial) return; // don't override during edit
     if (platform && BREADCRUMB_PLATFORMS.includes(platform)) {
-      setIsBreadcrumb(true);
-    } else if (platform) {
-      setIsBreadcrumb(false);
+      setDepthMode('breadcrumb');
+    } else if (platform && depthMode === 'breadcrumb') {
+      setDepthMode('100');
     }
   }, [platform, initial]);
 
@@ -65,10 +64,12 @@ export const PublicationForm = ({ briefings, onSubmit, isSubmitting, initial }: 
     e.preventDefault();
     const finalPlatform = showCustom ? customPlatform : platform;
     if (!briefingId || !finalPlatform) return;
+    const isBreadcrumb = depthMode === 'breadcrumb';
+    const contentDepth = isBreadcrumb ? 0 : parseInt(depthMode);
     onSubmit({
       briefing_id: briefingId,
       platform: finalPlatform,
-      content_depth: parseInt(contentDepth),
+      content_depth: contentDepth,
       published_url: publishedUrl,
       notes,
       published_at: date.toISOString(),
@@ -122,12 +123,13 @@ export const PublicationForm = ({ briefings, onSubmit, isSubmitting, initial }: 
 
       <div className="space-y-2">
         <Label>Content Depth</Label>
-        <RadioGroup value={contentDepth} onValueChange={setContentDepth} className="flex gap-4 flex-wrap">
+        <RadioGroup value={depthMode} onValueChange={setDepthMode} className="flex gap-4 flex-wrap">
           {[
             { val: '100', label: '100% Full', color: 'text-green-400' },
             { val: '75', label: '75% Substantial', color: 'text-blue-400' },
             { val: '50', label: '50% Condensed', color: 'text-amber-400' },
             { val: '25', label: '25% Teaser', color: 'text-red-400' },
+            { val: 'breadcrumb', label: 'Breadcrumb (teaser linking back)', color: 'text-primary' },
           ].map(d => (
             <div key={d.val} className="flex items-center gap-2">
               <RadioGroupItem value={d.val} id={`depth-${d.val}`} />
@@ -135,16 +137,6 @@ export const PublicationForm = ({ briefings, onSubmit, isSubmitting, initial }: 
             </div>
           ))}
         </RadioGroup>
-        <div className="flex items-center gap-2 pt-1">
-          <Checkbox
-            id="is-breadcrumb"
-            checked={isBreadcrumb}
-            onCheckedChange={(v) => setIsBreadcrumb(!!v)}
-          />
-          <Label htmlFor="is-breadcrumb" className="cursor-pointer text-sm font-normal">
-            Breadcrumb post (teaser/announcement linking back to article)
-          </Label>
-        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
