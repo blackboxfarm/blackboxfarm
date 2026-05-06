@@ -21,6 +21,7 @@ const TelegramCommandsPlanner = lazy(() => import("@/components/admin/TelegramCo
 const BoostsDashboard = lazy(() => import("@/components/admin/BoostsDashboard").then(m => ({ default: m.BoostsDashboard })));
 const UserJourneyDashboard = lazy(() => import("@/components/admin/UserJourneyDashboard").then(m => ({ default: m.UserJourneyDashboard })));
 const EmailTrackingDashboard = lazy(() => import("@/components/admin/EmailTrackingDashboard").then(m => ({ default: m.EmailTrackingDashboard })));
+const ManualXPostingQueue = lazy(() => import("@/components/admin/holders-intel/ManualXPostingQueue").then(m => ({ default: m.ManualXPostingQueue })));
 
 export default function HoldersIntelTab() {
   const [activeSubTab, setActiveSubTab] = useState("subscribers");
@@ -32,6 +33,7 @@ export default function HoldersIntelTab() {
         <TabsTrigger value="token-holders">📊 Token Holders</TabsTrigger>
         <TabsTrigger value="accounts">👥 Accounts</TabsTrigger>
         <TabsTrigger value="intel-xbot">🤖 Intel XBot</TabsTrigger>
+        <TabsTrigger value="manual-x-posting">📮 Manual X Posting</TabsTrigger>
         <TabsTrigger value="twitter-scrapes">🐦 Twitter Scrapes</TabsTrigger>
         <TabsTrigger value="ai-analyzer">🧠 AI Analyzer</TabsTrigger>
         <TabsTrigger value="banners">🎨 Banners</TabsTrigger>
@@ -59,6 +61,9 @@ export default function HoldersIntelTab() {
       </TabsContent>
       <TabsContent value="intel-xbot">
         {activeSubTab === "intel-xbot" && <Suspense fallback={<LazyLoader />}><ShareCardDemo /></Suspense>}
+      </TabsContent>
+      <TabsContent value="manual-x-posting">
+        {activeSubTab === "manual-x-posting" && <Suspense fallback={<LazyLoader />}><ManualXPostingQueue /></Suspense>}
       </TabsContent>
       <TabsContent value="twitter-scrapes">
         {activeSubTab === "twitter-scrapes" && <Suspense fallback={<LazyLoader />}><TwitterScrapesView /></Suspense>}
