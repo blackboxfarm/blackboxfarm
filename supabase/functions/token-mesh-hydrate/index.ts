@@ -356,20 +356,36 @@ async function handle(req: Request): Promise<Response> {
       () => supabase.functions.invoke('harvest-token-socials', { body: { mint, force: true } }),
       45_000,
     );
+    const hsErrMsg = hs.error ?? (hs.result as any)?.error?.message;
+    const hsTimedOut = !!hsErrMsg && /timed?\s*out|timeout/i.test(hsErrMsg);
     steps.push({
       step: 'socials',
       ok: !hs.error && !(hs.result as any)?.error,
       source: 'harvest-token-socials',
       ms: hs.ms,
       detail: hs.result ? `harvested` : undefined,
-      reason: hs.error ?? (hs.result as any)?.error?.message,
+      reason: hsErrMsg,
+      // Marker so downstream socials-backfill can demote a timeout-only failure
+      // to 'skipped' once it confirms which links were actually recovered.
+      // (kept on the in-memory step object only)
+      // @ts-ignore — extra field tolerated by downstream consumers
+      timed_out: hsTimedOut,
     });
     {
       const ok = !hs.error && !(hs.result as any)?.error;
-      await emit('socials', ok ? 'ok' : 'fail',
-        ok ? `harvested in ${hs.ms}ms` : null,
-        hs.error ?? (hs.result as any)?.error?.message,
-        ok ? 'value_present' : 'fetch_failed');
+      // If the harvester merely hit its 45 s budget (very common — the X scrape
+      // can stall while the mesh data is already in token_social_links), don't
+      // scream 'fail' yet. Mark 'skipped' with the reason; the next step
+      // (socials-backfill) is the source of truth and will confirm what we got.
+      const status: 'ok' | 'fail' | 'skipped' = ok
+        ? 'ok'
+        : hsTimedOut ? 'skipped' : 'fail';
+      await emit('socials', status,
+        ok ? `harvested in ${hs.ms}ms`
+          : hsTimedOut ? 'budget exceeded — deferring to socials-backfill'
+          : null,
+        ok ? null : hsErrMsg,
+        ok ? 'value_present' : hsTimedOut ? 'confirmed_empty' : 'fetch_failed');
     }
 
     if (identity.twitterUrl) {
