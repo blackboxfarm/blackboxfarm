@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, ExternalLink, RefreshCw, SkipForward, Check } from "lucide-react";
+import { Copy, ExternalLink, RefreshCw, SkipForward, Check, Wand2 } from "lucide-react";
 
 interface QueueRow {
   id: string;
@@ -64,6 +64,8 @@ export function ManualXPostingQueue() {
   const [pastedUrl, setPastedUrl] = useState<Record<string, string>>({});
   const [skipReason, setSkipReason] = useState<Record<string, string>>({});
   const [skipOpen, setSkipOpen] = useState<string | null>(null);
+  const [composing, setComposing] = useState<Record<string, boolean>>({});
+  const [autoComposed, setAutoComposed] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -99,6 +101,50 @@ export function ManualXPostingQueue() {
     const i = setInterval(load, 30000);
     return () => clearInterval(i);
   }, [autoRefresh, load]);
+
+  const composeOne = useCallback(async (id: string): Promise<boolean> => {
+    setComposing((p) => ({ ...p, [id]: true }));
+    try {
+      const { data, error } = await supabase.functions.invoke("holders-intel-compose-preview", {
+        body: { queue_id: id },
+      });
+      if (error) throw error;
+      const r = (data as any)?.results?.[0];
+      if (!r?.ok) throw new Error(r?.error || "compose failed");
+      return true;
+    } catch (e: any) {
+      toast({ title: "Compose failed", description: e?.message || String(e), variant: "destructive" });
+      return false;
+    } finally {
+      setComposing((p) => { const c = { ...p }; delete c[id]; return c; });
+    }
+  }, [toast]);
+
+  const composeMissing = useCallback(async () => {
+    const missing = rows.filter((r) => !r.tweet_text).map((r) => r.id);
+    if (missing.length === 0) return;
+    toast({ title: `Composing ${missing.length} tweet${missing.length === 1 ? "" : "s"}…` });
+    try {
+      const { data, error } = await supabase.functions.invoke("holders-intel-compose-preview", {
+        body: { queue_ids: missing },
+      });
+      if (error) throw error;
+      const okCount = ((data as any)?.results || []).filter((r: any) => r.ok).length;
+      toast({ title: `Composed ${okCount}/${missing.length}` });
+    } catch (e: any) {
+      toast({ title: "Bulk compose failed", description: e?.message || String(e), variant: "destructive" });
+    }
+    load();
+  }, [rows, toast, load]);
+
+  // Auto-compose any missing on first load (one shot)
+  useEffect(() => {
+    if (loading || autoComposed || rows.length === 0) return;
+    const missing = rows.filter((r) => !r.tweet_text);
+    if (missing.length === 0) { setAutoComposed(true); return; }
+    setAutoComposed(true);
+    composeMissing();
+  }, [loading, rows, autoComposed, composeMissing]);
 
   const copyText = async (text: string) => {
     try {
@@ -190,6 +236,9 @@ export function ManualXPostingQueue() {
           <Button onClick={load} size="sm" variant="outline" disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} />
             Refresh
+          </Button>
+          <Button onClick={composeMissing} size="sm" variant="default" disabled={loading || rows.every((r) => !!r.tweet_text)}>
+            <Wand2 className="h-4 w-4 mr-1" /> Compose all missing
           </Button>
         </div>
       </div>
@@ -299,8 +348,19 @@ export function ManualXPostingQueue() {
                     </div>
                   </>
                 ) : (
-                  <div className="rounded-md border border-dashed border-border/50 bg-background/30 p-3 text-sm text-muted-foreground">
-                    Tweet text not yet composed. The poster will populate this on its next cron tick (~3 min).
+                  <div className="rounded-md border border-dashed border-border/50 bg-background/30 p-3 flex items-center justify-between gap-3">
+                    <span className="text-sm text-muted-foreground">
+                      Tweet text not yet composed.
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={async () => { const ok = await composeOne(row.id); if (ok) load(); }}
+                      disabled={!!composing[row.id]}
+                    >
+                      <Wand2 className={`h-4 w-4 mr-1 ${composing[row.id] ? "animate-spin" : ""}`} />
+                      {composing[row.id] ? "Composing…" : "Generate now"}
+                    </Button>
                   </div>
                 )}
               </div>
