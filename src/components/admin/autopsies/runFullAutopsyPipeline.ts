@@ -342,9 +342,48 @@ export async function runFullAutopsyPipeline(args: RunPipelineArgs): Promise<Run
     toast({ title: 'Writing report…' });
     const writerPhase = addPhase('writer', 'AI writer (report draft)', maxAttempts);
     const writerRes = await runPhase(phases, emit, writerPhase, async () => {
-      const { error } = await supabase.functions.invoke('autopsy-writer', { body: { candidate_id: candidateId } });
-      if (error) return { ok: false, error: error.message };
-      return { ok: true, detail: 'autopsy drafted' };
+      // The writer is heavyweight (image gen + AI + several DB writes). The
+      // browser → edge invocation can silently stall mid-flight (idle TCP
+      // disconnect, CDN hiccup) — the promise never resolves and the dialog
+      // hangs forever even though the function finished and wrote the report.
+      // Defence: race the invoke() against (a) a 180s hard watchdog and (b) a
+      // DB poll that watches for the autopsy_reports row to appear. Whichever
+      // wins first wins the phase.
+      const PHASE_BUDGET_MS = 180_000;
+      const POLL_INTERVAL_MS = 3000;
+      type Outcome = { ok: true; detail: string } | { ok: false; error: string };
+
+      const invokePromise: Promise<Outcome> = supabase.functions
+        .invoke('autopsy-writer', { body: { candidate_id: candidateId } })
+        .then(({ error }) => error
+          ? { ok: false as const, error: error.message }
+          : { ok: true as const, detail: 'autopsy drafted (writer returned)' });
+
+      const pollPromise: Promise<Outcome> = new Promise((resolve) => {
+        const start = Date.now();
+        const timer = setInterval(async () => {
+          if (signal?.aborted) { clearInterval(timer); resolve({ ok: false, error: 'Cancelled by user' }); return; }
+          try {
+            const { data } = await supabase
+              .from('autopsy_reports')
+              .select('id, slug, version, created_at')
+              .eq('candidate_id', candidateId!)
+              .eq('is_current', true)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (data?.id) {
+              clearInterval(timer);
+              resolve({ ok: true, detail: `autopsy drafted · v${data.version} (detected via DB poll)` });
+            } else if (Date.now() - start > PHASE_BUDGET_MS) {
+              clearInterval(timer);
+              resolve({ ok: false, error: `writer watchdog timed out after ${PHASE_BUDGET_MS / 1000}s with no autopsy_reports row` });
+            }
+          } catch {/* keep polling */}
+        }, POLL_INTERVAL_MS);
+      });
+
+      return await Promise.race([invokePromise, pollPromise]);
     }, signal);
     if (signal?.aborted) return cancelled();
     if (!writerRes.ok) {
