@@ -12,6 +12,7 @@ import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
 import { GalleryPickerButton } from '@/components/admin/social/GalleryPickerButton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { TelegramFormattingHelp } from './TelegramFormattingHelp';
+import { EmojiPickerPopover } from './EmojiPickerPopover';
 
 interface TelegramAnnouncementBoxProps {
   audience: 'accounts' | 'hosted';
@@ -60,6 +61,24 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const insertEmoji = (emoji: string) => {
+    const ta = textareaRef.current;
+    if (!ta) {
+      setMessage((m) => m + emoji);
+      return;
+    }
+    const start = ta.selectionStart ?? message.length;
+    const end = ta.selectionEnd ?? message.length;
+    const next = message.slice(0, start) + emoji + message.slice(end);
+    setMessage(next);
+    requestAnimationFrame(() => {
+      ta.focus();
+      const pos = start + emoji.length;
+      ta.setSelectionRange(pos, pos);
+    });
+  };
   // Crop flow: when a file is chosen, open the crop dialog with a local object URL
   // for the original file, then upload the cropped Blob.
   const [pendingCropSrc, setPendingCropSrc] = useState<string | null>(null);
@@ -482,7 +501,12 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
               onChange={(e) => setMessage(e.target.value)}
               rows={4}
               className="text-sm"
+              ref={textareaRef}
             />
+            <div className="flex items-center gap-1 mt-1">
+              <EmojiPickerPopover onPick={insertEmoji} />
+              <span className="text-[10px] text-muted-foreground">Insert emoji at cursor</span>
+            </div>
             <ImageAttacher
               imageUrl={imageUrl}
               uploading={uploadingImage}
