@@ -6,10 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Megaphone, Send, Loader2, AlertTriangle, UserCheck, CreditCard, Gift, UserX, History, SquarePen, ChevronDown, ChevronUp, RotateCw, X, Globe, Crop as CropIcon } from 'lucide-react';
+import { Megaphone, Send, Loader2, AlertTriangle, UserCheck, CreditCard, Gift, UserX, History, SquarePen, ChevronDown, ChevronUp, RotateCw, X, Globe, Crop as CropIcon, HelpCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
 import { GalleryPickerButton } from '@/components/admin/social/GalleryPickerButton';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { TelegramFormattingHelp } from './TelegramFormattingHelp';
 
 interface TelegramAnnouncementBoxProps {
   audience: 'accounts' | 'hosted';
@@ -419,6 +421,27 @@ export function TelegramAnnouncementBox({ audience }: TelegramAnnouncementBoxPro
         <CardTitle className="text-sm flex items-center gap-2">
           <Megaphone className="w-4 h-4 text-yellow-500" />
           Announce to Users
+          <Dialog>
+            <DialogTrigger asChild>
+              <button
+                type="button"
+                className="ml-1 inline-flex items-center justify-center rounded-full p-1 text-muted-foreground hover:text-yellow-500 hover:bg-yellow-500/10 transition"
+                title="Telegram formatting cheatsheet"
+                aria-label="Telegram formatting cheatsheet"
+              >
+                <HelpCircle className="w-4 h-4" />
+              </button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <HelpCircle className="w-4 h-4 text-yellow-500" />
+                  Telegram Formatting Cheatsheet
+                </DialogTitle>
+              </DialogHeader>
+              <TelegramFormattingHelp />
+            </DialogContent>
+          </Dialog>
         </CardTitle>
       </CardHeader>
       <CardContent>
