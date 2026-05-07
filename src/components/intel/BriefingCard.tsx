@@ -30,11 +30,11 @@ export function BriefingCard({ slug, title, subtitle, category, featured_image_u
       className="group block rounded-xl border border-border bg-card hover:border-primary/40 transition-all duration-300 overflow-hidden hover:shadow-lg hover:shadow-primary/5"
     >
       {featured_image_url && (
-        <div className="aspect-video overflow-hidden">
+        <div className="aspect-video overflow-hidden bg-black/40 flex items-center justify-center">
           <img
             src={featured_image_url}
             alt={title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
             loading="lazy"
           />
         </div>
