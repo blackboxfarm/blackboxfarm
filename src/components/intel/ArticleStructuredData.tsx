@@ -18,6 +18,7 @@ interface ArticleStructuredDataProps {
   slug: string;
   category?: string;
   tags?: string[];
+  sameAs?: string[];
 }
 
 export function ArticleStructuredData({
@@ -29,6 +30,7 @@ export function ArticleStructuredData({
   slug,
   category,
   tags = [],
+  sameAs = [],
 }: ArticleStructuredDataProps) {
   useEffect(() => {
     const prev = document.title;
@@ -100,6 +102,7 @@ export function ArticleStructuredData({
       about: ['Solana', 'holder analysis', 'wallet tracing', 'on-chain intelligence', ...(tags || [])],
       keywords: tags?.join(', '),
       isPartOf: { '@type': 'WebSite', name: 'BlackBox Farm', url: 'https://blackbox.farm' },
+      sameAs: sameAs.length > 0 ? sameAs : undefined,
     });
     document.head.appendChild(script);
 
@@ -108,7 +111,7 @@ export function ArticleStructuredData({
       document.getElementById('intel-briefing-jsonld')?.remove();
       if (prevCanonical) canonical.href = prevCanonical;
     };
-  }, [title, description, datePublished, author, imageUrl, slug, category, tags]);
+  }, [title, description, datePublished, author, imageUrl, slug, category, tags, sameAs]);
 
   return null;
 }

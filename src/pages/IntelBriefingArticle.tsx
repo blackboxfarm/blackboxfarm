@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Calendar, User } from 'lucide-react';
 import { format } from 'date-fns';
 import { ArticleContent } from '@/components/intel/ArticleMarkdownRenderer';
+import { CrossPostStrip } from '@/components/intel/CrossPostStrip';
 
 export default function IntelBriefingArticle() {
   const { slug } = useParams<{ slug: string }>();
@@ -55,6 +56,20 @@ export default function IntelBriefingArticle() {
       return data || [];
     },
     enabled: !!article?.related_slugs && article.related_slugs.length > 0,
+  });
+
+  // Fetch external republish URLs for JSON-LD `sameAs`
+  const { data: sameAsUrls } = useQuery({
+    queryKey: ['intel-sameas', article?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('intel_publications')
+        .select('published_url')
+        .eq('briefing_id', article!.id)
+        .not('published_url', 'is', null);
+      return Array.from(new Set((data || []).map(r => r.published_url).filter(Boolean) as string[]));
+    },
+    enabled: !!article?.id,
   });
 
   // Track direct page view via edge function (server-side: classifies bots,
@@ -136,6 +151,7 @@ export default function IntelBriefingArticle() {
         slug={article.slug}
         category={article.category || undefined}
         tags={article.tags || undefined}
+        sameAs={sameAsUrls || []}
       />
 
       <article className="container mx-auto px-4 py-8 md:py-12">
@@ -182,6 +198,7 @@ export default function IntelBriefingArticle() {
                 Category: {(article.category || 'General').replace(/-/g, ' ')} | Solana Token Intelligence
               </p>
               <SocialShareBar url={shareUrl} title={resolvedTitle} description={resolvedDescription} slug={article.slug} />
+              <CrossPostStrip briefingId={article.id} variant="compact" />
             </div>
           </header>
 
@@ -202,6 +219,9 @@ export default function IntelBriefingArticle() {
           {/* BOTTOM share bar — just above related/footer */}
           <div className="mt-12 border-t border-border pt-4">
             <SocialShareBar url={shareUrl} title={resolvedTitle} description={resolvedDescription} slug={article.slug} />
+            <div className="mt-6">
+              <CrossPostStrip briefingId={article.id} variant="full" />
+            </div>
           </div>
 
           {/* Related Briefings */}
