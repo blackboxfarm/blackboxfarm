@@ -413,6 +413,14 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         clusterCapturePct: Number(txEvidence?.cluster_capture_pct ?? 0) || 0,
         xAccountSuspended: (c as any).social_x_account_status === 'suspended',
         devRealizedValueUsd: Number((dossier as any).dev_realized_value_usd ?? 0) || 0,
+        exitVerdict: (txEvidence?.exit_verdict ?? undefined) as any,
+        exitPattern: (txEvidence?.exit_pattern ?? undefined) as any,
+        exitGroupLinkagePct: (() => {
+          const s = txEvidence?.exit_group_linkage_summary as any;
+          if (!s) return 0;
+          return Number(s.dev_funded_pct ?? 0) + Number(s.launch_sniper_overlap_pct ?? 0);
+        })(),
+        exitGroupSameFunderPct: Number((txEvidence?.exit_group_linkage_summary as any)?.same_funder_pct ?? 0) || 0,
       });
       const existingCause: DeathCauseId = meaningfulCause(c.death_cause) ? c.death_cause : 'unknown';
       const causeId: DeathCauseId = (existingCause === 'unknown' || isRegenerate || freshClass.cause === 'natural_cycle') ? freshClass.cause : existingCause;
