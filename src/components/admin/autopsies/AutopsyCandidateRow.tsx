@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import {
   RefreshCw, CheckCircle2, XCircle, Clock, Image as ImageIcon,
@@ -77,6 +78,7 @@ interface Props {
 export default function AutopsyCandidateRow({ ordinal, c, busy, onDraft, onDecide, onRegenBanner }: Props) {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
+  const [rerunning, setRerunning] = useState(false);
   const sourceMeta = SOURCE_FEED_LABELS[c.source_feed] ?? { label: c.source_feed, description: "Unknown intake source." };
   const dexUrl = `https://dexscreener.com/solana/${c.token_mint}`;
   const pumpFunUrl = `https://pump.fun/coin/${c.token_mint}`;
@@ -89,6 +91,36 @@ export default function AutopsyCandidateRow({ ordinal, c, busy, onDraft, onDecid
       setTimeout(() => setCopied(false), 1500);
     } catch {
       toast({ title: "Copy failed", variant: "destructive" });
+    }
+  }
+
+  async function rerunAutopsy() {
+    if (rerunning) return;
+    setRerunning(true);
+    try {
+      const { error: updErr } = await supabase
+        .from("autopsy_candidates")
+        .update({ status: "pending" })
+        .eq("id", c.id);
+      if (updErr) throw updErr;
+
+      const { data, error } = await supabase.functions.invoke("autopsy-writer", {
+        body: { candidate_id: c.id },
+      });
+      if (error) throw error;
+      const slug = (data?.results?.[0]?.slug) ?? data?.slug ?? null;
+      toast({
+        title: "Autopsy re-run complete",
+        description: slug ? `Slug: ${slug}` : "Pipeline finished.",
+      });
+    } catch (e: any) {
+      toast({
+        title: "Re-run failed",
+        description: e?.message || String(e),
+        variant: "destructive",
+      });
+    } finally {
+      setRerunning(false);
     }
   }
 
@@ -185,6 +217,18 @@ export default function AutopsyCandidateRow({ ordinal, c, busy, onDraft, onDecid
         {c.published_slug && ["drafted", "approved", "published"].includes(c.status) && (
           <Button size="sm" variant="ghost" onClick={() => onRegenBanner(c)} disabled={busy === c.id} title="Regenerate banner overlay">
             <ImageIcon className="h-3 w-3 mr-1" /> Banner
+          </Button>
+        )}
+        {!["pending", "analyzing"].includes(c.status) && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={rerunAutopsy}
+            disabled={rerunning || busy === c.id}
+            title="Re-run the full autopsy pipeline for this candidate"
+          >
+            <RefreshCw className={`h-3 w-3 mr-1 ${rerunning ? "animate-spin" : ""}`} />
+            {rerunning ? "Re-running…" : "Re-run Autopsy"}
           </Button>
         )}
       </div>
