@@ -28,6 +28,7 @@ import { heliusRpcFetch } from '../_shared/helius-client.ts';
 import { discoverFunding } from '../_shared/funding-resolver.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 import { resolveTokenCreator } from '../_shared/creator-resolver.ts';
+import { traceClusterDump } from '../_shared/autopsy-cluster-dump.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -394,6 +395,41 @@ Deno.serve(withRunLog('autopsy-tx-timeline', async (req) => {
   const dump = detectDumpCascade(devTimeline);
   const usdcConsol = detectUsdcConsolidation(devTimeline);
 
+  // ── Trace co-snipers back to dev/cluster funding ──
+  // Even if no single wallet looks malicious, a bundle that all routes back to
+  // the dev (or to a single upstream funder) IS the coordinated rug signal.
+  let clusterDump: Awaited<ReturnType<typeof traceClusterDump>> | null = null;
+  try {
+    // Pull cluster siblings + KYC root from wallet_family_members (best-effort)
+    let clusterWallets: string[] = [];
+    let kycRoot: string | null = null;
+    try {
+      const { data: fam } = await supabase
+        .from('wallet_family_members')
+        .select('family_id')
+        .eq('wallet_address', creator)
+        .maybeSingle();
+      if (fam?.family_id) {
+        const { data: sibs } = await supabase
+          .from('wallet_family_members')
+          .select('wallet_address, is_kyc_root')
+          .eq('family_id', fam.family_id)
+          .limit(50);
+        clusterWallets = (sibs ?? []).map((s: any) => s.wallet_address);
+        kycRoot = (sibs ?? []).find((s: any) => s.is_kyc_root)?.wallet_address ?? null;
+      }
+    } catch { /* table may not exist */ }
+
+    clusterDump = await traceClusterDump({
+      devWallet: creator,
+      kycRoot,
+      clusterWallets,
+      coSnipers: launch.co_snipers ?? [],
+    });
+  } catch (e) {
+    console.warn('[autopsy-tx-timeline] cluster dump trace failed:', (e as Error).message);
+  }
+
   // Final dev action = newest classified non-misc sig
   const finalAction = devTimeline.find(t => t.kind !== 'misc' && t.kind !== 'unknown') ?? devTimeline[0] ?? null;
 
@@ -444,6 +480,9 @@ Deno.serve(withRunLog('autopsy-tx-timeline', async (req) => {
     post_dump_flow: [],
     usdc_consolidation_observed: usdcConsol,
     time_of_death_at: tod,
+    cluster_dump_provenance: clusterDump?.snipers_with_provenance ?? null,
+    cluster_capture_pct: clusterDump?.cluster_capture_pct ?? null,
+    cluster_dump_verdict: clusterDump?.verdict ?? null,
     notes: null,
     collected_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
