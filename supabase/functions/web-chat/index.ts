@@ -154,7 +154,47 @@ async function buildUserProfile(userId?: string, memory?: any): Promise<string> 
 }
 
 // ─── Intent Detection & Live Data Lookup ───
-async function detectAndLookup(messageText: string, userId?: string): Promise<string | null> {
+async function detectAndLookup(messageText: string, userId?: string, isSuperAdmin?: boolean): Promise<string | null> {
+  // ── Super-admin: "interesting recent chats" intent ──
+  if (isSuperAdmin && /\b(recent|latest|interesting|any\s+good|any\s+notable|notable|cool|funny|weird)\b.{0,40}\b(chat|chats|conversation|conversations|visitor|visitors|talk|talks)\b/i.test(messageText)) {
+    try {
+      const { data: recent } = await supabase
+        .from('web_chat_sessions')
+        .select('session_id, tier, page_path, messages, message_count, last_message_at, device_type, user_id')
+        .order('last_message_at', { ascending: false })
+        .limit(40);
+
+      const sessions = (recent || []).filter(s => (s.message_count || 0) >= 2);
+      // Score by length + variety; take top 8
+      const scored = sessions.map(s => {
+        const msgs = Array.isArray(s.messages) ? s.messages : [];
+        const userMsgs = msgs.filter((m: any) => m?.role === 'user');
+        const totalChars = userMsgs.reduce((acc: number, m: any) => acc + String(m.content || '').length, 0);
+        return { s, score: userMsgs.length * 10 + Math.min(totalChars, 2000) / 50, userMsgs };
+      }).sort((a, b) => b.score - a.score).slice(0, 8);
+
+      let block = `## LIVE DATA LOOKUP — RECENT CHAT SESSIONS (SUPER-ADMIN ONLY)\n`;
+      block += `Super-admin asked about recent/interesting visitor chats. Summarize naturally — do NOT dump raw IDs. Pick 3-5 of the most interesting ones, describe the gist, the tier, and what the visitor seemed to want. Be conversational, like recapping interesting calls from the day.\n\n`;
+      if (scored.length === 0) {
+        block += `No recent chat sessions with meaningful activity.\n`;
+      } else {
+        for (const { s, userMsgs } of scored) {
+          const when = new Date(s.last_message_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+          block += `— [${when}] tier=${s.tier} page=${s.page_path || '/'} device=${s.device_type || '?'} msgs=${s.message_count}\n`;
+          for (const um of userMsgs.slice(0, 3)) {
+            const c = String(um.content || '').replace(/\s+/g, ' ').slice(0, 220);
+            block += `   👤 "${c}"\n`;
+          }
+          block += `\n`;
+        }
+      }
+      block += `\nWhen replying, speak as The Signal recapping the day's notable visitor conversations. Group themes if you see them (e.g. "a couple of folks asked about X"). Never reveal user IDs or session IDs.\n`;
+      return block;
+    } catch (e) {
+      console.warn('[web-chat] super-admin recent-chats lookup failed:', e);
+    }
+  }
+
   // Only one lookup per message
   const solMatch = messageText.match(SOLANA_RE);
   if (solMatch) {
@@ -512,7 +552,18 @@ serve(async (req) => {
 
   try {
     const { messages, user_context } = await req.json();
-    const { tier = 'anon', pagePath = '/', sessionId, userId, emailVerified } = user_context || {};
+    const { tier = 'anon', pagePath = '/', sessionId, userId, emailVerified, isSuperAdmin: clientSuperAdmin } = user_context || {};
+
+    // Verify super-admin server-side (never trust client claim alone)
+    let isSuperAdmin = false;
+    if (clientSuperAdmin && userId) {
+      try {
+        const { data: sa } = await supabase.rpc('is_super_admin', { _user_id: userId });
+        isSuperAdmin = sa === true;
+      } catch (e) {
+        console.warn('[web-chat] super-admin verification failed:', e);
+      }
+    }
 
     // Rate limiting
     const rateLimitKey = userId || sessionId || 'unknown';
@@ -580,7 +631,7 @@ serve(async (req) => {
     // Detect intent and do live data lookup from the last user message
     const lastMsg = messages?.[messages.length - 1];
     const liveDataBlock = lastMsg?.role === 'user'
-      ? await detectAndLookup(lastMsg.content, userId || undefined)
+      ? await detectAndLookup(lastMsg.content, userId || undefined, isSuperAdmin)
       : null;
 
     // Inject buyer intent signals for non-subscribers
