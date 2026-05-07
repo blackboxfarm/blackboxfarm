@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Calendar, User } from 'lucide-react';
 import { format } from 'date-fns';
 import { ArticleContent } from '@/components/intel/ArticleMarkdownRenderer';
+import { CrossPostStrip } from '@/components/intel/CrossPostStrip';
 
 export default function IntelBriefingArticle() {
   const { slug } = useParams<{ slug: string }>();
@@ -182,6 +183,7 @@ export default function IntelBriefingArticle() {
                 Category: {(article.category || 'General').replace(/-/g, ' ')} | Solana Token Intelligence
               </p>
               <SocialShareBar url={shareUrl} title={resolvedTitle} description={resolvedDescription} slug={article.slug} />
+              <CrossPostStrip briefingId={article.id} variant="compact" />
             </div>
           </header>
 
@@ -202,6 +204,9 @@ export default function IntelBriefingArticle() {
           {/* BOTTOM share bar — just above related/footer */}
           <div className="mt-12 border-t border-border pt-4">
             <SocialShareBar url={shareUrl} title={resolvedTitle} description={resolvedDescription} slug={article.slug} />
+            <div className="mt-6">
+              <CrossPostStrip briefingId={article.id} variant="full" />
+            </div>
           </div>
 
           {/* Related Briefings */}
