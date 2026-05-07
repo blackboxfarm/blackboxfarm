@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserTier } from '@/hooks/useUserTier';
+import { useUserRoles } from '@/hooks/useUserRoles';
 import { useLocation } from 'react-router-dom';
 
 export type ChatMessage = {
@@ -24,6 +25,7 @@ function getSessionId(): string {
 export function useChatStream() {
   const { user } = useAuth();
   const { tierInfo } = useUserTier();
+  const { isSuperAdmin } = useUserRoles();
   const location = useLocation();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -79,6 +81,7 @@ export function useChatStream() {
             sessionId: getSessionId(),
             userId: user?.id || null,
             emailVerified: user?.email_confirmed_at ? true : false,
+            isSuperAdmin: !!isSuperAdmin,
           },
         }),
         signal: controller.signal,
