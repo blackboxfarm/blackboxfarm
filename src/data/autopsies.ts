@@ -14,6 +14,10 @@ export interface AutopsyEntry {
   heroImage: string;
   /** Original source banner the autopsy treatment was applied to (for provenance/regeneration) */
   sourceBanner?: string;
+  /** Harm Score 0-100 (backward-looking damage to holders). Replaces Risk on dead tokens. */
+  harmScore?: number | null;
+  harmHeadline?: string | null;
+  harmBreakdown?: any | null;
 }
 
 export const AUTOPSIES: AutopsyEntry[] = [

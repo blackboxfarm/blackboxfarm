@@ -9,6 +9,7 @@ import { ArticleContent } from '@/components/intel/ArticleMarkdownRenderer';
 import { SocialShareBar } from '@/components/intel/SocialShareBar';
 import { getAutopsy, type AutopsyEntry } from '@/data/autopsies';
 import { supabase } from '@/integrations/supabase/client';
+import { HarmBadge } from '@/components/autopsy/HarmBadge';
 
 export default function AutopsyArticle() {
   const { slug } = useParams<{ slug: string }>();
@@ -23,7 +24,7 @@ export default function AutopsyArticle() {
     if (staticAutopsy || !slug) return;
     supabase
       .from('autopsy_reports')
-      .select('slug, title, subtitle, ticker, token_mint, verdict, risk_score, hero_image_path, source_banner_url, tags, md_content, md_path, published_at')
+      .select('slug, title, subtitle, ticker, token_mint, verdict, risk_score, harm_score, harm_headline, harm_breakdown, hero_image_path, source_banner_url, tags, md_content, md_path, published_at')
       .eq('slug', slug)
       .eq('is_current', true)
       .order('version', { ascending: false })
@@ -39,6 +40,9 @@ export default function AutopsyArticle() {
           ticker: data.ticker ?? '',
           verdict: data.verdict ?? 'AUTOPSY',
           riskScore: data.risk_score ?? '—',
+          harmScore: (data as any).harm_score ?? null,
+          harmHeadline: (data as any).harm_headline ?? null,
+          harmBreakdown: (data as any).harm_breakdown ?? null,
           publishedAt: data.published_at,
           mdPath: data.md_path ?? `/autopsies/${data.slug}.md`,
           downloadName: `${data.ticker ?? 'token'}_Autopsy_BlackBoxFarm.md`,
@@ -150,13 +154,20 @@ export default function AutopsyArticle() {
             <Badge variant="outline" className="bg-destructive/15 text-destructive border-destructive/40 uppercase tracking-wider">
               <Skull className="h-3 w-3 mr-1" /> {autopsy.verdict}
             </Badge>
-            <Badge variant="outline" className="uppercase tracking-wider">Risk {autopsy.riskScore}</Badge>
+            {typeof autopsy.harmScore === 'number' ? (
+              <HarmBadge score={autopsy.harmScore} headline={autopsy.harmHeadline} breakdown={autopsy.harmBreakdown} size="md" />
+            ) : (
+              <Badge variant="outline" className="uppercase tracking-wider">Risk {autopsy.riskScore}</Badge>
+            )}
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground ml-auto">
               <Calendar className="h-3 w-3" />{format(new Date(autopsy.publishedAt), 'MMMM d, yyyy')}
             </span>
           </div>
           <h1 className="text-2xl md:text-4xl font-bold mb-2">{autopsy.title}</h1>
           <p className="text-muted-foreground text-sm md:text-base mb-4">{autopsy.subtitle}</p>
+          {autopsy.harmHeadline && (
+            <p className="text-sm text-destructive font-medium mb-4">☠ {autopsy.harmHeadline}</p>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <a href={autopsy.mdPath} download={autopsy.downloadName}>
               <Button size="sm" variant="default" className="gap-1.5">

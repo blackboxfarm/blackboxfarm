@@ -1,0 +1,5 @@
+ALTER TABLE public.autopsy_reports
+  ADD COLUMN IF NOT EXISTS harm_score INTEGER,
+  ADD COLUMN IF NOT EXISTS harm_breakdown JSONB,
+  ADD COLUMN IF NOT EXISTS harm_headline TEXT,
+  ADD COLUMN IF NOT EXISTS harm_scored_at TIMESTAMPTZ;

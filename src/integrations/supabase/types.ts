@@ -1747,6 +1747,10 @@ export type Database = {
           death_cause: string
           death_confidence: number | null
           death_intent: string | null
+          harm_breakdown: Json | null
+          harm_headline: string | null
+          harm_score: number | null
+          harm_scored_at: string | null
           hero_image_path: string | null
           id: string
           is_current: boolean
@@ -1771,6 +1775,10 @@ export type Database = {
           death_cause: string
           death_confidence?: number | null
           death_intent?: string | null
+          harm_breakdown?: Json | null
+          harm_headline?: string | null
+          harm_score?: number | null
+          harm_scored_at?: string | null
           hero_image_path?: string | null
           id?: string
           is_current?: boolean
@@ -1795,6 +1803,10 @@ export type Database = {
           death_cause?: string
           death_confidence?: number | null
           death_intent?: string | null
+          harm_breakdown?: Json | null
+          harm_headline?: string | null
+          harm_score?: number | null
+          harm_scored_at?: string | null
           hero_image_path?: string | null
           id?: string
           is_current?: boolean
