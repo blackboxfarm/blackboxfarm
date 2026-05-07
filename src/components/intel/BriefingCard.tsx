@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
+import { supabaseThumb } from '@/lib/supabaseImage';
 
 interface BriefingCardProps {
   slug: string;
@@ -32,7 +33,7 @@ export function BriefingCard({ slug, title, subtitle, category, featured_image_u
       {featured_image_url && (
         <div className="aspect-video overflow-hidden bg-black/40 flex items-center justify-center">
           <img
-            src={featured_image_url}
+            src={supabaseThumb(featured_image_url, { width: 600, height: 338, resize: 'contain', quality: 70 })}
             alt={title}
             className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
             loading="lazy"
