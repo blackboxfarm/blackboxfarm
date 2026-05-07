@@ -58,6 +58,20 @@ export default function IntelBriefingArticle() {
     enabled: !!article?.related_slugs && article.related_slugs.length > 0,
   });
 
+  // Fetch external republish URLs for JSON-LD `sameAs`
+  const { data: sameAsUrls } = useQuery({
+    queryKey: ['intel-sameas', article?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('intel_publications')
+        .select('published_url')
+        .eq('briefing_id', article!.id)
+        .not('published_url', 'is', null);
+      return Array.from(new Set((data || []).map(r => r.published_url).filter(Boolean) as string[]));
+    },
+    enabled: !!article?.id,
+  });
+
   // Track direct page view via edge function (server-side: classifies bots,
   // captures referrer source + UTMs, dedupes by session_id, runs as service_role).
   useEffect(() => {
@@ -137,6 +151,7 @@ export default function IntelBriefingArticle() {
         slug={article.slug}
         category={article.category || undefined}
         tags={article.tags || undefined}
+        sameAs={sameAsUrls || []}
       />
 
       <article className="container mx-auto px-4 py-8 md:py-12">
