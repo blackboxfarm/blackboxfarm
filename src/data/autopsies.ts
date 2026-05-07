@@ -35,6 +35,15 @@ export const AUTOPSIES: AutopsyEntry[] = [
     tags: ['rug', 'pump.fun', 'atomic-snipe', 'coordinated-exit'],
     heroImage: '/autopsies/gpt-greedy-pissing-testicle-autopsy-v2.jpg',
     sourceBanner: 'https://cdn.dexscreener.com/cms/images/5CFdN3bFcGLttRHB?width=1500&height=500&quality=95&format=auto',
+    harmScore: 92,
+    harmHeadline: 'Coordinated rug · 100% bonding-curve capture · 6-second dump',
+    harmBreakdown: {
+      drawdown_pct: 100,
+      death_hours: 0.1,
+      intent: 'rug_pull',
+      multiplier: 1.5,
+      components: { loss: 32, bag: 14, draw: 15, dev: 13, speed: 10 },
+    },
   },
 ];
 
