@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { AUTOPSIES, type AutopsyEntry } from '@/data/autopsies';
 import { supabase } from '@/integrations/supabase/client';
 import deadTokensHero from '@/assets/dead-tokens-hero.png';
+import { HarmBadge } from '@/components/autopsy/HarmBadge';
 
 export default function Autopsies() {
   const [dbAutopsies, setDbAutopsies] = useState<AutopsyEntry[]>([]);
@@ -23,7 +24,7 @@ export default function Autopsies() {
     // Static entries (e.g. GPT) win on slug collision so curated copy is preserved.
     supabase
       .from('autopsy_reports')
-      .select('slug, title, subtitle, ticker, token_mint, verdict, risk_score, hero_image_path, source_banner_url, tags, published_at')
+      .select('slug, title, subtitle, ticker, token_mint, verdict, risk_score, harm_score, harm_headline, harm_breakdown, hero_image_path, source_banner_url, tags, published_at')
       .eq('is_current', true)
       .order('published_at', { ascending: false })
       .limit(100)
@@ -40,6 +41,9 @@ export default function Autopsies() {
             ticker: r.ticker ?? '',
             verdict: r.verdict ?? 'AUTOPSY',
             riskScore: r.risk_score ?? '—',
+            harmScore: (r as any).harm_score ?? null,
+            harmHeadline: (r as any).harm_headline ?? null,
+            harmBreakdown: (r as any).harm_breakdown ?? null,
             publishedAt: r.published_at,
             mdPath: `/autopsies/${r.slug}.md`,
             downloadName: `${r.ticker ?? 'token'}_Autopsy_BlackBoxFarm.md`,
@@ -120,14 +124,21 @@ export default function Autopsies() {
                 <Badge variant="outline" className="text-[10px] uppercase tracking-wider bg-destructive/15 text-destructive border-destructive/30">
                   {a.verdict}
                 </Badge>
-                <Badge variant="outline" className="text-[10px] uppercase tracking-wider">
-                  Risk {a.riskScore}
-                </Badge>
+                {typeof a.harmScore === 'number' ? (
+                  <HarmBadge score={a.harmScore} headline={a.harmHeadline} breakdown={a.harmBreakdown} />
+                ) : (
+                  <Badge variant="outline" className="text-[10px] uppercase tracking-wider">
+                    Risk {a.riskScore}
+                  </Badge>
+                )}
               </div>
               <h2 className="font-semibold text-lg leading-tight group-hover:text-destructive transition-colors mb-2 line-clamp-2">
                 {a.title}
               </h2>
               <p className="text-sm text-muted-foreground line-clamp-3 mb-4">{a.subtitle}</p>
+              {a.harmHeadline && (
+                <p className="text-[11px] text-destructive/80 font-medium mb-3">{a.harmHeadline}</p>
+              )}
               <div className="flex items-center gap-3 text-xs text-muted-foreground/80 pt-3 border-t border-border/60">
                 <span className="inline-flex items-center gap-1"><Calendar className="h-3 w-3" />{format(new Date(a.publishedAt), 'MMM d, yyyy')}</span>
                 <span className="inline-flex items-center gap-1"><FileText className="h-3 w-3" />{a.ticker}</span>
