@@ -308,6 +308,7 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         txEvidence = txRow ?? null;
       } catch (e) {
         console.warn('[autopsy-writer] tx timeline skipped:', (e as Error).message);
+        evidenceGaps.push({ source: 'tx_timeline', reason: (e as Error).message });
       }
 
       const { data: blobs } = await supabase
@@ -328,6 +329,33 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         if (r.ok) livePf = await r.json();
       } catch (e) {
         console.warn('[autopsy-writer] live pump.fun fetch failed:', (e as Error).message);
+        evidenceGaps.push({ source: 'pumpfun_live', reason: (e as Error).message });
+      }
+
+      // ── X account status check (suspended detection) ───────
+      let xAccountStatus: { status: string; source: string; evidence: string | null; handle: string | null } = {
+        status: 'unchecked', source: 'no_handle', evidence: null, handle: null,
+      };
+      try {
+        const handleCandidate =
+          extractXHandle(livePf?.twitter) ??
+          extractXHandle(pf?.twitter) ??
+          (socials ?? [])
+            .map((s: any) => extractXHandle(s.url))
+            .find((h: string | null) => !!h) ?? null;
+        if (handleCandidate) {
+          const status = await checkXAccountStatus(handleCandidate);
+          xAccountStatus = { ...status, handle: handleCandidate };
+          await supabase.from('autopsy_candidates').update({
+            social_x_account_status: status.status,
+            social_x_checked_at: new Date().toISOString(),
+          }).eq('id', c.id);
+          if (status.status === 'unchecked') {
+            evidenceGaps.push({ source: 'x_account_status', reason: status.source });
+          }
+        }
+      } catch (e) {
+        evidenceGaps.push({ source: 'x_account_status', reason: (e as Error).message });
       }
 
       // ATH source priority (most accurate first):
