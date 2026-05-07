@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Archive, FileText, Lock, Trash2 } from 'lucide-react';
+import { Archive, FileText, Lock, Trash2, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { runFullAutopsyPipeline } from './runFullAutopsyPipeline';
 import PipelineProgressDialog from './PipelineProgressDialog';
@@ -136,6 +136,30 @@ export default function CoolDeathsBacklog() {
       return;
     }
     setRows(prev => (prev ?? []).filter(x => x.token_mint !== r.token_mint));
+  }
+
+  async function rerunAutopsy(r: BacklogRow) {
+    setBusy(r.token_mint);
+    try {
+      const { data: cand } = await supabase
+        .from('autopsy_candidates')
+        .select('id')
+        .eq('token_mint', r.token_mint)
+        .maybeSingle();
+      if (!cand?.id) {
+        toast({ title: 'No candidate found', description: 'Generate Report first.', variant: 'destructive' });
+        return;
+      }
+      await supabase.from('autopsy_candidates').update({ status: 'pending' }).eq('id', cand.id);
+      const { data, error } = await supabase.functions.invoke('autopsy-writer', { body: { candidate_id: cand.id } });
+      if (error) throw error;
+      const slug = data?.results?.[0]?.slug ?? data?.slug ?? null;
+      toast({ title: 'Autopsy re-run complete', description: slug ? `Slug: ${slug}` : 'Pipeline finished.' });
+    } catch (e: any) {
+      toast({ title: 'Re-run failed', description: e?.message || String(e), variant: 'destructive' });
+    } finally {
+      setBusy(null);
+    }
   }
 
   const filtered = useMemo(() => {
@@ -278,6 +302,17 @@ export default function CoolDeathsBacklog() {
                   aria-label="Delete from backlog">
                   <Trash2 className="h-3 w-3" />
                 </Button>
+                {isLocked && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy === r.token_mint}
+                    onClick={() => rerunAutopsy(r)}
+                    title="Re-run the full autopsy pipeline"
+                  >
+                    <RefreshCw className="h-3 w-3 mr-1" /> Re-run Autopsy
+                  </Button>
+                )}
               </div>
             </div>
           </Card>
