@@ -1014,6 +1014,26 @@ Write the full markdown now. No preamble, no code fence — start with "# Token 
         }
       } catch { /* ignore */ }
 
+      // Fire-and-forget Harm Score computation
+      const harmPromise = fetch(
+        `${Deno.env.get('SUPABASE_URL')}/functions/v1/autopsy-harm-scorer`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+          },
+          body: JSON.stringify({ slug: drafted.slug }),
+        },
+      ).catch((e: any) => console.warn(`[autopsy-writer] harm scorer failed: ${e?.message}`));
+      try {
+        // @ts-ignore
+        if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) {
+          // @ts-ignore
+          EdgeRuntime.waitUntil(harmPromise);
+        }
+      } catch { /* ignore */ }
+
       results.push({ candidate_id: c.id, slug: drafted.slug, status: autoPublish ? 'approved' : 'drafted' });
     } catch (e: any) {
       console.error(`[autopsy-writer] failed for ${c.id}:`, e);
