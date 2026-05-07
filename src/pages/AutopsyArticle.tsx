@@ -10,14 +10,14 @@ import { SocialShareBar } from '@/components/intel/SocialShareBar';
 import { getAutopsy, type AutopsyEntry } from '@/data/autopsies';
 import { supabase } from '@/integrations/supabase/client';
 import { HarmBadge } from '@/components/autopsy/HarmBadge';
-import { useSuperAdminAuth } from '@/hooks/useSuperAdminAuth';
+import { useUserRoles } from '@/hooks/useUserRoles';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AutopsyTweetComposer } from '@/components/admin/autopsies/AutopsyTweetComposer';
 
 export default function AutopsyArticle() {
   const { slug } = useParams<{ slug: string }>();
   const staticAutopsy = slug ? getAutopsy(slug) : undefined;
-  const { isSuperAdmin } = useSuperAdminAuth();
+  const { isSuperAdmin } = useUserRoles();
   const [autopsy, setAutopsy] = useState<AutopsyEntry | undefined | null>(staticAutopsy ?? null);
   const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState(true);
