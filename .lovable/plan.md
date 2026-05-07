@@ -1,85 +1,73 @@
-# Harm Score for Token Autopsies
+## DeadTokens X-Post Composer for Autopsy Reports
 
-Replace the misleading "Risk X/10" badge on dead tokens with a backward-looking **Harm Score (0–100)** that quantifies the damage a dead token caused its holders. Then backfill the score for all 22 existing autopsy reports.
+Add a copy-paste X (Twitter) post generator to every autopsy, modelled on the @DeadTokens83517 template, ready for manual posting until automation arrives.
 
-## 1. Database — add Harm fields
+### 1. Post template (locked format)
 
-Migration on `autopsy_reports`:
-- `harm_score` `int` (0–100, nullable)
-- `harm_breakdown` `jsonb` (component scores + display strings)
-- `harm_scored_at` `timestamptz`
-- `harm_headline` `text` (e.g. `"$412k vaporized · 1,847 bagholders"`)
+Generated client-side from the autopsy row + harm fields:
 
-No data migration in this step — values populated by the scorer in step 3.
+```text
+☠️DEADTOKEN : BlackBox Autopsy 🪦
+🩸 ${TICKER} '{TITLE_TAG}'
+{MINT_ADDRESS}
+{X_HANDLE_OR_BLANK}
 
-## 2. Harm Score formula
+🪦 {HARM_HEADLINE}     ← e.g. "$18,000 USD Rug Profit · 1,847 bagholders"
+See the Players & Profits 💰, the Rug Mechanics, Timeline & Ruggers Wallet💰 — all linked wallets.
 
-Composite 0–100, weighted:
+Verdict: {VERDICT_UPPER}
+🔍 Discover all the Players & Snipers 👇
+🪦 Read the FULL AUTOPSY REPORT! 🪦
 
-| Component | Weight | Source |
-|---|---|---|
-| Realized USD losses to holders | 35% | sum of `holder_movements.usd_value` where `action='sell'` after ATH, minus buys after ATH; floor at 0 |
-| Bagholder count | 20% | distinct wallets in `holder_movements` with net positive token balance at death |
-| Peak-to-floor drawdown | 15% | `1 - (token_lifecycle.market_cap / ath_24h_usd)` |
-| Dev extraction (USD) | 15% | `dev_behavior_scores.dump_velocity_score` × creator_wallet net SOL out × live SOL price |
-| Speed of death | 10% | inverse of hours from ATH → `autopsy_at` (faster = worse) |
-| **Intent multiplier** | ×1.0–1.5 | `intent_classification`: `rug_pull`=1.5, `soft_rug`=1.35, `abandoned`=1.2, `accidental_failure`=1.05, `unknown`=1.0 |
+🌐 https://blackbox.farm/autopsy/{slug}
 
-Each component normalized to 0–100 via log scale (USD/holders) or linear (drawdown/speed). Final = `min(100, round(weighted_sum × intent_multiplier))`.
-
-Stored breakdown JSON shape:
-```json
-{
-  "loss_usd": 412300, "bagholders": 1847, "drawdown_pct": 99.2,
-  "dev_extracted_usd": 14200, "death_hours": 6,
-  "intent": "rug_pull", "multiplier": 1.5,
-  "components": {"loss":34, "bag":18, "draw":15, "dev":12, "speed":9}
-}
+#Solana #${TICKER} #RugPull #DeadTokens
 ```
 
-## 3. New edge function — `autopsy-harm-scorer`
+Variants the composer auto-picks based on `death_cause`:
+- `coordinated_rug` / `atomic_snipe_rug` → "TEXTBOOK COORDINATED RUG"
+- `soft_rug` → "SLOW-DRAIN SOFT RUG"
+- `dev_abandonment` → "DEV ABANDONED — BAG HOLDERS LEFT"
+- `hype_decay` / `community_burnout` → "HYPE DIED — ORGANIC FLATLINE"
+- fallback → uses `verdict` field uppercased
 
-`supabase/functions/autopsy-harm-scorer/index.ts`:
-- Input: `{ slug?: string, token_mint?: string, all?: boolean, limit?: number }`
-- Loads `autopsy_reports` row(s) + joins `token_lifecycle`, `dev_behavior_scores` (via `pumpfun_watchlist.creator_wallet`), `holder_movements`
-- Fetches live SOL/USD (per `mem://constraints/autopsy-live-sol-price`)
-- Computes Harm Score per formula above
-- Uses `assertUpdate` (per zero-tolerance memory) to write `harm_score`, `harm_breakdown`, `harm_headline`, `harm_scored_at`
-- Wrapped with `withRunLog`
+Hashtag set rotates by intent so we don't spam identical tags every post.
 
-## 4. Hook into pipeline
+### 2. New component — `AutopsyTweetComposer`
 
-In `autopsy-writer` (after the `autopsy_reports` insert, alongside the banner overlay best-effort call):
-- Fire-and-forget call to `autopsy-harm-scorer` with the new slug.
+`src/components/admin/autopsies/AutopsyTweetComposer.tsx`:
+- Props: `report` row (slug, ticker, title, mint, verdict, harm_headline, harm_breakdown, hero_image_path, x_handle?).
+- Builds the post string with `buildDeadTokensPost()` helper (`src/lib/deadTokensPost.ts`).
+- Renders:
+  - **Live char counter** (X limit 280; we expect ~260 — show red if >280, amber if >250).
+  - **Editable `<Textarea>`** pre-filled with template (admin can tweak before copying).
+  - **Copy Post** button → clipboard.
+  - **Copy Image URL** button → public hero banner URL.
+  - **Download Image** button → fetches hero banner blob (works around X drag-drop).
+  - **"Open X compose"** link → `https://x.com/intent/post?text=...` so two clicks gets it on screen with text pre-filled.
+  - Small live preview pane styled like an X card (avatar, handle @DeadTokens83517, body, image thumb).
+- Resets to template when admin clicks **Regenerate**.
 
-## 5. UI — replace Risk badge
+### 3. Surface the composer in two places
 
-**`src/pages/Autopsies.tsx`**
-- Add `harm_score`, `harm_headline`, `harm_breakdown` to the select.
-- Replace `Risk {a.riskScore}` badge with `☠ HARM {harmScore}/100` badge.
-- Color: green ≤25, amber ≤60, red ≤85, black ≥86.
-- Subtitle line shows `harm_headline` ("$412k vaporized · 1,847 bagholders").
-- Fallback to existing Risk badge only when `harm_score` is null (legacy/unscored).
+a. **Admin tab — `PublishedAutopsies.tsx`**
+   - Add a `<Button>` "🐦 X Post" on each row → opens a `<Dialog>` containing `AutopsyTweetComposer`.
 
-**`src/pages/AutopsyArticle.tsx`**
-- Same replacement in header.
-- Add a small "Harm breakdown" tooltip/popover listing the 5 components from `harm_breakdown.components`.
+b. **Public autopsy page — `src/pages/AutopsyArticle.tsx`**
+   - For super-admins only (gated by `useSuperAdminAuth`), show a floating "🐦 Generate X Post" button bottom-right that opens the same dialog. Hidden for normal visitors.
 
-**`src/components/admin/autopsies/AutopsyCandidateRow.tsx`** + `AllDrafts.tsx`
-- Show Harm badge next to existing status pills when present.
+### 4. Optional schema touch (no migration required now)
 
-Risk field is left in the DB (not deleted) for any legacy reads, but no longer rendered when Harm exists.
+`autopsy_reports` already carries everything we need. We just add an optional `x_post_template` jsonb column later when we automate — out of scope for this pass.
 
-## 6. Backfill all 22 existing autopsies
+### 5. Memory + docs
 
-After deploy:
-- Invoke `autopsy-harm-scorer` with `{ all: true }` once. The function iterates every row in `autopsy_reports` (currently 22) sequentially with a small delay to respect SOL price/Helius rate limits, and writes Harm fields to each.
-- Confirm via a `SELECT slug, harm_score, harm_headline FROM autopsy_reports ORDER BY harm_score DESC` readout.
+- Add `mem/features/autopsy/x-post-template.md` documenting the locked format, hashtag rotation rules, and the @DeadTokens83517 handle so future agents don't drift.
 
-## Technical notes
+### Technical notes
 
-- All DB writes use `assertUpdate`/`assertUpsert` from `_shared/db-assert.ts`.
-- Live SOL price fetched fresh per run (CoinGecko → Helius → DexScreener fallback chain).
-- No hardcoded USD or SOL constants.
-- Harm Score is deterministic given the same inputs — safe to re-run.
-- Existing `risk_score` column untouched (no breakage if anything else reads it).
+- All-client-side; no edge function or DB write.
+- Helper `buildDeadTokensPost()` is pure → easy to unit-test later and reuse when we wire automation.
+- Image download uses `fetch(...).blob()` + `<a download>` so it works on Supabase Storage + public `/autopsies/*.jpg` paths.
+- For the static GPT entry (no DB row), the public `AutopsyArticle.tsx` button reads from `AUTOPSIES` array, so the composer works there too.
+- No hardcoded numbers — harm_headline always sourced from `harm_breakdown` / fields already populated by `autopsy-harm-scorer`.

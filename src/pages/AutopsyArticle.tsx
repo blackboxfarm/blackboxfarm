@@ -3,17 +3,21 @@ import { Link, useParams, Navigate } from 'react-router-dom';
 import { SiteLayout } from '@/components/layout/SiteLayout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Download, Skull, Calendar, FileText } from 'lucide-react';
+import { ArrowLeft, Download, Skull, Calendar, FileText, Twitter } from 'lucide-react';
 import { format } from 'date-fns';
 import { ArticleContent } from '@/components/intel/ArticleMarkdownRenderer';
 import { SocialShareBar } from '@/components/intel/SocialShareBar';
 import { getAutopsy, type AutopsyEntry } from '@/data/autopsies';
 import { supabase } from '@/integrations/supabase/client';
 import { HarmBadge } from '@/components/autopsy/HarmBadge';
+import { useUserRoles } from '@/hooks/useUserRoles';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AutopsyTweetComposer } from '@/components/admin/autopsies/AutopsyTweetComposer';
 
 export default function AutopsyArticle() {
   const { slug } = useParams<{ slug: string }>();
   const staticAutopsy = slug ? getAutopsy(slug) : undefined;
+  const { isSuperAdmin } = useUserRoles();
   const [autopsy, setAutopsy] = useState<AutopsyEntry | undefined | null>(staticAutopsy ?? null);
   const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -213,6 +217,37 @@ export default function AutopsyArticle() {
           © 2026 BlackBox Farm / HoldersIntel · Licensed under CC BY-NC-ND 4.0 · Forensic analysis based on public Solana ledger data.
         </p>
       </div>
+
+      {isSuperAdmin && (
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button
+              size="lg"
+              className="fixed bottom-6 right-6 z-50 shadow-lg gap-2"
+              variant="default"
+            >
+              <Twitter className="h-4 w-4" /> Generate X Post
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>DeadTokens X Post — {autopsy.ticker || autopsy.slug}</DialogTitle>
+            </DialogHeader>
+            <AutopsyTweetComposer
+              input={{
+                ticker: autopsy.ticker,
+                title: autopsy.title,
+                mintAddress: autopsy.mintAddress,
+                slug: autopsy.slug,
+                verdict: autopsy.verdict,
+                harmHeadline: autopsy.harmHeadline ?? null,
+                harmScore: autopsy.harmScore ?? null,
+              }}
+              heroImage={autopsy.heroImage}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Override muted text inside the white doc so it remains readable */}
       <style>{`
