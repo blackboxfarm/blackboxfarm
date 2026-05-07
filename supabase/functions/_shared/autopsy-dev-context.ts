@@ -17,7 +17,7 @@ import type { DevDossier } from './autopsy-taxonomy.ts';
 import { discoverFundingChain } from './funding-resolver.ts';
 import { isCexWallet, getCexName } from './cex-wallets.ts';
 import { heliusRpcFetch } from './helius-client.ts';
-import { getSolPriceQuick } from './sol-price-cache.ts';
+import { getSolPriceQuick } from './sol-price-fetcher.ts';
 
 export async function buildDevDossier(
   supabase: any,
