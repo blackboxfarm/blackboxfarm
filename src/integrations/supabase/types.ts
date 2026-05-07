@@ -1831,6 +1831,7 @@ export type Database = {
           cluster_dump_provenance: Json | null
           cluster_dump_verdict: string | null
           co_snipers: Json | null
+          collapse_window: Json | null
           collected_at: string
           creator_wallet: string | null
           dev_buy_amount_tokens: number | null
@@ -1841,6 +1842,10 @@ export type Database = {
           dev_final_action_signature: string | null
           dev_signatures: Json | null
           dump_cascade: Json | null
+          exit_group: Json | null
+          exit_group_linkage_summary: Json | null
+          exit_pattern: string | null
+          exit_verdict: string | null
           funder_funded_amount_sol: number | null
           funder_funded_at: string | null
           funder_minutes_before_launch: number | null
@@ -1861,6 +1866,7 @@ export type Database = {
           cluster_dump_provenance?: Json | null
           cluster_dump_verdict?: string | null
           co_snipers?: Json | null
+          collapse_window?: Json | null
           collected_at?: string
           creator_wallet?: string | null
           dev_buy_amount_tokens?: number | null
@@ -1871,6 +1877,10 @@ export type Database = {
           dev_final_action_signature?: string | null
           dev_signatures?: Json | null
           dump_cascade?: Json | null
+          exit_group?: Json | null
+          exit_group_linkage_summary?: Json | null
+          exit_pattern?: string | null
+          exit_verdict?: string | null
           funder_funded_amount_sol?: number | null
           funder_funded_at?: string | null
           funder_minutes_before_launch?: number | null
@@ -1891,6 +1901,7 @@ export type Database = {
           cluster_dump_provenance?: Json | null
           cluster_dump_verdict?: string | null
           co_snipers?: Json | null
+          collapse_window?: Json | null
           collected_at?: string
           creator_wallet?: string | null
           dev_buy_amount_tokens?: number | null
@@ -1901,6 +1912,10 @@ export type Database = {
           dev_final_action_signature?: string | null
           dev_signatures?: Json | null
           dump_cascade?: Json | null
+          exit_group?: Json | null
+          exit_group_linkage_summary?: Json | null
+          exit_pattern?: string | null
+          exit_verdict?: string | null
           funder_funded_amount_sol?: number | null
           funder_funded_at?: string | null
           funder_minutes_before_launch?: number | null

@@ -1,94 +1,126 @@
-## Diagnosis — why the AstroGrok autopsy looks wrong
+## Goal
 
-I read the actual pipeline (`autopsy-writer`, `autopsy-tx-timeline`, `autopsy-social-death-check`, `autopsy-dev-context`, `autopsy-evidence-interpret`) against your screenshots. The verdict "natural decline / clean dev" is wrong for at least four concrete reasons that are all **fixable code/data gaps**, not AI judgement calls:
+Identify the **Exit Group** for any autopsy — the specific wallets whose sells caused the chart collapse — then prove (or disprove) their link to the dev, the dev's wallet family/KYC root, or the original bonding-curve snipers. Make this a first-class section of every autopsy report.
 
-### Gap 1 — Co-snipers are captured, but never traced back to the dev
-`autopsy-tx-timeline.decodeLaunchTx()` already records every wallet that bought tokens **in the same tx as the dev** (`co_snipers[]` with `pct_of_curve`). But nothing then asks: *"were those wallets funded by the dev / KYC root / a sibling?"* So a 4-wallet sniper bundle owned by the dev shows up in the report as "anonymous early buyers" and the writer concludes "no malicious dump."
+## What's missing today
 
-### Gap 2 — KYC root resolution is too shallow
-`buildDevDossier` only checks `wallet_family_members` + a single-hop `developer_genealogy` lookup. If the dev wallet was never seeded into `wallet_family_members` (which happens for fresh pump.fun mints), it returns `kyc_root: null` and the report renders ❌ for the KYC row — even when the dev's funder is sitting on Solscan one hop away. There's also a $3K pump.fun profile balance sitting on `GxpEYC…F2ee` that is itself a strong KYC signal we never surface.
+The current pipeline (`autopsy-tx-timeline` + `autopsy-cluster-dump`) only traces the **launch-side bundle** (co-snipers in the launch tx). It never asks the symmetrical question on the **exit side**: who actually dumped, and were they pre-positioned?
 
-### Gap 3 — "Suspended" X account is invisible to the writer
-`autopsy-social-death-check` only computes `social_no_admin_hours`/`social_spam_pct`. It never flags **HTTP 404 / "Account suspended"** on the X handle. The writer sees a present `twitter` link and says "the dev built socials" — when in reality the account is now suspended (which is itself a death signal worth a full paragraph).
-
-### Gap 4 — Failed scrapes are silently swallowed
-`autopsy-evidence-interpret`, the X community sweep, and the TG deep-pull all `try/catch { /* ignore */ }`. When Apify/Browserless returns 0 results, the writer never knows the difference between "we looked and found nothing" vs "we couldn't look." The report should explicitly say *"Telegram scrape failed — verdict made without Telegram evidence."*
-
----
+Specifically:
+- `detectDumpCascade()` only counts dev-wallet sells in a 60s window. It ignores all non-dev sellers on the pair.
+- We never enumerate the top sellers against the pool by USD/SOL volume.
+- We never trace exit wallets' **funder** or **acquisition tx** (when/how they got the tokens — airdrop from dev? sniped at launch? bought on curve?).
+- We never link Exit Group ↔ Launch Snipers ↔ Dev Cluster ↔ KYC root in one graph.
+- The writer prompt has no "Exit Group" section, so even if data existed it wouldn't be in the .md.
 
 ## Plan
 
-### 1. New shared helper — `traceClusterDump`
-Create `supabase/functions/_shared/autopsy-cluster-dump.ts`:
+### 1. New shared module: `_shared/autopsy-exit-group.ts`
 
-- Input: `txEvidence.co_snipers[]` + dev wallet + KYC root.
-- For each sniper wallet: call `discoverFunding()` (already exists in `_shared/funding-resolver.ts`) to find its first-inbound funder.
-- Bucket results into:
-  - `dev_funded` — funder == dev OR == KYC root
-  - `cluster_funded` — funder ∈ `dossier.cluster_wallets`
-  - `same_funder` — multiple snipers share an upstream funder (≤ 2 hops)
-  - `cex_funded` — funder is in `cex-wallets.ts` registry
-  - `unknown`
-- Return `{ snipers_with_provenance: [...], cluster_capture_pct: number, verdict: 'coordinated_bundle' | 'mixed' | 'organic' }`.
-- Persist as a new `autopsy_evidence_blobs` row `kind='cluster_dump_provenance'` and as `autopsy_tx_evidence.cluster_dump_provenance` (new column).
+Pure forensics, no AI. Given `{ mint, pairAddress, deathWindow: { start, end }, devCluster, launchSnipers }`, return:
 
-### 2. Migration
-Add to `autopsy_tx_evidence`:
-- `cluster_dump_provenance jsonb`
-- `cluster_capture_pct numeric`
-- `cluster_dump_verdict text`
+```ts
+{
+  exit_group: Array<{
+    wallet, sells_count, sol_received, usd_received,
+    first_sell_at, last_sell_at,
+    pct_of_window_volume,            // share of total sells in window
+    acquisition: {
+      mode: 'launch_sniper' | 'curve_buyer' | 'airdrop_from_dev' | 'transfer_from_cluster' | 'open_market' | 'unknown',
+      acquired_at, acquired_tx, source_wallet | null,
+    },
+    funder: { wallet, label, is_cex, hops_to_cex },
+    linkage: {
+      is_dev: bool, is_kyc_root: bool, is_in_dev_family: bool,
+      is_launch_sniper: bool, shares_funder_with_dev: bool,
+      shares_funder_with_other_exiters: bool,
+    },
+    linkage_score: 0-100,           // how confidently this wallet is "with the dev"
+  }>,
+  exit_pattern: 'single_dump' | 'sequential_burst' | 'slow_bleed' | 'staircase' | 'mixed',
+  collapse_window: { start, end, duration_sec, sol_extracted, usd_extracted, pct_of_liquidity_drained },
+  exit_group_linkage_summary: {
+    dev_funded_pct, cluster_funded_pct, launch_sniper_overlap_pct,
+    same_funder_pct, independent_pct,
+  },
+  exit_verdict: 'pre_planned_exit' | 'coordinated_dump' | 'opportunistic_dump' | 'organic_distribution' | 'insufficient_data',
+  notes: string[],
+}
+```
 
-Add to `autopsy_candidates`:
-- `social_x_account_status text` (`active` | `suspended` | `not_found` | `private` | `unchecked`)
-- `social_x_checked_at timestamptz`
-- `evidence_gaps jsonb` — array of `{ source, reason }` strings the writer must surface.
+**Detection algorithm:**
+1. Pull last N (≈1000) signatures for the pool/pair address (Helius `getSignaturesForAddress`).
+2. Decode swaps; bucket by seller wallet within the **collapse window** (auto-detected: largest contiguous price-drop window where >40% of liquidity exits — fall back to the existing `detectDumpCascade` window if pool data is too sparse).
+3. Rank sellers by SOL received in window. Take **top 20** OR all sellers contributing to ≥80% of window volume, whichever is smaller.
+4. For each exit wallet, run in parallel (with strict Helius-call cap of ≤6 per wallet):
+   - **Acquisition trace**: scan that wallet's signatures for the first inbound transfer of `mint`. Was it the launch tx (→ launch_sniper), a transfer from dev/cluster (→ airdrop/cluster), or a curve buy?
+   - **Funder trace**: `discoverFunding(wallet)` (already exists).
+5. Cross-reference each wallet against `devCluster` (from `wallet_family_members`), `kycRoot`, and `launchSnipers` (from `autopsy_tx_evidence.co_snipers`).
+6. Promote `unknown` → `same_funder` when ≥2 exit wallets share the same upstream funder (mirrors the cluster-dump heuristic).
+7. Compute `linkage_score` as a weighted sum (dev/KYC = 100, cluster = 90, launch_sniper = 80, shared funder = 60, etc.).
+8. `exit_verdict`:
+   - `pre_planned_exit` if dev_funded_pct + cluster_funded_pct + launch_sniper_overlap_pct ≥ 50
+   - `coordinated_dump` if same_funder_pct ≥ 40
+   - `opportunistic_dump` if top 1 wallet > 60% but no linkage
+   - `organic_distribution` otherwise
 
-### 3. Harden `autopsy-tx-timeline`
-After `decodeLaunchTx` returns co_snipers, immediately call `traceClusterDump` and write the provenance fields. This runs once, in the same edge function, so cost is bounded (≤ 5 extra Helius calls per autopsy).
+**Cost guard:** total Helius spend capped at ~120 calls per autopsy. Skip and emit `evidence_gap: 'exit_trace_budget_exceeded'` if hit.
 
-### 4. New edge function `autopsy-x-status-check` (or extend `autopsy-social-death-check`)
-- For every X handle on `token_social_links`, do a **server-side fetch** of `https://x.com/<handle>` via Browserless (existing connector) and look for the "Account suspended" / "doesn't exist" markers.
-- Write `social_x_account_status` + timestamp on `autopsy_candidates`.
-- Run inside `autopsy-writer` before the prompt is built, so the writer can cite it.
+### 2. DB migration: extend `autopsy_tx_evidence`
 
-### 5. Strengthen KYC resolution in `buildDevDossier`
-Three additions, in order:
-1. If `wallet_family_members` returns nothing, **directly call `discoverFunding(creatorWallet)`** and treat the funder as the KYC candidate when it isn't a known DEX/router/jito tip account.
-2. If the funder is in the CEX registry, set `kyc_root = funder` and tag `kyc_source = 'cex_<exchange>'`.
-3. Trigger `wallet-family-discovery` (existing) for the dev wallet on-demand when missing, so the next autopsy on the same dev gets the cluster.
+Add columns:
+- `exit_group jsonb` — full structure above
+- `exit_pattern text`
+- `collapse_window jsonb`
+- `exit_group_linkage_summary jsonb`
+- `exit_verdict text`
 
-Also: the pump.fun profile balance ($3K SOL on the dev) should be surfaced as a `dev_realized_value_usd` field on the dossier — that IS the smoking gun for "they kept the money."
+(All nullable; backfill on next re-run.)
 
-### 6. Make scrape failures loud, not silent
-Replace every `try { … } catch { /* ignore */ }` in the autopsy pipeline with `try { … } catch (e) { evidenceGaps.push({ source: 'tg_deep_pull', reason: e.message }) }`. Pass `evidence_gaps` into the writer prompt and add a **mandatory "Evidence Gaps" section** to the markdown template — so the report says explicitly *"Telegram could not be scraped; verdict excludes TG signals."* This stops false-confidence verdicts.
+### 3. Wire into `autopsy-tx-timeline/index.ts`
 
-### 7. Re-classify in `_shared/autopsy-taxonomy.ts`
-Add new signals to `classifyDeath`:
-- `clusterCapturePct` (from step 1) — `> 35%` → `coordinated_rug` confidence boost.
-- `xAccountSuspended` boolean — adds confidence to `coordinated_rug` / `marketing_scam`.
-- `devRealizedValueUsd` — when dev wallet still holds > $1K SOL after death and ATH > $500K, this is a strong "they cashed out" indicator.
+After `decodeLaunchTx()` + `buildDevTimeline()` + cluster-dump, call `traceExitGroup()` with:
+- `devCluster` = the same `clusterWallets` already pulled
+- `launchSnipers` = `launch.co_snipers.map(s => s.wallet)`
+- Pair address = look up from DexScreener cache (already used by other autopsy steps) or Helius DAS
 
-### 8. Re-run AstroGrok and confirm
-Once the above ships, run `holders-intel-autopsy-now` for the AstroGrok queue row with `force: true`. The report should now show:
-- Discovery Snapshot: KYC ✅ (funder of `GxpEYC…`)
-- Players section: cluster of N sniper wallets all funded by dev
-- Verdict: coordinated bundle, X account suspended, $3K still in dev wallet
-- Explicit "Evidence Gaps" section listing TG/Discord absences as "not present" vs "scrape failed."
+Persist the new fields to `autopsy_tx_evidence` in the same upsert.
 
----
+### 4. Feed signals into the classifier
 
-## Build order
+`_shared/autopsy-taxonomy.ts → classifyDeath()`:
+- New input: `exitVerdict`, `exitGroupLinkagePct = dev_funded_pct + cluster_funded_pct + launch_sniper_overlap_pct`
+- Rules:
+  - `exitGroupLinkagePct ≥ 60` → bump `coordinated_rug` confidence to ≥ 92, mark Tier-A auto-publish
+  - `exit_pattern === 'single_dump'` AND linkage to dev → `liquidity_pulled` (or new `solo_dev_dump` cause if you want a distinct ID)
+  - `exit_pattern === 'sequential_burst'` AND `same_funder_pct ≥ 40` → `coordinated_rug`
+  - `exit_pattern === 'slow_bleed'` AND launch_sniper_overlap → `wash_trade_exit`
 
-1. Migration (3 columns on `autopsy_tx_evidence`, 3 on `autopsy_candidates`).
-2. `_shared/autopsy-cluster-dump.ts` + wire into `autopsy-tx-timeline`.
-3. KYC resolution hardening in `_shared/autopsy-dev-context.ts` (incl. funder fallback + pump.fun balance read).
-4. `autopsy-x-status-check` edge function + invoke from `autopsy-writer`.
-5. `evidence_gaps` plumbing across pipeline + new "Evidence Gaps" markdown section in `autopsy-writer`.
-6. Taxonomy signals in `_shared/autopsy-taxonomy.ts`.
-7. Re-run AstroGrok via `holders-intel-autopsy-now { queue_id, force: true }`.
+### 5. Writer prompt + report template
 
-## Out of scope
+`autopsy-writer/index.ts`:
+- Pass `exit_group`, `exit_pattern`, `collapse_window`, `exit_group_linkage_summary`, `exit_verdict` into the user prompt.
+- Add a **mandatory new section** to the markdown template: **"The Exit Group — Who Actually Pulled the Plug"**. Required content:
+  - One-line verdict ("Pre-planned exit by 4 wallets, all funded by KYC root `Abc…XyZ`").
+  - Table of top exit wallets with: short addr, SOL extracted, % of dump, acquisition mode, funder, linkage tags.
+  - Timeline narrative tying collapse window to launch tx.
+  - Explicit "Where the plan started" paragraph: traces back from exit → acquisition → funder → KYC.
+- If `exit_verdict === 'insufficient_data'`, the section must say so explicitly (no fabrication) and add an entry to `evidence_gaps`.
 
-- No changes to `holders-intel-poster`, `ManualXPostingQueue.tsx`, or the autopsy banner overlay.
-- No changes to the public `/autopsies/<slug>` reader page — markdown additions render automatically.
-- We are NOT auto-publishing to X. Manual queue stays manual.
+### 6. Re-run for AstroGrok
+
+After deploy, re-trigger AstroGrok via the queue's "Re-run Autopsy" button (`holders-intel-autopsy-now { force: true }`) to validate the new Exit Group section surfaces the wallets you flagged.
+
+## Out of scope (this round)
+
+- UI rendering changes on `/autopsies/<slug>` — the new markdown section will render via the existing `ArticleMarkdownRenderer`. No reader-page work needed.
+- No changes to `holders-intel-poster` / `ManualXPostingQueue` — the X tweet's "Autopsy Now" CTA already pulls the regenerated report and banner.
+- No new DEX integrations — we use Helius pair sigs + the existing DexScreener cache only.
+
+## Files touched
+
+- **New**: `supabase/functions/_shared/autopsy-exit-group.ts`
+- **New migration**: adds 5 columns to `autopsy_tx_evidence`
+- **Edited**: `supabase/functions/autopsy-tx-timeline/index.ts` (call + persist)
+- **Edited**: `supabase/functions/_shared/autopsy-taxonomy.ts` (new signals + rules)
+- **Edited**: `supabase/functions/autopsy-writer/index.ts` (prompt + template)
