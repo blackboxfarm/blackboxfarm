@@ -1,126 +1,85 @@
-## Goal
+# Harm Score for Token Autopsies
 
-Identify the **Exit Group** for any autopsy — the specific wallets whose sells caused the chart collapse — then prove (or disprove) their link to the dev, the dev's wallet family/KYC root, or the original bonding-curve snipers. Make this a first-class section of every autopsy report.
+Replace the misleading "Risk X/10" badge on dead tokens with a backward-looking **Harm Score (0–100)** that quantifies the damage a dead token caused its holders. Then backfill the score for all 22 existing autopsy reports.
 
-## What's missing today
+## 1. Database — add Harm fields
 
-The current pipeline (`autopsy-tx-timeline` + `autopsy-cluster-dump`) only traces the **launch-side bundle** (co-snipers in the launch tx). It never asks the symmetrical question on the **exit side**: who actually dumped, and were they pre-positioned?
+Migration on `autopsy_reports`:
+- `harm_score` `int` (0–100, nullable)
+- `harm_breakdown` `jsonb` (component scores + display strings)
+- `harm_scored_at` `timestamptz`
+- `harm_headline` `text` (e.g. `"$412k vaporized · 1,847 bagholders"`)
 
-Specifically:
-- `detectDumpCascade()` only counts dev-wallet sells in a 60s window. It ignores all non-dev sellers on the pair.
-- We never enumerate the top sellers against the pool by USD/SOL volume.
-- We never trace exit wallets' **funder** or **acquisition tx** (when/how they got the tokens — airdrop from dev? sniped at launch? bought on curve?).
-- We never link Exit Group ↔ Launch Snipers ↔ Dev Cluster ↔ KYC root in one graph.
-- The writer prompt has no "Exit Group" section, so even if data existed it wouldn't be in the .md.
+No data migration in this step — values populated by the scorer in step 3.
 
-## Plan
+## 2. Harm Score formula
 
-### 1. New shared module: `_shared/autopsy-exit-group.ts`
+Composite 0–100, weighted:
 
-Pure forensics, no AI. Given `{ mint, pairAddress, deathWindow: { start, end }, devCluster, launchSnipers }`, return:
+| Component | Weight | Source |
+|---|---|---|
+| Realized USD losses to holders | 35% | sum of `holder_movements.usd_value` where `action='sell'` after ATH, minus buys after ATH; floor at 0 |
+| Bagholder count | 20% | distinct wallets in `holder_movements` with net positive token balance at death |
+| Peak-to-floor drawdown | 15% | `1 - (token_lifecycle.market_cap / ath_24h_usd)` |
+| Dev extraction (USD) | 15% | `dev_behavior_scores.dump_velocity_score` × creator_wallet net SOL out × live SOL price |
+| Speed of death | 10% | inverse of hours from ATH → `autopsy_at` (faster = worse) |
+| **Intent multiplier** | ×1.0–1.5 | `intent_classification`: `rug_pull`=1.5, `soft_rug`=1.35, `abandoned`=1.2, `accidental_failure`=1.05, `unknown`=1.0 |
 
-```ts
+Each component normalized to 0–100 via log scale (USD/holders) or linear (drawdown/speed). Final = `min(100, round(weighted_sum × intent_multiplier))`.
+
+Stored breakdown JSON shape:
+```json
 {
-  exit_group: Array<{
-    wallet, sells_count, sol_received, usd_received,
-    first_sell_at, last_sell_at,
-    pct_of_window_volume,            // share of total sells in window
-    acquisition: {
-      mode: 'launch_sniper' | 'curve_buyer' | 'airdrop_from_dev' | 'transfer_from_cluster' | 'open_market' | 'unknown',
-      acquired_at, acquired_tx, source_wallet | null,
-    },
-    funder: { wallet, label, is_cex, hops_to_cex },
-    linkage: {
-      is_dev: bool, is_kyc_root: bool, is_in_dev_family: bool,
-      is_launch_sniper: bool, shares_funder_with_dev: bool,
-      shares_funder_with_other_exiters: bool,
-    },
-    linkage_score: 0-100,           // how confidently this wallet is "with the dev"
-  }>,
-  exit_pattern: 'single_dump' | 'sequential_burst' | 'slow_bleed' | 'staircase' | 'mixed',
-  collapse_window: { start, end, duration_sec, sol_extracted, usd_extracted, pct_of_liquidity_drained },
-  exit_group_linkage_summary: {
-    dev_funded_pct, cluster_funded_pct, launch_sniper_overlap_pct,
-    same_funder_pct, independent_pct,
-  },
-  exit_verdict: 'pre_planned_exit' | 'coordinated_dump' | 'opportunistic_dump' | 'organic_distribution' | 'insufficient_data',
-  notes: string[],
+  "loss_usd": 412300, "bagholders": 1847, "drawdown_pct": 99.2,
+  "dev_extracted_usd": 14200, "death_hours": 6,
+  "intent": "rug_pull", "multiplier": 1.5,
+  "components": {"loss":34, "bag":18, "draw":15, "dev":12, "speed":9}
 }
 ```
 
-**Detection algorithm:**
-1. Pull last N (≈1000) signatures for the pool/pair address (Helius `getSignaturesForAddress`).
-2. Decode swaps; bucket by seller wallet within the **collapse window** (auto-detected: largest contiguous price-drop window where >40% of liquidity exits — fall back to the existing `detectDumpCascade` window if pool data is too sparse).
-3. Rank sellers by SOL received in window. Take **top 20** OR all sellers contributing to ≥80% of window volume, whichever is smaller.
-4. For each exit wallet, run in parallel (with strict Helius-call cap of ≤6 per wallet):
-   - **Acquisition trace**: scan that wallet's signatures for the first inbound transfer of `mint`. Was it the launch tx (→ launch_sniper), a transfer from dev/cluster (→ airdrop/cluster), or a curve buy?
-   - **Funder trace**: `discoverFunding(wallet)` (already exists).
-5. Cross-reference each wallet against `devCluster` (from `wallet_family_members`), `kycRoot`, and `launchSnipers` (from `autopsy_tx_evidence.co_snipers`).
-6. Promote `unknown` → `same_funder` when ≥2 exit wallets share the same upstream funder (mirrors the cluster-dump heuristic).
-7. Compute `linkage_score` as a weighted sum (dev/KYC = 100, cluster = 90, launch_sniper = 80, shared funder = 60, etc.).
-8. `exit_verdict`:
-   - `pre_planned_exit` if dev_funded_pct + cluster_funded_pct + launch_sniper_overlap_pct ≥ 50
-   - `coordinated_dump` if same_funder_pct ≥ 40
-   - `opportunistic_dump` if top 1 wallet > 60% but no linkage
-   - `organic_distribution` otherwise
+## 3. New edge function — `autopsy-harm-scorer`
 
-**Cost guard:** total Helius spend capped at ~120 calls per autopsy. Skip and emit `evidence_gap: 'exit_trace_budget_exceeded'` if hit.
+`supabase/functions/autopsy-harm-scorer/index.ts`:
+- Input: `{ slug?: string, token_mint?: string, all?: boolean, limit?: number }`
+- Loads `autopsy_reports` row(s) + joins `token_lifecycle`, `dev_behavior_scores` (via `pumpfun_watchlist.creator_wallet`), `holder_movements`
+- Fetches live SOL/USD (per `mem://constraints/autopsy-live-sol-price`)
+- Computes Harm Score per formula above
+- Uses `assertUpdate` (per zero-tolerance memory) to write `harm_score`, `harm_breakdown`, `harm_headline`, `harm_scored_at`
+- Wrapped with `withRunLog`
 
-### 2. DB migration: extend `autopsy_tx_evidence`
+## 4. Hook into pipeline
 
-Add columns:
-- `exit_group jsonb` — full structure above
-- `exit_pattern text`
-- `collapse_window jsonb`
-- `exit_group_linkage_summary jsonb`
-- `exit_verdict text`
+In `autopsy-writer` (after the `autopsy_reports` insert, alongside the banner overlay best-effort call):
+- Fire-and-forget call to `autopsy-harm-scorer` with the new slug.
 
-(All nullable; backfill on next re-run.)
+## 5. UI — replace Risk badge
 
-### 3. Wire into `autopsy-tx-timeline/index.ts`
+**`src/pages/Autopsies.tsx`**
+- Add `harm_score`, `harm_headline`, `harm_breakdown` to the select.
+- Replace `Risk {a.riskScore}` badge with `☠ HARM {harmScore}/100` badge.
+- Color: green ≤25, amber ≤60, red ≤85, black ≥86.
+- Subtitle line shows `harm_headline` ("$412k vaporized · 1,847 bagholders").
+- Fallback to existing Risk badge only when `harm_score` is null (legacy/unscored).
 
-After `decodeLaunchTx()` + `buildDevTimeline()` + cluster-dump, call `traceExitGroup()` with:
-- `devCluster` = the same `clusterWallets` already pulled
-- `launchSnipers` = `launch.co_snipers.map(s => s.wallet)`
-- Pair address = look up from DexScreener cache (already used by other autopsy steps) or Helius DAS
+**`src/pages/AutopsyArticle.tsx`**
+- Same replacement in header.
+- Add a small "Harm breakdown" tooltip/popover listing the 5 components from `harm_breakdown.components`.
 
-Persist the new fields to `autopsy_tx_evidence` in the same upsert.
+**`src/components/admin/autopsies/AutopsyCandidateRow.tsx`** + `AllDrafts.tsx`
+- Show Harm badge next to existing status pills when present.
 
-### 4. Feed signals into the classifier
+Risk field is left in the DB (not deleted) for any legacy reads, but no longer rendered when Harm exists.
 
-`_shared/autopsy-taxonomy.ts → classifyDeath()`:
-- New input: `exitVerdict`, `exitGroupLinkagePct = dev_funded_pct + cluster_funded_pct + launch_sniper_overlap_pct`
-- Rules:
-  - `exitGroupLinkagePct ≥ 60` → bump `coordinated_rug` confidence to ≥ 92, mark Tier-A auto-publish
-  - `exit_pattern === 'single_dump'` AND linkage to dev → `liquidity_pulled` (or new `solo_dev_dump` cause if you want a distinct ID)
-  - `exit_pattern === 'sequential_burst'` AND `same_funder_pct ≥ 40` → `coordinated_rug`
-  - `exit_pattern === 'slow_bleed'` AND launch_sniper_overlap → `wash_trade_exit`
+## 6. Backfill all 22 existing autopsies
 
-### 5. Writer prompt + report template
+After deploy:
+- Invoke `autopsy-harm-scorer` with `{ all: true }` once. The function iterates every row in `autopsy_reports` (currently 22) sequentially with a small delay to respect SOL price/Helius rate limits, and writes Harm fields to each.
+- Confirm via a `SELECT slug, harm_score, harm_headline FROM autopsy_reports ORDER BY harm_score DESC` readout.
 
-`autopsy-writer/index.ts`:
-- Pass `exit_group`, `exit_pattern`, `collapse_window`, `exit_group_linkage_summary`, `exit_verdict` into the user prompt.
-- Add a **mandatory new section** to the markdown template: **"The Exit Group — Who Actually Pulled the Plug"**. Required content:
-  - One-line verdict ("Pre-planned exit by 4 wallets, all funded by KYC root `Abc…XyZ`").
-  - Table of top exit wallets with: short addr, SOL extracted, % of dump, acquisition mode, funder, linkage tags.
-  - Timeline narrative tying collapse window to launch tx.
-  - Explicit "Where the plan started" paragraph: traces back from exit → acquisition → funder → KYC.
-- If `exit_verdict === 'insufficient_data'`, the section must say so explicitly (no fabrication) and add an entry to `evidence_gaps`.
+## Technical notes
 
-### 6. Re-run for AstroGrok
-
-After deploy, re-trigger AstroGrok via the queue's "Re-run Autopsy" button (`holders-intel-autopsy-now { force: true }`) to validate the new Exit Group section surfaces the wallets you flagged.
-
-## Out of scope (this round)
-
-- UI rendering changes on `/autopsies/<slug>` — the new markdown section will render via the existing `ArticleMarkdownRenderer`. No reader-page work needed.
-- No changes to `holders-intel-poster` / `ManualXPostingQueue` — the X tweet's "Autopsy Now" CTA already pulls the regenerated report and banner.
-- No new DEX integrations — we use Helius pair sigs + the existing DexScreener cache only.
-
-## Files touched
-
-- **New**: `supabase/functions/_shared/autopsy-exit-group.ts`
-- **New migration**: adds 5 columns to `autopsy_tx_evidence`
-- **Edited**: `supabase/functions/autopsy-tx-timeline/index.ts` (call + persist)
-- **Edited**: `supabase/functions/_shared/autopsy-taxonomy.ts` (new signals + rules)
-- **Edited**: `supabase/functions/autopsy-writer/index.ts` (prompt + template)
+- All DB writes use `assertUpdate`/`assertUpsert` from `_shared/db-assert.ts`.
+- Live SOL price fetched fresh per run (CoinGecko → Helius → DexScreener fallback chain).
+- No hardcoded USD or SOL constants.
+- Harm Score is deterministic given the same inputs — safe to re-run.
+- Existing `risk_score` column untouched (no breakage if anything else reads it).
