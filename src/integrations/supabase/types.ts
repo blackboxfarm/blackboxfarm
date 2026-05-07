@@ -7093,6 +7093,11 @@ export type Database = {
       }
       holders_intel_post_queue: {
         Row: {
+          autopsy_hero_image: string | null
+          autopsy_slug: string | null
+          autopsy_triggered_at: string | null
+          autopsy_triggered_by: string | null
+          autopsy_url: string | null
           created_at: string
           error_message: string | null
           id: string
@@ -7116,6 +7121,11 @@ export type Database = {
           tweet_text: string | null
         }
         Insert: {
+          autopsy_hero_image?: string | null
+          autopsy_slug?: string | null
+          autopsy_triggered_at?: string | null
+          autopsy_triggered_by?: string | null
+          autopsy_url?: string | null
           created_at?: string
           error_message?: string | null
           id?: string
@@ -7139,6 +7149,11 @@ export type Database = {
           tweet_text?: string | null
         }
         Update: {
+          autopsy_hero_image?: string | null
+          autopsy_slug?: string | null
+          autopsy_triggered_at?: string | null
+          autopsy_triggered_by?: string | null
+          autopsy_url?: string | null
           created_at?: string
           error_message?: string | null
           id?: string

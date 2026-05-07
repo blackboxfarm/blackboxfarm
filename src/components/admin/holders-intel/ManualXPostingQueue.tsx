@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, ExternalLink, RefreshCw, SkipForward, Check, Wand2 } from "lucide-react";
+import { Copy, ExternalLink, RefreshCw, SkipForward, Check, Wand2, Skull } from "lucide-react";
 
 interface QueueRow {
   id: string;
@@ -20,6 +20,9 @@ interface QueueRow {
   manual_status: string;
   manual_posted_at: string | null;
   manual_tweet_url: string | null;
+  autopsy_slug?: string | null;
+  autopsy_url?: string | null;
+  autopsy_hero_image?: string | null;
 }
 
 const X_INTENT_URL = "https://x.com/intent/post";
@@ -66,19 +69,20 @@ export function ManualXPostingQueue() {
   const [skipOpen, setSkipOpen] = useState<string | null>(null);
   const [composing, setComposing] = useState<Record<string, boolean>>({});
   const [autoComposed, setAutoComposed] = useState(false);
+  const [autopsying, setAutopsying] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
     const [pendingRes, historyRes] = await Promise.all([
       supabase
         .from("holders_intel_post_queue")
-        .select("id, token_mint, symbol, name, market_cap, trigger_source, created_at, tweet_text, manual_status, manual_posted_at, manual_tweet_url")
+        .select("id, token_mint, symbol, name, market_cap, trigger_source, created_at, tweet_text, manual_status, manual_posted_at, manual_tweet_url, autopsy_slug, autopsy_url, autopsy_hero_image")
         .eq("manual_status", "pending")
         .order("created_at", { ascending: false })
         .limit(50),
       supabase
         .from("holders_intel_post_queue")
-        .select("id, token_mint, symbol, name, market_cap, trigger_source, created_at, tweet_text, manual_status, manual_posted_at, manual_tweet_url")
+        .select("id, token_mint, symbol, name, market_cap, trigger_source, created_at, tweet_text, manual_status, manual_posted_at, manual_tweet_url, autopsy_slug, autopsy_url, autopsy_hero_image")
         .in("manual_status", ["posted_manual", "skipped_manual"])
         .order("manual_posted_at", { ascending: false })
         .limit(50),
@@ -136,6 +140,28 @@ export function ManualXPostingQueue() {
     }
     load();
   }, [rows, toast, load]);
+
+  const runAutopsy = useCallback(async (id: string) => {
+    setAutopsying((p) => ({ ...p, [id]: true }));
+    toast({ title: "⚰️ Generating autopsy…", description: "Full pipeline + banner — 30-60s." });
+    try {
+      const { data, error } = await supabase.functions.invoke("holders-intel-autopsy-now", {
+        body: { queue_id: id },
+      });
+      if (error) throw error;
+      const d = data as any;
+      if (!d?.success) throw new Error(d?.error || "autopsy failed");
+      toast({
+        title: "Autopsy published",
+        description: `Tweet updated with ${d.autopsy_url}${d.warning ? ` (warn: ${d.warning})` : ""}`,
+      });
+      await load();
+    } catch (e: any) {
+      toast({ title: "Autopsy failed", description: e?.message || String(e), variant: "destructive" });
+    } finally {
+      setAutopsying((p) => { const c = { ...p }; delete c[id]; return c; });
+    }
+  }, [toast, load]);
 
   // Auto-compose any missing on first load (one shot)
   useEffect(() => {
@@ -253,8 +279,9 @@ export function ManualXPostingQueue() {
         <div className="space-y-3">
           {rows.map((row) => {
             const charCount = tweetCharCount(row.tweet_text || "");
-            const overLimit = charCount > 280;
             const composed = !!row.tweet_text;
+            const hasAutopsy = !!row.autopsy_slug;
+            const isAutopsying = !!autopsying[row.id];
             return (
               <div key={row.id} className="rounded-lg border border-border/50 bg-card/50 p-4 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -275,19 +302,57 @@ export function ManualXPostingQueue() {
                       <Badge variant="outline" className="text-xs">{row.trigger_source}</Badge>
                     )}
                     <span className="text-xs text-muted-foreground">{timeAgo(row.created_at)}</span>
+                    {hasAutopsy && (
+                      <Badge variant="outline" className="text-xs bg-destructive/20 text-destructive border-destructive/40">
+                        ⚰️ autopsy published
+                      </Badge>
+                    )}
                   </div>
                 </div>
 
                 {composed ? (
                   <>
-                    <div className="rounded-md border border-border/50 bg-background/50 p-3">
+                    <div className={`rounded-md border bg-background/50 p-3 ${hasAutopsy ? "border-destructive/40" : "border-border/50"}`}>
                       <pre className="whitespace-pre-wrap font-mono text-sm break-words">{row.tweet_text}</pre>
                     </div>
+                    {hasAutopsy && (
+                      <div className="flex items-center gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-2">
+                        {row.autopsy_hero_image && (
+                          <a href={row.autopsy_url || `/autopsies/${row.autopsy_slug}`} target="_blank" rel="noopener noreferrer">
+                            <img
+                              src={row.autopsy_hero_image}
+                              alt="Autopsy banner"
+                              className="h-16 w-auto rounded border border-border/50 object-cover"
+                            />
+                          </a>
+                        )}
+                        <div className="flex-1 min-w-0 text-xs">
+                          <div className="font-medium text-destructive">Forensic autopsy</div>
+                          <a
+                            href={row.autopsy_url || `/autopsies/${row.autopsy_slug}`}
+                            target="_blank" rel="noopener noreferrer"
+                            className="underline text-primary break-all"
+                          >
+                            {row.autopsy_url || `/autopsies/${row.autopsy_slug}`} ↗
+                          </a>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between">
-                      <span className={`text-xs ${overLimit ? "text-destructive" : "text-muted-foreground"}`}>
-                        {charCount} / 280 chars{overLimit ? " — over limit" : ""}
+                      <span className="text-xs text-muted-foreground">
+                        {charCount} chars (Premium · long-form OK)
                       </span>
                       <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant={hasAutopsy ? "outline" : "destructive"}
+                          onClick={() => runAutopsy(row.id)}
+                          disabled={isAutopsying}
+                          title="Run full Autopsy pipeline and append link to tweet"
+                        >
+                          <Skull className={`h-4 w-4 mr-1 ${isAutopsying ? "animate-pulse" : ""}`} />
+                          {isAutopsying ? "Generating…" : hasAutopsy ? "Re-run Autopsy" : "Autopsy Now"}
+                        </Button>
                         <Button size="sm" variant="outline" onClick={() => copyText(row.tweet_text!)}>
                           <Copy className="h-4 w-4 mr-1" /> Copy text
                         </Button>
@@ -352,15 +417,26 @@ export function ManualXPostingQueue() {
                     <span className="text-sm text-muted-foreground">
                       Tweet text not yet composed.
                     </span>
-                    <Button
-                      size="sm"
-                      variant="default"
-                      onClick={async () => { const ok = await composeOne(row.id); if (ok) load(); }}
-                      disabled={!!composing[row.id]}
-                    >
-                      <Wand2 className={`h-4 w-4 mr-1 ${composing[row.id] ? "animate-spin" : ""}`} />
-                      {composing[row.id] ? "Composing…" : "Generate now"}
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={async () => { const ok = await composeOne(row.id); if (ok) load(); }}
+                        disabled={!!composing[row.id]}
+                      >
+                        <Wand2 className={`h-4 w-4 mr-1 ${composing[row.id] ? "animate-spin" : ""}`} />
+                        {composing[row.id] ? "Composing…" : "Generate now"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => runAutopsy(row.id)}
+                        disabled={isAutopsying}
+                      >
+                        <Skull className={`h-4 w-4 mr-1 ${isAutopsying ? "animate-pulse" : ""}`} />
+                        {isAutopsying ? "Generating…" : "Autopsy Now"}
+                      </Button>
+                    </div>
                   </div>
                 )}
               </div>

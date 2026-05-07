@@ -421,6 +421,9 @@ verify_jwt = false
 [functions.holders-intel-compose-preview]
 verify_jwt = false
 
+[functions.holders-intel-autopsy-now]
+verify_jwt = false
+
 [functions.search-surge-scanner]
 verify_jwt = false
 
