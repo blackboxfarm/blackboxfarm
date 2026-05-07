@@ -328,6 +328,9 @@ export function classifyDeath(input: {
   hasMaliciousDump?: boolean;
   socialCompleteness?: number;
   devDossier?: DevDossier;
+  clusterCapturePct?: number;
+  xAccountSuspended?: boolean;
+  devRealizedValueUsd?: number;
 }): { cause: DeathCauseId; confidence: number; matchedSignals: string[] } {
   const matched: string[] = [];
   const {
@@ -340,6 +343,9 @@ export function classifyDeath(input: {
     hasMaliciousDump,
     socialCompleteness = 0,
     devDossier,
+    clusterCapturePct = 0,
+    xAccountSuspended = false,
+    devRealizedValueUsd = 0,
   } = input;
 
   const repVerdict = devDossier?.reputation_verdict ?? 'clean';
@@ -350,6 +356,16 @@ export function classifyDeath(input: {
   if (freezeAuthorityActive) {
     matched.push('freeze_authority_active');
     return { cause: 'honeypot', confidence: 85, matchedSignals: matched };
+  }
+
+  // Coordinated bundle — sniper wallets in the launch tx all route back to
+  // the dev / KYC root / a single upstream funder. This catches the case
+  // where no single wallet looks bad but the cluster IS the dump.
+  if (clusterCapturePct >= 50 && ageHours < 72) {
+    matched.push(`cluster_capture_pct>=${Math.round(clusterCapturePct)}`, 'lifetime_hours<72');
+    if (xAccountSuspended) matched.push('x_account_suspended');
+    if (devRealizedValueUsd >= 1000) matched.push(`dev_realized_value_usd>=${Math.round(devRealizedValueUsd)}`);
+    return { cause: 'coordinated_rug', confidence: 88, matchedSignals: matched };
   }
 
   // Mint authority abuse
