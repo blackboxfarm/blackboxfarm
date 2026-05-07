@@ -413,6 +413,14 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         clusterCapturePct: Number(txEvidence?.cluster_capture_pct ?? 0) || 0,
         xAccountSuspended: (c as any).social_x_account_status === 'suspended',
         devRealizedValueUsd: Number((dossier as any).dev_realized_value_usd ?? 0) || 0,
+        exitVerdict: (txEvidence?.exit_verdict ?? undefined) as any,
+        exitPattern: (txEvidence?.exit_pattern ?? undefined) as any,
+        exitGroupLinkagePct: (() => {
+          const s = txEvidence?.exit_group_linkage_summary as any;
+          if (!s) return 0;
+          return Number(s.dev_funded_pct ?? 0) + Number(s.launch_sniper_overlap_pct ?? 0);
+        })(),
+        exitGroupSameFunderPct: Number((txEvidence?.exit_group_linkage_summary as any)?.same_funder_pct ?? 0) || 0,
       });
       const existingCause: DeathCauseId = meaningfulCause(c.death_cause) ? c.death_cause : 'unknown';
       const causeId: DeathCauseId = (existingCause === 'unknown' || isRegenerate || freshClass.cause === 'natural_cycle') ? freshClass.cause : existingCause;
@@ -717,6 +725,32 @@ ${(() => {
 })()}
 
 REPORT REQUIREMENT: If "Verdict: coordinated_bundle" or cluster_capture_pct >= 30, you MUST add a "## Cluster Dump Analysis" section calling out which sniper wallets trace back to the dev / KYC root / shared funder, and treat the launch buy as a coordinated bundle (NOT an organic launch). Cite the per-sniper bucket labels.
+
+## EXIT GROUP — WHO ACTUALLY PULLED THE PLUG
+${(() => {
+  const eg: any = txEvidence?.exit_group;
+  const sum: any = txEvidence?.exit_group_linkage_summary;
+  const win: any = txEvidence?.collapse_window;
+  if (!eg || !Array.isArray(eg) || eg.length === 0) return '(exit group trace unavailable for this token — pair signatures could not be decoded)';
+  const lines: string[] = [];
+  lines.push(`Exit verdict: ${txEvidence?.exit_verdict ?? 'unknown'}`);
+  lines.push(`Exit pattern: ${txEvidence?.exit_pattern ?? 'unknown'}`);
+  if (win) lines.push(`Collapse window: ${win.start} → ${win.end} (${win.duration_sec}s, ${win.tx_count} sells across ${win.seller_count} wallets, ~${win.sol_extracted?.toFixed?.(2) ?? '?'} SOL extracted)`);
+  if (sum) lines.push(`Linkage summary: dev/family=${sum.dev_funded_pct?.toFixed?.(1) ?? '?'}%  launch_sniper_overlap=${sum.launch_sniper_overlap_pct?.toFixed?.(1) ?? '?'}%  same_funder=${sum.same_funder_pct?.toFixed?.(1) ?? '?'}%  independent=${sum.independent_pct?.toFixed?.(1) ?? '?'}%`);
+  lines.push('Top exit wallets:');
+  for (const w of eg.slice(0, 12)) {
+    lines.push(`  - ${w.wallet} :: ${w.sol_received?.toFixed?.(2) ?? '?'} SOL (${w.pct_of_window_volume?.toFixed?.(1) ?? '?'}% of dump) sells=${w.sells_count} bucket=${w.bucket} score=${w.linkage_score} acquired=${w.acquisition?.mode}${w.acquisition?.source_wallet ? ` from ${w.acquisition.source_wallet}` : ''} funder=${w.funder?.wallet ?? '?'} (${w.funder?.label ?? 'no label'}${w.funder?.is_cex ? ', CEX' : ''})`);
+  }
+  return lines.join('\n');
+})()}
+
+REPORT REQUIREMENT — Exit Group section:
+You MUST include a clearly-titled section "## The Exit Group — Who Actually Pulled the Plug" that:
+  - Opens with a one-line verdict mapping to "Exit verdict" above (e.g. "Pre-planned exit by 4 wallets, all linked to KYC root <addr>." or "Insufficient on-chain coverage to identify the dump cohort.").
+  - Quotes the collapse window timing (start, end, duration, SOL extracted) and the exit pattern label.
+  - Includes a markdown table of the top exit wallets with columns: Wallet (short addr), SOL out, % of dump, Acquired (mode + source wallet if any), Funder, Linkage. Use the bucket label as the Linkage tag (dev / kyc_root / dev_family / launch_sniper / shared_funder / cex_funded / independent / unknown).
+  - Adds a short "Where the plan started" paragraph that traces backwards: exit wallet → acquisition (launch sniper / airdrop / cluster transfer) → funder → KYC root if known. If multiple exiters share an upstream funder, name that funder.
+  - If the exit verdict is "insufficient_data", say so explicitly. Do NOT invent wallets, signatures or amounts. Do NOT claim "no coordination found" when the verdict is insufficient_data — those are different statements.
 
 ## X ACCOUNT STATUS (live check at autopsy time)
 Handle: ${xAccountStatus.handle ?? 'no handle on file'}

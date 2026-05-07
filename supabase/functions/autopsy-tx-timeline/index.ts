@@ -29,6 +29,7 @@ import { discoverFunding } from '../_shared/funding-resolver.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 import { resolveTokenCreator } from '../_shared/creator-resolver.ts';
 import { traceClusterDump } from '../_shared/autopsy-cluster-dump.ts';
+import { traceExitGroup } from '../_shared/autopsy-exit-group.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -430,6 +431,53 @@ Deno.serve(withRunLog('autopsy-tx-timeline', async (req) => {
     console.warn('[autopsy-tx-timeline] cluster dump trace failed:', (e as Error).message);
   }
 
+  // ── Exit Group: who actually pulled the plug? ──
+  // Identify the dump wallets, trace acquisition + funder, link back to dev/cluster/launch snipers.
+  let exitGroup: Awaited<ReturnType<typeof traceExitGroup>> | null = null;
+  try {
+    let pairAddress: string | null = null;
+    try {
+      const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${cand.token_mint}`);
+      if (dexRes.ok) {
+        const dexJson = await dexRes.json();
+        const pairs: any[] = dexJson?.pairs ?? [];
+        const sol = pairs.filter((p: any) => p.chainId === 'solana');
+        const best = sol.length > 0
+          ? sol.reduce((a: any, b: any) => (b.liquidity?.usd || 0) > (a.liquidity?.usd || 0) ? b : a, sol[0])
+          : pairs[0];
+        pairAddress = best?.pairAddress ?? null;
+      }
+    } catch (e) {
+      console.warn('[autopsy-tx-timeline] dexscreener pair lookup failed:', (e as Error).message);
+    }
+
+    // Reuse cluster set discovered above
+    let clusterWallets: string[] = [];
+    let kycRoot: string | null = null;
+    try {
+      const { data: fam } = await supabase.from('wallet_family_members')
+        .select('family_id').eq('wallet_address', creator).maybeSingle();
+      if (fam?.family_id) {
+        const { data: sibs } = await supabase.from('wallet_family_members')
+          .select('wallet_address, is_kyc_root').eq('family_id', fam.family_id).limit(50);
+        clusterWallets = (sibs ?? []).map((s: any) => s.wallet_address);
+        kycRoot = (sibs ?? []).find((s: any) => s.is_kyc_root)?.wallet_address ?? null;
+      }
+    } catch { /* ignore */ }
+
+    exitGroup = await traceExitGroup({
+      mint: cand.token_mint,
+      pairAddress,
+      devWallet: creator,
+      kycRoot,
+      clusterWallets,
+      launchSnipers: (launch.co_snipers ?? []).map(s => s.wallet),
+      launchTxSig: launch.launch_tx_signature,
+    });
+  } catch (e) {
+    console.warn('[autopsy-tx-timeline] exit group trace failed:', (e as Error).message);
+  }
+
   // Final dev action = newest classified non-misc sig
   const finalAction = devTimeline.find(t => t.kind !== 'misc' && t.kind !== 'unknown') ?? devTimeline[0] ?? null;
 
@@ -483,6 +531,11 @@ Deno.serve(withRunLog('autopsy-tx-timeline', async (req) => {
     cluster_dump_provenance: clusterDump?.snipers_with_provenance ?? null,
     cluster_capture_pct: clusterDump?.cluster_capture_pct ?? null,
     cluster_dump_verdict: clusterDump?.verdict ?? null,
+    exit_group: exitGroup?.exit_group ?? null,
+    exit_pattern: exitGroup?.exit_pattern ?? null,
+    collapse_window: exitGroup?.collapse_window ?? null,
+    exit_group_linkage_summary: exitGroup?.exit_group_linkage_summary ?? null,
+    exit_verdict: exitGroup?.exit_verdict ?? null,
     notes: null,
     collected_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
