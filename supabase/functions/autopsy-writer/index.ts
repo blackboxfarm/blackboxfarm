@@ -25,6 +25,7 @@ import { assertInsert, assertUpdate } from '../_shared/db-assert.ts';
 import { classifyDeath, DEATH_TAXONOMY, shouldAutoPublish, type DeathCauseId } from '../_shared/autopsy-taxonomy.ts';
 import { enrichCandidate, backfillDexBoostsLive } from '../_shared/autopsy-enrich.ts';
 import { buildDevDossier } from '../_shared/autopsy-dev-context.ts';
+import { checkXAccountStatus, extractXHandle } from '../_shared/autopsy-x-status.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -261,13 +262,18 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
       // ── v2: enrichment + dev dossier + evidence blobs ───────
       const enrichment = await enrichCandidate(supabase, c.token_mint, creatorWallet);
       const dossier = await buildDevDossier(supabase, creatorWallet);
+      const evidenceGaps: Array<{ source: string; reason: string }> = [];
 
       // Trigger AI interpretation of any raw TG/X scrape blobs (best effort)
       try {
         await supabase.functions.invoke('autopsy-evidence-interpret', {
           body: { candidate_id: c.id, token_mint: c.token_mint },
         });
-      } catch (e) { console.warn('[autopsy-writer] evidence interpret skipped:', (e as Error).message); }
+      } catch (e) {
+        const reason = (e as Error).message;
+        console.warn('[autopsy-writer] evidence interpret skipped:', reason);
+        evidenceGaps.push({ source: 'evidence_interpret', reason });
+      }
 
       // Trigger one X-Community sweep that runs vulture + dissent lenses in
       // parallel off a single Apify scrape. Populates vulture_sightings,
@@ -279,7 +285,11 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         });
         const refreshed = await enrichCandidate(supabase, c.token_mint, creatorWallet);
         Object.assign(enrichment, refreshed);
-      } catch (e) { console.warn('[autopsy-writer] community sweep skipped:', (e as Error).message); }
+      } catch (e) {
+        const reason = (e as Error).message;
+        console.warn('[autopsy-writer] community sweep skipped:', reason);
+        evidenceGaps.push({ source: 'community_sweep', reason });
+      }
 
       // ── On-chain forensics (launch tx + dev timeline + cascade) ──
       // This is THE substance for Section 3/4 of the report. Awaited so the
