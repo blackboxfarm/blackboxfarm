@@ -410,6 +410,9 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
           ? Math.max(0, (Date.now() - new Date(txEvidence.dev_final_action_at).getTime()) / 3600000)
           : 0,
         devDossier: dossier,
+        clusterCapturePct: Number(txEvidence?.cluster_capture_pct ?? 0) || 0,
+        xAccountSuspended: (c as any).social_x_account_status === 'suspended',
+        devRealizedValueUsd: Number((dossier as any).dev_realized_value_usd ?? 0) || 0,
       });
       const existingCause: DeathCauseId = meaningfulCause(c.death_cause) ? c.death_cause : 'unknown';
       const causeId: DeathCauseId = (existingCause === 'unknown' || isRegenerate || freshClass.cause === 'natural_cycle') ? freshClass.cause : existingCause;
