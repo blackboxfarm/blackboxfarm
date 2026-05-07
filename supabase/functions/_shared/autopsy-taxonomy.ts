@@ -331,6 +331,10 @@ export function classifyDeath(input: {
   clusterCapturePct?: number;
   xAccountSuspended?: boolean;
   devRealizedValueUsd?: number;
+  exitVerdict?: 'pre_planned_exit' | 'coordinated_dump' | 'opportunistic_dump' | 'organic_distribution' | 'insufficient_data';
+  exitPattern?: 'single_dump' | 'sequential_burst' | 'slow_bleed' | 'staircase' | 'mixed' | 'none';
+  exitGroupLinkagePct?: number;        // dev_funded + cluster_funded + launch_sniper_overlap
+  exitGroupSameFunderPct?: number;
 }): { cause: DeathCauseId; confidence: number; matchedSignals: string[] } {
   const matched: string[] = [];
   const {
@@ -346,6 +350,10 @@ export function classifyDeath(input: {
     clusterCapturePct = 0,
     xAccountSuspended = false,
     devRealizedValueUsd = 0,
+    exitVerdict,
+    exitPattern,
+    exitGroupLinkagePct = 0,
+    exitGroupSameFunderPct = 0,
   } = input;
 
   const repVerdict = devDossier?.reputation_verdict ?? 'clean';
@@ -356,6 +364,29 @@ export function classifyDeath(input: {
   if (freezeAuthorityActive) {
     matched.push('freeze_authority_active');
     return { cause: 'honeypot', confidence: 85, matchedSignals: matched };
+  }
+
+  // Exit Group forensics — wallets that actually pulled the plug.
+  // Strongest "coordinated rug" signal we have once it's available.
+  if (exitGroupLinkagePct >= 60) {
+    matched.push(
+      `exit_group_linkage_pct>=${Math.round(exitGroupLinkagePct)}`,
+      `exit_pattern=${exitPattern ?? 'unknown'}`,
+    );
+    if (xAccountSuspended) matched.push('x_account_suspended');
+    return { cause: 'coordinated_rug', confidence: 95, matchedSignals: matched };
+  }
+  if (exitVerdict === 'coordinated_dump' && exitGroupSameFunderPct >= 40) {
+    matched.push(`exit_same_funder_pct>=${Math.round(exitGroupSameFunderPct)}`, `exit_pattern=${exitPattern ?? 'unknown'}`);
+    return { cause: 'coordinated_rug', confidence: 88, matchedSignals: matched };
+  }
+  if (exitPattern === 'single_dump' && exitGroupLinkagePct >= 40) {
+    matched.push('exit_pattern=single_dump', `exit_linkage_pct>=${Math.round(exitGroupLinkagePct)}`);
+    return { cause: 'liquidity_pulled', confidence: 85, matchedSignals: matched };
+  }
+  if (exitPattern === 'slow_bleed' && exitGroupLinkagePct >= 30) {
+    matched.push('exit_pattern=slow_bleed', `exit_linkage_pct>=${Math.round(exitGroupLinkagePct)}`);
+    return { cause: 'wash_trade_exit', confidence: 80, matchedSignals: matched };
   }
 
   // Coordinated bundle — sniper wallets in the launch tx all route back to
