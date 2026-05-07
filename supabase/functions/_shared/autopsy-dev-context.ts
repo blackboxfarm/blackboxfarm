@@ -14,6 +14,10 @@
  */
 
 import type { DevDossier } from './autopsy-taxonomy.ts';
+import { discoverFundingChain } from './funding-resolver.ts';
+import { isCexWallet, getCexName } from './cex-wallets.ts';
+import { heliusRpcFetch } from './helius-client.ts';
+import { getSolPriceQuick } from './sol-price-cache.ts';
 
 export async function buildDevDossier(
   supabase: any,
@@ -75,6 +79,63 @@ export async function buildDevDossier(
 
   dossier.cluster_wallets = clusterWallets;
   dossier.kyc_root = kycRoot;
+  if (kycRoot) (dossier as any).kyc_source = 'wallet_family_members';
+
+  // ── Funding-chain fallback: if no KYC root from mesh, walk the funder graph
+  // until we hit a CEX (real KYC) or run out of hops.
+  if (!kycRoot) {
+    try {
+      const chain = await discoverFundingChain(creatorWallet, 8);
+      if (chain.kycRoot) {
+        dossier.kyc_root = chain.kycRoot;
+        (dossier as any).kyc_source = chain.kycRootLabel ? `cex_${chain.kycRootLabel}` : 'funding_chain';
+        (dossier as any).funding_chain = chain.chain.map(c => ({
+          funder: c.funder,
+          label: c.funderName ?? c.funderType ?? null,
+          amount_sol: c.amountSol,
+          is_cex: c.isCex,
+        }));
+      } else if (chain.chain.length > 0) {
+        // No CEX terminus, but we DID find at least one funder hop.
+        const last = chain.chain[chain.chain.length - 1];
+        dossier.kyc_root = last.funder;
+        (dossier as any).kyc_source = isCexWallet(last.funder)
+          ? `cex_${getCexName(last.funder) ?? 'unknown'}`
+          : 'funding_chain_partial';
+        (dossier as any).funding_chain = chain.chain.map(c => ({
+          funder: c.funder,
+          label: c.funderName ?? c.funderType ?? null,
+          amount_sol: c.amountSol,
+          is_cex: c.isCex,
+        }));
+      }
+    } catch (e) {
+      console.warn('[dev-context] funding chain fallback failed:', (e as Error).message);
+    }
+  }
+
+  // ── Dev realised value: SOL still sitting in dev wallet right now ──
+  // A dev who "abandoned" a token while holding $3K of SOL in their pump.fun
+  // profile is the smoking gun for "they cashed out, they didn't lose."
+  try {
+    const balRes = await heliusRpcFetch('getBalance', [creatorWallet]).catch(() => null);
+    const lamports = balRes?.result?.value ?? null;
+    if (typeof lamports === 'number' && lamports > 0) {
+      const sol = lamports / 1_000_000_000;
+      const solUsd = await getSolPriceQuick().catch(() => 0);
+      const usd = solUsd > 0 ? sol * solUsd : null;
+      (dossier as any).dev_wallet_sol_balance = sol;
+      (dossier as any).dev_realized_value_usd = usd;
+      if (usd && usd >= 500) {
+        dossier.primary_evidence_strings = [
+          ...(dossier.primary_evidence_strings ?? []),
+          `Dev wallet currently holds ${sol.toFixed(2)} SOL (~$${Math.round(usd).toLocaleString()}) — funds were not lost.`,
+        ];
+      }
+    }
+  } catch (e) {
+    console.warn('[dev-context] dev balance read failed:', (e as Error).message);
+  }
 
   // ── Prior tokens across all cluster wallets ────────────────
   try {

@@ -1516,10 +1516,12 @@ export type Database = {
           decided_at: string | null
           dev_dossier: Json | null
           dev_holding_pct_at_death: number | null
+          dev_realized_value_usd: number | null
           dex_paid: boolean | null
           discord_present: boolean | null
           draft_md_path: string | null
           drafted_at: string | null
+          evidence_gaps: Json | null
           funneled_at: string | null
           holders_at_ath: number | null
           hydrated_at: string | null
@@ -1536,6 +1538,8 @@ export type Database = {
           social_last_admin_msg_at: string | null
           social_no_admin_hours: number | null
           social_spam_pct: number | null
+          social_x_account_status: string | null
+          social_x_checked_at: string | null
           source_feed: string
           status: string
           status_reason: string | null
@@ -1567,10 +1571,12 @@ export type Database = {
           decided_at?: string | null
           dev_dossier?: Json | null
           dev_holding_pct_at_death?: number | null
+          dev_realized_value_usd?: number | null
           dex_paid?: boolean | null
           discord_present?: boolean | null
           draft_md_path?: string | null
           drafted_at?: string | null
+          evidence_gaps?: Json | null
           funneled_at?: string | null
           holders_at_ath?: number | null
           hydrated_at?: string | null
@@ -1587,6 +1593,8 @@ export type Database = {
           social_last_admin_msg_at?: string | null
           social_no_admin_hours?: number | null
           social_spam_pct?: number | null
+          social_x_account_status?: string | null
+          social_x_checked_at?: string | null
           source_feed: string
           status?: string
           status_reason?: string | null
@@ -1618,10 +1626,12 @@ export type Database = {
           decided_at?: string | null
           dev_dossier?: Json | null
           dev_holding_pct_at_death?: number | null
+          dev_realized_value_usd?: number | null
           dex_paid?: boolean | null
           discord_present?: boolean | null
           draft_md_path?: string | null
           drafted_at?: string | null
+          evidence_gaps?: Json | null
           funneled_at?: string | null
           holders_at_ath?: number | null
           hydrated_at?: string | null
@@ -1638,6 +1648,8 @@ export type Database = {
           social_last_admin_msg_at?: string | null
           social_no_admin_hours?: number | null
           social_spam_pct?: number | null
+          social_x_account_status?: string | null
+          social_x_checked_at?: string | null
           source_feed?: string
           status?: string
           status_reason?: string | null
@@ -1815,6 +1827,9 @@ export type Database = {
         Row: {
           atomic_snipe_pct: number | null
           candidate_id: string
+          cluster_capture_pct: number | null
+          cluster_dump_provenance: Json | null
+          cluster_dump_verdict: string | null
           co_snipers: Json | null
           collected_at: string
           creator_wallet: string | null
@@ -1842,6 +1857,9 @@ export type Database = {
         Insert: {
           atomic_snipe_pct?: number | null
           candidate_id: string
+          cluster_capture_pct?: number | null
+          cluster_dump_provenance?: Json | null
+          cluster_dump_verdict?: string | null
           co_snipers?: Json | null
           collected_at?: string
           creator_wallet?: string | null
@@ -1869,6 +1887,9 @@ export type Database = {
         Update: {
           atomic_snipe_pct?: number | null
           candidate_id?: string
+          cluster_capture_pct?: number | null
+          cluster_dump_provenance?: Json | null
+          cluster_dump_verdict?: string | null
           co_snipers?: Json | null
           collected_at?: string
           creator_wallet?: string | null

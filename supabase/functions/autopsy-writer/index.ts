@@ -25,6 +25,7 @@ import { assertInsert, assertUpdate } from '../_shared/db-assert.ts';
 import { classifyDeath, DEATH_TAXONOMY, shouldAutoPublish, type DeathCauseId } from '../_shared/autopsy-taxonomy.ts';
 import { enrichCandidate, backfillDexBoostsLive } from '../_shared/autopsy-enrich.ts';
 import { buildDevDossier } from '../_shared/autopsy-dev-context.ts';
+import { checkXAccountStatus, extractXHandle } from '../_shared/autopsy-x-status.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -261,13 +262,18 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
       // ── v2: enrichment + dev dossier + evidence blobs ───────
       const enrichment = await enrichCandidate(supabase, c.token_mint, creatorWallet);
       const dossier = await buildDevDossier(supabase, creatorWallet);
+      const evidenceGaps: Array<{ source: string; reason: string }> = [];
 
       // Trigger AI interpretation of any raw TG/X scrape blobs (best effort)
       try {
         await supabase.functions.invoke('autopsy-evidence-interpret', {
           body: { candidate_id: c.id, token_mint: c.token_mint },
         });
-      } catch (e) { console.warn('[autopsy-writer] evidence interpret skipped:', (e as Error).message); }
+      } catch (e) {
+        const reason = (e as Error).message;
+        console.warn('[autopsy-writer] evidence interpret skipped:', reason);
+        evidenceGaps.push({ source: 'evidence_interpret', reason });
+      }
 
       // Trigger one X-Community sweep that runs vulture + dissent lenses in
       // parallel off a single Apify scrape. Populates vulture_sightings,
@@ -279,7 +285,11 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         });
         const refreshed = await enrichCandidate(supabase, c.token_mint, creatorWallet);
         Object.assign(enrichment, refreshed);
-      } catch (e) { console.warn('[autopsy-writer] community sweep skipped:', (e as Error).message); }
+      } catch (e) {
+        const reason = (e as Error).message;
+        console.warn('[autopsy-writer] community sweep skipped:', reason);
+        evidenceGaps.push({ source: 'community_sweep', reason });
+      }
 
       // ── On-chain forensics (launch tx + dev timeline + cascade) ──
       // This is THE substance for Section 3/4 of the report. Awaited so the
@@ -298,6 +308,7 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         txEvidence = txRow ?? null;
       } catch (e) {
         console.warn('[autopsy-writer] tx timeline skipped:', (e as Error).message);
+        evidenceGaps.push({ source: 'tx_timeline', reason: (e as Error).message });
       }
 
       const { data: blobs } = await supabase
@@ -318,6 +329,33 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         if (r.ok) livePf = await r.json();
       } catch (e) {
         console.warn('[autopsy-writer] live pump.fun fetch failed:', (e as Error).message);
+        evidenceGaps.push({ source: 'pumpfun_live', reason: (e as Error).message });
+      }
+
+      // ── X account status check (suspended detection) ───────
+      let xAccountStatus: { status: string; source: string; evidence: string | null; handle: string | null } = {
+        status: 'unchecked', source: 'no_handle', evidence: null, handle: null,
+      };
+      try {
+        const handleCandidate =
+          extractXHandle(livePf?.twitter) ??
+          extractXHandle(pf?.twitter) ??
+          (socials ?? [])
+            .map((s: any) => extractXHandle(s.url))
+            .find((h: string | null) => !!h) ?? null;
+        if (handleCandidate) {
+          const status = await checkXAccountStatus(handleCandidate);
+          xAccountStatus = { ...status, handle: handleCandidate };
+          await supabase.from('autopsy_candidates').update({
+            social_x_account_status: status.status,
+            social_x_checked_at: new Date().toISOString(),
+          }).eq('id', c.id);
+          if (status.status === 'unchecked') {
+            evidenceGaps.push({ source: 'x_account_status', reason: status.source });
+          }
+        }
+      } catch (e) {
+        evidenceGaps.push({ source: 'x_account_status', reason: (e as Error).message });
       }
 
       // ATH source priority (most accurate first):
@@ -405,6 +443,8 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         liquidity_usd: liquidityUsd,
         age_hours: ageHours,
         creator_wallet: creatorWallet,
+        evidence_gaps: evidenceGaps,
+        dev_realized_value_usd: (dossier as any).dev_realized_value_usd ?? null,
       }).eq('id', c.id).select('id').single(), 'autopsy_candidates');
 
       // Backfill the canonical mesh tables with anything Pump.fun handed us this run.
@@ -650,12 +690,41 @@ ${(enrichment.paid_orders ?? []).length === 0
 
 ## DEV DOSSIER (cluster-aware)
 - Reputation verdict: ${dossier.reputation_verdict}
-- KYC root: ${dossier.kyc_root ?? 'not resolved'}
+- KYC root: ${dossier.kyc_root ?? 'not resolved'} (source: ${(dossier as any).kyc_source ?? 'none'})
+- Funding chain: ${JSON.stringify((dossier as any).funding_chain ?? [])}
+- Dev wallet SOL balance NOW: ${(dossier as any).dev_wallet_sol_balance ?? 'unknown'} SOL (~$${(dossier as any).dev_realized_value_usd ? Math.round((dossier as any).dev_realized_value_usd).toLocaleString() : 'unknown'})
 - Cluster size: ${dossier.cluster_wallets?.length ?? 1} linked wallets
 - Cluster history: ${JSON.stringify(dossier.cluster_history_summary)}
 - Prior tokens (most recent first):
 ${(dossier.prior_tokens ?? []).slice(0, 8).map(t => `  - ${t.mint} ATH=${t.ath_mcap_usd ?? '?'} status=${t.status ?? '?'} cause=${t.death_cause ?? '?'}`).join('\n') || '  (none on record)'}
 - Evidence strings: ${JSON.stringify(dossier.primary_evidence_strings)}
+
+## CO-SNIPER PROVENANCE (cluster dump trace)
+${(() => {
+  const v = txEvidence?.cluster_dump_verdict;
+  if (!v) return '(no cluster dump trace available)';
+  const prov = (txEvidence?.cluster_dump_provenance ?? []) as any[];
+  const lines = [
+    `Verdict: ${v}`,
+    `Cluster capture %: ${txEvidence?.cluster_capture_pct?.toFixed?.(1) ?? '?'}% of launch-tx buy controlled by dev/cluster/shared-funder wallets`,
+    'Per-sniper trace:',
+    ...prov.slice(0, 8).map(p => `  - ${p.wallet} pct=${p.pct_of_curve?.toFixed?.(1) ?? '?'}% bucket=${p.bucket} funder=${p.funder ?? '?'} (${p.funder_label ?? 'no label'})`),
+  ];
+  return lines.join('\n');
+})()}
+
+REPORT REQUIREMENT: If "Verdict: coordinated_bundle" or cluster_capture_pct >= 30, you MUST add a "## Cluster Dump Analysis" section calling out which sniper wallets trace back to the dev / KYC root / shared funder, and treat the launch buy as a coordinated bundle (NOT an organic launch). Cite the per-sniper bucket labels.
+
+## X ACCOUNT STATUS (live check at autopsy time)
+Handle: ${xAccountStatus.handle ?? 'no handle on file'}
+Status: ${xAccountStatus.status} (source: ${xAccountStatus.source}${xAccountStatus.evidence ? `, evidence: ${xAccountStatus.evidence}` : ''})
+
+REPORT REQUIREMENT: If status is "suspended" or "not_found", you MUST add a sentence in the Players AND Verdict sections noting that the dev's X account is **${xAccountStatus.status === 'suspended' ? 'currently SUSPENDED by X' : 'no longer reachable'}** — this is itself a death signal (either reported as a scam, or the dev deleted to evade attribution).
+
+## EVIDENCE GAPS (scrape failures — disclose, do not omit)
+${evidenceGaps.length === 0 ? '(no scrape failures — all sources reached)' : evidenceGaps.map(g => `- ${g.source}: ${g.reason}`).join('\n')}
+
+REPORT REQUIREMENT: If "EVIDENCE GAPS" lists ANY entries, you MUST include a section "## Evidence Gaps" near the end stating which sources failed to load. Do NOT silently treat a failed scrape as "no evidence found" — that is the difference between "we looked and saw nothing" and "we couldn't look."
 
 ## TOKEN LIFECYCLE
 ${JSON.stringify(lifecycle ?? {}, null, 2)}
