@@ -6,6 +6,7 @@ import { Skull, FileText, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 import { AUTOPSIES, type AutopsyEntry } from '@/data/autopsies';
 import { supabase } from '@/integrations/supabase/client';
+import deadTokensHero from '@/assets/dead-tokens-hero.png';
 
 export default function Autopsies() {
   const [dbAutopsies, setDbAutopsies] = useState<AutopsyEntry[]>([]);
@@ -68,6 +69,14 @@ export default function Autopsies() {
             Forensic post-mortems on coordinated rugs and exit-liquidity events.
             Every wallet, every transaction, every dollar — reconstructed from the Solana ledger.
           </p>
+          <div className="mt-6 flex justify-center">
+            <img
+              src={deadTokensHero}
+              alt="Dead Tokens — Token Autopsies Exposed"
+              className="w-full max-w-4xl h-auto rounded-xl border border-destructive/30 shadow-lg shadow-destructive/10"
+              loading="eager"
+            />
+          </div>
           <div className="mt-5 max-w-2xl mx-auto rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs md:text-sm text-foreground/80 leading-relaxed">
             <Badge variant="outline" className="text-[10px] uppercase tracking-wider bg-primary/15 text-primary border-primary/40 mr-2">
               Beta
