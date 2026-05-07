@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Skull, FileText, CheckCircle2 } from 'lucide-react';
+import { Skull, FileText, CheckCircle2, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { runFullAutopsyPipeline } from './runFullAutopsyPipeline';
 import PipelineProgressDialog from './PipelineProgressDialog';
@@ -333,6 +333,24 @@ export default function LiveDeathWatch() {
                           : 'Queues this token as a Tier B candidate and drafts a full autopsy report. Promote to Tier A in the Queue to auto-publish.'}
                       </TooltipContent>
                     </Tooltip>
+                    {isLocked && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busy === r.token_mint}
+                            onClick={() => rerunAutopsy(r)}
+                            title="Re-run the full autopsy pipeline"
+                          >
+                            <RefreshCw className="h-3 w-3 mr-1" /> Re-run Autopsy
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs text-xs">
+                          Resets the candidate to pending and re-invokes autopsy-writer.
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
                   </div>
                 </TooltipProvider>
               </div>
