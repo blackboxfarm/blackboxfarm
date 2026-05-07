@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Link2 } from "lucide-react";
 import { StyleCategoryManager } from "./StyleCategoryManager";
+import { supabaseThumb } from "@/lib/supabaseImage";
 
 export interface GalleryImage {
   id: string;
@@ -388,7 +389,7 @@ export function ImageGallery({ mode = 'manage', onSelect, articleContent, articl
                     >
                       <div className="aspect-square bg-muted relative">
                         <img
-                          src={`${img.file_url}?width=200&height=200&resize=cover`}
+                          src={supabaseThumb(img.file_url, { width: 240, height: 240, resize: 'cover', quality: 65 })}
                           alt={img.display_name}
                           className="w-full h-full object-cover"
                           loading="lazy"
