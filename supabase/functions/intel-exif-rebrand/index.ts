@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.54.0";
 import { assertUpdate } from "../_shared/db-assert.ts";
+import { sendAdminSms } from "../_shared/sms-notify.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -318,6 +319,9 @@ Deno.serve(async (req) => {
 
     const results: Array<{ url: string; status: string; size?: number }> = [];
     const errors: string[] = [];
+    // TRANSACTIONAL: process all images, but only commit metadata-stamp + alert if every image succeeded.
+    // Each rewrite uses the SAME storage path (overwrites the original in place), so the URL the article
+    // references is unchanged → no risk of "hero pointer drifted to an inline image" mid-batch.
     for (const url of targets) {
       if (!isOurStorageUrl(url, SUPA_URL)) { results.push({ url, status: "skipped_external" }); continue; }
       const loc = parseStoragePath(url, SUPA_URL);
@@ -348,15 +352,35 @@ Deno.serve(async (req) => {
       }
     }
 
-    await assertUpdate(
-      supabase.from("intel_briefings").update({ exif_branded_at: new Date().toISOString() }).eq("id", briefingId),
-      "intel_briefings",
-    );
-
     const ok = results.filter(r => r.status === "rebranded").length;
     const success = errors.length === 0 && ok > 0;
+
+    // Self-audit: if hero URL appears as an inline-markdown URL too, that's the smoking-gun
+    // signature of an old filename collision. Surface it loudly.
+    const inlineUrls = extractImageUrls(b.content_md || "");
+    const heroCollision = b.featured_image_url && inlineUrls.includes(b.featured_image_url);
+
+    if (errors.length > 0 || heroCollision) {
+      // Loud admin alert — silent partial failures are exactly what bit us on Article #10
+      await sendAdminSms(
+        `🚨 EXIF rebrand FAILED for briefing "${b.title}" (${b.slug})\n` +
+        `Errors: ${errors.length}/${targets.size}\n` +
+        (heroCollision ? `⚠️ HERO COLLISION: featured_image_url is also referenced inline — likely overwritten.\n` : '') +
+        `First error: ${errors[0] || 'n/a'}`,
+      );
+    }
+
+    // Only stamp exif_branded_at when EVERY image succeeded — partial passes
+    // must remain visible so they re-run on the next sweep.
+    if (success) {
+      await assertUpdate(
+        supabase.from("intel_briefings").update({ exif_branded_at: new Date().toISOString() }).eq("id", briefingId),
+        "intel_briefings",
+      );
+    }
+
     return new Response(
-      JSON.stringify({ success, total: results.length, rebranded: ok, errors, results }),
+      JSON.stringify({ success, total: results.length, rebranded: ok, errors, results, heroCollision }),
       {
         status: success ? 200 : 207, // 207 Multi-Status when partial failure
         headers: { ...corsHeaders, "Content-Type": "application/json" },

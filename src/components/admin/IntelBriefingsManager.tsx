@@ -561,10 +561,15 @@ function IntelBriefingsArticlesManager() {
     // Strip EXIF data and inject BlackBox Farm copyright
     const cleanBlob = await stripExifAndBrand(blob);
 
+    // Random 6-char suffix prevents same-millisecond filename collisions
+    // (two uploads in the same ms with overlapping random words would otherwise overwrite each other)
+    const rand = Math.random().toString(36).slice(2, 8);
+
     if (cropMode === 'hero') {
       const imageName = generateImageName('hero', form.title);
-      const path = `${Date.now()}-${imageName}.jpg`;
-      const { error } = await supabase.storage.from('intel-images').upload(path, cleanBlob, { contentType: 'image/jpeg' });
+      const path = `${Date.now()}-${rand}-${imageName}.jpg`;
+      // upsert:false → storage rejects collisions instead of silently overwriting
+      const { error } = await supabase.storage.from('intel-images').upload(path, cleanBlob, { contentType: 'image/jpeg', upsert: false });
       if (error) {
         toast({ title: 'Upload failed', description: error.message, variant: 'destructive' });
         URL.revokeObjectURL(blobUrl);
@@ -576,8 +581,8 @@ function IntelBriefingsArticlesManager() {
       URL.revokeObjectURL(blobUrl);
     } else {
       const imageName = generateImageName('inline', form.title);
-      const path = `${Date.now()}-${imageName}.jpg`;
-      const { error } = await supabase.storage.from('intel-images').upload(path, cleanBlob, { contentType: 'image/jpeg' });
+      const path = `${Date.now()}-${rand}-${imageName}.jpg`;
+      const { error } = await supabase.storage.from('intel-images').upload(path, cleanBlob, { contentType: 'image/jpeg', upsert: false });
       if (error) {
         toast({ title: 'Upload failed', description: error.message, variant: 'destructive' });
         URL.revokeObjectURL(blobUrl);
