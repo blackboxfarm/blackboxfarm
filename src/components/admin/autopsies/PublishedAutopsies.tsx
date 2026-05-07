@@ -4,10 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ExternalLink, RefreshCw, Newspaper } from 'lucide-react';
+import { ExternalLink, RefreshCw, Newspaper, Twitter } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AutopsyTweetComposer } from './AutopsyTweetComposer';
 
 type Report = {
   id: string;
@@ -20,6 +22,10 @@ type Report = {
   hero_image_path: string | null;
   published_at: string | null;
   created_at: string;
+  token_mint?: string;
+  verdict?: string | null;
+  harm_score?: number | null;
+  harm_headline?: string | null;
 };
 
 export default function PublishedAutopsies() {
@@ -29,7 +35,7 @@ export default function PublishedAutopsies() {
   async function load() {
     const { data, error } = await supabase
       .from('autopsy_reports')
-      .select('id, slug, ticker, title, subtitle, death_cause, death_intent, hero_image_path, published_at, created_at')
+      .select('id, slug, ticker, title, subtitle, death_cause, death_intent, hero_image_path, published_at, created_at, token_mint, verdict, harm_score, harm_headline')
       .eq('is_current', true)
       .order('created_at', { ascending: false })
       .limit(100);
@@ -78,6 +84,31 @@ export default function PublishedAutopsies() {
               <Button size="sm" variant="outline" asChild>
                 <Link to={`/autopsy/${r.slug}`} target="_blank"><ExternalLink className="h-3 w-3 mr-1" /> View</Link>
               </Button>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline" className="gap-1">
+                    <Twitter className="h-3 w-3" /> X Post
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>DeadTokens X Post — {r.ticker || r.slug}</DialogTitle>
+                  </DialogHeader>
+                  <AutopsyTweetComposer
+                    input={{
+                      ticker: r.ticker || '',
+                      title: r.title,
+                      mintAddress: r.token_mint || '',
+                      slug: r.slug,
+                      verdict: r.verdict,
+                      deathCause: r.death_cause,
+                      harmHeadline: r.harm_headline,
+                      harmScore: r.harm_score,
+                    }}
+                    heroImage={r.hero_image_path}
+                  />
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
         </Card>
