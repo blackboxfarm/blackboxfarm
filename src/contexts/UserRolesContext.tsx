@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthContext } from './AuthContext';
 import { usePreviewSuperAdmin } from '@/hooks/usePreviewSuperAdmin';
@@ -23,6 +23,7 @@ export const UserRolesProvider = ({ children }: { children: ReactNode }) => {
   // Initialize with super_admin if preview mode is active - prevents flash
   const [roles, setRoles] = useState<UserRole[]>(() => isPreviewAdmin ? ['super_admin'] : []);
   const [isLoading, setIsLoading] = useState(() => !isPreviewAdmin);
+  const hasResolvedOnceRef = useRef(false);
 
   const fetchUserRoles = useCallback(async () => {
     // Preview bypass grants super_admin without requiring auth/session - HIGHEST PRIORITY
@@ -49,7 +50,9 @@ export const UserRolesProvider = ({ children }: { children: ReactNode }) => {
       // the browser tab regains focus and Supabase issues a token refresh)
       // should not flip the whole app into a loading state — that unmounts
       // gated pages like Super Admin and wipes any in-progress form input.
-      setIsLoading(prev => (roles.length === 0 ? true : prev));
+      if (!hasResolvedOnceRef.current) {
+        setIsLoading(true);
+      }
 
       // Prefer RPC to bypass potential RLS on user_roles
       const { data: isSA, error: saError } = await supabase.rpc('is_super_admin', { _user_id: user.id });
@@ -78,6 +81,7 @@ export const UserRolesProvider = ({ children }: { children: ReactNode }) => {
       setRoles([]);
     } finally {
       setIsLoading(false);
+      hasResolvedOnceRef.current = true;
     }
   }, [user, isAuthenticated, isPreviewAdmin, authLoading]);
 
