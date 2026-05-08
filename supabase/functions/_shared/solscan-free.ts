@@ -17,6 +17,7 @@
  */
 
 import { createApiLogger } from "./api-logger.ts";
+import { solscanFetch } from "./solscan-rate-limiter.ts";
 
 export interface SolscanFreeTokenMeta {
   name: string;
@@ -54,23 +55,17 @@ export async function fetchSolscanFreeTokenMeta(
 
   try {
     const url = `https://public-api.solscan.io/token/meta?tokenAddress=${tokenMint}`;
-    
-    const headers: Record<string, string> = {
-      'Accept': 'application/json',
-    };
-    
-    // Add API key if available (better rate limits)
-    if (solscanApiKey) {
-      headers['token'] = solscanApiKey;
-    }
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (solscanApiKey) headers['token'] = solscanApiKey;
 
-    const resp = await fetch(url, {
+    const resp = await solscanFetch(url, {
       headers,
-      signal: AbortSignal.timeout(6000),
+      timeoutMs: 6000,
+      cacheTtlMs: 5 * 60_000, // 5-min cache for token metadata
     });
 
     if (!resp.ok) {
-      const errText = await resp.text().catch(() => '');
+      const errText = typeof resp.body === 'string' ? resp.body : JSON.stringify(resp.body || '');
       // 404 = token not indexed by Solscan (expected for ungraduated pump.fun tokens)
       // Don't log as failure — only 5xx and rate-limits are real errors
       if (resp.status === 404) {
@@ -84,7 +79,7 @@ export async function fetchSolscanFreeTokenMeta(
     }
 
     await logger.complete(resp.status);
-    const data = await resp.json();
+    const data = resp.body;
 
     // The public API returns data directly (not wrapped in {success, data})
     if (!data || (!data.name && !data.symbol)) {
