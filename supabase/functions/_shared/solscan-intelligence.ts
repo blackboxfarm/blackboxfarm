@@ -259,11 +259,11 @@ async function solscanScrapeFundingInfo(
 export async function solscanResolveTokenCreator(
   tokenMint: string,
   apiErrors: string[] = []
-): Promise<{ creator: string | null; mintAuthority: string | null; meta: any }> {
+): Promise<{ creator: string | null; mintAuthority: string | null; freezeAuthority: string | null; meta: any }> {
   const apiKey = getSolscanApiKey();
   if (!apiKey) {
     apiErrors.push('SOLSCAN_API_KEY not configured');
-    return { creator: null, mintAuthority: null, meta: null };
+    return { creator: null, mintAuthority: null, freezeAuthority: null, meta: null };
   }
 
   try {
@@ -285,7 +285,7 @@ export async function solscanResolveTokenCreator(
       const detail = await readSolscanErrorDetail(resp);
       await logger.complete(resp.status, `Solscan ${resp.status}: ${detail}`);
       apiErrors.push(formatSolscanApiError('Solscan token/meta', resp.status, detail));
-      return { creator: null, mintAuthority: null, meta: null };
+      return { creator: null, mintAuthority: null, freezeAuthority: null, meta: null };
     }
 
     await logger.complete(resp.status);
@@ -294,15 +294,16 @@ export async function solscanResolveTokenCreator(
 
     const creator = meta?.creator || null;
     const mintAuthority = meta?.mint_authority || meta?.mintAuthority || null;
+    const freezeAuthority = meta?.freeze_authority || meta?.freezeAuthority || null;
 
     if (creator) console.log(`[Solscan Intel] Token ${tokenMint.slice(0, 8)}... creator: ${creator.slice(0, 8)}...`);
 
-    return { creator, mintAuthority, meta };
+    return { creator, mintAuthority, freezeAuthority, meta };
   } catch (e) {
     const msg = `Solscan token/meta error: ${e instanceof Error ? e.message : 'timeout'}`;
     apiErrors.push(msg);
     console.error(`[Solscan Intel] ${msg}`);
-    return { creator: null, mintAuthority: null, meta: null };
+    return { creator: null, mintAuthority: null, freezeAuthority: null, meta: null };
   }
 }
 
