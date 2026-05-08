@@ -27,8 +27,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
+        // Avoid churning state on tab focus / token refresh — only update when
+        // the user identity or access token actually changes. Otherwise React
+        // sees a brand-new `user` object reference, which cascades through
+        // contexts (e.g. UserRoles) and unmounts forms mid-edit.
+        setSession(prev => {
+          if (prev?.access_token === session?.access_token && prev?.user?.id === session?.user?.id) {
+            return prev;
+          }
+          return session;
+        });
+        setUser(prev => {
+          const nextId = session?.user?.id ?? null;
+          const prevId = prev?.id ?? null;
+          if (prevId === nextId) return prev;
+          return session?.user ?? null;
+        });
 
         if (event !== 'INITIAL_SESSION') {
           setLoading(false);
