@@ -34,12 +34,14 @@ interface PlatformAdapter {
 
 const platformAdapters: PlatformAdapter[] = [
   { key: 'onchain', type: 'rpc', priority: 100 },
+  // ✅ Solscan Pro v2.0 — promoted to primary API tier (priority 95)
+  { key: 'solscan', type: 'api', priority: 95, apiEndpoint: 'https://pro-api.solscan.io/v2.0/token/meta?address={MINT}' },
   { key: 'pumpfun', type: 'api', priority: 95, apiEndpoint: 'https://frontend-api-v3.pump.fun/coins/{MINT}' },
   { key: 'bagsfm', type: 'api', priority: 95, apiEndpoint: 'https://bags.fm/{MINT}' }, // Will scrape public page
   { key: 'coingecko', type: 'api', priority: 90, apiEndpoint: 'https://api.coingecko.com/api/v3/coins/solana/contract/{MINT}' },
   { key: 'dexscreener', type: 'api', priority: 85, apiEndpoint: 'https://api.dexscreener.com/latest/dex/tokens/{MINT}' },
   { key: 'birdeye', type: 'api', priority: 80, apiEndpoint: 'https://public-api.birdeye.so/public/token_overview?address={MINT}' },
-  { key: 'solscan', type: 'scrape', priority: 70, url: 'https://solscan.io/token/{MINT}' },
+  { key: 'solscan_scrape', type: 'scrape', priority: 55, url: 'https://solscan.io/token/{MINT}' }, // fallback only
   { key: 'geckoterminal', type: 'scrape', priority: 70, url: 'https://www.geckoterminal.com/solana/tokens/{MINT}' },
   { key: 'jupiterterminaldotcom', type: 'scrape', priority: 65, url: 'https://terminal.jup.ag/swap/SOL-{MINT}' },
   { key: 'orca', type: 'scrape', priority: 65, url: 'https://www.orca.so/pools?tokens={MINT}' },
@@ -161,13 +163,22 @@ async function fetchFromAPI(adapter: PlatformAdapter, mint: string): Promise<Tok
     }
 
     const url = adapter.apiEndpoint.replace('{MINT}', mint);
-    
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'BreadCrumbs-Scanner/1.0',
-        'Accept': 'application/json'
+
+    // Solscan Pro v2.0 requires the `token` header
+    const headers: Record<string, string> = {
+      'User-Agent': 'BreadCrumbs-Scanner/1.0',
+      'Accept': 'application/json',
+    };
+    if (adapter.key === 'solscan') {
+      const solscanKey = Deno.env.get('SOLSCAN_API_KEY');
+      if (!solscanKey) {
+        console.warn('[breadcrumbs-scanner] SOLSCAN_API_KEY missing — skipping solscan API tier');
+        return null;
       }
-    });
+      headers['token'] = solscanKey;
+    }
+
+    const response = await fetch(url, { headers });
 
     if (!response.ok) {
       throw new Error(`API request failed: ${response.status}`);
@@ -269,6 +280,21 @@ function parseAPIResponse(source: string, data: any, mint: string, url: string):
           if (token.logo) profile.icon = token.logo;
         }
         break;
+
+      case 'solscan': {
+        // Solscan Pro v2.0 /token/meta envelope: { success, data: { ... } }
+        const meta = data?.data || data;
+        if (meta?.name) profile.name = meta.name;
+        if (meta?.symbol) profile.symbol = meta.symbol;
+        if (meta?.icon) profile.icon = meta.icon;
+        if (meta?.website) profile.website = meta.website;
+        if (meta?.twitter) profile.twitter = meta.twitter.startsWith('http') ? meta.twitter : `https://x.com/${String(meta.twitter).replace('@', '')}`;
+        if (meta?.telegram) profile.telegram = meta.telegram.startsWith('http') ? meta.telegram : `https://t.me/${String(meta.telegram).replace('@', '')}`;
+        if (meta?.discord) profile.discord = meta.discord;
+        if (meta?.github) profile.github = meta.github;
+        profile.verified = true;
+        break;
+      }
     }
 
     return profile;
