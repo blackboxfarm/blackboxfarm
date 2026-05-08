@@ -10,9 +10,10 @@
  * USE CASE: Quick metadata fill-in to avoid burning a Helius DAS credit
  * when we just need name/symbol/image that DexScreener didn't have.
  * 
- * NOTE: All pro-api.solscan.io/v2.0 endpoints are DISABLED.
- * They require a Pro Level 2 subscription ($199/mo).
- * See solscan-intelligence.ts and solscan-api.ts for dormant Pro code.
+ * NOTE: pro-api.solscan.io/v2.0 endpoints are now ENABLED (Pro v2.0 key verified).
+ * See solscan-intelligence.ts, solscan-api.ts, and solscan-markets.ts for the Pro paths.
+ * This free endpoint is still preferred for lightweight name/symbol/icon lookups
+ * to keep Pro credits for richer queries.
  */
 
 import { createApiLogger } from "./api-logger.ts";
