@@ -893,11 +893,48 @@ export function FlipItDashboard() {
           
           // Check if creator is a known scammer via reputation
           if (reputationResult.data && reputationResult.data.length > 0) {
-            const rep = reputationResult.data[0];
-            if (rep.trust_level === 'scammer' || rep.trust_level === 'serial_rugger') {
+            const rep = reputationResult.data[0] as any;
+            const rugs = rep.tokens_rugged || 0;
+            const abandoned = rep.tokens_abandoned || 0;
+            const score = rep.reputation_score || 0;
+
+            // Truthful tiering: classify by what's actually in the row,
+            // not just the (sometimes inflated) trust_level enum.
+            if (rugs >= 3) {
               setBlacklistWarning({
                 level: 'high',
-                reason: `🚨 ${rep.trust_level === 'serial_rugger' ? 'SERIAL RUGGER' : 'KNOWN SCAMMER'} — ${rep.tokens_rugged || 0} rugged tokens on record. Reputation score: ${rep.reputation_score || 0}/100. Dev wallet flagged across mesh network.`,
+                reason: `🚨 SERIAL RUGGER — ${rugs} rugged tokens on record${abandoned ? `, ${abandoned} abandoned` : ''}. Reputation: ${score}/100.`,
+                source: 'creator_wallet',
+                entryType: 'dev_wallet_reputation'
+              });
+              setIsCheckingBlacklist(false);
+              return;
+            }
+            if (rugs >= 1) {
+              setBlacklistWarning({
+                level: 'high',
+                reason: `⚠️ PRIOR RUG — ${rugs} rug${rugs > 1 ? 's' : ''} on record${abandoned ? `, ${abandoned} abandoned` : ''}. Reputation: ${score}/100.`,
+                source: 'creator_wallet',
+                entryType: 'dev_wallet_reputation'
+              });
+              setIsCheckingBlacklist(false);
+              return;
+            }
+            if (rep.trust_level === 'scammer' && abandoned >= 10) {
+              setBlacklistWarning({
+                level: 'medium',
+                reason: `⚠️ LOW-QUALITY LAUNCHER — ${abandoned} abandoned tokens, 0 confirmed rugs. Reputation: ${score}/100.`,
+                source: 'creator_wallet',
+                entryType: 'dev_wallet_reputation'
+              });
+              setIsCheckingBlacklist(false);
+              return;
+            }
+            if (rep.trust_level === 'serial_rugger' && rugs === 0) {
+              // Mis-labelled by old classifier — show honest abandonment warning instead
+              setBlacklistWarning({
+                level: abandoned >= 10 ? 'medium' : 'low',
+                reason: `⚠️ LOW-QUALITY LAUNCHER — ${abandoned} abandoned tokens, 0 confirmed rugs. Reputation: ${score}/100.`,
                 source: 'creator_wallet',
                 entryType: 'dev_wallet_reputation'
               });
