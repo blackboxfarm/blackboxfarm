@@ -16,10 +16,10 @@ export async function fetchSolscanMarkets(tokenMint: string): Promise<SolscanMar
     verifiedLPSource: null
   };
 
-  // DISABLED: Solscan Pro API returns 401 — demoted per Helius migration.
-  // Re-enable when API key is upgraded or replaced.
-  console.log('[Solscan] DISABLED — skipping all Solscan API calls');
-  return result;
+  if (!solscanApiKey) {
+    console.warn('[Solscan] SOLSCAN_API_KEY missing — skipping markets fetch');
+    return result;
+  }
 
   try {
     console.log('[Solscan] Fetching ALL token markets...');
@@ -33,7 +33,8 @@ export async function fetchSolscanMarkets(tokenMint: string): Promise<SolscanMar
       credits: 1,
     });
     
-    const marketsResp = await fetch(`https://pro-api.solscan.io/v2.0/token/markets?address=${tokenMint}`, {
+    // Solscan Pro v2.0 markets endpoint: parameter name is `token` (not `address`)
+    const marketsResp = await fetch(`https://pro-api.solscan.io/v2.0/token/markets?token[]=${tokenMint}&page=1&page_size=20`, {
       headers: { 'token': solscanApiKey }
     });
     

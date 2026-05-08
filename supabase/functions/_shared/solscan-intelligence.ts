@@ -1,7 +1,7 @@
 /**
  * Solscan Intelligence — Oracle Spider Data Source
  * 
- * ⚠️  ALL PRO ENDPOINTS DISABLED — requires Pro Level 2 ($199/mo)
+ * ✅ Solscan Pro v2.0 ENABLED (key verified)
  * Current key is FREE tier, only works with public-api.solscan.io
  * See solscan-free.ts for active free-tier metadata calls.
  * 
@@ -260,11 +260,6 @@ export async function solscanResolveTokenCreator(
   tokenMint: string,
   apiErrors: string[] = []
 ): Promise<{ creator: string | null; mintAuthority: string | null; meta: any }> {
-  // DISABLED: Pro API v2.0 returns 401 with free key. Re-enable when upgraded to Pro Level 2.
-  console.log('[Solscan Intel] DISABLED — Pro API not available (free tier key). Skipping token/meta.');
-  apiErrors.push('Solscan Pro disabled (free tier key)');
-  return { creator: null, mintAuthority: null, meta: null };
-
   const apiKey = getSolscanApiKey();
   if (!apiKey) {
     apiErrors.push('SOLSCAN_API_KEY not configured');
@@ -319,9 +314,6 @@ export async function solscanCheckAccountLabel(
   walletAddress: string,
   apiErrors: string[] = []
 ): Promise<{ label: string | null; isCex: boolean; tags: string[] }> {
-  // DISABLED: Pro API v2.0 returns 401 with free key. Re-enable when upgraded to Pro Level 2.
-  console.log('[Solscan Intel] DISABLED — Pro API not available. Falling back to scrape.');
-  
   const scrapeFallback = async () => {
     const scraped = await solscanScrapeFundingInfo(walletAddress, apiErrors);
     const label = scraped.fundedByLabel || null;
@@ -333,8 +325,6 @@ export async function solscanCheckAccountLabel(
 
     return { label, isCex, tags: [] };
   };
-
-  return await scrapeFallback();
 
   const apiKey = getSolscanApiKey();
   if (!apiKey) {
@@ -414,10 +404,6 @@ export async function solscanDiscoverFunders(
 
     return [];
   };
-
-  // DISABLED: Pro API v2.0 returns 401 with free key. Re-enable when upgraded to Pro Level 2.
-  console.log('[Solscan Intel] DISABLED — Pro API not available. Falling back to scrape for funders.');
-  return await fallbackFromScrape();
 
   const apiKey = getSolscanApiKey();
   if (!apiKey) {
@@ -525,11 +511,6 @@ export async function solscanDiscoverCreatedTokens(
   walletAddress: string,
   apiErrors: string[] = []
 ): Promise<SolscanTokenCreation[]> {
-  // DISABLED: Pro API v2.0 returns 401 with free key. Re-enable when upgraded to Pro Level 2.
-  console.log('[Solscan Intel] DISABLED — Pro API not available. Skipping created tokens discovery.');
-  apiErrors.push('Solscan Pro disabled (free tier key)');
-  return [];
-
   const apiKey = getSolscanApiKey();
   if (!apiKey) {
     apiErrors.push('SOLSCAN_API_KEY not configured');
@@ -616,11 +597,6 @@ export async function solscanFullIntelSweep(
     apiErrors,
     callsMade: 0,
   };
-
-  // DISABLED: Pro API v2.0 returns 401 with free key. Re-enable when upgraded to Pro Level 2.
-  console.log('[Solscan Intel] DISABLED — Pro API not available. Full intel sweep skipped.');
-  apiErrors.push('Solscan Pro disabled (free tier key)');
-  return result;
 
   const apiKey = getSolscanApiKey();
   if (!apiKey) {

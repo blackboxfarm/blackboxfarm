@@ -43,23 +43,25 @@ export async function checkProviderHealth(
       .limit(50);
 
     const total = recentLogs?.length || 0;
-    const failures = recentLogs?.filter(l => 
-      l.response_status === 401 || l.response_status === 403 || !l.success
-    ).length || 0;
-
-    const failRate = total > 0 ? failures / total : 0;
-    const isHealthy = failRate < 0.3;
-    const isDegraded = failRate >= 0.3 && failRate < 0.8;
-
-    // Check for auth failures specifically (401/403 = key is broken)
-    const authFailures = recentLogs?.filter(l => 
+    const failures = recentLogs?.filter(l => !l.success).length || 0;
+    const rateLimited = recentLogs?.filter(l => l.response_status === 429).length || 0;
+    // 401/403 only count as "auth broken" if they dominate (>50% of recent calls).
+    // Single 401s happen on bad params or revoked accounts being probed; not a key issue.
+    const authFailures = recentLogs?.filter(l =>
       l.response_status === 401 || l.response_status === 403
     ).length || 0;
-    const hasAuthFailure = authFailures > 0;
+    const authShare = total > 0 ? authFailures / total : 0;
+    const hasAuthFailure = authShare > 0.5 && authFailures >= 5;
+
+    const failRate = total > 0 ? failures / total : 0;
+    const isHealthy = failRate < 0.3 && !hasAuthFailure;
+    const isDegraded = (failRate >= 0.3 && failRate < 0.8) || rateLimited > 5;
 
     let recommendation = 'Available';
     if (hasAuthFailure) {
-      recommendation = `API key invalid or tier insufficient (${authFailures} auth failures)`;
+      recommendation = `API key likely invalid (${authFailures}/${total} auth failures, ${(authShare * 100).toFixed(0)}%)`;
+    } else if (rateLimited > 5) {
+      recommendation = `Rate-limited (${rateLimited} 429s in 30m) — back off, do not disable`;
     } else if (isDegraded) {
       recommendation = `Degraded (${(failRate * 100).toFixed(0)}% failure rate)`;
     } else if (!isHealthy) {
@@ -68,8 +70,8 @@ export async function checkProviderHealth(
 
     const health: ProviderHealth = {
       serviceName,
-      isHealthy: isHealthy && !hasAuthFailure,
-      isDegraded: isDegraded || hasAuthFailure,
+      isHealthy,
+      isDegraded,
       recentFailRate: failRate,
       recommendation,
     };
