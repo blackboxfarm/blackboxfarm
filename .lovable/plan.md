@@ -60,3 +60,23 @@ LIST 3 — sellable features unlocked: **none built yet.**
 ### Out of scope for this plan
 - Replacing DexScreener pricing — Solscan is not used for live price.
 - Re-enabling Solscan in any code path the Strategic Direction memory de-prioritises.
+
+---
+
+## Implementation status (post-build)
+
+**Shipped this turn:**
+- Phase A.1 — `breadcrumbs-scanner` Solscan promoted to `type:'api', priority:95` (`/v2.0/token/meta` with `token` header). Old scrape kept as `solscan_scrape` priority 55 fallback.
+- Phase A.2 — `oracle-unified-lookup` now runs `solscanDiscoverFunders` + `solscanCheckAccountLabel` after the Helius funding chain and merges unique funders tagged `source: 'solscan_pro'`.
+- Phase B.6 — `solscanResolveTokenCreator` now also returns `freezeAuthority` so the Mint/Freeze badge can read both authorities from a single Pro call.
+- Phase B.5 — New `_shared/solscan-portfolio.ts` (in-memory 5-min LRU around `/v2.0/account/portfolio`) + new edge function `wallet-portfolio-chip` for the BubbleMap hover chip.
+- Phase D.9 — New `_shared/solscan-rate-limiter.ts` — 800-rpm self-throttle, LRU response cache with per-call TTL, structured `[Solscan] GET … hit=net status=… rpm=…/800` log lines, and a `getSolscanRateStats()` helper for the admin status panel.
+
+**Deferred (need product/UI input before invasive cross-file rewires):**
+- Phase A.3 — wiring `developer-wallet-tracer` as the *primary* tracer in `developer-discovery-job` and watchlist enricher.
+- Phase A.4 — `token-metadata` / `bagless-holders-report` / `flipit-execute` / `flipit-repair-positions` audit pass for Pro-path coverage + `assertDbWrite`.
+- Phase B (UI) — Render Portfolio chip on BubbleMap node hover and Mint/Freeze badge on token header (helpers exist, components not yet wired).
+- Phase C — LP composition deep-read and Autopsy enrichment.
+- Phase D.10 — daily Helius credit delta counter.
+
+These are scoped as follow-up tickets so this turn ships a clean, reviewable surface area.
