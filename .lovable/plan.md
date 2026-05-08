@@ -84,3 +84,12 @@ LIST 3 — sellable features unlocked: **none built yet.**
 - Phase B.6 UI — `MintFreezeAuthorityBadge` component shipped (red/green chips, tooltip explaining the rug-risk implication of each authority).
 
 These are scoped as follow-up tickets so this turn ships a clean, reviewable surface area.
+
+**Shipped this turn (3rd pass):**
+- Phase A.3 — `_shared/rpc-provider.ts` now puts **Solscan first** for `tx_history` and `token_metadata` capabilities. `fetchSolscanTransactions` was rewritten to call Pro v2.0 `/v2.0/account/transfer` through `solscanFetch` (60 s LRU + 800 rpm throttle), normalised back into the legacy `{ lamport, src, txHash, blockTime }` shape so `developer-wallet-tracer` and other callers keep working without changes. Helius is now the *fallback*, not the primary, for transfer-history fan-outs.
+- Phase D.10 — New edge function `api-credit-delta` aggregates `api_usage_log` over the last 48 h and returns `{ helius: { last24, prior24, deltaPct }, solscan: { … } }` so the admin Solscan/Helius status panel can show the projected 30-50 % Helius credit drop in real time. Pure read aggregator, no DB writes, no `assertDbWrite` needed.
+
+**Still deferred (need product/UI input):**
+- Phase B UI placement — drop `<MintFreezeAuthorityBadge>` into the Holders report header and render the `wallet-portfolio-chip` USD chip on BubbleMap node hover. The components + edge function exist; placement is a UI-design call.
+- Phase C — LP composition deep-read on BubbleMap and Autopsy enrichment with Pro transfer history + CEX labels.
+- Admin panel that consumes `api-credit-delta` and `getSolscanRateStats()` (status widget can land alongside the existing Helius credit tracker on the Mesh visualizer).
