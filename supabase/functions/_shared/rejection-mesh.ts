@@ -100,11 +100,15 @@ export async function feedRejectionToMesh(supabase: any, params: RejectionMeshPa
       }
       updates.total_tokens_launched = (existingRep.total_tokens_launched || 0) + 1;
 
-      const totalBad = (updates.tokens_rugged ?? existingRep.tokens_rugged ?? 0) + 
-                       (updates.tokens_abandoned ?? existingRep.tokens_abandoned ?? 0);
-      if (totalBad >= 5) { updates.trust_level = 'serial_rugger'; updates.is_serial_spammer = true; }
-      else if (totalBad >= 3) { updates.trust_level = 'repeat_loser'; }
-      else if (isRug) { updates.trust_level = 'scammer'; }
+      const newRugs     = (updates.tokens_rugged    ?? existingRep.tokens_rugged    ?? 0);
+      const newAbandons = (updates.tokens_abandoned ?? existingRep.tokens_abandoned ?? 0);
+      // Truthful classifier: serial_rugger reserved for actual repeat rug events.
+      // Mass-abandonment / spam patterns get their own honest tier.
+      if (newRugs >= 5)        { updates.trust_level = 'serial_rugger'; updates.is_serial_spammer = true; }
+      else if (newRugs >= 2)   { updates.trust_level = 'scammer'; }
+      else if (newRugs >= 1)   { updates.trust_level = 'scammer'; }
+      else if (newAbandons >= 10) { updates.trust_level = 'low_quality_launcher'; updates.is_serial_spammer = true; }
+      else if (newAbandons >= 3)  { updates.trust_level = 'repeat_loser'; }
 
       await supabase.from('dev_wallet_reputation').update(updates).eq('id', existingRep.id);
     } else {
