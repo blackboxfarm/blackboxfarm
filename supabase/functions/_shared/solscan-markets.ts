@@ -1,6 +1,7 @@
 // Solscan Markets API utilities
 import { KNOWN_DEX_PROGRAMS, BONDING_CURVE_PROGRAMS } from "./lp-detection.ts";
 import { createApiLogger } from "./api-logger.ts";
+import { solscanFetch } from "./solscan-rate-limiter.ts";
 
 export interface SolscanMarketResult {
   poolAddresses: Set<string>;
@@ -34,12 +35,13 @@ export async function fetchSolscanMarkets(tokenMint: string): Promise<SolscanMar
     });
     
     // Solscan Pro v2.0 markets endpoint: parameter name is `token` (not `address`)
-    const marketsResp = await fetch(`https://pro-api.solscan.io/v2.0/token/markets?token[]=${tokenMint}&page=1&page_size=20`, {
-      headers: { 'token': solscanApiKey }
-    });
-    
+    const marketsResp = await solscanFetch(
+      `https://pro-api.solscan.io/v2.0/token/markets?token[]=${tokenMint}&page=1&page_size=20`,
+      { headers: { token: solscanApiKey }, cacheTtlMs: 60_000 }
+    );
+
     if (!marketsResp.ok) {
-      const errorBody = await marketsResp.text();
+      const errorBody = typeof marketsResp.body === 'string' ? marketsResp.body : JSON.stringify(marketsResp.body || '');
       await marketsLogger.complete(marketsResp.status, `Solscan ${marketsResp.status}: ${errorBody.slice(0, 200)}`);
       console.error(`[Solscan] API error ${marketsResp.status}: ${errorBody.slice(0, 200)}`);
       return result;
@@ -48,7 +50,7 @@ export async function fetchSolscanMarkets(tokenMint: string): Promise<SolscanMar
     await marketsLogger.complete(marketsResp.status);
     
     {
-      const marketsData = await marketsResp.json();
+      const marketsData = marketsResp.body;
       if (marketsData.success && marketsData.data?.length > 0) {
         console.log(`[Solscan] Found ${marketsData.data.length} markets`);
         
@@ -81,14 +83,15 @@ export async function fetchSolscanMarkets(tokenMint: string): Promise<SolscanMar
             credits: 1,
           });
           
-          const holdersResp = await fetch(`https://pro-api.solscan.io/v2.0/token/holders?address=${tokenMint}&page=1&page_size=50`, {
-            headers: { 'token': solscanApiKey }
-          });
-          
+          const holdersResp = await solscanFetch(
+            `https://pro-api.solscan.io/v2.0/token/holders?address=${tokenMint}&page=1&page_size=50`,
+            { headers: { token: solscanApiKey }, cacheTtlMs: 60_000 }
+          );
+
           await holdersLogger.complete(holdersResp.status);
-          
+
           if (holdersResp.ok) {
-            const holdersData = await holdersResp.json();
+            const holdersData = holdersResp.body;
             if (holdersData.success && holdersData.data?.length > 0) {
               const allDexPrograms = [...Object.values(KNOWN_DEX_PROGRAMS), ...Object.values(BONDING_CURVE_PROGRAMS)];
 
