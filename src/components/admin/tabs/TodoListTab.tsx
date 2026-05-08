@@ -106,6 +106,10 @@ export default function TodoListTab() {
 
   const toggleStatus = async (item: TodoItem) => {
     const newStatus = item.status === 'done' ? 'todo' : 'done';
+    if (newStatus === 'done') {
+      const ok = window.confirm(`Mark "${item.title}" as done? It will move out of the Active list.`);
+      if (!ok) return;
+    }
     const { error } = await supabase
       .from('admin_todo_items')
       .update({
