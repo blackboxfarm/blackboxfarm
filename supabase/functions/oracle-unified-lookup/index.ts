@@ -760,12 +760,12 @@ Deno.serve(withRunLog('oracle-unified-lookup', async (req) => {
           const heliusFunderSet = new Set(heliusFundingChain.map(f => f.funder));
           const newFromSolscan = solFunders.filter(f => !heliusFunderSet.has(f.wallet));
           for (const f of newFromSolscan.slice(0, 5)) {
-            const label = await solscanCheckAccountLabel(f.wallet, apiErrors).catch(() => null);
+            const labelInfo = await solscanCheckAccountLabel(f.wallet, apiErrors).catch(() => null);
             heliusFundingChain.push({
               funder: f.wallet,
-              funderName: label || null,
+              funderName: labelInfo?.label || null,
               amountSol: f.amountSol,
-              isCex: !!label && /binance|coinbase|kraken|bybit|kucoin|okx|bitfinex|gate/i.test(label),
+              isCex: !!labelInfo?.isCex,
               // @ts-expect-error annotated for downstream evidence
               source: 'solscan_pro',
             } as any);
