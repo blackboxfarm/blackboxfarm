@@ -4296,6 +4296,72 @@ export type Database = {
         }
         Relationships: []
       }
+      dev_reputation_v2: {
+        Row: {
+          archetype: string | null
+          best_token_mint: string | null
+          career_arc: Json | null
+          composite: number | null
+          distribution: Json | null
+          last_rolled_up_at: string
+          peak_mcap_lifetime: number | null
+          rollup_version: string
+          tokens_of_worth: number
+          tokens_scored: number
+          total_boosts_usd: number | null
+          total_buybacks_usd: number | null
+          wallet_address: string
+          weighted_effort: number | null
+          weighted_integrity: number | null
+          weighted_skill: number | null
+          weighted_social: number | null
+          weighted_sustain: number | null
+          worst_token_mint: string | null
+        }
+        Insert: {
+          archetype?: string | null
+          best_token_mint?: string | null
+          career_arc?: Json | null
+          composite?: number | null
+          distribution?: Json | null
+          last_rolled_up_at?: string
+          peak_mcap_lifetime?: number | null
+          rollup_version?: string
+          tokens_of_worth?: number
+          tokens_scored?: number
+          total_boosts_usd?: number | null
+          total_buybacks_usd?: number | null
+          wallet_address: string
+          weighted_effort?: number | null
+          weighted_integrity?: number | null
+          weighted_skill?: number | null
+          weighted_social?: number | null
+          weighted_sustain?: number | null
+          worst_token_mint?: string | null
+        }
+        Update: {
+          archetype?: string | null
+          best_token_mint?: string | null
+          career_arc?: Json | null
+          composite?: number | null
+          distribution?: Json | null
+          last_rolled_up_at?: string
+          peak_mcap_lifetime?: number | null
+          rollup_version?: string
+          tokens_of_worth?: number
+          tokens_scored?: number
+          total_boosts_usd?: number | null
+          total_buybacks_usd?: number | null
+          wallet_address?: string
+          weighted_effort?: number | null
+          weighted_integrity?: number | null
+          weighted_skill?: number | null
+          weighted_social?: number | null
+          weighted_sustain?: number | null
+          worst_token_mint?: string | null
+        }
+        Relationships: []
+      }
       dev_teams: {
         Row: {
           admin_usernames: string[] | null
@@ -17411,6 +17477,78 @@ export type Database = {
           },
         ]
       }
+      token_lifecycle_scorecard: {
+        Row: {
+          composite_score: number | null
+          dev_wallet: string | null
+          effort_score: number | null
+          factor_scores: Json | null
+          graduation_score: number | null
+          integrity_score: number | null
+          mint_bonding_score: number | null
+          phase_scores: Json | null
+          scored_at: string
+          scoring_version: string
+          skill_score: number | null
+          social_score: number | null
+          solscan_evidence_refs: Json | null
+          sustain_score: number | null
+          token_mint: string
+          updated_at: string
+          verdict: string | null
+          verdict_confidence: number | null
+          wallet_mesh_score: number | null
+          worth_gate_passed: boolean
+          worth_gate_reasons: Json | null
+        }
+        Insert: {
+          composite_score?: number | null
+          dev_wallet?: string | null
+          effort_score?: number | null
+          factor_scores?: Json | null
+          graduation_score?: number | null
+          integrity_score?: number | null
+          mint_bonding_score?: number | null
+          phase_scores?: Json | null
+          scored_at?: string
+          scoring_version?: string
+          skill_score?: number | null
+          social_score?: number | null
+          solscan_evidence_refs?: Json | null
+          sustain_score?: number | null
+          token_mint: string
+          updated_at?: string
+          verdict?: string | null
+          verdict_confidence?: number | null
+          wallet_mesh_score?: number | null
+          worth_gate_passed?: boolean
+          worth_gate_reasons?: Json | null
+        }
+        Update: {
+          composite_score?: number | null
+          dev_wallet?: string | null
+          effort_score?: number | null
+          factor_scores?: Json | null
+          graduation_score?: number | null
+          integrity_score?: number | null
+          mint_bonding_score?: number | null
+          phase_scores?: Json | null
+          scored_at?: string
+          scoring_version?: string
+          skill_score?: number | null
+          social_score?: number | null
+          solscan_evidence_refs?: Json | null
+          sustain_score?: number | null
+          token_mint?: string
+          updated_at?: string
+          verdict?: string | null
+          verdict_confidence?: number | null
+          wallet_mesh_score?: number | null
+          worth_gate_passed?: boolean
+          worth_gate_reasons?: Json | null
+        }
+        Relationships: []
+      }
       token_lifecycle_tracking: {
         Row: {
           created_at: string
@@ -21516,6 +21654,13 @@ export type Database = {
         }[]
       }
       mask_sensitive_data: { Args: { input_text: string }; Returns: string }
+      passes_worth_gate: {
+        Args: { p_token_mint: string }
+        Returns: {
+          passes: boolean
+          reasons: Json
+        }[]
+      }
       pause_apify: {
         Args: {
           p_body?: string
