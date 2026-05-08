@@ -330,9 +330,6 @@ export async function solscanCheckAccountLabel(
   if (!apiKey) {
     return await scrapeFallback();
   }
-  if (!apiKey) {
-    return await scrapeFallback();
-  }
 
   try {
     const logger = createApiLogger({
