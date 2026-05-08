@@ -1,4 +1,7 @@
-import { corsHeaders } from '@supabase/supabase-js/cors';
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 // One-shot probe: confirm SOLSCAN_API_KEY is a Pro v2.0 key by hitting
 // a Pro-only endpoint (/v2.0/token/meta) and a free endpoint side-by-side.
