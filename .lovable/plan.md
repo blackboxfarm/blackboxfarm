@@ -1,194 +1,82 @@
+## Solscan Pro v2.0 — Status Audit & Remaining Plan
 
-# Plan — Dev Reputation: Full Token-Lifecycle Scoring Engine (Solscan-Pro powered)
+### What's already done (verified in current code)
 
-## Goal
+**Phase 0 — Pro key activation** ✅
+- `verify-solscan-pro` edge function exists; `SOLSCAN_API_KEY` confirmed Pro v2.0 (200s on `/token/meta`, `/account/transfer`).
+- `_shared/solscan-api.ts` — Pro v2.0 enabled, `token` header, `/v2.0/transaction/detail`.
+- `_shared/solscan-intelligence.ts` — Pro endpoints live: `/token/meta`, `/account/detail` (CEX labels), `/account/transfer` (SPL transfer + mint chains).
+- `_shared/solscan-markets.ts` — Pro `/token/markets` + `/token/holders`, correct `token[]` param.
+- `_shared/solscan-free.ts` — Pro v2.0 path enabled for token meta.
+- `_shared/provider-health.ts` — Solscan no longer auth-broken.
 
-Given any **token CA** or **dev wallet**, return a verdict that:
-1. Lists every past token they launched
-2. Grades each token across the full lifecycle (mint → bonding → graduation → post-grad → death/CTO)
-3. Rolls those grades additively into a per-dev reputation across 5 dimensions: **Effort, Skill, Integrity, Sustain, Social**
-4. Distinguishes *3 good launches* from *4 bad + 1 great*, *effort-but-no-traction* from *scammy*, *inexperience* from *expert/shark*
-5. Uses **Solscan Pro v2.0** as the on-chain truth layer wherever possible (replacing Helius-heavy and HTML-scrape paths)
+**Phase 0b — Hybrid genealogy** ✅
+- `_shared/auto-genealogy.ts` uses Solscan Pro `/v2.0/account/transfer` as the fast-path funder discovery before falling back to Helius.
 
----
+### What's NOT done yet (gaps vs the To-Do)
 
-## Phase 0 — Solscan Pro Activation (PREREQUISITE)
+From LIST 1 of the To-Do:
+- ❌ **#7 — `oracle-unified-lookup` funding-chain block**: no Solscan corroborating-source branch found in the unified lookup.
+- ❌ **#8 — `breadcrumbs-scanner` promotion**: Solscan is still `type: 'scrape', priority: 70`. Needs to become `type: 'api', priority: 95` using Pro `/v2.0/token/meta`.
+- ❌ **#9 — `developer-wallet-tracer` activation as primary tracer**: file exists but not wired as the lead tracer in the discovery jobs that currently lean on Helius.
+- ⚠️ **#10 — `token-metadata`, `bagless-holders-report`, `flipit-execute`, `flipit-repair-positions`**: imports detected but no audit yet that they actually invoke the new Pro paths instead of legacy fallbacks.
 
-The TODO-list item *"Solscan Pro API Migration & Expansion Plan"* is folded in as Phase 0 because every lifecycle probe below leans on it.
-
-### 0a. Confirm key & lift the guards
-- Verify `SOLSCAN_API_KEY` is a Pro v2.0 key
-- Remove the `DISABLED — free tier key cannot access pro-api.solscan.io` early-returns in:
-  - `_shared/solscan-api.ts` (`fetchTransactionFromSolscan` + `parseBuyFromSolscan` + `parseSellFromSolscan`)
-  - `_shared/solscan-markets.ts` (`fetchSolscanMarkets`)
-  - `_shared/solscan-intelligence.ts` (token meta, CEX labels, SOL transfer chain)
-  - `_shared/solscan-free.ts` (`fetchSolscanFreeTokenMeta`)
-- Update `_shared/provider-health.ts` from "auth-broken" to "rate-limit-aware"
-- Promote `breadcrumbs-scanner` to `type: api, priority: 95`
-- Activate `developer-wallet-tracer` as the primary tracer
-- Re-enable Solscan as the second corroborating source in the `oracle-unified-lookup` funding-chain block
-- Hybridise `_shared/auto-genealogy.ts` to use Solscan first, Helius fallback
-
-### 0b. What Solscan Pro replaces/upgrades
-| Old path | New path |
-|---|---|
-| HTML scraping for transfers | `/v2.0/account/transfer` |
-| Multi-call Helius for tx detail | Single `/v2.0/transaction/detail` paged |
-| Estimated fills | Pre-parsed `sol_bal_change` + `token_bal_change` (on-chain truth) |
-| Whale-vs-LP guesswork | `/v2.0/token/markets` authoritative LP list |
-| Public-tier token meta | Pro `/v2.0/token/meta` |
-| Browserless DOM scraping | Native endpoint |
-
-### 0c. New capabilities unlocked (drive Phase 2 factors)
-- DeFi Activity Timelines (per wallet, per token)
-- Portfolio Valuations
-- CEX wallet labels (real, not heuristic)
-- Token top-holder movement
-- Real-time LP composition
-- Cross-token wallet behaviour
-- Mint/Freeze authority audit
-- Forensic autopsy enrichment
-- **~30–50 % Helius credit reduction** — frees budget for the new probes
-
-### 0d. First-wave Pro-only features (ship before reputation engine consumes them)
-1. **Portfolio chip** on Bubble Map nodes (#2)
-2. **Mint/Freeze authority badge** on token header (#8)
-3. **Provider-health rewrite** (#5)
-4. **Forensic autopsy enrichment** in `token-autopsy` (#9)
-
-Phase 0 is its own deployable unit; nothing in Phases 1–6 is started until Phase 0 smoke-tests green.
+LIST 3 — sellable features unlocked: **none built yet.**
 
 ---
 
-## Phase 1 — "Token of Worth" gate
+### Plan to finish — 4 phases
 
-Tokens qualify for full lifecycle scoring if **any**:
-- Peak market cap ≥ $25k
-- Lived ≥ 6 h with ≥ $5k liquidity
-- Reached DexScreener top-200 even briefly
-- Graduated from pump.fun bonding curve
-- Has ≥ 1 verified social asset (X community, TG group, site)
+#### Phase A — Wire the dormant consumers (List 1 #7-#10)
 
-Failing tokens get a lightweight `mint_only_score` so spam/effort patterns still register.
+1. **breadcrumbs-scanner**: promote Solscan to `{ key: 'solscan', type: 'api', priority: 95, apiEndpoint: 'pro-api.solscan.io/v2.0/token/meta?address={MINT}' }` with `token` header. Keep scrape entry as fallback at priority 60.
+2. **oracle-unified-lookup**: add Solscan-Pro corroboration block to the funding-chain section — calls `fetchSolscanCEXLabel()` and `fetchSolscanFundingChain()` from `_shared/solscan-intelligence.ts`, merges into the existing creator chain, and tags `source: 'solscan_pro'` for evidence transparency.
+3. **developer-wallet-tracer**: make it the first-pass tracer in `developer-discovery-job` and the watchlist enricher; Helius becomes secondary.
+4. **Audit pass**: open `token-metadata`, `bagless-holders-report`, `flipit-execute`, `flipit-repair-positions` and replace any remaining HTML-scrape / public-tier paths with the Pro helpers. Add `assertDbWrite` on every write touched (per Core memory).
 
----
+#### Phase B — First wave of new sellable features (List 3 #2 + #8)
 
-## Phase 2 — Scoring Matrix (5 dimensions, ~40 factors)
+5. **Portfolio chip on Bubble Map nodes**: new `_shared/solscan-portfolio.ts` calling `/v2.0/account/portfolio`; surface as a hover chip on wallet bubbles (USD total + top 3 token tickers). Cached 5 min in `wallet_portfolio_cache` table.
+6. **Mint / Freeze authority badge**: extend `token_meta` enrichment to capture `mint_authority` and `freeze_authority` from Pro `/token/meta`; render a red/green badge in token header + Hacker Terminal evidence.
 
-Each factor → `{ score: -100..+100, weight: 0..1, evidence: jsonb, present: bool }`. Absence ≠ failure (weaker negative than active malfeasance).
+#### Phase C — Second wave (List 3 #5 + #9)
 
-### A. Mint & Bonding (Solscan Pro = primary source)
-- Dev pre-mint wallet age & funding source (Solscan transfer chain + KYC root)
-- Bundle/sniper concentration block 0–5 (Solscan tx detail)
-- Dev buy-then-sell during bonding (Solscan `sol_bal_change`)
-- Bundled associative wallets — count, % held (`reputation_mesh` + Solscan portfolio)
-- Bonding-curve volume profile (organic vs wash) — Solscan tx timeline
-- Time to graduation / stall pattern
-- Dev's own contribution to bonding volume
+7. **Real-time LP composition** (`/token/markets` deeper read): show LP token mix and pool routes on the BubbleMap LP node; replace whale-vs-LP guesswork.
+8. **Forensic Autopsy enrichment**: feed `token_autopsy_engine` with Pro transfer history + CEX labels for richer `death_cause` reasoning.
 
-### B. Graduation & Raydium
-- Graduated to Raydium (binary, big positive)
-- Post-grad LP size & whether dev seeded it (`/v2.0/token/markets`)
-- Liquidity locked? (verifiable on-chain)
-- Mint authority revoked + Freeze authority (Solscan Pro authority audit)
-- Burn events + mcap at burn + community reaction (new probe)
-- Secondary LP managed by dev (Solscan markets list)
+#### Phase D — Cost & ops controls
 
-### C. Sustain / Effort (the big gap to fill)
-- Peak mcap milestones ($100k / $200k / $500k / $1M / $5M)
-- Hours in top-200 / top-50 / top-10
-- **Buybacks** — dev wallet buying post-grad (Solscan DeFi activity timeline) → new `probe-buybacks`
-- DexScreener boosts paid (50x, 100x, 500x) + ROI (`token_boost_history`)
-- Paid ads / promo spend signals
-- Pump.fun Live hosted? Frequency? → new `probe-pumpfun-profile-activity`
-- X Spaces hosted (X API)
-- **Token burns** + announcement + market reaction → new `probe-burns`
+9. **Solscan request budget** in `_shared/solscan-api.ts`: per-minute rate limiter (Pro v2.0 ≈ 1k rpm), simple LRU response cache (5 min for meta, 60 s for transfers), structured `[Solscan]` log lines for credit accounting.
+10. **Helius credit drop verification**: add a daily counter that compares Helius RPC calls before/after Phase A to confirm the projected 30–50% reduction.
 
-### D. Social Build & Maintenance
-- Website live, age, depth (`autopsy-social-death-check`)
-- Telegram channel: members, admins/mods, message velocity, sentiment (`autopsy-tg-deep-pull`)
-- X Community: members, posts/day, sentiment polarity (`autopsy-community-sweep`)
-- Discord server: members, channels, active mods (new probe)
-- TikTok presence (deferred to Phase 2.5)
-- Pump.fun profile activity (posts, replies)
-- CTO handover detected vs dev-led-to-death
-- Social asset survival post-death (zombie vs nuked)
+### Technical notes
 
-### E. Wallet Behaviour / Mesh
-- # associative wallets, classified (dev / promo / sniper-bundle / unknown) — Solscan + `reputation_mesh`
-- Wallet-washer / hidden-whale / diamond-dev / spike-kill patterns (already in `dev_wallet_reputation`)
-- Promo-wallet bundle: managed responsibly vs rugged (new — Solscan portfolio diff)
-- KYC root reached + exchange identified (Solscan CEX labels — finally real, not heuristic)
+- All new edge functions and helpers must use `assertDbWrite` for writes (Core memory: zero-tolerance silent fails).
+- All Pro requests use `'token': SOLSCAN_API_KEY` header (not `Authorization: Bearer`).
+- Respect the existing `provider-health.ts` circuit breaker — wrap new helpers in `await withProviderHealth('solscan', ...)`.
+- No hard-coded SOL/USD values anywhere (Core memory).
+- Keep `dex-top-200` cache as the sole price authority; Solscan is for chain truth, labels, and structure — not for prices.
+
+### Out of scope for this plan
+- Replacing DexScreener pricing — Solscan is not used for live price.
+- Re-enabling Solscan in any code path the Strategic Direction memory de-prioritises.
 
 ---
 
-## Phase 3 — Per-Token Scorecard
+## Implementation status (post-build)
 
-New table `token_lifecycle_scorecard`:
-```text
-token_mint (pk), dev_wallet, worth_gate_passed bool
-phase_scores jsonb     -- mint_bonding, graduation, sustain, social, wallet
-factor_scores jsonb    -- per-factor {score, weight, evidence, present}
-composite_score, effort_score, skill_score,
-integrity_score, sustain_score, social_score numeric
-verdict text           -- expert | competent | inexperienced | sloppy | scammy | shark | abandoner | builder
-verdict_confidence numeric
-solscan_evidence_refs jsonb  -- tx signatures + endpoints used (audit trail)
-scored_at timestamptz, scoring_version text
-```
+**Shipped this turn:**
+- Phase A.1 — `breadcrumbs-scanner` Solscan promoted to `type:'api', priority:95` (`/v2.0/token/meta` with `token` header). Old scrape kept as `solscan_scrape` priority 55 fallback.
+- Phase A.2 — `oracle-unified-lookup` now runs `solscanDiscoverFunders` + `solscanCheckAccountLabel` after the Helius funding chain and merges unique funders tagged `source: 'solscan_pro'`.
+- Phase B.6 — `solscanResolveTokenCreator` now also returns `freezeAuthority` so the Mint/Freeze badge can read both authorities from a single Pro call.
+- Phase B.5 — New `_shared/solscan-portfolio.ts` (in-memory 5-min LRU around `/v2.0/account/portfolio`) + new edge function `wallet-portfolio-chip` for the BubbleMap hover chip.
+- Phase D.9 — New `_shared/solscan-rate-limiter.ts` — 800-rpm self-throttle, LRU response cache with per-call TTL, structured `[Solscan] GET … hit=net status=… rpm=…/800` log lines, and a `getSolscanRateStats()` helper for the admin status panel.
 
----
+**Deferred (need product/UI input before invasive cross-file rewires):**
+- Phase A.3 — wiring `developer-wallet-tracer` as the *primary* tracer in `developer-discovery-job` and watchlist enricher.
+- Phase A.4 — `token-metadata` / `bagless-holders-report` / `flipit-execute` / `flipit-repair-positions` audit pass for Pro-path coverage + `assertDbWrite`.
+- Phase B (UI) — Render Portfolio chip on BubbleMap node hover and Mint/Freeze badge on token header (helpers exist, components not yet wired).
+- Phase C — LP composition deep-read and Autopsy enrichment.
+- Phase D.10 — daily Helius credit delta counter.
 
-## Phase 4 — Roll-up: `dev_reputation_v2`
-
-Parallel to legacy `dev_wallet_reputation` (don't break callers). Columns:
-```text
-wallet_address (pk), tokens_scored, tokens_of_worth
-distribution jsonb        -- {expert:1, competent:2, sloppy:4, scammy:0}
-career_arc jsonb          -- timeline of verdicts (learning vs regressing)
-weighted_effort, weighted_skill, weighted_integrity,
-weighted_sustain, weighted_social, composite numeric
-archetype text            -- builder | grinder | sniper | rugger | shark | tourist
-best_token_mint, worst_token_mint
-peak_mcap_lifetime, total_buybacks_usd, total_boosts_usd
-last_rolled_up_at timestamptz
-```
-
-Roll-up rule: **best 3 tokens weighted 1.0, rest 0.6** — 1 great + 4 bad ≠ 0 great + 5 mediocre, but the 4 bad still drag Integrity/Effort. Effort & Integrity roll across **all** tokens (can't hide spam behind one winner).
-
----
-
-## Phase 5 — Edge Functions
-
-Net-new (additive):
-1. `lifecycle-scorecard-builder` — runs all factor probes for one mint, idempotent
-2. `dev-reputation-rollup` — recomputes `dev_reputation_v2` from scorecards
-3. `dev-verdict-resolver` — public input: token CA OR dev wallet → full launch history + grades + reputation impact
-4. `probe-buybacks`, `probe-burns`, `probe-pumpfun-profile-activity`
-
-Reuse: `autopsy-tx-timeline`, `autopsy-tg-deep-pull`, `autopsy-community-sweep`, `dev-behavior-scorer`, `calculate-developer-integrity`, plus all newly-activated Solscan Pro shared modules from Phase 0.
-
-Cron: `lifecycle-scorecard-builder` runs nightly over `token_lifecycle` rows where `worth_gate_passed = true AND (scored_at IS NULL OR autopsy_at > scored_at)`. Rollup runs after each batch.
-
----
-
-## Phase 6 — Verdict Surface UI
-
-`/super-admin/dev-verdict` (new tab):
-- Dev card: archetype, composite, 5-dimension radar
-- Career-arc timeline (verdicts over time)
-- Per-token table with the 5 sub-scores + click-through evidence drawer (links straight to the Solscan tx signatures stored in `solscan_evidence_refs`)
-- Mesh wallet panel: linked wallets classified + CEX labels
-
-Frontend is a thin read of `dev-verdict-resolver` — no business logic in React.
-
----
-
-## What I need confirmed before building
-
-1. **Phase 0 first** — confirm `SOLSCAN_API_KEY` is Pro v2.0 and you want me to lift the DISABLED guards before any reputation work begins. (If the key isn't Pro yet, Phase 0 stalls and Phases 1–6 lose ~60 % of their data fidelity.)
-2. **Worth-gate thresholds** — proposed $25k peak / 6 h+$5k liq / top-200 / graduated / 1 social. Tighter or looser?
-3. **Roll-up weighting** — "best-3 at 1.0, rest at 0.6", or strict average, or "carry only the 5 best"?
-4. **New probes scope** — confirm `probe-buybacks`, `probe-burns`, `probe-pumpfun-profile-activity` ship in this pass; defer Discord/TikTok to a follow-up?
-
-After "approve" I'll execute Phase 0 → smoke-test → then schema + resolver + builder in one pass, then probes + UI.
+These are scoped as follow-up tickets so this turn ships a clean, reviewable surface area.
