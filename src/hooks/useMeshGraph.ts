@@ -1426,6 +1426,20 @@ function buildGraph(meshLinks: any[], typeFilters: Set<string>): MeshGraphData {
   const links: MeshLink[] = [];
 
   for (const link of meshLinks) {
+    // ═══ MINT-AS-WALLET GUARD ═══
+    // Some upstream writers (KYC same_kyc_root, etc.) emit mint addresses under
+    // linked_type='wallet'. Pump.fun mints end in `pump`, letsbonk mints in `bonk`.
+    // Reclassify them as 'token' so we don't render the same address twice
+    // (once as a gold token bubble, once as a green wallet bubble).
+    const isMintAddr = (id: string) =>
+      typeof id === 'string' && (id.endsWith('pump') || id.endsWith('bonk'));
+    if (link.source_type === 'wallet' && isMintAddr(link.source_id)) {
+      link.source_type = 'token';
+    }
+    if (link.linked_type === 'wallet' && isMintAddr(link.linked_id)) {
+      link.linked_type = 'token';
+    }
+
     const sourceKey = `${link.source_type}:${link.source_id}`;
     const targetKey = `${link.linked_type}:${link.linked_id}`;
 

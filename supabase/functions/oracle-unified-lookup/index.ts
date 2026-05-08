@@ -1293,6 +1293,18 @@ Deno.serve(withRunLog('oracle-unified-lookup', async (req) => {
       return true;
     });
 
+    // ═══ MINT-AS-WALLET GUARD ═══
+    // Reclassify any pump.fun (`pump`) or letsbonk (`bonk`) mint address that
+    // accidentally got tagged as `wallet` — these are tokens, not wallets.
+    // Without this, the bubble map renders the same mint twice (gold token +
+    // green wallet) when KYC-clustering picks up the mint address.
+    const isMintAddr = (id: string) =>
+      typeof id === 'string' && (id.endsWith('pump') || id.endsWith('bonk'));
+    for (const link of dedupedLinks) {
+      if (link.source_type === 'wallet' && isMintAddr(link.source_id)) link.source_type = 'token';
+      if (link.linked_type === 'wallet' && isMintAddr(link.linked_id)) link.linked_type = 'token';
+    }
+
     // Batch upsert in chunks of 50
     if (dedupedLinks.length > 0) {
       console.log(`[Oracle] Writing ${dedupedLinks.length} mesh links...`);

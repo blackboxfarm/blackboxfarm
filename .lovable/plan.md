@@ -1,89 +1,45 @@
-## Why almost every token shows "SERIAL RUGGER"
+## What's happening
 
-It's a **labeling bug + misleading copy**, not because the system actually thinks every dev rugged.
+The green "46gXYf…pump" bubble and the gold `$ANUNNAKI` bubble are the **same token mint** rendered twice — once correctly as a `token` and once incorrectly as a `wallet`.
 
-### What I found in the data
+Confirmed from `reputation_mesh` for that address:
 
-The UFO creator wallet (`Aqje5DsN…CFhSMXk`) is recorded as:
-- `trust_level = serial_rugger`
-- `tokens_rugged = 0`
-- `tokens_abandoned = 58`
-- `total_tokens_launched = 1020`
-- Notes: `Auto-created from backfill: bump_bot_detected:88%_micro_txs, high_bump_bot_ratio`
-
-Across the whole table, `dev_wallet_reputation` has **537 wallets labelled `serial_rugger` — 256 of them (48%) have 0 actual rugs**. They were promoted on `tokens_abandoned` alone (avg 15.9 abandons, avg 31 launches).
-
-### Root cause (in `supabase/functions/_shared/rejection-mesh.ts` lines 94–107)
-
-```ts
-const isRug = tags.includes('dev_dump') || tags.includes('pump_and_dump');
-if (isRug) updates.tokens_rugged++;
-else       updates.tokens_abandoned++;     // bump-bot, low-liquidity, spam, etc.
-const totalBad = tokens_rugged + tokens_abandoned;
-if (totalBad >= 5) updates.trust_level = 'serial_rugger';
+```
+linked_id=46gXYf…pump  linked_type=token   relationship=created          (correct)
+linked_id=46gXYf…pump  linked_type=token   relationship=created_token    (correct)
+linked_id=46gXYf…pump  linked_type=wallet  relationship=same_kyc_root    (WRONG — mint treated as wallet)
 ```
 
-So **any 5 rejections of any kind** (bump-bot heuristics, low liq, spam pattern, abandonment) flip the wallet to `serial_rugger`, even with zero rug events. Then `FlipItDashboard.tsx` line 900 renders:
+A KYC-cluster writer is emitting mint addresses (those ending in `pump`) under `linked_type='wallet'`, so the bubble map's `buildGraph` keys them as `wallet:46gXYf…pump` — a separate green node from `token:46gXYf…pump`. Scope across DB: 64 rows where a `…pump` mint is on the linked side as `wallet`, 17 where it's on the source side. Same bug will hit any pump.fun mint sharing a KYC root with the dev.
 
-> "🚨 SERIAL RUGGER — **0 rugged tokens on record**. Reputation score: 50/100."
+## Fix (3 layers)
 
-…which is internally contradictory and exactly what you saw.
+### 1. Frontend defensive guard — `src/hooks/useMeshGraph.ts` (`buildGraph`)
 
-A second amplifier: `total_tokens_launched` is incremented on every rejection event for the same token, so prolific launchers (Pump.fun bot devs, token factories) hit threshold almost instantly and stay there.
+Before inserting a node:
+- If `type === 'wallet'` AND id ends in `pump` (or `bonk`), reclassify it as `token`.
+- Then dedupe: if a `token:<id>` node already exists, drop the wallet node and **remap any edges** that pointed to `wallet:<id>` so they target `token:<id>` instead.
 
----
+This stops the double-bubble immediately, even with dirty DB rows.
 
-## Proposed fix (frontend + small classifier change)
+### 2. Backend writer fix
 
-### 1. Fix the misleading copy in `src/components/admin/FlipItDashboard.tsx` (~line 895–906)
+Audit and patch the four files that write `same_kyc_root` edges so they classify a mint address as `token` (suffix `pump`/`bonk`, or present in `token_metadata`) instead of defaulting to `wallet`:
+- `supabase/functions/_shared/holder-intelligence.ts`
+- `supabase/functions/oracle-unified-lookup/index.ts`
+- `supabase/functions/oracle-master-spider/index.ts`
+- `supabase/functions/mesh-kyc-deep-search/index.ts`
 
-Distinguish real rugs from "low-quality launcher":
+(The blacklist-mesh-guard and KYC-override paths only read, but I'll verify in implementation.)
 
-- If `tokens_rugged >= 3` → keep `🚨 SERIAL RUGGER — N rugs on record` (high)
-- Else if `tokens_rugged >= 1` → `⚠️ PRIOR RUG — N rug${s}, M abandoned` (high)
-- Else if `tokens_abandoned >= 10` → `⚠️ LOW-QUALITY LAUNCHER — M abandoned tokens, 0 confirmed rugs` (medium, not high)
-- Else → no warning (drop to mesh check)
+### 3. Cleanup migration
 
-This way the badge truthfully reflects what's in the row instead of forcing the `serial_rugger` enum into "RUGGER" wording.
+One-shot migration to fix existing rows in `reputation_mesh`:
+- `UPDATE reputation_mesh SET source_type='token' WHERE source_type='wallet' AND source_id LIKE '%pump'`
+- `UPDATE reputation_mesh SET linked_type='token' WHERE linked_type='wallet' AND linked_id LIKE '%pump'`
+- Then `DELETE` any rows that become exact duplicates of an existing (source,linked,relationship) triple.
 
-### 2. Tighten the classifier in `supabase/functions/_shared/rejection-mesh.ts`
+## Out of scope
 
-Replace the `totalBad >= 5 → serial_rugger` rule with:
-
-```text
-rugs   = tokens_rugged
-abandon = tokens_abandoned
-if rugs >= 5                       → serial_rugger
-elif rugs >= 2                     → repeat_rugger    (new tier, or reuse 'scammer')
-elif rugs >= 1                     → scammer
-elif abandon >= 10                 → low_quality_launcher  (new tier)
-elif abandon >= 3                  → repeat_loser
-else                               → suspicious
-```
-
-`serial_rugger` becomes reserved for actual repeat rug events. Bump-bot/abandonment patterns get their own honest label.
-
-### 3. One-time backfill SQL (migration)
-
-For existing rows: anything currently `serial_rugger` with `tokens_rugged = 0` gets demoted to the new `low_quality_launcher` (or `repeat_loser` if abandons < 10). ~256 wallets re-classified, no data loss.
-
-### 4. Keep the Blacklist Mesh `fail-open` policy intact
-
-Per project memory ("Security Guards Policy"), warnings stay non-blocking. This is purely a **truthfulness of the warning** fix — the buy still proceeds.
-
----
-
-### Files touched
-
-- `src/components/admin/FlipItDashboard.tsx` — copy + tier mapping (~15 lines)
-- `supabase/functions/_shared/rejection-mesh.ts` — classifier ladder (~10 lines)
-- new migration: backfill demotion of false-positive `serial_rugger` rows
-
-### Out of scope (call out, don't fix unless you want)
-
-- `total_tokens_launched` being incremented on repeat rejections of the same token (inflates the denominator). Worth fixing but separate change.
-- Other call sites that promote to `serial_rugger` (`backcheck-profit-exits`, `pumpfun-fantasy-sell-monitor`) — they already use real rug signals, so they're fine.
-
----
-
-**Confirm and I'll switch to build mode.** Want me to also fix the `total_tokens_launched` double-counting in the same pass, or leave that for later?
+- Why `$ANUNNAKI` (gold) and the `…pump` mint (green) appear as separate tokens — they probably *are* two different mints by the same dev. The bug is only that the `…pump` one is also drawn a second time as a wallet. After the fix you'll see one node per real token.
+- Bonk/letsbonk suffix logic (0 rows currently affected; will keep the guard generic anyway).

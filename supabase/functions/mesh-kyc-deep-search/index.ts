@@ -268,6 +268,12 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
 
     // If we found a KYC root, mark it in the mesh
     if (kycRoot && kycRoot !== walletAddress) {
+      // ═══ MINT-AS-WALLET GUARD ═══
+      // Defensive: if walletAddress is actually a mint (ends in `pump`/`bonk`),
+      // skip writing it as a wallet under same_kyc_root — that would make the
+      // bubble map render it twice (gold token + green wallet bubble).
+      const isMint = (id: string) =>
+        typeof id === 'string' && (id.endsWith('pump') || id.endsWith('bonk'));
       await supabase
         .from('reputation_mesh')
         .upsert({
@@ -282,19 +288,21 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
         }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true });
       meshLinksAdded++;
 
-      await supabase
-        .from('reputation_mesh')
-        .upsert({
-          source_type: 'kyc_root',
-          source_id: kycRoot,
-          linked_type: 'wallet',
-          linked_id: walletAddress,
-          relationship: 'same_kyc_root',
-          confidence: 85,
-          discovered_via: 'mesh-kyc-deep-search',
-          discovered_at: new Date().toISOString(),
-        }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true });
-      meshLinksAdded++;
+      if (!isMint(walletAddress)) {
+        await supabase
+          .from('reputation_mesh')
+          .upsert({
+            source_type: 'kyc_root',
+            source_id: kycRoot,
+            linked_type: 'wallet',
+            linked_id: walletAddress,
+            relationship: 'same_kyc_root',
+            confidence: 85,
+            discovered_via: 'mesh-kyc-deep-search',
+            discovered_at: new Date().toISOString(),
+          }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true });
+        meshLinksAdded++;
+      }
 
       // Mark intermediate wallets AND sibling wallets under same KYC root
       const allWalletsUnderKyc = [
@@ -304,6 +312,7 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
       
       for (const wallet of allWalletsUnderKyc) {
         if (wallet === kycRoot) continue;
+        if (isMint(wallet)) continue; // skip mint addresses misclassified as wallets
         await supabase
           .from('reputation_mesh')
           .upsert({
