@@ -46,8 +46,10 @@ export async function getBestProvider(capability: 'rpc' | 'tx_history' | 'token_
   
   const capabilityMap: Record<string, string[]> = {
     'rpc': ['helius', 'shyft', 'public_rpc'],
-    'tx_history': ['helius', 'solscan', 'shyft'],
-    'token_metadata': ['helius', 'solscan', 'shyft'],
+    // Solscan Pro v2.0 is preferred for tx history & meta — cheaper than Helius credits
+    // and returns labelled CEX/program data we use downstream.
+    'tx_history': ['solscan', 'helius', 'shyft'],
+    'token_metadata': ['solscan', 'helius', 'shyft'],
   };
 
   const supportedProviders = capabilityMap[capability] || ['public_rpc'];
@@ -158,29 +160,42 @@ async function fetchHeliusTransactions(wallet: string, limit: number): Promise<R
 }
 
 async function fetchSolscanTransactions(wallet: string, limit: number): Promise<RpcResult<any[]>> {
-  // Pro API disabled — go straight to public API
   const solscanKey = Deno.env.get('SOLSCAN_API_KEY');
-  
-  const headers: Record<string, string> = {
-    'Accept': 'application/json',
-  };
-  
-  if (solscanKey) {
-    headers['token'] = solscanKey;
+  if (!solscanKey) {
+    throw new Error('SOLSCAN_API_KEY not configured');
   }
 
-  // Use public API directly (free tier key doesn't work with pro-api.solscan.io)
-  const response = await fetch(
-    `https://public-api.solscan.io/account/transactions?account=${wallet}&limit=${limit}`,
-    { headers }
-  );
+  // Pro v2.0 transfer feed — labelled, faster than Helius DAS, and routed through the
+  // shared rate-limiter (800rpm self-throttle + LRU cache).
+  const { solscanFetch } = await import('./solscan-rate-limiter.ts');
+  const url = `https://pro-api.solscan.io/v2.0/account/transfer?address=${wallet}&page=1&page_size=${Math.min(limit, 100)}&sort_by=block_time&sort_order=desc`;
+  const resp = await solscanFetch(url, {
+    headers: { Accept: 'application/json', token: solscanKey },
+    cacheTtlMs: 60_000, // 60s — transfers are time-sensitive
+    timeoutMs: 8000,
+  });
 
-  if (!response.ok) {
-    throw new Error(`Solscan public API error: ${response.status}`);
+  if (!resp.ok) {
+    throw new Error(`Solscan Pro transfer ${resp.status}`);
   }
 
-  const data = await response.json();
-  return { data, error: null, provider: 'solscan_public' };
+  const raw = (resp.body as any)?.data || [];
+  // Normalize Pro v2.0 shape into the legacy `{ lamport, src, txHash, blockTime }` shape
+  // that downstream consumers (developer-wallet-tracer, etc.) already understand.
+  const data = raw.map((row: any) => ({
+    lamport: typeof row.amount === 'number' ? row.amount : Number(row.amount || 0),
+    src: row.from_address,
+    dst: row.to_address,
+    txHash: row.trans_id,
+    signature: row.trans_id,
+    blockTime: row.block_time,
+    timestamp: row.block_time,
+    activity_type: row.activity_type,
+    token_address: row.token_address,
+    _provider: 'solscan_pro',
+  }));
+
+  return { data, error: null, provider: 'solscan_pro' };
 }
 
 async function fetchRpcTransactions(wallet: string, limit: number): Promise<RpcResult<any[]>> {
