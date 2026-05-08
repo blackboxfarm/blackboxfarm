@@ -45,7 +45,11 @@ export const UserRolesProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
-      setIsLoading(true);
+      // Only show loading on the FIRST fetch. Background refetches (e.g. when
+      // the browser tab regains focus and Supabase issues a token refresh)
+      // should not flip the whole app into a loading state — that unmounts
+      // gated pages like Super Admin and wipes any in-progress form input.
+      setIsLoading(prev => (roles.length === 0 ? true : prev));
 
       // Prefer RPC to bypass potential RLS on user_roles
       const { data: isSA, error: saError } = await supabase.rpc('is_super_admin', { _user_id: user.id });
