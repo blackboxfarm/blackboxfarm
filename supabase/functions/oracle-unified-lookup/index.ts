@@ -4,6 +4,7 @@ import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRestUrl, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 import { discoverFundingChain } from '../_shared/funding-resolver.ts';
 import { isSolscanUsable } from '../_shared/provider-health.ts';
+import { solscanDiscoverFunders, solscanCheckAccountLabel } from '../_shared/solscan-intelligence.ts';
 import { resolveTokenCreator } from '../_shared/creator-resolver.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 import { ingestPublicCAQuery } from '../_shared/mesh-ingest.ts';
@@ -749,6 +750,36 @@ Deno.serve(withRunLog('oracle-unified-lookup', async (req) => {
       if (circularFunding && circularWallets.length > 0) {
         console.log(`[Oracle] 🔄 Circular funding wallets: ${circularWallets.map(w => w.slice(0,8)).join(' ↔ ')}`);
         apiErrors.push(`🔄 CIRCULAR FUNDING: ${circularWallets.length} wallets in funding loop`);
+      }
+
+      // ═══════ SOLSCAN PRO CORROBORATION (second on-chain source) ═══════
+      // Adds funders Helius missed and tags each as source: 'solscan_pro' for evidence transparency.
+      try {
+        if (await isSolscanUsable()) {
+          const solFunders = await solscanDiscoverFunders(resolvedWallet, apiErrors, 2);
+          const heliusFunderSet = new Set(heliusFundingChain.map(f => f.funder));
+          const newFromSolscan = solFunders.filter(f => !heliusFunderSet.has(f.wallet));
+          for (const f of newFromSolscan.slice(0, 5)) {
+            const label = await solscanCheckAccountLabel(f.wallet, apiErrors).catch(() => null);
+            heliusFundingChain.push({
+              funder: f.wallet,
+              funderName: label || null,
+              amountSol: f.amountSol,
+              isCex: !!label && /binance|coinbase|kraken|bybit|kucoin|okx|bitfinex|gate/i.test(label),
+              // @ts-expect-error annotated for downstream evidence
+              source: 'solscan_pro',
+            } as any);
+          }
+          if (newFromSolscan.length > 0) {
+            console.log(`[Oracle] Solscan-Pro corroboration added ${Math.min(newFromSolscan.length, 5)} extra funder(s).`);
+          }
+        } else {
+          console.log('[Oracle] Solscan unhealthy — skipping corroboration block.');
+        }
+      } catch (solErr) {
+        const msg = solErr instanceof Error ? solErr.message : String(solErr);
+        console.warn(`[Oracle] Solscan corroboration failed: ${msg}`);
+        apiErrors.push(`Solscan corroboration failed: ${msg}`);
       }
     }
     
