@@ -10,6 +10,7 @@
 
 const PORTFOLIO_CACHE_TTL_MS = 5 * 60 * 1000;
 const cache = new Map<string, { ts: number; value: WalletPortfolio }>();
+import { solscanFetch } from "./solscan-rate-limiter.ts";
 
 export interface PortfolioToken {
   mint: string;
@@ -69,19 +70,20 @@ export async function fetchWalletPortfolio(
 
   try {
     const url = `https://pro-api.solscan.io/v2.0/account/portfolio?address=${wallet}`;
-    const resp = await fetch(url, {
+    const resp = await solscanFetch(url, {
       headers: solscanHeaders(apiKey),
-      signal: AbortSignal.timeout(8000),
+      timeoutMs: 8000,
+      cacheTtlMs: 0, // local cache above already memoizes per wallet
     });
 
     if (!resp.ok) {
-      const detail = await resp.text().catch(() => '');
+      const detail = typeof resp.body === 'string' ? resp.body : JSON.stringify(resp.body || '');
       apiErrors.push(`Solscan portfolio ${resp.status}: ${detail.slice(0, 200)}`);
       console.warn(`[solscan-portfolio] ${resp.status} for ${wallet.slice(0, 8)}…`);
       return null;
     }
 
-    const json = await resp.json();
+    const json = resp.body;
     const data = json?.data || json;
     const tokens: PortfolioToken[] = (data?.tokens || data?.items || [])
       .map((t: any) => {

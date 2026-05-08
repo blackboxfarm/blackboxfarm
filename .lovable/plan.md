@@ -74,9 +74,13 @@ LIST 3 — sellable features unlocked: **none built yet.**
 
 **Deferred (need product/UI input before invasive cross-file rewires):**
 - Phase A.3 — wiring `developer-wallet-tracer` as the *primary* tracer in `developer-discovery-job` and watchlist enricher.
-- Phase A.4 — `token-metadata` / `bagless-holders-report` / `flipit-execute` / `flipit-repair-positions` audit pass for Pro-path coverage + `assertDbWrite`.
-- Phase B (UI) — Render Portfolio chip on BubbleMap node hover and Mint/Freeze badge on token header (helpers exist, components not yet wired).
+- Phase B (UI placement) — Drop `<MintFreezeAuthorityBadge>` into the token header / Hacker Terminal evidence row (component now exists at `src/components/token/MintFreezeAuthorityBadge.tsx`), and render Portfolio chip on BubbleMap node hover via `wallet-portfolio-chip`.
 - Phase C — LP composition deep-read and Autopsy enrichment.
 - Phase D.10 — daily Helius credit delta counter.
+
+**Shipped this turn (continuation):**
+- Phase A.4 audit complete — `token-metadata`, `bagless-holders-report`, `flipit-execute`, `flipit-repair-positions` all confirmed routing through Pro helpers (`solscan-free.ts`, `solscan-markets.ts`, `solscan-api.ts`) — no legacy scrape paths remain.
+- Phase D.9 propagation — `solscan-free.ts`, `solscan-markets.ts`, `solscan-portfolio.ts` now route every outbound call through `solscanFetch()` so the 800-rpm self-throttle, structured `[Solscan]` log lines, and per-endpoint TTL cache (5 min meta, 60 s markets/holders) apply uniformly.
+- Phase B.6 UI — `MintFreezeAuthorityBadge` component shipped (red/green chips, tooltip explaining the rug-risk implication of each authority).
 
 These are scoped as follow-up tickets so this turn ships a clean, reviewable surface area.
