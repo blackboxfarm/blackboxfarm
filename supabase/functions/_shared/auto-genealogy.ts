@@ -16,6 +16,7 @@
 
 import { getHeliusRpcUrl } from './helius-client.ts';
 import { getCexName } from './cex-wallets.ts';
+import { solscanDiscoverFunders } from './solscan-intelligence.ts';
 
 const MAX_DEPTH = 20;          // Solscan-style reach; KYC roots usually 8–15 hops
 const MIN_SOL = 0.01;          // Catch dust-funded temp wallets (1¢-ish at $85 SOL)
@@ -163,6 +164,25 @@ async function traceDepth(
   try {
     const rpcUrl = getHeliusRpcUrl();
 
+    // ── Phase 0b: SOLSCAN PRO v2.0 FAST PATH ──
+    // Try /v2.0/account/transfer first (1 call, pre-parsed). Fallback to
+    // Helius enhanced-tx API only if Solscan returns empty/errors.
+    let funders = new Map<string, number>();
+    try {
+      const solscanFunders = await solscanDiscoverFunders(wallet, [], 1);
+      for (const f of solscanFunders) {
+        if (f.amountSol >= MIN_SOL && f.wallet !== wallet) {
+          funders.set(f.wallet, (funders.get(f.wallet) || 0) + f.amountSol);
+        }
+      }
+      if (funders.size > 0) {
+        console.log(`[auto-genealogy] Solscan-Pro hop d=${depth} ${wallet.slice(0,8)} → ${funders.size} funders`);
+      }
+    } catch (e) {
+      console.warn(`[auto-genealogy] Solscan-Pro hop failed for ${wallet.slice(0,8)}: ${e}`);
+    }
+
+    if (funders.size === 0) {
     // Get recent signatures (50, parse top 25)
     const sigResp = await fetch(rpcUrl, {
       method: 'POST',
@@ -231,9 +251,6 @@ async function traceDepth(
 
     const enhancedTxs = await enhancedResp.json();
 
-    // Find incoming SOL transfers
-    const funders = new Map<string, number>(); // wallet -> total SOL received
-
     for (const tx of enhancedTxs) {
       if (!tx.nativeTransfers) continue;
       for (const transfer of tx.nativeTransfers) {
@@ -246,6 +263,7 @@ async function traceDepth(
         }
       }
     }
+    } // end Helius fallback block
 
     // Linear walk: follow the single biggest funder (top-2 near the root for diversity).
     // Matches Solscan's "Funded by" recursive click pattern.

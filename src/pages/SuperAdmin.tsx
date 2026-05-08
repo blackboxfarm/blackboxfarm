@@ -45,6 +45,7 @@ const InsidersLifecycleTab = lazy(() => import("@/components/admin/tabs/Insiders
 const DocsTab = lazy(() => import("@/components/admin/tabs/DocsTab"));
 const ChatSessionsTab = lazy(() => import("@/components/admin/ChatSessionsTab").then(m => ({ default: m.ChatSessionsTab })));
 const AutopsiesTab = lazy(() => import("@/components/admin/tabs/AutopsiesTab"));
+const DevVerdictTab = lazy(() => import("@/components/admin/tabs/DevVerdictTab"));
 
 const DEFAULT_ADMIN_TAB = "utilities";
 const ALLOWED_ADMIN_TABS = new Set([
@@ -77,6 +78,7 @@ const ALLOWED_ADMIN_TABS = new Set([
   "insiders-lifecycle",
   "docs",
   "chat-sessions",
+  "dev-verdict",
 ]);
 
 // Simple loading fallback
@@ -218,6 +220,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="insiders-lifecycle" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-fuchsia-500/30 data-[state=active]:to-purple-500/20">📈 Insiders Lifecycle</TabsTrigger>
             <TabsTrigger value="docs" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-slate-500/30 data-[state=active]:to-zinc-500/20">📚 Docs</TabsTrigger>
             <TabsTrigger value="chat-sessions" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500/30 data-[state=active]:to-indigo-500/20">💬 Chat Sessions</TabsTrigger>
+            <TabsTrigger value="dev-verdict" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-teal-500/20">🔬 Dev Verdict</TabsTrigger>
           </TabsList>
 
           {/* Each tab content is completely lazy - inner tabs only load when this category is active */}
@@ -450,6 +453,13 @@ export default function SuperAdmin() {
             {activeTab === "chat-sessions" && (
               <TabErrorBoundary tabName="Chat Sessions">
                 <Suspense fallback={<TabLoader />}><ChatSessionsTab /></Suspense>
+              </TabErrorBoundary>
+            )}
+          </TabsContent>
+          <TabsContent value="dev-verdict">
+            {activeTab === "dev-verdict" && (
+              <TabErrorBoundary tabName="Dev Verdict">
+                <Suspense fallback={<TabLoader />}><DevVerdictTab /></Suspense>
               </TabErrorBoundary>
             )}
           </TabsContent>
