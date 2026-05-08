@@ -1,0 +1,1 @@
+UPDATE public.admin_todo_items SET status='todo', updated_at=now() WHERE id IN ('74bcf9d9-0c60-492e-986e-03546f3df080','5092127e-de97-4fe7-8d43-83948100930a');
