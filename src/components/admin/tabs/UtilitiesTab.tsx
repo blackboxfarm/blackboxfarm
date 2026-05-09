@@ -19,12 +19,12 @@ const LiquidityLockChecker = lazy(() => import("@/components/LiquidityLockChecke
 const ApiResourceManager = lazy(() => import("@/components/admin/ApiResourceManager").then(m => ({ default: m.ApiResourceManager })));
 const DatabaseHousekeeping = lazy(() => import("@/components/admin/DatabaseHousekeeping").then(m => ({ default: m.DatabaseHousekeeping })));
 const HeliusUsageBreakdown = lazy(() => import("@/components/admin/HeliusUsageBreakdown").then(m => ({ default: m.HeliusUsageBreakdown })));
-const SolscanUsageBreakdown = lazy(() => import("@/components/admin/SolscanUsageBreakdown").then(m => ({ default: m.SolscanUsageBreakdown })));
+const SolscanDashboard = lazy(() => import("@/components/admin/SolscanDashboard"));
 const ApifyUsageBreakdown = lazy(() => import("@/components/admin/ApifyUsageBreakdown").then(m => ({ default: m.ApifyUsageBreakdown })));
 const FunctionOperationsDashboard = lazy(() => import("@/components/admin/FunctionOperationsDashboard").then(m => ({ default: m.FunctionOperationsDashboard })));
 
 export default function UtilitiesTab() {
-  const [activeSubTab, setActiveSubTab] = useState("function-ops");
+  const [activeSubTab, setActiveSubTab] = useState("solscan");
 
   return (
     <div className="space-y-4">
@@ -38,6 +38,7 @@ export default function UtilitiesTab() {
       <IntelligenceFeatureToggles />
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
       <TabsList className="flex flex-wrap gap-1">
+        <TabsTrigger value="solscan">🔎 Solscan</TabsTrigger>
         <TabsTrigger value="function-ops">⚙️ Function Ops</TabsTrigger>
         <TabsTrigger value="api-resources">📊 API Resources</TabsTrigger>
         <TabsTrigger value="spider">🕷️ Spider</TabsTrigger>
@@ -49,10 +50,12 @@ export default function UtilitiesTab() {
         <TabsTrigger value="liquidity">💧 Liquidity Checker</TabsTrigger>
         <TabsTrigger value="housekeeping">🧹 Housekeeping</TabsTrigger>
         <TabsTrigger value="helius-breakdown">📊 Helius Usage</TabsTrigger>
-        <TabsTrigger value="solscan-breakdown">🔎 Solscan Usage</TabsTrigger>
         <TabsTrigger value="apify-breakdown">🤖 Apify Usage</TabsTrigger>
       </TabsList>
 
+      <TabsContent value="solscan">
+        {activeSubTab === "solscan" && <Suspense fallback={<LazyLoader />}><SolscanDashboard /></Suspense>}
+      </TabsContent>
       <TabsContent value="function-ops">
         {activeSubTab === "function-ops" && <Suspense fallback={<LazyLoader />}><FunctionOperationsDashboard /></Suspense>}
       </TabsContent>
@@ -85,9 +88,6 @@ export default function UtilitiesTab() {
       </TabsContent>
       <TabsContent value="helius-breakdown">
         {activeSubTab === "helius-breakdown" && <Suspense fallback={<LazyLoader />}><HeliusUsageBreakdown /></Suspense>}
-      </TabsContent>
-      <TabsContent value="solscan-breakdown">
-        {activeSubTab === "solscan-breakdown" && <Suspense fallback={<LazyLoader />}><SolscanUsageBreakdown /></Suspense>}
       </TabsContent>
       <TabsContent value="apify-breakdown">
         {activeSubTab === "apify-breakdown" && <Suspense fallback={<LazyLoader />}><ApifyUsageBreakdown /></Suspense>}
