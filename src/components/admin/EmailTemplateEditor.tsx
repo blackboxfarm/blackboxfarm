@@ -211,9 +211,11 @@ export function EmailTemplateEditor() {
                       </div>
                       <ScrollArea className="h-[400px]">
                         {editData.html_body ? (
-                          <div
-                            className="bg-white p-4"
-                            dangerouslySetInnerHTML={{ __html: editData.html_body }}
+                          <iframe
+                            title="Email template preview"
+                            sandbox=""
+                            srcDoc={editData.html_body}
+                            className="bg-white w-full h-[400px] border-0"
                           />
                         ) : (
                           <div className="flex items-center justify-center h-[300px] text-sm text-muted-foreground">
