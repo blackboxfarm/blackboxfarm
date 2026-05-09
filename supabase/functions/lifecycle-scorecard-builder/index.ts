@@ -7,6 +7,7 @@
  */
 import { createClient } from "@supabase/supabase-js";
 import { scoreLifecycle, type LifecycleInputs } from "../_shared/lifecycle-scoring.ts";
+import { solscanFetch } from "../_shared/solscan-rate-limiter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,13 +18,14 @@ const SOLSCAN_KEY = Deno.env.get("SOLSCAN_API_KEY") ?? "";
 
 async function solscanTokenMeta(mint: string) {
   if (!SOLSCAN_KEY) return null;
-  const r = await fetch(`https://pro-api.solscan.io/v2.0/token/meta?address=${mint}`, {
-    headers: { token: SOLSCAN_KEY },
-    signal: AbortSignal.timeout(8000),
-  }).catch(() => null);
-  if (!r || !r.ok) return null;
-  const j = await r.json().catch(() => null);
-  return j?.data ?? null;
+  const r = await solscanFetch(`https://pro-api.solscan.io/v2.0/token/meta?address=${mint}`, {
+    headers: { token: SOLSCAN_KEY, accept: 'application/json' },
+    timeoutMs: 8000,
+    cacheTtlMs: 300_000,
+    callerName: 'lifecycle-scorecard-builder',
+  });
+  if (!r.ok) return null;
+  return (r.body as any)?.data ?? null;
 }
 
 Deno.serve(async (req) => {
