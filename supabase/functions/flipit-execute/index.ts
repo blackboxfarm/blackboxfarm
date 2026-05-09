@@ -555,7 +555,7 @@ serve(withRunLog('flipit-execute', async (req) => {
       return ok({ ok: true, skipped: 'no active flipit action requested' });
     }
 
-    const { action, tokenMint, walletId, buyAmountSol: explicitBuyAmountSol, buyAmountUsd, displayPriceUsd, displayPriceIsExecutable, targetMultiplier, positionId, slippageBps, priorityFeeMode, customPriorityFee, priorityFeeMicroLamports, jitoTipLamports, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct, moonbagEnabled, moonbagSellPct, moonbagKeepPct, positionType, isDiamondHand, diamondTrailingStopPct, diamondMinPeakX, diamondMaxHoldHours, isOnCurve: preflightIsOnCurve, venueHint: preflightVenueHint } = body;
+    const { action, tokenMint, walletId, buyAmountSol: explicitBuyAmountSol, buyAmountUsd, displayPriceUsd, displayPriceIsExecutable, targetMultiplier, positionId, slippageBps, priorityFeeMode, customPriorityFee, priorityFeeMicroLamports, jitoTipLamports, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct, moonbagEnabled, moonbagSellPct, moonbagKeepPct, positionType, isDiamondHand, diamondTrailingStopPct, diamondMinPeakX, diamondMaxHoldHours, isOnCurve: preflightIsOnCurve, venueHint: preflightVenueHint, fastReturn } = body;
 
     // Default slippage 5% (500 bps), configurable
     const effectiveSlippage = slippageBps || 500;
@@ -987,6 +987,7 @@ serve(withRunLog('flipit-execute', async (req) => {
 
       // Execute the buy via raydium-swap
       execLog.logPhaseStart('SWAP_EXECUTION');
+      const swapTask = (async (): Promise<Response> => {
       try {
         const buyLamportsForSwap = Math.floor(buyAmountSol * 1_000_000_000);
         const buyUsdForSwap = buyAmountSol * solPrice;
