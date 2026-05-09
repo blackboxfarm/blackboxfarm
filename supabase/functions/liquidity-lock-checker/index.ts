@@ -99,7 +99,7 @@ serve(withRunLog('liquidity-lock-checker', async (req) => {
             
             // Get top holders to confirm LP
             const holdersResp = await solscanFetch(
-              `https://pro-api.solscan.io/v2.0/token/holders?address=${tokenMint}&page=1&page_size=50`,
+              `https://pro-api.solscan.io/v2.0/token/holders?address=${tokenMint}&page=1&page_size=40`,
               { headers: solscanHeaders, timeoutMs: 8000, cacheTtlMs: 120_000, callerName: 'liquidity-lock-checker' }
             );
             if (holdersResp.ok) {
