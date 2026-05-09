@@ -1567,6 +1567,34 @@ serve(withRunLog('flipit-execute', async (req) => {
 
         return ok({ success: false, error: `Buy failed: ${errMsg}`, executionLog: execLog.getLogString() });
       }
+      })();
+
+      if (fastReturn) {
+        // Fire-and-forget: confirm + accounting happen in the background.
+        // Frontend's realtime subscription on flip_positions will see the row
+        // flip from 'pending_buy' -> 'holding' (success) or vanish (failure).
+        try {
+          // @ts-ignore - EdgeRuntime is provided by the Supabase Deno runtime
+          if (typeof EdgeRuntime !== 'undefined' && (EdgeRuntime as any).waitUntil) {
+            // @ts-ignore
+            (EdgeRuntime as any).waitUntil(
+              swapTask.catch((e: any) => console.error('[flipit-execute][fast-return] background error', e))
+            );
+          } else {
+            swapTask.catch((e: any) => console.error('[flipit-execute][fast-return] background error', e));
+          }
+        } catch (wuErr) {
+          console.error('[flipit-execute][fast-return] waitUntil failed', wuErr);
+        }
+        return ok({
+          success: true,
+          positionId: position.id,
+          status: 'pending_buy',
+          fastReturn: true,
+          message: 'Buy submitted — confirming in background',
+        });
+      }
+      return await swapTask;
     }
 
     if (action === "sell") {
