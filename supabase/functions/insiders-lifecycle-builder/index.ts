@@ -20,6 +20,9 @@ import { traceParentWallets, meshGenealogyResults } from "../_shared/auto-geneal
 import { fetchPumpFunCoin } from "../_shared/pumpfun-fetch.ts";
 import { assertUpdate } from "../_shared/db-assert.ts";
 
+import { enableHeliusTracking } from "../_shared/helius-fetch-interceptor.ts";
+enableHeliusTracking("insiders-lifecycle-builder");
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',

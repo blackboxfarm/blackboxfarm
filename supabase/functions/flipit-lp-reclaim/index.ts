@@ -20,6 +20,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { assertInsert } from '../_shared/db-assert.ts';
 
+import { enableHeliusTracking } from "../_shared/helius-fetch-interceptor.ts";
+enableHeliusTracking("flipit-lp-reclaim");
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',

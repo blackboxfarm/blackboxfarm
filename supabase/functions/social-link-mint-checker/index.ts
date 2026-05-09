@@ -4,6 +4,9 @@ import { extractXHandle, extractXCommunityId } from '../_shared/x-handle-extract
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 import { enqueueCommunityResolution } from '../_shared/queue-community-resolution.ts';
 
+import { enableHeliusTracking } from "../_shared/helius-fetch-interceptor.ts";
+enableHeliusTracking("social-link-mint-checker");
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
