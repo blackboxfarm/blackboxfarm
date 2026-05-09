@@ -207,19 +207,27 @@ async function fetchPumpFunUrls(mint: string): Promise<string[]> {
   } catch (_) { return []; }
 }
 
-/** Source 3: Solscan public API (FREE) */
+/** Source 3: Solscan Pro v2.0 /token/meta (authenticated) */
 async function fetchSolscanUrls(mint: string): Promise<string[]> {
   try {
-    const res = await fetch(`https://api-v2.solscan.io/v2/token/meta?address=${mint}`, {
-      headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; BlackBox/1.0)' },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    const meta = data?.data;
+    const solscanKey = Deno.env.get('SOLSCAN_API_KEY');
+    if (!solscanKey) return [];
+    const { solscanFetch } = await import('../_shared/solscan-rate-limiter.ts');
+    const resp = await solscanFetch(
+      `https://pro-api.solscan.io/v2.0/token/meta?address=${mint}`,
+      {
+        headers: { Accept: 'application/json', token: solscanKey },
+        timeoutMs: 5000,
+        cacheTtlMs: 300_000,
+        callerName: 'backfill-x-communities',
+      },
+    );
+    if (!resp.ok) return [];
+    const meta: any = (resp.body as any)?.data;
     if (!meta) return [];
     return [
       meta.twitter, meta.website, meta.telegram,
+      meta.metadata?.twitter, meta.metadata?.website, meta.metadata?.telegram,
       meta.extensions?.twitter, meta.extensions?.website, meta.extensions?.discord,
       meta.extensions?.telegram, meta.extensions?.medium, meta.extensions?.github,
     ].filter(Boolean);
