@@ -53,11 +53,13 @@ export async function getBestProvider(capability: 'rpc' | 'tx_history' | 'token_
   };
 
   const supportedProviders = capabilityMap[capability] || ['public_rpc'];
-  
-  for (const provider of providers) {
-    if (supportedProviders.includes(provider.provider_name)) {
-      return provider.provider_name;
-    }
+  const enabledNames = new Set(providers.map(p => p.provider_name));
+
+  // IMPORTANT: honor capability-map order (which encodes our cost/speed preference)
+  // and intersect with what's actually enabled in api_provider_config.
+  // Numeric priority is a tiebreaker only inside the same capability tier.
+  for (const name of supportedProviders) {
+    if (enabledNames.has(name)) return name;
   }
 
   return 'public_rpc';
