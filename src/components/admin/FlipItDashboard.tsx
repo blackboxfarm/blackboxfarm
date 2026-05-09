@@ -2170,7 +2170,12 @@ export function FlipItDashboard() {
           venueHint: inputToken.venueHint,
           targetMultiplier: targetMultiplier,
           slippageBps: slippageBps,
-          priorityFeeMode: priorityFeeMode
+          priorityFeeMode: priorityFeeMode,
+          // Trojan-style fast path: edge function returns the moment the position
+          // row exists (status='pending_buy') and confirms in the background.
+          // Realtime subscription on flip_positions flips the row to 'holding'
+          // when the swap confirms, or removes it on failure.
+          fastReturn: true,
         }
       });
 
@@ -2178,6 +2183,14 @@ export function FlipItDashboard() {
 
       if (data?.error) {
         toast.error(data.error);
+      } else if (data?.fastReturn) {
+        // Submitted — confirmation happens in background. Active Flips row
+        // already exists via realtime and will update to 'holding' on confirm.
+        toast.success('Buy submitted — confirming on-chain', { duration: 4000 });
+        setTokenAddress('');
+        setInputToken(getEmptyInputToken());
+        loadPositions({ silent: true });
+        refreshWalletBalance();
       } else {
         // Show actual entry price used by the backend (this is the "received" price)
         const receivedPrice = data?.entryPrice;
