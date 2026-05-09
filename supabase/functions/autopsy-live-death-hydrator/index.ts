@@ -7,6 +7,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { assertDbWrite } from '../_shared/db-assert.ts';
 
+import { enableHeliusTracking } from "../_shared/helius-fetch-interceptor.ts";
+enableHeliusTracking("autopsy-live-death-hydrator");
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',

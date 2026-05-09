@@ -3,6 +3,9 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 import { Connection, PublicKey } from "npm:@solana/web3.js@1.95.3";
 
+import { enableHeliusTracking } from "../_shared/helius-fetch-interceptor.ts";
+enableHeliusTracking("verify-channel-payment");
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",

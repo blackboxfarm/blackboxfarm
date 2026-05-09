@@ -9,6 +9,9 @@ const corsHeaders = {
 
 import { isCexWallet, getCexName } from '../_shared/cex-wallets.ts';
 
+import { enableHeliusTracking } from "../_shared/helius-fetch-interceptor.ts";
+enableHeliusTracking("mesh-kyc-deep-search");
+
 const CEX_KEYWORDS = ['binance', 'coinbase', 'okx', 'bybit', 'kraken', 'kucoin', 'huobi', 'gate.io', 'ftx', 'gemini', 'bitfinex', 'crypto.com', 'mexc'];
 
 interface HeliusFundedByResult {
