@@ -70,6 +70,15 @@ export async function solscanFetch(url: string, opts: SolscanFetchOptions = {}):
   const { headers = {}, cacheTtlMs = 0, timeoutMs = 8000, cacheKeyOverride } = opts;
   const cacheKey = cacheKeyOverride || url;
 
+  // Global kill switch — set SOLSCAN_DISABLED=1 in Supabase secrets to pause all v2 calls
+  // (e.g. while rotating an expired/invalid SOLSCAN_API_KEY). Returns a synthetic 503 so
+  // callers fall back to DexScreener/Helius without spamming 401 alerts.
+  const disabled = (Deno.env.get('SOLSCAN_DISABLED') ?? '').toLowerCase();
+  if (disabled === '1' || disabled === 'true' || disabled === 'yes') {
+    console.warn(`[Solscan] DISABLED via SOLSCAN_DISABLED — skipping ${shortPath(url)}`);
+    return { ok: false, status: 503, body: { error: 'solscan_disabled' }, fromCache: false };
+  }
+
   // Cache hit
   if (cacheTtlMs > 0) {
     const hit = responseCache.get(cacheKey);
