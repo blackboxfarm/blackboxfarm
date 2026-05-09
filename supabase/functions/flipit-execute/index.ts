@@ -555,7 +555,7 @@ serve(withRunLog('flipit-execute', async (req) => {
       return ok({ ok: true, skipped: 'no active flipit action requested' });
     }
 
-    const { action, tokenMint, walletId, buyAmountSol: explicitBuyAmountSol, buyAmountUsd, displayPriceUsd, displayPriceIsExecutable, targetMultiplier, positionId, slippageBps, priorityFeeMode, customPriorityFee, priorityFeeMicroLamports, jitoTipLamports, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct, moonbagEnabled, moonbagSellPct, moonbagKeepPct, positionType, isDiamondHand, diamondTrailingStopPct, diamondMinPeakX, diamondMaxHoldHours, isOnCurve: preflightIsOnCurve, venueHint: preflightVenueHint } = body;
+    const { action, tokenMint, walletId, buyAmountSol: explicitBuyAmountSol, buyAmountUsd, displayPriceUsd, displayPriceIsExecutable, targetMultiplier, positionId, slippageBps, priorityFeeMode, customPriorityFee, priorityFeeMicroLamports, jitoTipLamports, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct, moonbagEnabled, moonbagSellPct, moonbagKeepPct, positionType, isDiamondHand, diamondTrailingStopPct, diamondMinPeakX, diamondMaxHoldHours, isOnCurve: preflightIsOnCurve, venueHint: preflightVenueHint, fastReturn } = body;
 
     // Default slippage 5% (500 bps), configurable
     const effectiveSlippage = slippageBps || 500;
@@ -987,6 +987,7 @@ serve(withRunLog('flipit-execute', async (req) => {
 
       // Execute the buy via raydium-swap
       execLog.logPhaseStart('SWAP_EXECUTION');
+      const swapTask = (async (): Promise<Response> => {
       try {
         const buyLamportsForSwap = Math.floor(buyAmountSol * 1_000_000_000);
         const buyUsdForSwap = buyAmountSol * solPrice;
@@ -1566,6 +1567,34 @@ serve(withRunLog('flipit-execute', async (req) => {
 
         return ok({ success: false, error: `Buy failed: ${errMsg}`, executionLog: execLog.getLogString() });
       }
+      })();
+
+      if (fastReturn) {
+        // Fire-and-forget: confirm + accounting happen in the background.
+        // Frontend's realtime subscription on flip_positions will see the row
+        // flip from 'pending_buy' -> 'holding' (success) or vanish (failure).
+        try {
+          // @ts-ignore - EdgeRuntime is provided by the Supabase Deno runtime
+          if (typeof EdgeRuntime !== 'undefined' && (EdgeRuntime as any).waitUntil) {
+            // @ts-ignore
+            (EdgeRuntime as any).waitUntil(
+              swapTask.catch((e: any) => console.error('[flipit-execute][fast-return] background error', e))
+            );
+          } else {
+            swapTask.catch((e: any) => console.error('[flipit-execute][fast-return] background error', e));
+          }
+        } catch (wuErr) {
+          console.error('[flipit-execute][fast-return] waitUntil failed', wuErr);
+        }
+        return ok({
+          success: true,
+          positionId: position.id,
+          status: 'pending_buy',
+          fastReturn: true,
+          message: 'Buy submitted — confirming in background',
+        });
+      }
+      return await swapTask;
     }
 
     if (action === "sell") {
