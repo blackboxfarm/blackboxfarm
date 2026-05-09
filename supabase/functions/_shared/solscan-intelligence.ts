@@ -2,10 +2,7 @@
  * Solscan Intelligence — Oracle Spider Data Source
  * 
  * ✅ Solscan Pro v2.0 ENABLED (key verified)
- * Current key is FREE tier, only works with public-api.solscan.io
- * See solscan-free.ts for active free-tier metadata calls.
- * 
- * Uses Solscan Pro API v2.0 to discover (WHEN PRO IS ACTIVE):
+ * Uses Solscan Pro API v2.0 to discover:
  * 1. Token creator/mint authority (token meta)
  * 2. Wallet funding chain (SOL transfers TO a wallet = who funded it)
  * 3. Tokens created/minted by a wallet
