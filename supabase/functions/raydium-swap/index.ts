@@ -10,7 +10,7 @@ import {
   Keypair,
   SystemProgram,
   TransactionInstruction,
-} from "npm:@solana/web3.js@1.95.3";
+} from "https://esm.sh/@solana/web3.js@1.95.3?bundle&target=deno";
 import { SecureStorage } from "../_shared/encryption.ts";
 import { getHeliusRpcUrl, getHeliusApiKey, getRpcEndpoints } from '../_shared/helius-client.ts';
 import { decryptWalletSecretAuto } from "../_shared/decrypt-wallet-secret.ts";
