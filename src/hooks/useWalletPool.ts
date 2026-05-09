@@ -49,9 +49,24 @@ async function saveWalletToDatabase(wallet: StoredWallet): Promise<boolean> {
     if (!user?.id) {
       throw new Error('User not authenticated');
     }
-    
+
+    if (!wallet.secretBase58) {
+      throw new Error('Missing wallet secret');
+    }
+
+    // Encrypt the private key server-side via the encrypt-data edge function
+    // before persisting. Never store raw base58 secrets in the database.
+    const { data: encResp, error: encErr } = await supabase.functions.invoke('encrypt-data', {
+      body: { data: wallet.secretBase58, action: 'encrypt' },
+    });
+    if (encErr) throw encErr;
+    const ciphertext = (encResp as any)?.encryptedData;
+    if (!ciphertext || typeof ciphertext !== 'string') {
+      throw new Error('Encryption failed: no ciphertext returned');
+    }
+
     const { error } = await supabase.from('wallet_pools').insert({
-      secret_key_encrypted: wallet.secretBase58,
+      secret_key_encrypted: ciphertext,
       pubkey: wallet.pubkey,
       user_id: user.id,
       is_active: true
