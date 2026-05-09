@@ -1,95 +1,96 @@
-## Solscan Pro v2.0 — Status Audit & Remaining Plan
+# Why the buy is failing (answered first)
 
-### What's already done (verified in current code)
+The buy failure has **nothing to do with Solscan**. Two distinct failures are visible in `flipit-execute` logs at 21:01 UTC:
 
-**Phase 0 — Pro key activation** ✅
-- `verify-solscan-pro` edge function exists; `SOLSCAN_API_KEY` confirmed Pro v2.0 (200s on `/token/meta`, `/account/transfer`).
-- `_shared/solscan-api.ts` — Pro v2.0 enabled, `token` header, `/v2.0/transaction/detail`.
-- `_shared/solscan-intelligence.ts` — Pro endpoints live: `/token/meta`, `/account/detail` (CEX labels), `/account/transfer` (SPL transfer + mint chains).
-- `_shared/solscan-markets.ts` — Pro `/token/markets` + `/token/holders`, correct `token[]` param.
-- `_shared/solscan-free.ts` — Pro v2.0 path enabled for token meta.
-- `_shared/provider-health.ts` — Solscan no longer auth-broken.
+**1. `raydium-swap` edge function is crashing on boot (primary cause of "non-2xx status code")**
+```
+event loop error: Error: Expected to resolve main module, got Import instead.
+  at node_modules/localhost/rpc-websockets/9.3.9/dist/index.cjs:6:12
+```
+Every recent boot of `raydium-swap` dies before serving a request. `flipit-execute` passes TradeGuard cleanly (price $0.0000133, 0.025 SOL, slippage 5%), invokes `raydium-swap`, and immediately gets a non-2xx back because the function never started. This is a CJS/ESM resolution bug in `rpc-websockets@9.3.9` (pulled in transitively by `@solana/web3.js` / `@raydium-io/raydium-sdk`).
 
-**Phase 0b — Hybrid genealogy** ✅
-- `_shared/auto-genealogy.ts` uses Solscan Pro `/v2.0/account/transfer` as the fast-path funder discovery before falling back to Helius.
+Fix path: pin `rpc-websockets` to a version that resolves cleanly under Deno's edge runtime (typically `7.x`), or refactor `raydium-swap` to use Jupiter's REST swap endpoint and drop the websocket dependency entirely.
 
-### What's NOT done yet (gaps vs the To-Do)
+**2. A second failure (`buy-1778360482185`) shows a frontend bug**
+- `explicitBuyAmountSol: 2202.643` for a `$50` buy at `solPrice=$93.26` → correct value would be ~`0.536` SOL.
+- The frontend is computing `usd * solPrice` (or dividing by an inverted price) instead of `usd / solPrice`. This is unrelated to Solscan and a separate bug.
 
-From LIST 1 of the To-Do:
-- ❌ **#7 — `oracle-unified-lookup` funding-chain block**: no Solscan corroborating-source branch found in the unified lookup.
-- ❌ **#8 — `breadcrumbs-scanner` promotion**: Solscan is still `type: 'scrape', priority: 70`. Needs to become `type: 'api', priority: 95` using Pro `/v2.0/token/meta`.
-- ❌ **#9 — `developer-wallet-tracer` activation as primary tracer**: file exists but not wired as the lead tracer in the discovery jobs that currently lean on Helius.
-- ⚠️ **#10 — `token-metadata`, `bagless-holders-report`, `flipit-execute`, `flipit-repair-positions`**: imports detected but no audit yet that they actually invoke the new Pro paths instead of legacy fallbacks.
-
-LIST 3 — sellable features unlocked: **none built yet.**
+Both should be tracked separately from the Solscan work below. Want me to dig into either after the plan is approved?
 
 ---
 
-### Plan to finish — 4 phases
+# Plan
 
-#### Phase A — Wire the dormant consumers (List 1 #7-#10)
+## Part A — Solscan caller cleanup
 
-1. **breadcrumbs-scanner**: promote Solscan to `{ key: 'solscan', type: 'api', priority: 95, apiEndpoint: 'pro-api.solscan.io/v2.0/token/meta?address={MINT}' }` with `token` header. Keep scrape entry as fallback at priority 60.
-2. **oracle-unified-lookup**: add Solscan-Pro corroboration block to the funding-chain section — calls `fetchSolscanCEXLabel()` and `fetchSolscanFundingChain()` from `_shared/solscan-intelligence.ts`, merges into the existing creator chain, and tags `source: 'solscan_pro'` for evidence transparency.
-3. **developer-wallet-tracer**: make it the first-pass tracer in `developer-discovery-job` and the watchlist enricher; Helius becomes secondary.
-4. **Audit pass**: open `token-metadata`, `bagless-holders-report`, `flipit-execute`, `flipit-repair-positions` and replace any remaining HTML-scrape / public-tier paths with the Pro helpers. Add `assertDbWrite` on every write touched (per Core memory).
+Audit shows these are still using legacy / wrong patterns:
 
-#### Phase B — First wave of new sellable features (List 3 #2 + #8)
+| File | Issue |
+|---|---|
+| `_shared/solscan-markets.ts` line 87 | `/token/holders?address=` — needs verification (likely fine, holders endpoint uses `address`) |
+| `liquidity-lock-checker/index.ts` line 67–103 | `SOLSCAN_API_KEY = null` hard-disable + uses `/token/markets?address=` (wrong v2 param) |
+| `lifecycle-scorecard-builder/index.ts` line 20 | Direct `fetch()` bypasses `solscanFetch` rate limiter + cache |
+| `probe-burns/index.ts` line 25 | Direct `fetch()`, bypasses limiter |
+| `probe-buybacks/index.ts` line 36 | Direct `fetch()`, bypasses limiter |
+| `_shared/solscan-intelligence.ts` (multiple) | Already uses helpers but some endpoints need v2 param verification |
+| `breadcrumbs-scanner/index.ts` line 173 | Direct fetch, bypasses limiter |
+| `flipit-execute/index.ts` line 1288 + `flipit-repair-positions` line 95 | Direct fetch, bypasses limiter |
 
-5. **Portfolio chip on Bubble Map nodes**: new `_shared/solscan-portfolio.ts` calling `/v2.0/account/portfolio`; surface as a hover chip on wallet bubbles (USD total + top 3 token tickers). Cached 5 min in `wallet_portfolio_cache` table.
-6. **Mint / Freeze authority badge**: extend `token_meta` enrichment to capture `mint_authority` and `freeze_authority` from Pro `/token/meta`; render a red/green badge in token header + Hacker Terminal evidence.
+Actions:
+1. Re-route every Solscan call through `solscanFetch()` (so the master dashboard captures every request).
+2. Fix the `/token/markets?address=` → `?token[]=` param in `liquidity-lock-checker` (and remove the `null` hard-disable).
+3. Grep-confirm zero hardcoded keys, zero references to old `public-api.solscan.io` v1, zero `Authorization: Bearer` (Pro v2 uses the `token:` header).
+4. Make `SOLSCAN_API_KEY` the single source of truth — remove any disabled/short-circuit branches left over from the previous outage.
 
-#### Phase C — Second wave (List 3 #5 + #9)
+## Part B — Dedicated "Solscan" master dashboard tab
 
-7. **Real-time LP composition** (`/token/markets` deeper read): show LP token mix and pool routes on the BubbleMap LP node; replace whale-vs-LP guesswork.
-8. **Forensic Autopsy enrichment**: feed `token_autopsy_engine` with Pro transfer history + CEX labels for richer `death_cause` reasoning.
+A new admin tab purpose-built for the $199/mo Pro v2 key. Replaces the existing minimal `SolscanUsageBreakdown` panel.
 
-#### Phase D — Cost & ops controls
+### Backend
+1. New table `solscan_api_calls` (append-only, 30-day retention):
+   - `id, ts, endpoint_path, function_name, http_status, duration_ms, from_cache, error_message, response_bytes, mint_or_address, billed (bool)`
+2. Patch `_shared/solscan-rate-limiter.ts` so every `solscanFetch()` writes one row (fire-and-forget). Capture caller via `(new Error()).stack` parse OR explicit `callerName` arg.
+3. New edge function `solscan-usage-stats` returns aggregates for the dashboard:
+   - Calls today / this billing period (cycle starts the **8th of each month**)
+   - Success vs error breakdown by HTTP status
+   - Top endpoints by call count + avg latency
+   - Top calling functions
+   - Cache hit ratio
+   - Live RPM gauge (from `getSolscanRateStats()`)
+   - Recent errors stream (last 50)
 
-9. **Solscan request budget** in `_shared/solscan-api.ts`: per-minute rate limiter (Pro v2.0 ≈ 1k rpm), simple LRU response cache (5 min for meta, 60 s for transfers), structured `[Solscan]` log lines for credit accounting.
-10. **Helius credit drop verification**: add a daily counter that compares Helius RPC calls before/after Phase A to confirm the projected 30–50% reduction.
+### Frontend (`src/components/admin/SolscanDashboard.tsx`)
+A single, dense dashboard — not a sub-tab — registered in `UtilitiesTab.tsx` as a top-level tab named **"Solscan"** (replacing the current `solscan-breakdown` slot).
 
-### Technical notes
+Sections:
+1. **Header strip** — key fingerprint (masked), verdict badge from `verify-solscan-pro`, billing-cycle countdown ("12 days until reset on June 8"), $199 plan label.
+2. **Live throttle** — current RPM / 800 ceiling, cache size, in-flight requests.
+3. **Billing cycle usage** — total calls since last 8th, daily sparkline, projected month-end total.
+4. **Endpoint breakdown table** — endpoint, calls, success %, avg ms, cache hit %, last error.
+5. **Calling functions table** — which edge functions burn the most quota.
+6. **Errors feed** — last 50 non-2xx with timestamp, endpoint, status, message.
+7. **Pro v2 feature inventory** — static doc panel listing every Pro v2 endpoint we use, what it powers in the product, and the user benefit. Sourced from a one-time read of [pro-api.solscan.io docs](https://pro-api.solscan.io/pro-api-docs/v2.0). Sections:
+   - `/token/meta` → mint/freeze authority audit on token cards
+   - `/token/markets` → liquidity-lock-checker pool detection
+   - `/token/holders` → top-holder concentration in HoldersIntel
+   - `/token/transfer?activity_type[]=ACTIVITY_SPL_BURN` → burn events in lifecycle scorecard
+   - `/account/transfer` → wallet activity in oracle / dev genealogy
+   - `/account/portfolio` → wallet investigator
+   - `/account/defi/activities` → buyback detection
+   - `/transaction/detail` → tx forensics
+   - **NEW Pro v2 endpoints we're not yet using** (highlighted with "Untapped" badge so we can roadmap them)
+8. **Manual probe button** — re-runs `verify-solscan-pro` and displays the 3-probe result inline.
 
-- All new edge functions and helpers must use `assertDbWrite` for writes (Core memory: zero-tolerance silent fails).
-- All Pro requests use `'token': SOLSCAN_API_KEY` header (not `Authorization: Bearer`).
-- Respect the existing `provider-health.ts` circuit breaker — wrap new helpers in `await withProviderHealth('solscan', ...)`.
-- No hard-coded SOL/USD values anywhere (Core memory).
-- Keep `dex-top-200` cache as the sole price authority; Solscan is for chain truth, labels, and structure — not for prices.
+### Wiring
+- Replace `SolscanUsageBreakdown` import in `UtilitiesTab.tsx` with `SolscanDashboard`.
+- Move the tab to a prominent first/second position in the tab list and rename trigger to `🔎 Solscan`.
 
-### Out of scope for this plan
-- Replacing DexScreener pricing — Solscan is not used for live price.
-- Re-enabling Solscan in any code path the Strategic Direction memory de-prioritises.
+## Technical details
+- Logging insert uses `assertDbWrite` per the zero-tolerance rule.
+- `solscan_api_calls` RLS: super-admin read only; service-role insert.
+- Billing-cycle math: if today < 8th, cycle started 8th of last month; else 8th of this month. Pure date-fns, no hardcoded SOL/USD anything.
+- No new secrets needed — existing `SOLSCAN_API_KEY` covers everything.
 
----
-
-## Implementation status (post-build)
-
-**Shipped this turn:**
-- Phase A.1 — `breadcrumbs-scanner` Solscan promoted to `type:'api', priority:95` (`/v2.0/token/meta` with `token` header). Old scrape kept as `solscan_scrape` priority 55 fallback.
-- Phase A.2 — `oracle-unified-lookup` now runs `solscanDiscoverFunders` + `solscanCheckAccountLabel` after the Helius funding chain and merges unique funders tagged `source: 'solscan_pro'`.
-- Phase B.6 — `solscanResolveTokenCreator` now also returns `freezeAuthority` so the Mint/Freeze badge can read both authorities from a single Pro call.
-- Phase B.5 — New `_shared/solscan-portfolio.ts` (in-memory 5-min LRU around `/v2.0/account/portfolio`) + new edge function `wallet-portfolio-chip` for the BubbleMap hover chip.
-- Phase D.9 — New `_shared/solscan-rate-limiter.ts` — 800-rpm self-throttle, LRU response cache with per-call TTL, structured `[Solscan] GET … hit=net status=… rpm=…/800` log lines, and a `getSolscanRateStats()` helper for the admin status panel.
-
-**Deferred (need product/UI input before invasive cross-file rewires):**
-- Phase A.3 — wiring `developer-wallet-tracer` as the *primary* tracer in `developer-discovery-job` and watchlist enricher.
-- Phase B (UI placement) — Drop `<MintFreezeAuthorityBadge>` into the token header / Hacker Terminal evidence row (component now exists at `src/components/token/MintFreezeAuthorityBadge.tsx`), and render Portfolio chip on BubbleMap node hover via `wallet-portfolio-chip`.
-- Phase C — LP composition deep-read and Autopsy enrichment.
-- Phase D.10 — daily Helius credit delta counter.
-
-**Shipped this turn (continuation):**
-- Phase A.4 audit complete — `token-metadata`, `bagless-holders-report`, `flipit-execute`, `flipit-repair-positions` all confirmed routing through Pro helpers (`solscan-free.ts`, `solscan-markets.ts`, `solscan-api.ts`) — no legacy scrape paths remain.
-- Phase D.9 propagation — `solscan-free.ts`, `solscan-markets.ts`, `solscan-portfolio.ts` now route every outbound call through `solscanFetch()` so the 800-rpm self-throttle, structured `[Solscan]` log lines, and per-endpoint TTL cache (5 min meta, 60 s markets/holders) apply uniformly.
-- Phase B.6 UI — `MintFreezeAuthorityBadge` component shipped (red/green chips, tooltip explaining the rug-risk implication of each authority).
-
-These are scoped as follow-up tickets so this turn ships a clean, reviewable surface area.
-
-**Shipped this turn (3rd pass):**
-- Phase A.3 — `_shared/rpc-provider.ts` now puts **Solscan first** for `tx_history` and `token_metadata` capabilities. `fetchSolscanTransactions` was rewritten to call Pro v2.0 `/v2.0/account/transfer` through `solscanFetch` (60 s LRU + 800 rpm throttle), normalised back into the legacy `{ lamport, src, txHash, blockTime }` shape so `developer-wallet-tracer` and other callers keep working without changes. Helius is now the *fallback*, not the primary, for transfer-history fan-outs.
-- Phase D.10 — New edge function `api-credit-delta` aggregates `api_usage_log` over the last 48 h and returns `{ helius: { last24, prior24, deltaPct }, solscan: { … } }` so the admin Solscan/Helius status panel can show the projected 30-50 % Helius credit drop in real time. Pure read aggregator, no DB writes, no `assertDbWrite` needed.
-
-**Still deferred (need product/UI input):**
-- Phase B UI placement — drop `<MintFreezeAuthorityBadge>` into the Holders report header and render the `wallet-portfolio-chip` USD chip on BubbleMap node hover. The components + edge function exist; placement is a UI-design call.
-- Phase C — LP composition deep-read on BubbleMap and Autopsy enrichment with Pro transfer history + CEX labels.
-- Admin panel that consumes `api-credit-delta` and `getSolscanRateStats()` (status widget can land alongside the existing Helius credit tracker on the Mesh visualizer).
+## Out of scope (separate tickets)
+- `raydium-swap` boot crash (the actual buy failure)
+- Frontend `buyAmountSol` calculation bug

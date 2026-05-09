@@ -68,24 +68,18 @@ export async function fetchTransactionFromSolscan(
   solscanApiKey: string
 ): Promise<SolscanTxDetailV2 | null> {
   try {
-    // Solscan Pro API v2.0 uses query param and 'token' header
+    const { solscanFetch } = await import('./solscan-rate-limiter.ts');
     const url = `https://pro-api.solscan.io/v2.0/transaction/detail?tx=${signature}`;
-    
-    const res = await fetch(url, {
-      headers: {
-        'Accept': 'application/json',
-        'token': solscanApiKey  // v2.0 uses 'token' header
-      },
-      signal: AbortSignal.timeout(15000)
+    const res = await solscanFetch(url, {
+      headers: { 'Accept': 'application/json', 'token': solscanApiKey },
+      timeoutMs: 15000,
+      callerName: 'fetchTransactionFromSolscan',
     });
-
     if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      console.error(`Solscan API error ${res.status}: ${errText}`);
+      console.error(`Solscan API error ${res.status}`);
       return null;
     }
-
-    const json: SolscanTxDetailV2 = await res.json();
+    const json = res.body as SolscanTxDetailV2;
     
     if (!json.success || !json.data) {
       console.error(`Solscan returned success=false for ${signature}`);

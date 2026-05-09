@@ -5,6 +5,7 @@
  * Body: { token_mint: string, dev_wallet?: string, lookback_pages?: number }
  */
 import { createClient } from "@supabase/supabase-js";
+import { solscanFetch } from "../_shared/solscan-rate-limiter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -34,10 +35,13 @@ Deno.serve(async (req) => {
     const evidence: string[] = [];
     for (let page = 1; page <= lookback_pages; page++) {
       const url = `https://pro-api.solscan.io/v2.0/account/defi/activities?address=${dev_wallet}&token=${token_mint}&activity_type[]=ACTIVITY_TOKEN_SWAP&page=${page}&page_size=40&sort_by=block_time&sort_order=desc`;
-      const r = await fetch(url, { headers: { token: SOLSCAN_KEY }, signal: AbortSignal.timeout(10000) }).catch(() => null);
-      if (!r || !r.ok) break;
-      const j = await r.json().catch(() => null);
-      const items = j?.data ?? [];
+      const r = await solscanFetch(url, {
+        headers: { token: SOLSCAN_KEY, accept: 'application/json' },
+        timeoutMs: 10000,
+        callerName: 'probe-buybacks',
+      });
+      if (!r.ok) break;
+      const items = (r.body as any)?.data ?? [];
       if (!Array.isArray(items) || !items.length) break;
       for (const a of items) {
         // Identify a BUY: dev received the target token

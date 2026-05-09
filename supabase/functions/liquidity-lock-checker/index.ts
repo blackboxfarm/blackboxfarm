@@ -61,9 +61,8 @@ serve(withRunLog('liquidity-lock-checker', async (req) => {
     const allPoolAddresses: Set<string> = new Set();
     const dexScreenerPairAddresses: Set<string> = new Set();
 
-    // Method 0: Solscan-first LP detection (DISABLED — Pro API requires $199/mo subscription)
-    // Re-enable when upgraded to Solscan Pro Level 2
-    const SOLSCAN_API_KEY = null; // Deno.env.get('SOLSCAN_API_KEY'); — disabled for Pro
+    // Method 0: Solscan-first LP detection — Pro v2 enabled
+    const SOLSCAN_API_KEY = Deno.env.get('SOLSCAN_API_KEY');
     if (SOLSCAN_API_KEY) {
       try {
         console.log('🔍 [Solscan Primary] Fetching LP from Solscan markets...');
@@ -72,14 +71,14 @@ serve(withRunLog('liquidity-lock-checker', async (req) => {
           'accept': 'application/json'
         };
 
-        // Get ALL markets for this token
-        const marketsResponse = await fetch(
-          `https://pro-api.solscan.io/v2.0/token/markets?address=${tokenMint}`,
-          { headers: solscanHeaders }
+        // Get ALL markets for this token (v2 uses token[] array param)
+        const { solscanFetch } = await import('../_shared/solscan-rate-limiter.ts');
+        const marketsResp = await solscanFetch(
+          `https://pro-api.solscan.io/v2.0/token/markets?token[]=${tokenMint}&page=1&page_size=20`,
+          { headers: solscanHeaders, timeoutMs: 8000, cacheTtlMs: 120_000, callerName: 'liquidity-lock-checker' }
         );
-
-        if (marketsResponse.ok) {
-          const marketsData = await marketsResponse.json();
+        if (marketsResp.ok) {
+          const marketsData = marketsResp.body as any;
           console.log(`✅ Solscan markets found: ${marketsData?.data?.length || 0}`);
           
           if (marketsData?.data && marketsData.data.length > 0) {
@@ -99,13 +98,12 @@ serve(withRunLog('liquidity-lock-checker', async (req) => {
             result.dexInfo = topMarket.market_name || 'Unknown DEX';
             
             // Get top holders to confirm LP
-            const holdersResponse = await fetch(
+            const holdersResp = await solscanFetch(
               `https://pro-api.solscan.io/v2.0/token/holders?address=${tokenMint}&page=1&page_size=50`,
-              { headers: solscanHeaders }
+              { headers: solscanHeaders, timeoutMs: 8000, cacheTtlMs: 120_000, callerName: 'liquidity-lock-checker' }
             );
-
-            if (holdersResponse.ok) {
-              const holdersData = await holdersResponse.json();
+            if (holdersResp.ok) {
+              const holdersData = holdersResp.body as any;
               const holders = holdersData?.data || [];
               
               // Find AMM pool in holders using shared constants

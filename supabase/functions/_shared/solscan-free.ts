@@ -62,6 +62,7 @@ export async function fetchSolscanFreeTokenMeta(
       headers,
       timeoutMs: 6000,
       cacheTtlMs: 5 * 60_000, // 5-min cache for token metadata
+      callerName: 'fetchSolscanFreeTokenMeta',
     });
 
     if (!resp.ok) {

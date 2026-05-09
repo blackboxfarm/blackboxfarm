@@ -178,14 +178,17 @@ async function fetchFromAPI(adapter: PlatformAdapter, mint: string): Promise<Tok
       headers['token'] = solscanKey;
     }
 
-    const response = await fetch(url, { headers });
-
-    if (!response.ok) {
-      throw new Error(`API request failed: ${response.status}`);
+    let data: any;
+    if (adapter.key === 'solscan') {
+      const { solscanFetch } = await import('../_shared/solscan-rate-limiter.ts');
+      const r = await solscanFetch(url, { headers, timeoutMs: 8000, cacheTtlMs: 300_000, callerName: 'breadcrumbs-scanner' });
+      if (!r.ok) throw new Error(`API request failed: ${r.status}`);
+      data = r.body;
+    } else {
+      const response = await fetch(url, { headers });
+      if (!response.ok) throw new Error(`API request failed: ${response.status}`);
+      data = await response.json();
     }
-
-    const data = await response.json();
-    
     return parseAPIResponse(adapter.key, data, mint, url);
 
   } catch (error) {

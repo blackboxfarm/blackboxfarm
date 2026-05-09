@@ -14028,6 +14028,45 @@ export type Database = {
         }
         Relationships: []
       }
+      solscan_api_calls: {
+        Row: {
+          duration_ms: number
+          endpoint_path: string
+          error_message: string | null
+          from_cache: boolean
+          function_name: string | null
+          http_status: number
+          id: number
+          mint_or_address: string | null
+          response_bytes: number | null
+          ts: string
+        }
+        Insert: {
+          duration_ms?: number
+          endpoint_path: string
+          error_message?: string | null
+          from_cache?: boolean
+          function_name?: string | null
+          http_status?: number
+          id?: number
+          mint_or_address?: string | null
+          response_bytes?: number | null
+          ts?: string
+        }
+        Update: {
+          duration_ms?: number
+          endpoint_path?: string
+          error_message?: string | null
+          from_cache?: boolean
+          function_name?: string | null
+          http_status?: number
+          id?: number
+          mint_or_address?: string | null
+          response_bytes?: number | null
+          ts?: string
+        }
+        Relationships: []
+      }
       spider_run_metrics: {
         Row: {
           avg_genealogy_depth: number | null
@@ -21679,6 +21718,7 @@ export type Database = {
           deleted_success: number
         }[]
       }
+      prune_solscan_api_calls: { Args: never; Returns: undefined }
       record_function_skip: {
         Args: { p_function_name: string }
         Returns: undefined
