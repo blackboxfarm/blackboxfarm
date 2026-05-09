@@ -193,16 +193,20 @@ serve(withRunLog('flipit-deep-order-monitor', async (req) => {
           console.log(`Executing deep buy: ${order.buy_amount_sol} SOL ($${buyAmountUsd.toFixed(2)}) at $${currentPrice}`);
 
           // Create new position via flipit-execute
+          // CRITICAL: flipit-execute requires buyAmountSol. order.buy_amount_sol is
+          // already SOL-denominated in the DB — pass it through directly.
           const { data: buyResult, error: buyError } = await supabase.functions.invoke("flipit-execute", {
             body: {
               action: "buy",
               tokenMint: order.token_mint,
               walletId: order.wallet_id,
+              buyAmountSol: order.buy_amount_sol,
               buyAmountUsd: buyAmountUsd,
               displayPriceUsd: currentPrice,
               targetMultiplier: order.target_multiplier,
               slippageBps: order.slippage_bps,
               priorityFeeMode: order.priority_fee_mode,
+              source: 'deep-order-monitor',
             }
           });
 
