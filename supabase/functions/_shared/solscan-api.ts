@@ -2,9 +2,6 @@
  * SOLSCAN API v2.0 - Direct On-Chain Truth
  * 
  * ✅ Solscan Pro v2.0 ENABLED (key verified by verify-solscan-pro probe)
- * Current key is FREE tier, only works with public-api.solscan.io
- * See solscan-free.ts for active free-tier metadata calls.
- * 
  * Solscan Pro provides PRE-PARSED transaction data:
  * - sol_bal_change: exact SOL balance changes per account
  * - token_bal_change: exact token balance changes per account
