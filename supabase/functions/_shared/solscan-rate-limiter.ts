@@ -70,12 +70,6 @@ export async function solscanFetch(url: string, opts: SolscanFetchOptions = {}):
   const { headers = {}, cacheTtlMs = 0, timeoutMs = 8000, cacheKeyOverride } = opts;
   const cacheKey = cacheKeyOverride || url;
 
-  // HARD-DISABLED at code level. Solscan API is permanently off — invalid key was spamming
-  // 401 audit alerts. All callers fall back to DexScreener / Helius / Pump.fun.
-  // To re-enable: delete this block (and ensure SOLSCAN_API_KEY is a valid Pro v2 key).
-  console.warn(`[Solscan] HARD-DISABLED in code — skipping ${shortPath(url)}`);
-  return { ok: false, status: 503, body: { error: 'solscan_disabled' }, fromCache: false };
-
   // Cache hit
   if (cacheTtlMs > 0) {
     const hit = responseCache.get(cacheKey);
