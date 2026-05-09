@@ -215,15 +215,24 @@ serve(withRunLog('flipit-rebuy-monitor', async (req) => {
           console.log(`Using rebuy target multiplier: ${positionRebuyMultiplier}x (new target: $${newTargetPrice})`);
 
           // Create new position via flipit-execute
+          // CRITICAL: flipit-execute requires buyAmountSol. Convert USD→SOL ONCE here
+          // using the live solPrice fetched above.
+          const rebuyAmountSol = solPrice > 0 ? rebuyAmountUsd / solPrice : 0;
+          if (!rebuyAmountSol || rebuyAmountSol <= 0) {
+            console.error(`[rebuy-monitor] Cannot compute rebuyAmountSol (usd=${rebuyAmountUsd}, solPrice=${solPrice}) — skipping position ${position.id}`);
+            continue;
+          }
           const { data: buyResult, error: buyError } = await supabase.functions.invoke("flipit-execute", {
             body: {
               action: "buy",
               tokenMint: position.token_mint,
               walletId: position.wallet_id,
+              buyAmountSol: rebuyAmountSol,
               buyAmountUsd: rebuyAmountUsd,
               targetMultiplier: positionRebuyMultiplier,
               slippageBps: effectiveSlippage,
               priorityFeeMode: effectivePriorityFee,
+              source: 'rebuy-monitor',
             }
           });
 

@@ -660,6 +660,28 @@ serve(withRunLog('flipit-execute', async (req) => {
         return bad("buyAmountSol is required and must be positive (frontend must convert USD→SOL)");
       }
       const buyAmountSol = explicitBuyAmountSol;
+
+      // SAFETY CLAMP: any single buy > 50 SOL is almost certainly a runaway caller bug.
+      // Reject early before we waste an RPC round-trip on a guaranteed "Insufficient funds".
+      const MAX_REASONABLE_BUY_SOL = 50;
+      if (buyAmountSol > MAX_REASONABLE_BUY_SOL) {
+        execLog.logFailure('buyAmountSol exceeds safety ceiling', {
+          buyAmountSol,
+          ceiling: MAX_REASONABLE_BUY_SOL,
+          source,
+          sourceChannelId,
+          buyAmountUsd,
+        });
+        return bad(`buyAmountSol (${buyAmountSol}) exceeds ${MAX_REASONABLE_BUY_SOL} SOL safety ceiling — likely a caller bug. source=${source || 'manual'}`);
+      }
+      console.log('[flipit-execute][BUY-INTAKE]', JSON.stringify({
+        tokenMint: tokenMint?.slice(0, 12),
+        walletId: walletId?.slice(0, 8),
+        buyAmountSol,
+        buyAmountUsd,
+        source: source || 'manual',
+        sourceChannelId: safeSourceChannelId,
+      }));
       
       // Fetch SOL price for USD display/logging only (NOT for buy amount calculation)
       const solPrice = await fetchSolPrice();
