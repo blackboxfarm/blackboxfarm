@@ -276,20 +276,18 @@ export async function solscanResolveTokenCreator(
       credits: 1,
     });
 
-    const resp = await fetch(
+    const { solscanFetch } = await import('./solscan-rate-limiter.ts');
+    const resp = await solscanFetch(
       `https://pro-api.solscan.io/v2.0/token/meta?address=${tokenMint}`,
-      { headers: solscanHeaders(apiKey), signal: AbortSignal.timeout(8000) }
+      { headers: solscanHeaders(apiKey), timeoutMs: 8000, cacheTtlMs: 300_000, callerName: 'solscanResolveTokenCreator' }
     );
-
     if (!resp.ok) {
-      const detail = await readSolscanErrorDetail(resp);
-      await logger.complete(resp.status, `Solscan ${resp.status}: ${detail}`);
-      apiErrors.push(formatSolscanApiError('Solscan token/meta', resp.status, detail));
+      await logger.complete(resp.status, `Solscan ${resp.status}: ${typeof resp.body === 'string' ? resp.body : JSON.stringify(resp.body).slice(0,200)}`);
+      apiErrors.push(formatSolscanApiError('Solscan token/meta', resp.status, ''));
       return { creator: null, mintAuthority: null, freezeAuthority: null, meta: null };
     }
-
     await logger.complete(resp.status);
-    const data = await resp.json();
+    const data = resp.body as any;
     const meta = data?.data || data;
 
     const creator = meta?.creator || null;
@@ -342,20 +340,18 @@ export async function solscanCheckAccountLabel(
       credits: 1,
     });
 
-    const resp = await fetch(
+    const { solscanFetch } = await import('./solscan-rate-limiter.ts');
+    const resp = await solscanFetch(
       `https://pro-api.solscan.io/v2.0/account/detail?address=${walletAddress}`,
-      { headers: solscanHeaders(apiKey), signal: AbortSignal.timeout(8000) }
+      { headers: solscanHeaders(apiKey), timeoutMs: 8000, cacheTtlMs: 300_000, callerName: 'solscanCheckAccountLabel' }
     );
-
     if (!resp.ok) {
-      const detail = await readSolscanErrorDetail(resp);
-      await logger.complete(resp.status, `Solscan ${resp.status}: ${detail}`);
-      apiErrors.push(formatSolscanApiError('Solscan account/detail', resp.status, detail));
+      await logger.complete(resp.status, `Solscan ${resp.status}`);
+      apiErrors.push(formatSolscanApiError('Solscan account/detail', resp.status, ''));
       return await scrapeFallback();
     }
-
     await logger.complete(resp.status);
-    const data = await resp.json();
+    const data = resp.body as any;
     const detail = data?.data || data;
 
     // Solscan returns tags like ["Token Creator", "#Pump.fun"] and
@@ -432,21 +428,18 @@ export async function solscanDiscoverFunders(
 
       const url = `https://pro-api.solscan.io/v2.0/account/transfer?address=${walletAddress}&activity_type[]=ACTIVITY_SPL_TRANSFER&token=${SOL_NATIVE_MINT}&page=${page}&page_size=40&sort_by=block_time&sort_order=desc`;
 
-      const resp = await fetch(url, {
-        headers: solscanHeaders(apiKey),
-        signal: AbortSignal.timeout(8000),
+      const { solscanFetch } = await import('./solscan-rate-limiter.ts');
+      const resp = await solscanFetch(url, {
+        headers: solscanHeaders(apiKey), timeoutMs: 8000, callerName: 'solscanDiscoverFunders',
       });
-
       if (!resp.ok) {
-        const detail = await readSolscanErrorDetail(resp);
-        await logger.complete(resp.status, `Solscan ${resp.status}: ${detail}`);
-        apiErrors.push(formatSolscanApiError('Solscan account/transfer', resp.status, detail));
+        await logger.complete(resp.status, `Solscan ${resp.status}`);
+        apiErrors.push(formatSolscanApiError('Solscan account/transfer', resp.status, ''));
         shouldUseScrapeFallback = resp.status === 401 || resp.status === 403 || resp.status === 429;
         break;
       }
-
       await logger.complete(resp.status);
-      const data = await resp.json();
+      const data = resp.body as any;
       const transfers = data?.data || [];
 
       if (!Array.isArray(transfers) || transfers.length === 0) {
@@ -533,20 +526,17 @@ export async function solscanDiscoverCreatedTokens(
     // Look for MINT activities by this wallet
     const url = `https://pro-api.solscan.io/v2.0/account/transfer?address=${walletAddress}&activity_type[]=ACTIVITY_SPL_MINT&page=1&page_size=40&sort_by=block_time&sort_order=desc`;
 
-    const resp = await fetch(url, {
-      headers: solscanHeaders(apiKey),
-      signal: AbortSignal.timeout(8000),
+    const { solscanFetch } = await import('./solscan-rate-limiter.ts');
+    const resp = await solscanFetch(url, {
+      headers: solscanHeaders(apiKey), timeoutMs: 8000, callerName: 'solscanDiscoverCreatedTokens',
     });
-
     if (!resp.ok) {
-      const detail = await readSolscanErrorDetail(resp);
-      await logger.complete(resp.status, `Solscan ${resp.status}: ${detail}`);
-      apiErrors.push(formatSolscanApiError('Solscan account/transfer MINT', resp.status, detail));
+      await logger.complete(resp.status, `Solscan ${resp.status}`);
+      apiErrors.push(formatSolscanApiError('Solscan account/transfer MINT', resp.status, ''));
       return [];
     }
-
     await logger.complete(resp.status);
-    const data = await resp.json();
+    const data = resp.body as any;
     const transfers = data?.data || [];
 
     const seenMints = new Set<string>();
