@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
   const SOL = 'So11111111111111111111111111111111111111112';
   const results = await Promise.all([
     probe(`https://pro-api.solscan.io/v2.0/token/meta?address=${SOL}`),
-    probe(`https://pro-api.solscan.io/v2.0/token/markets?address=${SOL}&page=1&page_size=10`),
+    probe(`https://pro-api.solscan.io/v2.0/token/markets?token[]=${SOL}&page=1&page_size=10`),
     probe(`https://pro-api.solscan.io/v2.0/account/transfer?address=${SOL}&page=1&page_size=10`),
   ]);
 
