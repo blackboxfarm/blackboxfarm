@@ -29,6 +29,7 @@ const SIGNUP_TYPES = ['new_signup', 'user_registered', 'account_created'];
 const TRANSACTION_TYPES = ['banner_purchase', 'payment_confirmed', 'transaction', 'fantasy_buy', 'fantasy_sell', 'swap'];
 const TICKET_TYPES = ['support_ticket', 'ticket_reply'];
 const AUDIT_TYPES = ['api_failure_critical', 'api_failure_warning', 'quota_critical', 'quota_warning', 'repeated_failure', 'table_bloat', 'security', 'error', 'rug_pull_detected'];
+const NON_AUDIT_TYPES = [...SIGNUP_TYPES, ...TRANSACTION_TYPES, ...TICKET_TYPES];
 
 function describeNotificationPurpose(title: string, notificationType: string) {
   if (title.includes('holdersintel-bot-webhook')) {
@@ -77,6 +78,7 @@ export function AdminNotificationsBadge() {
   const { toast } = useToast();
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [tabTotals, setTabTotals] = useState<Record<TabCategory, number>>({ signups: 0, transactions: 0, audit: 0, tickets: 0 });
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabCategory>('signups');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -95,11 +97,30 @@ export function AdminNotificationsBadge() {
       .select('*')
       .eq('is_archived', false)
       .order('created_at', { ascending: false })
-      .limit(100) as any);
+      .limit(500) as any);
 
     if (!error && data) {
       setNotifications(data as AdminNotification[]);
       setUnreadCount((data as AdminNotification[]).filter((n) => !n.is_read).length);
+    }
+
+    // Server-side accurate totals per tab (independent of fetch limit)
+    try {
+      const counts: Record<TabCategory, number> = { signups: 0, transactions: 0, audit: 0, tickets: 0 };
+      const queries: Array<Promise<any>> = [
+        (supabase.from('admin_notifications' as any).select('*', { count: 'exact', head: true }).eq('is_archived', false).in('notification_type', SIGNUP_TYPES) as any),
+        (supabase.from('admin_notifications' as any).select('*', { count: 'exact', head: true }).eq('is_archived', false).in('notification_type', TRANSACTION_TYPES) as any),
+        (supabase.from('admin_notifications' as any).select('*', { count: 'exact', head: true }).eq('is_archived', false).in('notification_type', TICKET_TYPES) as any),
+        (supabase.from('admin_notifications' as any).select('*', { count: 'exact', head: true }).eq('is_archived', false).not('notification_type', 'in', `(${NON_AUDIT_TYPES.map(t => `"${t}"`).join(',')})`) as any),
+      ];
+      const [s, t, k, a] = await Promise.all(queries);
+      counts.signups = s?.count ?? 0;
+      counts.transactions = t?.count ?? 0;
+      counts.tickets = k?.count ?? 0;
+      counts.audit = a?.count ?? 0;
+      setTabTotals(counts);
+    } catch {
+      // non-fatal — fallback to in-memory counts
     }
   }, []);
 
@@ -152,15 +173,28 @@ export function AdminNotificationsBadge() {
   };
 
   const archiveAllInTab = async () => {
-    const tabNotifs = getTabNotifs();
-    if (!tabNotifs || tabNotifs.length === 0) return;
-    const ids = tabNotifs.map((n) => n.id);
-    await (supabase.from('admin_notifications' as any).update({ is_archived: true }).in('id', ids) as any);
-    setNotifications((prev) => prev.filter((n) => !ids.includes(n.id)));
-    setUnreadCount((prev) => {
-      const unreadArchived = tabNotifs.filter((n) => !n.is_read).length;
-      return Math.max(0, prev - unreadArchived);
-    });
+    const total = tabTotals[activeTab] ?? 0;
+    if (total === 0) {
+      const inMem = getTabNotifs();
+      if (!inMem || inMem.length === 0) return;
+    }
+    const confirmMsg = `Archive ALL ${total} alerts in "${activeTab}"? This cannot be undone from the UI.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    // Server-side bulk archive — covers EVERY matching row, not just what's loaded
+    let q = (supabase.from('admin_notifications' as any).update({ is_archived: true }).eq('is_archived', false) as any);
+    if (activeTab === 'signups') q = q.in('notification_type', SIGNUP_TYPES);
+    else if (activeTab === 'transactions') q = q.in('notification_type', TRANSACTION_TYPES);
+    else if (activeTab === 'tickets') q = q.in('notification_type', TICKET_TYPES);
+    else if (activeTab === 'audit') q = q.not('notification_type', 'in', `(${NON_AUDIT_TYPES.map(t => `"${t}"`).join(',')})`);
+
+    const { error } = await q;
+    if (error) {
+      toast({ title: 'Clear failed', description: error.message, variant: 'destructive' });
+      return;
+    }
+    toast({ title: 'Cleared', description: `Archived ${total} alerts in ${activeTab}.` });
+    await fetchNotifications();
   };
 
   const getTypeEmoji = (type: string) => {
@@ -373,9 +407,9 @@ export function AdminNotificationsBadge() {
             >
               <AlertTriangle className="h-4 w-4 text-red-500" />
               <span className="text-xs">Audit</span>
-              {auditUnread > 0 && (
+              {(tabTotals.audit > 0 || auditUnread > 0) && (
                 <Badge variant="secondary" className="h-5 px-1.5 text-xs bg-red-500/20 text-red-500 border-0">
-                  {auditUnread}
+                  {tabTotals.audit || auditUnread}
                 </Badge>
               )}
             </TabsTrigger>
