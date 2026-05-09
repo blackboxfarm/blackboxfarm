@@ -2062,6 +2062,18 @@ export function FlipItDashboard() {
       return;
     }
 
+    // SAFETY: never let a stale/garbled value send a runaway buy.
+    // Hard clamps: must fit wallet balance, and an absolute ceiling of 50 SOL per buy.
+    if (walletBalance !== null && parsedAmount > walletBalance) {
+      toast.error(`Buy amount ${parsedAmount} SOL exceeds wallet balance ${walletBalance.toFixed(4)} SOL`);
+      return;
+    }
+    if (parsedAmount > 50) {
+      toast.error(`Buy amount ${parsedAmount} SOL exceeds 50 SOL safety ceiling. Re-check the input.`);
+      return;
+    }
+    console.log('[FlipIt][handleFlip] buyAmount input=', buyAmount, 'parsed=', parsedAmount, 'walletBalance=', walletBalance);
+
     const tokenSymbol = inputToken.symbol;
     const cachedPrice = inputToken.price;
     const cachedAt = inputToken.lastFetched ? new Date(inputToken.lastFetched).getTime() : 0;
