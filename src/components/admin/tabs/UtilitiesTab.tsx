@@ -28,8 +28,16 @@ export default function UtilitiesTab() {
 
   return (
     <div className="space-y-4">
-      <ReputationBackfillPanel />
       <GenealogyRetracePanel />
+      <details className="rounded-md border border-border/50 bg-muted/20 p-2 group">
+        <summary className="cursor-pointer text-sm font-semibold px-2 py-1 flex items-center justify-between">
+          <span>🛠️ Maintenance · One-shot tools (Reputation Backfill)</span>
+          <span className="text-xs text-muted-foreground group-open:hidden">expand</span>
+        </summary>
+        <div className="mt-3">
+          <ReputationBackfillPanel />
+        </div>
+      </details>
       <SocialLinksBackfillPanel />
       <XCommunityQueueEtaCard />
       <VigilStatusPanel />
