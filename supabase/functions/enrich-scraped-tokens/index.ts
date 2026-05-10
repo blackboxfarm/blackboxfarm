@@ -2,6 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { meshFeed } from '../_shared/mesh-feeder.ts';
 import { withRunLog } from '../_shared/run-logger.ts';
 import { fetchPumpFunCoin, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
+import { normalizeTokenWebsite } from '../_shared/non-token-domains.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -138,6 +139,20 @@ Deno.serve(withRunLog('enrich-scraped-tokens', async (req) => {
                 updates.creator_wallet = pumpData.creator;
                 updates.creator_fetched_at = new Date().toISOString();
                 needsUpdate = true;
+              }
+
+              // ── Launchpad website capture (one-time, event-driven) ──
+              // Pump.fun's /coins/{mint} returns the creator-set website.
+              // We record it once into token_website_sources; the UNIQUE
+              // (mint,url,source) constraint guarantees no re-checks.
+              const lp = normalizeTokenWebsite(pumpData?.website);
+              if (lp) {
+                await supabaseClient
+                  .from('token_website_sources')
+                  .upsert(
+                    { token_mint: token.token_mint, url: lp.url, host: lp.host, source: 'launchpad' },
+                    { onConflict: 'token_mint,url,source', ignoreDuplicates: true }
+                  );
               }
             } else {
               // For non-pump tokens, use solscan-creator-lookup
