@@ -47,6 +47,29 @@ import { formatDistanceToNow } from "date-fns";
 
 const SOL_MINTS = new Set(["So11111111111111111111111111111111111111112"]);
 
+// Stablecoins / non-meme tokens that DexScreener sometimes ranks but should never
+// appear in our meme-token Top 200 view.
+const STABLECOIN_MINTS = new Set<string>([
+  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
+  "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
+  "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo", // PYUSD
+  "USDSwr9ApdHk5bvJKMjzff41FfuX8bSxdKcR81vTwcA",  // USDS
+  "HzwqbKZw8HxMN6bF2yFZNrht3c2iXXzpKcFu7uBEDKtr", // EURC
+  "Fu7SNdg5wSwXRYu2LP1F4Ym9qMy6kU2WPByLd7QkDAjo", // USD1 / United States Drip
+]);
+const STABLE_NAME_RX = /^(usdc|usdt|usd1|pyusd|usds|fdusd|eurc|dai|usde)$/i;
+const STABLE_FULLNAME_RX = /\b(usd coin|tether|stablecoin|dollar coin|united states drip)\b/i;
+
+function isStablecoin(t: any): boolean {
+  if (!t) return false;
+  if (STABLECOIN_MINTS.has(t.tokenMint || t.token_mint)) return true;
+  const sym = (t.symbol || "").trim();
+  const nm = (t.name || "").trim();
+  // Exact stablecoin ticker match — but only if name also looks stable.
+  if (STABLE_NAME_RX.test(sym) && STABLE_FULLNAME_RX.test(nm)) return true;
+  return false;
+}
+
 interface WorkerPair {
   pairId: string;
   tokenMint: string;
@@ -251,7 +274,8 @@ export default function Top200Tab() {
       const tokens = (edgeData.tokens || [])
         .filter((t: any) => t.tokenMint)
         .filter((t: any) => !SOL_MINTS.has(t.tokenMint))
-        .filter((t: any) => !(t.symbol === "SOL" && t.name === "Solana"));
+        .filter((t: any) => !(t.symbol === "SOL" && t.name === "Solana"))
+        .filter((t: any) => !isStablecoin(t));
 
       // Dedupe by tokenMint
       const uniqueTokens = tokens.filter(
@@ -271,14 +295,45 @@ export default function Top200Tab() {
 
       const dbMap = new Map((dbTokens || []).map((token: any) => [token.token_mint, token]));
 
+      // Fallback creator lookup for mints missing creator_wallet in token_lifecycle.
+      const missingCreator = mints.filter(
+        (m: string) => !(dbMap.get(m) as any)?.creator_wallet,
+      );
+      const creatorFallback = new Map<string, string>();
+      if (missingCreator.length > 0) {
+        const [pf, sc] = await Promise.all([
+          supabase
+            .from("pumpfun_watchlist")
+            .select("token_mint, creator_wallet")
+            .in("token_mint", missingCreator)
+            .not("creator_wallet", "is", null),
+          supabase
+            .from("scraped_tokens")
+            .select("token_mint, creator_wallet")
+            .in("token_mint", missingCreator)
+            .not("creator_wallet", "is", null),
+        ]);
+        for (const row of (pf.data || []) as any[]) {
+          if (row.creator_wallet) creatorFallback.set(row.token_mint, row.creator_wallet);
+        }
+        for (const row of (sc.data || []) as any[]) {
+          if (row.creator_wallet && !creatorFallback.has(row.token_mint)) {
+            creatorFallback.set(row.token_mint, row.creator_wallet);
+          }
+        }
+      }
+
       return uniqueTokens.map((t: any, index: number) => {
         const dbToken: any = dbMap.get(t.tokenMint) || {};
+        const creatorWallet =
+          dbToken.creator_wallet || creatorFallback.get(t.tokenMint) || null;
 
         return {
           ...dbToken,
           token_mint: t.tokenMint,
           symbol: dbToken.symbol ?? t.symbol ?? null,
           name: dbToken.name ?? t.name ?? null,
+          creator_wallet: creatorWallet,
           liquidity_usd: t.liquidityUsd ?? dbToken.liquidity_usd ?? null,
           volume_24h: t.volume24h ?? dbToken.volume_24h ?? null,
           price_usd: t.priceUsd ?? dbToken.price_usd ?? null,
@@ -306,13 +361,32 @@ export default function Top200Tab() {
 
       if (error) throw error;
 
-      return (data || [])
+      const rows = (data || [])
         .filter((t: any) => !SOL_MINTS.has(t.token_mint))
-        .map((t: any, index: number) => ({
-          ...t,
-          dex_url: `https://dexscreener.com/solana/${t.token_mint}`,
-          _rank: 201 + index,
-        }));
+        .filter((t: any) => !isStablecoin(t));
+
+      // Fallback creator_wallet lookup for overflow rows missing it.
+      const missing = rows.filter((r: any) => !r.creator_wallet).map((r: any) => r.token_mint);
+      const fallback = new Map<string, string>();
+      if (missing.length > 0) {
+        const [pf, sc] = await Promise.all([
+          supabase.from("pumpfun_watchlist").select("token_mint, creator_wallet").in("token_mint", missing).not("creator_wallet", "is", null),
+          supabase.from("scraped_tokens").select("token_mint, creator_wallet").in("token_mint", missing).not("creator_wallet", "is", null),
+        ]);
+        for (const row of (pf.data || []) as any[]) {
+          if (row.creator_wallet) fallback.set(row.token_mint, row.creator_wallet);
+        }
+        for (const row of (sc.data || []) as any[]) {
+          if (row.creator_wallet && !fallback.has(row.token_mint)) fallback.set(row.token_mint, row.creator_wallet);
+        }
+      }
+
+      return rows.map((t: any, index: number) => ({
+        ...t,
+        creator_wallet: t.creator_wallet || fallback.get(t.token_mint) || null,
+        dex_url: `https://dexscreener.com/solana/${t.token_mint}`,
+        _rank: 201 + index,
+      }));
     },
   });
 
