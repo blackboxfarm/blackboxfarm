@@ -1,81 +1,96 @@
-## Diagnosis — yes, it's a real bug, not a UI glitch
 
-The "Dev Wallet" column on `/super-admin` Master Token Directory shows things like `{"addr…ed"}` because the underlying row literally contains a **JSON object stringified into a TEXT column**.
+# Team Intel Dashboard — Feedback & Fix Plan
 
-Confirmed via DB:
+Direct answers to your questions first, then the fix list.
+
+## Answers to your questions
+
+**"Unkown" badge on the right side of every team**
+That is the team's `risk_level` field rendered by `getRiskBadge()`. Every row in `dev_teams` currently has `risk_level = 'unknown'` because the team risk classifier hasn't tagged them yet. It is not telling you anything useful right now — it is just the absence of a verdict. Fix: relabel to "Unrated" with a tooltip ("Auto-classifier hasn't scored this team yet"), so it stops looking like a label for the team itself.
+
+**Risk Score 990 (Rotation Patterns)**
+That column is NOT a 0–100 score — the Postgres function `get_rotation_patterns` computes:
 
 ```
-pumpfun_watchlist.creator_wallet
-  = '{"address":"65eY9uU5...","balance":33881204.27,"usdValue":3527.03,
-      "percentageOfSupply":3.39,"confidence":45,
-      "detectionMethod":"top_holder",
-      "reason":"Top non-LP holder (3.4%) — creator unverified"}'
+risk_score = admin_count × 30 + mod_count × 20 + min(co_mod_count, 20) × 5
 ```
 
-That's an entire `potentialDevWallet` payload shoved into a column that is supposed to hold a 32–44 char Solana address.
+`@estoni_x` is admin of 33 communities → 33 × 30 = **990**. There is no upper bound. The `<Progress value={risk_score}/>` bar is wrong because Progress expects 0–100. Fix: rename to "Rotation Score", show the raw number with a tooltip explaining the formula, and replace the progress bar with a normalized bar (`min(score / 1000, 1) × 100`) plus a colored band (≥300 high, ≥150 medium).
 
-### Source of the corruption
+**Mesh Link Distribution showing exactly 50 / 1000 / 0 / 0 / 0**
+Those numbers are wrong, and here is why:
 
-`supabase/functions/holders-intel-poster/index.ts` has three sites where it falls back to the **whole object** instead of `.address`:
+- The materialized view `mesh_summary` was last refreshed **2026-02-09** (3 months ago), and at that time admin/mod/co_mod/community_for were all zero. Real current counts in `reputation_mesh`:
+  - admin_of: **1,206**
+  - mod_of: **498**
+  - co_mod: **1,010**
+  - community_for: **22,032**
+- When the front-end falls back to a direct query, the Supabase JS client caps at **1000 rows by default** — that is exactly where the "1000" comes from. All 1000 rows happened to be one relationship type, so the other categories show 0.
+- "50 Teams" / "50 Rotators" are page-size caps (`PAGE_SIZE = 50`) being shown as totals. Also misleading.
+- "0 Rugged" / "0 High Risk" are genuine — `tokens_rugged` and `risk_level` aren't being populated by any classifier yet.
 
-- Line 625: `const creatorWallet = report?.creatorInfo?.wallet || report?.potentialDevWallet;`
-- Line 680: `(report?.creatorInfo?.wallet ?? report?.potentialDevWallet ?? null) as string | null;`
-- Line 921: `const creatorWalletForMesh = report?.creatorInfo?.wallet || report?.potentialDevWallet || null;`
+Fix: refresh & schedule the materialized view, drop the broken fallback, and make the top stat cards report real DB totals (count queries with `head: true, count: 'exact'`) instead of array lengths.
 
-`bagless-holders-report` builds `potentialDevWallet` as `{ address, balance, percentageOfSupply, confidence, detectionMethod, reason, ... }`. The other consumers (`token-vigil`, `holdersintel-bot-webhook`) correctly use `potentialDevWallet?.address`. Only `holders-intel-poster` uses the bare object — and it's the one writing to `pumpfun_watchlist.creator_wallet`, which is exactly what the Master Token Directory view (`master_token_directory`) coalesces from first.
+## Scope of edits
 
-### Why the UI renders weirdly
+All in `src/components/admin/oracle/TeamIntelDashboard.tsx` plus one DB migration.
 
-`MasterDBTab.tsx` does `wallet.slice(0,6)…wallet.slice(-4)` — when `wallet` is the JSON blob string, `slice(0,6)` = `{"addr` and `slice(-4)` = `ed"}`, hence the `{"addr…ed"}` chip and the broken Solscan hover URL `solscan.io/account/{"address":"…","detectionMethod":"top_holder",…}`.
+### 1. Linked Communities → real X community links
+Today: `<Badge>#{comm.slice(0,10)}...</Badge>` with no link.
+Change to anchor: `https://x.com/i/communities/{comm}` (these IDs like `2023816834667987005` are X community IDs), open in new tab, ExternalLink icon.
 
-## Plan
+### 2. Linked Tokens → ticker as label, working URL, hide dead ones
+Today: shows mint prefix, links to `dexscreener.com/solana/{mint}` (many 404).
+Change:
+- Fetch ticker for each mint in the visible team panel from `token_lifecycle` / `scraped_tokens` / `pumpfun_watchlist` (one batched `select symbol, mint where mint in (…)`), cache per team expansion.
+- Render `${symbol}` as the badge label; mint as title hover.
+- Link priority:
+  1. If the token has a DexScreener pair → `dexscreener.com/solana/{mint}`.
+  2. Else → `pump.fun/coin/{mint}` (covers pre-graduation tokens that have no DEX page).
+- Tokens with no symbol AND no on-chain presence get a muted "dead" pill, not a broken link.
 
-### 1. Fix the writer (stop the bleed)
+### 3. Member Wallets → full address + clickable + owner label
+Today: `Aaaa…Bbbb` truncated, only the icon is the link, no owner info.
+Change each wallet row to:
+- Full base58 address rendered with `font-mono text-xs break-all`, the **whole address is the anchor** (`solscan.io/account/{wallet}`), copy button next to it.
+- Owner label resolved with a single batched lookup (one query per team expand) across, in priority:
+  1. `developer_profiles.master_wallet_address` → "Dev: @{primary_x_handle}" (or wallet alias).
+  2. `cex_wallets` / `is_kyc_root` → "CEX: {exchange_name}" or "KYC root".
+  3. `wallet_labels` (if present) → label.
+  4. Otherwise → "Unlinked" (italic, muted) — never the word "Unknown" (which we are reserving for risk).
+- Show owner label as a small secondary line under the wallet, NOT as a guess.
 
-In `supabase/functions/holders-intel-poster/index.ts`, change all three fallbacks from `report?.potentialDevWallet` to `report?.potentialDevWallet?.address`. Add a defensive guard so only a string of length 32–44 (base58-shaped) is ever assigned to `creator_wallet`. Deploy.
+### 4. Top stat cards → real numbers, not page-size caps
+Replace the four misleading numerics:
+- Teams: `select count(*) from dev_teams where is_active`.
+- Tokens: `select sum(tokens_created) from dev_teams where is_active` (single aggregate query) — drop the `teams.reduce(...)` over the visible 50.
+- Rotators: `select count(*) from get_rotation_patterns(2, 2147483647, 0)` OR a new RPC `count_rotation_patterns(min_communities)`.
+- Mesh Links: `select total_links from mesh_summary` after refresh.
 
-### 2. Clean up corrupted rows
-
-One-shot SQL migration to scrub `pumpfun_watchlist.creator_wallet` (and any other table that may have caught the same blob) where the value starts with `{`:
-
-```sql
-UPDATE pumpfun_watchlist
-   SET creator_wallet = (creator_wallet::jsonb ->> 'address')
- WHERE creator_wallet LIKE '{%'
-   AND creator_wallet ~ '^\{.*"address"';
-
-UPDATE pumpfun_watchlist
-   SET creator_wallet = NULL
- WHERE creator_wallet LIKE '{%';   -- safety: anything still malformed → null
+### 5. Mesh Link Distribution → repair `mesh_summary`
+DB migration:
 ```
-
-Audit the same pattern in `scraped_tokens.creator_wallet`, `token_lifecycle.creator_wallet`, `funnel_feed_discoveries.creator_wallet`, and `developer_tokens.creator_wallet` (cheap `WHERE creator_wallet LIKE '{%'` check). Apply the same extract-or-null cleanup to anything that matches.
-
-### 3. Add a permanent guard at the column level
-
-Add a CHECK constraint to `pumpfun_watchlist` (and the four other tables above) so this can never silently re-occur:
-
-```sql
-ALTER TABLE pumpfun_watchlist
-  ADD CONSTRAINT creator_wallet_is_address
-  CHECK (creator_wallet IS NULL
-      OR (length(creator_wallet) BETWEEN 32 AND 44
-          AND creator_wallet !~ '[^1-9A-HJ-NP-Za-km-z]'));
+REFRESH MATERIALIZED VIEW CONCURRENTLY mesh_summary;
 ```
+Plus a pg_cron schedule (every 15 min) so it stays current. Drop the 1000-row fallback in the front-end (it is the source of the fake "1000 / 0 / 0 / 0" pattern); show "Computing…" spinner while the view is refreshing for the first time.
 
-This is base58 + correct-length, matching the same regex `validateTokenAddress` uses on the frontend. Any future buggy writer will fail loudly instead of poisoning the directory.
+### 6. Risk badge wording on team rows
+`getRiskBadge('unknown')` → render as "Unrated" with a `title` tooltip "Auto-classifier hasn't scored this team yet". Keeps the column honest until the classifier exists.
 
-### 4. UI hardening (cheap belt-and-suspenders)
+### 7. Rotation Patterns Risk Score column
+- Rename header to "Rotation Score".
+- Add a `<TooltipProvider>` info icon next to the header explaining: `admin × 30 + mod × 20 + min(co_mod, 20) × 5`.
+- Progress bar value: `Math.min(risk_score / 1000, 1) × 100`.
+- Color thresholds: ≥300 destructive, ≥150 orange, else muted.
 
-In `MasterDBTab.tsx` line 429, before slicing, validate the wallet shape; if it looks like JSON (starts with `{` or length > 44), render `—` instead of a broken link. This protects against any other source we haven't found yet.
+### 8. X Accounts & Mods (already partially OK)
+Wrap each `@admin` / `@mod` / `@member` badge in `<a href={`https://x.com/${handle}`} target="_blank">`. The Rotation Patterns table already does this — apply the same pattern to the team-detail panel.
 
-### 5. Verify
-
-After deploy + migration, re-query a sample (`BadAni`, `s0la`, `MOM`, etc.) and confirm `creator_wallet` is either a clean base58 string or null. Reload the Master Token Directory page and confirm Dev Wallet column shows real addresses or `—`, never `{"addr…ed"}`.
+## Out of scope (call out, don't fix here)
+- Populating `tokens_rugged` and `risk_level` requires a classifier job — separate task, not part of this UI pass.
+- Adding wallet-label coverage beyond what already exists in `developer_profiles` / `cex_wallets` is also a separate backfill task.
 
 ## Technical notes
-
-- Migrations under `supabase/migrations/` are read-only; we'll add a new timestamped migration for the data backfill + CHECK constraints.
-- `master_token_directory` is a view, not a table — no schema change needed there. Once base tables are clean, the view is automatically clean.
-- Only `holders-intel-poster` needs to be redeployed; the other consumers were already correct.
-- Root cause is a long-standing typo where the variable was renamed from a string to an object payload but one consumer was never updated.
+- Mint→ticker batching: one `.in('mint', [...])` per expanded team, results stored in a `Map<mint, { symbol, has_pair }>` in component state, keyed by team id so collapsing/re-expanding doesn't re-fetch.
+- Wallet→owner batching: same pattern using `developer_profiles` and `cex_wallets`.
+- `mesh_summary` refresh migration must use `CONCURRENTLY` (the view already has a unique index? — verify; if not, add one before scheduling).
