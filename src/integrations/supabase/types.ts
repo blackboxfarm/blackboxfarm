@@ -4802,6 +4802,7 @@ export type Database = {
           failed_tokens: number | null
           id: string
           integrity_score: number | null
+          kyc_last_checked_at: string | null
           kyc_source: string | null
           kyc_verification_date: string | null
           kyc_verified: boolean | null
@@ -4843,6 +4844,7 @@ export type Database = {
           failed_tokens?: number | null
           id?: string
           integrity_score?: number | null
+          kyc_last_checked_at?: string | null
           kyc_source?: string | null
           kyc_verification_date?: string | null
           kyc_verified?: boolean | null
@@ -4884,6 +4886,7 @@ export type Database = {
           failed_tokens?: number | null
           id?: string
           integrity_score?: number | null
+          kyc_last_checked_at?: string | null
           kyc_source?: string | null
           kyc_verification_date?: string | null
           kyc_verified?: boolean | null
@@ -18441,6 +18444,33 @@ export type Database = {
           },
         ]
       }
+      token_website_sources: {
+        Row: {
+          first_seen_at: string
+          host: string | null
+          id: string
+          source: string
+          token_mint: string
+          url: string
+        }
+        Insert: {
+          first_seen_at?: string
+          host?: string | null
+          id?: string
+          source: string
+          token_mint: string
+          url: string
+        }
+        Update: {
+          first_seen_at?: string
+          host?: string | null
+          id?: string
+          source?: string
+          token_mint?: string
+          url?: string
+        }
+        Relationships: []
+      }
       trade_history: {
         Row: {
           error_message: string | null
@@ -21045,6 +21075,8 @@ export type Database = {
       master_token_directory: {
         Row: {
           ath_24h_usd: number | null
+          ath_market_cap_at: string | null
+          ath_market_cap_usd: number | null
           community_admin_handles: string[] | null
           community_mod_handles: string[] | null
           created_at: string | null
@@ -21072,6 +21104,7 @@ export type Database = {
           symbol: string | null
           token_mint: string | null
           was_posted: boolean | null
+          website_sources: Json | null
           websites: string[] | null
           x_community_names: string[] | null
           x_community_urls: string[] | null
