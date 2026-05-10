@@ -3,6 +3,7 @@ import { meshFeed } from '../_shared/mesh-feeder.ts';
 import { withRunLog } from '../_shared/run-logger.ts';
 import { fetchPumpFunCoin, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
 import { normalizeTokenWebsite } from '../_shared/non-token-domains.ts';
+import { assertUpdate, assertUpsert } from '../_shared/db-assert.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,6 +11,14 @@ const corsHeaders = {
 };
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const hasText = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
+
+const pumpImageUrl = (data: any): string | null =>
+  data?.image_uri || data?.image || data?.image_url || data?.imageUrl || null;
+
+const needsMetadata = (token: any) =>
+  !hasText(token.symbol) || !hasText(token.name) || !hasText(token.image_url) || !hasText(token.launchpad) || !token.metadata_fetched_at;
 
 // Detect launchpad based on token mint and DEX data
 const detectLaunchpad = (tokenMint: string, pairData: any): string | null => {
@@ -83,8 +92,47 @@ Deno.serve(withRunLog('enrich-scraped-tokens', async (req) => {
         const updates: any = {};
         let needsUpdate = false;
 
-        // Fetch metadata from DexScreener if missing
-        if (!token.metadata_fetched_at || !token.symbol || !token.name) {
+        const isPumpToken = token.token_mint?.endsWith('pump') || token.launchpad === 'pump.fun';
+
+        // Pump.fun is authoritative for pump mints. Fetch it even if creator_wallet is already filled,
+        // because symbol/name/image often remain blank when rows came from HTML/mint-only discovery.
+        if (isPumpToken && (needsMetadata(token) || !token.creator_wallet || !token.creator_fetched_at)) {
+          try {
+            const pumpData = await fetchPumpFunCoin(token.token_mint, 'enrich-scraped-tokens');
+
+            if (pumpData) {
+              if (!hasText(token.symbol) && hasText(pumpData.symbol)) updates.symbol = pumpData.symbol.trim();
+              if (!hasText(token.name) && hasText(pumpData.name)) updates.name = pumpData.name.trim();
+              const image = pumpImageUrl(pumpData);
+              if (!hasText(token.image_url) && hasText(image)) updates.image_url = image;
+              if (!hasText(token.launchpad)) updates.launchpad = 'pump.fun';
+              if (!token.creator_wallet && hasText(pumpData.creator)) updates.creator_wallet = pumpData.creator;
+              if (hasText(token.creator_wallet) || hasText(pumpData.creator)) updates.creator_fetched_at = new Date().toISOString();
+              if (hasText(pumpData.symbol) || hasText(pumpData.name) || hasText(image)) updates.metadata_fetched_at = new Date().toISOString();
+              needsUpdate = true;
+
+              const lp = normalizeTokenWebsite(pumpData.website);
+              if (lp) {
+                await assertUpsert(
+                  supabaseClient
+                    .from('token_website_sources')
+                    .upsert(
+                      { token_mint: token.token_mint, url: lp.url, host: lp.host, source: 'launchpad' },
+                      { onConflict: 'token_mint,url,source', ignoreDuplicates: true }
+                    ),
+                  'token_website_sources',
+                );
+              }
+            }
+          } catch (error) {
+            console.error(`Failed to fetch Pump.fun data for ${token.token_mint}:`, error);
+          }
+
+          await delay(250);
+        }
+
+        // Fetch metadata from DexScreener if still missing (or for non-pump tokens)
+        if (!updates.metadata_fetched_at && (!token.metadata_fetched_at || !token.symbol || !token.name || !token.image_url)) {
           try {
             const dexResponse = await fetch(
               `https://api.dexscreener.com/latest/dex/tokens/${token.token_mint}`
@@ -130,8 +178,6 @@ Deno.serve(withRunLog('enrich-scraped-tokens', async (req) => {
         if (!token.creator_wallet) {
           try {
             // For pump.fun tokens, call pump.fun API directly (authoritative source)
-            const isPumpToken = token.token_mint?.endsWith('pump') || token.launchpad === 'pump.fun';
-            
             if (isPumpToken) {
               const pumpData = await fetchPumpFunCoin(token.token_mint, 'enrich-scraped-tokens');
 
@@ -147,12 +193,15 @@ Deno.serve(withRunLog('enrich-scraped-tokens', async (req) => {
               // (mint,url,source) constraint guarantees no re-checks.
               const lp = normalizeTokenWebsite(pumpData?.website);
               if (lp) {
-                await supabaseClient
-                  .from('token_website_sources')
-                  .upsert(
-                    { token_mint: token.token_mint, url: lp.url, host: lp.host, source: 'launchpad' },
-                    { onConflict: 'token_mint,url,source', ignoreDuplicates: true }
-                  );
+                await assertUpsert(
+                  supabaseClient
+                    .from('token_website_sources')
+                    .upsert(
+                      { token_mint: token.token_mint, url: lp.url, host: lp.host, source: 'launchpad' },
+                      { onConflict: 'token_mint,url,source', ignoreDuplicates: true }
+                    ),
+                  'token_website_sources',
+                );
               }
             } else {
               // For non-pump tokens, use solscan-creator-lookup
@@ -186,35 +235,29 @@ Deno.serve(withRunLog('enrich-scraped-tokens', async (req) => {
 
         // Update database if we have new data
         if (needsUpdate) {
-          const { error: updateError } = await supabaseClient
-            .from('scraped_tokens')
-            .update(updates)
-            .eq('token_mint', token.token_mint);
+          await assertUpdate(
+            supabaseClient
+              .from('scraped_tokens')
+              .update(updates)
+              .eq('token_mint', token.token_mint),
+            'scraped_tokens',
+          );
 
-          if (!updateError) {
-            enrichedCount++;
-            results.push({
-              token_mint: token.token_mint,
-              success: true,
-              updates
-            });
-            
-            // 🕸️ MESH FEEDER: Every enriched token feeds the mesh
-            meshFeed.token(supabaseClient, {
-              mint: token.token_mint,
-              symbol: updates.symbol || token.symbol,
-              name: updates.name || token.name,
-              creatorWallet: updates.creator_wallet || token.creator_wallet,
-              source: 'enrich-scraped-tokens',
-            }).catch(e => console.warn('[mesh-feeder] enrich feed failed:', e));
-          } else {
-            console.error(`Failed to update ${token.token_mint}:`, updateError);
-            results.push({
-              token_mint: token.token_mint,
-              success: false,
-              error: updateError.message
-            });
-          }
+          enrichedCount++;
+          results.push({
+            token_mint: token.token_mint,
+            success: true,
+            updates
+          });
+          
+          // 🕸️ MESH FEEDER: Every enriched token feeds the mesh
+          meshFeed.token(supabaseClient, {
+            mint: token.token_mint,
+            symbol: updates.symbol || token.symbol,
+            name: updates.name || token.name,
+            creatorWallet: updates.creator_wallet || token.creator_wallet,
+            source: 'enrich-scraped-tokens',
+          }).catch(e => console.warn('[mesh-feeder] enrich feed failed:', e));
         }
 
       } catch (error) {
