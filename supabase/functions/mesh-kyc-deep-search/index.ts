@@ -474,20 +474,21 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
       profilePayload.kyc_source = finalKycLabel ? `helius_chain:${finalKycLabel}` : 'helius_chain';
       profilePayload.kyc_verification_date = new Date().toISOString();
     }
-    await supabase
+    await assertUpsert(supabase
       .from('developer_profiles')
-      .upsert(profilePayload, { onConflict: 'master_wallet_address', ignoreDuplicates: false });
+      .upsert(profilePayload, { onConflict: 'master_wallet_address', ignoreDuplicates: false }),
+      'developer_profiles');
 
     // ── KYC Discovery Log (BFS path) ──
     if (kycRoot) {
-      try {
+      {
         const { data: toks } = await supabase
           .from('master_token_directory')
           .select('token_mint')
           .eq('creator_wallet', walletAddress)
           .limit(50);
         const tokenList = (toks ?? []).map(t => t.token_mint as string);
-        await supabase.from('kyc_discovery_log').upsert({
+        await assertUpsert(supabase.from('kyc_discovery_log').upsert({
           dev_wallet: walletAddress,
           kyc_wallet: kycRoot,
           kyc_label: finalKycLabel,
@@ -501,8 +502,8 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
           token_count: tokenList.length,
           discovered_via: 'mesh-kyc-deep-search',
           discovered_at: new Date().toISOString(),
-        }, { onConflict: 'dev_wallet,kyc_wallet', ignoreDuplicates: true });
-      } catch (e) { console.warn('[KYCDeep] discovery_log BFS insert failed', e); }
+        }, { onConflict: 'dev_wallet,kyc_wallet', ignoreDuplicates: true }), 'kyc_discovery_log');
+      }
     }
 
     return new Response(
