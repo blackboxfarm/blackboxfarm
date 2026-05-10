@@ -8,6 +8,7 @@ import { fetchDexScreenerData } from "../_shared/dexscreener-api.ts"
 import { fetchCreatorInfo } from "../_shared/creator-api.ts"
 import { fetchSolscanMarkets } from "../_shared/solscan-markets.ts"
 import { fetchRugCheckInsiders, type InsidersGraphResult } from "../_shared/rugcheck-insiders.ts"
+import { assertDbWrite } from "../_shared/db-assert.ts"
 import { 
   startSearchLog, 
   extractIpAddress, 
@@ -727,6 +728,22 @@ serve(withRunLog('bagless-holders-report', async (req) => {
     }
     
     // ── ABSOLUTE FAILURE FLOORS (hard gates) ──
+    const bondingCurvePct = typeof creatorInfo.bondingCurveProgress === 'number' ? creatorInfo.bondingCurveProgress : null;
+    const isPumpLaunch = (launchpadInfo.name || '').toLowerCase().includes('pump') || dexId?.toLowerCase() === 'pumpfun';
+    const ungraduatedPump = isPumpLaunch && !isGraduatedVenue && healthPhase === 'on_curve';
+    const hardDeadCurve = ungraduatedPump && inferredMarketCapUSD > 0 && inferredMarketCapUSD < 5_000;
+    const stalledLowCurve = ungraduatedPump && bondingCurvePct !== null && bondingCurvePct < 70 && pairAgeHours !== null && pairAgeHours > 2 && vol24 < 2_500;
+    const hardFailureOverride = hardDeadCurve || stalledLowCurve;
+
+    if (hardFailureOverride) {
+      healthScore = Math.min(healthScore, 25);
+      vitalityPenalties.push(
+        hardDeadCurve
+          ? `DEAD/RUG OVERRIDE: ungraduated Pump.fun token under $5k market cap ($${Math.round(inferredMarketCapUSD).toLocaleString()}) — automatic F`
+          : `DEAD/RUG OVERRIDE: stalled bonding curve (${bondingCurvePct?.toFixed(0)}%) with weak volume — automatic F`
+      );
+    }
+
     if (realHolderCount < 15) {
       healthScore = Math.min(healthScore, 20);
       vitalityPenalties.push(`CRITICAL: Only ${realHolderCount} real holders (non-dust) — automatic F`);
@@ -764,37 +781,37 @@ serve(withRunLog('bagless-holders-report', async (req) => {
     // ── STRUCTURAL HOLDER FLOORS (independent of volume/liquidity/catastrophic) ──
     // A token with thousands of REAL holders (non-dust) is NOT an F regardless of current volume.
     // These floors ALWAYS apply — real holder count is an immutable structural fact.
-    if (realHolderCount >= 5000) {
+    if (!hardFailureOverride && realHolderCount >= 5000) {
       const holderFloor = 89; // A
       if (healthScore < holderFloor) {
         vitalityPenalties.push(`Massive holder floor (A): ${realHolderCount.toLocaleString()} real holders → raised from ${Math.round(healthScore)} to ${holderFloor}`);
         healthScore = holderFloor;
       }
-    } else if (realHolderCount >= 2000) {
+    } else if (!hardFailureOverride && realHolderCount >= 2000) {
       const holderFloor = 80; // B+
       if (healthScore < holderFloor) {
         vitalityPenalties.push(`Large holder floor (B+): ${realHolderCount.toLocaleString()} real holders → raised from ${Math.round(healthScore)} to ${holderFloor}`);
         healthScore = holderFloor;
       }
-    } else if (realHolderCount >= 1000) {
+    } else if (!hardFailureOverride && realHolderCount >= 1000) {
       const holderFloor = 70; // B-
       if (healthScore < holderFloor) {
         vitalityPenalties.push(`Solid holder floor (B-): ${realHolderCount.toLocaleString()} real holders → raised from ${Math.round(healthScore)} to ${holderFloor}`);
         healthScore = holderFloor;
       }
-    } else if (realHolderCount >= 500) {
+    } else if (!hardFailureOverride && realHolderCount >= 500) {
       const holderFloor = 60; // C
       if (healthScore < holderFloor) {
         vitalityPenalties.push(`Holder floor (C): ${realHolderCount.toLocaleString()} real holders → raised from ${Math.round(healthScore)} to ${holderFloor}`);
         healthScore = holderFloor;
       }
-    } else if (realHolderCount >= 200) {
+    } else if (!hardFailureOverride && realHolderCount >= 200) {
       const holderFloor = 50; // D+
       if (healthScore < holderFloor) {
         vitalityPenalties.push(`Moderate holder floor (D+): ${realHolderCount.toLocaleString()} real holders → raised from ${Math.round(healthScore)} to ${holderFloor}`);
         healthScore = holderFloor;
       }
-    } else if (realHolderCount >= 100) {
+    } else if (!hardFailureOverride && realHolderCount >= 100) {
       const holderFloor = 45; // D
       if (healthScore < holderFloor) {
         vitalityPenalties.push(`Small holder floor (D): ${realHolderCount.toLocaleString()} real holders → raised from ${Math.round(healthScore)} to ${holderFloor}`);
