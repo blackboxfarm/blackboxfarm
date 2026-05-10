@@ -189,39 +189,20 @@ async function updateMissingCreator(supabase: any, target: TargetRow, creator: s
 }
 
 async function seedDeveloperChain(supabase: any, mint: string, creator: string) {
-  const { data: profile, error: profileError } = await supabase
-    .from('developer_profiles')
-    .select('id')
-    .eq('master_wallet_address', creator)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (profileError) throw profileError;
+  const profile = await assertUpsert(
+    supabase.from('developer_profiles').upsert({
+      master_wallet_address: creator,
+      display_name: creator.slice(0, 8),
+      source: 'solscan_v2_creator_backfill',
+      kyc_verified: false,
+      trust_level: 'neutral',
+      metadata: { seeded_from_token: mint, provider: 'solscan_v2_token_meta' },
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'master_wallet_address', ignoreDuplicates: false }).select('id').single(),
+    'developer_profiles',
+  );
 
-  let developerId = profile?.id;
-  if (!developerId) {
-    const inserted = await assertInsert(
-      supabase.from('developer_profiles').insert({
-        master_wallet_address: creator,
-        display_name: creator.slice(0, 8),
-        source: 'solscan_v2_creator_backfill',
-        kyc_verified: false,
-        trust_level: 'neutral',
-        metadata: { seeded_from_token: mint, provider: 'solscan_v2_token_meta' },
-      }).select('id').single(),
-      'developer_profiles',
-    );
-    developerId = inserted?.id;
-  } else {
-    await assertUpdate(
-      supabase.from('developer_profiles').update({
-        source: 'solscan_v2_creator_backfill',
-        metadata: { seeded_from_token: mint, provider: 'solscan_v2_token_meta' },
-        updated_at: new Date().toISOString(),
-      }).eq('id', developerId),
-      'developer_profiles',
-    );
-  }
+  const developerId = profile?.id;
 
   if (developerId) {
     await assertUpsert(
