@@ -8,6 +8,8 @@ const corsHeaders = {
 };
 
 import { isCexWallet, getCexName } from '../_shared/cex-wallets.ts';
+import { getCexNameAny, getCexNameCached, recordCexWallet, warmCexCache } from '../_shared/cex-wallets-db.ts';
+import { solscanCheckAccountLabel } from '../_shared/solscan-intelligence.ts';
 
 import { enableHeliusTracking } from "../_shared/helius-fetch-interceptor.ts";
 enableHeliusTracking("mesh-kyc-deep-search");
@@ -26,11 +28,26 @@ interface HeliusFundedByResult {
 }
 
 function isKnownCex(funderAddress: string, funderName: string | null, funderType: string | null): boolean {
-  // Check shared CEX wallet database first (most reliable)
-  if (isCexWallet(funderAddress)) return true;
+  // 1) curated file dictionary + DB cache (warmed at handler start)
+  if (getCexNameCached(funderAddress)) return true;
+  // 2) Helius hint
   if (funderType === 'exchange' || funderType === 'cex') return true;
+  // 3) keyword in funder display name
   const name = (funderName || '').toLowerCase();
   return CEX_KEYWORDS.some(k => name.includes(k));
+}
+
+/** Map a Solscan-returned label string ("Binance 2", "Coinbase 5") to a canonical CEX name. */
+function canonicalCexFromLabel(label: string | null): string | null {
+  if (!label) return null;
+  const lower = label.toLowerCase();
+  const match = CEX_KEYWORDS.find(k => lower.includes(k));
+  if (!match) return null;
+  // Title-case + special-case fixups
+  if (match === 'gate.io') return 'Gate.io';
+  if (match === 'crypto.com') return 'Crypto.com';
+  if (match === 'htx' || match === 'huobi') return 'HTX';
+  return match.charAt(0).toUpperCase() + match.slice(1);
 }
 
 async function heliusFundedBy(
@@ -169,6 +186,63 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
     const shouldDiscoverBundle = discoverBundle !== false; // Default: true
     console.log(`[KYCDeep] Starting depth-${depth} Helius trace for ${walletAddress} (bundle discovery: ${shouldDiscoverBundle})`);
 
+    // Warm DB-backed CEX dictionary so isKnownCex hits the latest labels
+    // (file dictionary + every wallet ever discovered via Solscan label).
+    try { await warmCexCache(); } catch { /* non-fatal */ }
+
+    // ═══ SOLSCAN-DIRECT FAST PATH ═══
+    // Solscan Pro v2 already returns the wallet's "funded_by" label in a single
+    // /account/detail call. If that label is a known CEX, we can return a KYC
+    // root in 1 API hit instead of walking up to 8 hops via Helius.
+    try {
+      const solscanErrors: string[] = [];
+      const fast = await solscanCheckAccountLabel(walletAddress, solscanErrors);
+      const directCex = canonicalCexFromLabel(fast.label);
+      if (fast.isCex && directCex) {
+        console.log(`[KYCDeep] ⚡ Solscan-direct hit: ${walletAddress.slice(0, 8)}... funded_by="${fast.label}" → ${directCex}`);
+
+        // Self-expand the dictionary so future calls don't even need Solscan.
+        // We tag this wallet's *funder* as the CEX address only if we can later
+        // trace it; for now we just record the direct relationship in the mesh.
+        await supabase
+          .from('reputation_mesh')
+          .upsert({
+            source_type: 'wallet',
+            source_id: walletAddress,
+            linked_type: 'kyc_root',
+            linked_id: directCex,
+            relationship: 'is_kyc_root',
+            confidence: 95,
+            discovered_via: 'mesh-kyc-deep-search:solscan-direct',
+            discovered_at: new Date().toISOString(),
+            evidence: { source: 'solscan-account-detail', rawLabel: fast.label, tags: fast.tags },
+          }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true });
+
+        return new Response(
+          JSON.stringify({
+            walletAddress,
+            kycRoot: walletAddress,        // wallet itself is the leaf node funded by CEX
+            kycRootLabel: directCex,
+            kycRootCex: directCex,
+            chainDepth: 0,
+            walletsTraced: 1,
+            meshLinksAdded: 1,
+            siblingCount: 0,
+            chain: [],
+            siblings: [],
+            fastPath: 'solscan-direct',
+            errors: solscanErrors,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      if (fast.label) {
+        console.log(`[KYCDeep] Solscan-direct: ${walletAddress.slice(0, 8)} has label "${fast.label}" but not a known CEX — falling through to BFS`);
+      }
+    } catch (e) {
+      console.warn('[KYCDeep] Solscan-direct fast path failed, falling through:', e);
+    }
+
     const visited = new Set<string>();
     const chain: Array<{ wallet: string; funder: string; funderName: string | null; funderType: string | null; amountSol: number; depth: number }> = [];
     const errors: string[] = [];
@@ -213,6 +287,18 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
         kycRoot = current.wallet;
         kycRootLabel = funding.funderName || funding.funderType || 'exchange';
         console.log(`[KYCDeep] 🏦 CEX-funded KYC root: ${current.wallet.slice(0, 12)} (funded by "${kycRootLabel}" ${funding.funder.slice(0, 8)})`);
+        // Self-expand: if Helius identified this funder as a CEX but it's not
+        // in our dictionary yet, record it so future scans skip the chain walk.
+        const canon = canonicalCexFromLabel(kycRootLabel);
+        if (canon && !getCexNameCached(funding.funder)) {
+          await recordCexWallet({
+            wallet: funding.funder,
+            cexName: canon,
+            cexLabel: kycRootLabel,
+            source: 'mesh-kyc-deep-search:helius-funded-by',
+            verified: false,
+          });
+        }
         continue;
       }
 
@@ -336,7 +422,7 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
 
     // Prefer our own curated CEX label over Helius's "funderName" — guarantees
     // we always say "Binance" instead of "Binance Hot Wallet 7" or null.
-    const ourCexLabel = kycRoot ? getCexName(kycRoot) : null;
+    const ourCexLabel = kycRoot ? getCexNameCached(kycRoot) : null;
     const finalKycLabel = ourCexLabel ?? kycRootLabel ?? null;
 
     return new Response(
