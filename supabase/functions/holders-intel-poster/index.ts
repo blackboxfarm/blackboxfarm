@@ -28,6 +28,15 @@ const FALLBACK_TEMPLATE = `🔍 {TICKER} Holder Analysis
 
 👉 blackbox.farm/holders?token={TOKEN_ADDRESS}`;
 
+// Guard: only accept base58-shaped Solana wallet addresses (32–44 chars).
+// Prevents JSON blobs like `{"address":"...","detectionMethod":"top_holder"}`
+// from being persisted to creator_wallet columns.
+function isValidWallet(v: unknown): v is string {
+  return typeof v === 'string'
+    && v.length >= 32 && v.length <= 44
+    && /^[1-9A-HJ-NP-Za-km-z]+$/.test(v);
+}
+
 function asCount(value: any): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string') {
