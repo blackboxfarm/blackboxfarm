@@ -5,6 +5,7 @@
 // milestone crossed. Self-throttling: never sends the same % twice.
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
+import { assertUpsert, assertInsert } from '../_shared/db-assert.ts';
 
 const ADMIN_PHONE = '+12265835975';
 const TWILIO_FROM = '+16624814161';
@@ -81,17 +82,17 @@ Deno.serve(withRunLog('coverage-milestone-notifier', async (req) => {
     const msg = `📊 ${current}% ${label}\n\n${count.toLocaleString()} / ${total.toLocaleString()} tokens.${current >= 100 ? '\n\n✅ COMPLETE.' : ''}`;
     const r = await sendSms(msg);
     if (r.ok) {
-      await supabase.from('coverage_milestone_state').upsert({
+      await assertUpsert(supabase.from('coverage_milestone_state').upsert({
         metric_key: key,
         last_pct: current,
         last_notified_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'metric_key' });
+      }, { onConflict: 'metric_key' }), 'coverage_milestone_state');
       sent.push({ key, pct: current });
     } else {
       sent.push({ key, pct: current, failed: r.err, status: r.status });
     }
-    await supabase.from('coverage_milestone_sms_log').insert({
+    await assertInsert(supabase.from('coverage_milestone_sms_log').insert({
       metric_key: key,
       pct: current,
       count_at_send: count,
@@ -100,7 +101,7 @@ Deno.serve(withRunLog('coverage-milestone-notifier', async (req) => {
       to_phone: ADMIN_PHONE,
       status: r.ok ? 'sent' : 'failed',
       error: r.ok ? null : (r.err ?? null),
-    });
+    }), 'coverage_milestone_sms_log');
   }
 
   await checkAndNotify('dev_wallet', 'Dev Wallets Discovered', devPct, dev);
