@@ -86,7 +86,7 @@ export function ReputationBackfillPanel() {
           Reputation Backfill Engine
         </CardTitle>
         <CardDescription>
-          Sync dev_wallet_reputation → developer_profiles. Batch-processes wallets with real rug/success data and mesh connections. Zero external API calls.
+          One-shot migration: syncs dev_wallet_reputation → developer_profiles. Already ~94% complete (live mesh writers handle ongoing sync). Re-run only after schema changes. Zero external API calls.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
