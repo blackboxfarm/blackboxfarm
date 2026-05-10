@@ -55,36 +55,35 @@ interface TableCaps {
   lastCheckedAt: boolean;
   lastFetchedAt: boolean;
   creatorFetchedAt: boolean;
-  metadata: boolean;
 }
 
 const TABLE_CAPS: Record<TargetTable, TableCaps> = {
-  allstar_mint_alerts: { updatedAt: false, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false, metadata: true },
-  autopsy_backlog: { updatedAt: false, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false, metadata: false },
-  autopsy_candidates: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false, metadata: false },
-  autopsy_tx_evidence: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false, metadata: false },
-  developer_alerts: { updatedAt: false, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false, metadata: true },
-  developer_mint_alerts: { updatedAt: false, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false, metadata: true },
-  developer_tokens: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false, metadata: false },
-  flip_positions: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false, metadata: false },
-  funnel_feed_discoveries: { updatedAt: false, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: true, metadata: false },
-  holders_intel_seen_tokens: { updatedAt: false, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: true, metadata: false },
-  pumpfun_buy_candidates: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false, metadata: true },
-  pumpfun_discovery_logs: { updatedAt: false, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false, metadata: true },
-  pumpfun_fantasy_positions: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false, metadata: false },
-  pumpfun_rejected_backcheck: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false, metadata: false },
-  pumpfun_rejection_events: { updatedAt: false, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false, metadata: false },
-  pumpfun_watchlist: { updatedAt: true, lastCheckedAt: true, lastFetchedAt: false, creatorFetchedAt: false, metadata: true },
-  scraped_tokens: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: true, metadata: false },
-  telegram_insider_token_lifecycle: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false, metadata: true },
-  token_lifecycle: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: true, creatorFetchedAt: false, metadata: true },
-  token_mint_watchdog: { updatedAt: false, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false, metadata: true },
-  token_projects: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false, metadata: false },
-  token_search_results: { updatedAt: false, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false, metadata: false },
-  proven_dev_tokens: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false, metadata: false },
-  token_assessments: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false, metadata: false },
-  token_lifecycle_scorecard: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false, metadata: false },
-  token_lifecycle_tracking: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false, metadata: true },
+  allstar_mint_alerts: { updatedAt: false, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
+  autopsy_backlog: { updatedAt: false, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
+  autopsy_candidates: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
+  autopsy_tx_evidence: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
+  developer_alerts: { updatedAt: false, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
+  developer_mint_alerts: { updatedAt: false, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
+  developer_tokens: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
+  flip_positions: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
+  funnel_feed_discoveries: { updatedAt: false, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: true },
+  holders_intel_seen_tokens: { updatedAt: false, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: true },
+  pumpfun_buy_candidates: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
+  pumpfun_discovery_logs: { updatedAt: false, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
+  pumpfun_fantasy_positions: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
+  pumpfun_rejected_backcheck: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
+  pumpfun_rejection_events: { updatedAt: false, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
+  pumpfun_watchlist: { updatedAt: true, lastCheckedAt: true, lastFetchedAt: false, creatorFetchedAt: false },
+  scraped_tokens: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: true },
+  telegram_insider_token_lifecycle: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
+  token_lifecycle: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: true, creatorFetchedAt: false },
+  token_mint_watchdog: { updatedAt: false, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
+  token_projects: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
+  token_search_results: { updatedAt: false, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
+  proven_dev_tokens: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
+  token_assessments: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
+  token_lifecycle_scorecard: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
+  token_lifecycle_tracking: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
 };
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -175,7 +174,6 @@ function updatePayload(table: TargetTable, column: 'creator_wallet' | 'dev_walle
   if (caps.lastCheckedAt) payload.last_checked_at = now;
   if (caps.lastFetchedAt) payload.last_fetched_at = now;
   if (caps.creatorFetchedAt) payload.creator_fetched_at = now;
-  if (caps.metadata) payload.metadata = { creator_wallet_source: 'solscan_v2_token_meta', creator_wallet_fetched_at: now };
   return payload;
 }
 
