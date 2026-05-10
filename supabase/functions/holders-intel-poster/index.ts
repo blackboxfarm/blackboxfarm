@@ -28,6 +28,15 @@ const FALLBACK_TEMPLATE = `🔍 {TICKER} Holder Analysis
 
 👉 blackbox.farm/holders?token={TOKEN_ADDRESS}`;
 
+// Guard: only accept base58-shaped Solana wallet addresses (32–44 chars).
+// Prevents JSON blobs like `{"address":"...","detectionMethod":"top_holder"}`
+// from being persisted to creator_wallet columns.
+function isValidWallet(v: unknown): v is string {
+  return typeof v === 'string'
+    && v.length >= 32 && v.length <= 44
+    && /^[1-9A-HJ-NP-Za-km-z]+$/.test(v);
+}
+
 function asCount(value: any): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string') {
@@ -622,7 +631,11 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
       }
       
       // Fetch dev reputation from dev_wallet_reputation table
-      const creatorWallet = report?.creatorInfo?.wallet || report?.potentialDevWallet;
+      // NOTE: potentialDevWallet is an OBJECT ({ address, balance, confidence, ... }),
+      // never a string. Always extract .address.
+      const creatorWalletRaw =
+        report?.creatorInfo?.wallet || report?.potentialDevWallet?.address || null;
+      const creatorWallet = isValidWallet(creatorWalletRaw) ? creatorWalletRaw : null;
       if (creatorWallet) {
         try {
           const { data: devRepData } = await supabase
@@ -676,8 +689,9 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
         const reportPriceUsd = (report?.priceUSD ?? report?.priceUsd ?? null) as number | null;
         const reportMcapUsd = (report?.marketCapUSD ?? report?.marketCap ?? report?.inferredMarketCapUSD ?? null) as number | null;
         const reportLiquidityUsd = (report?.liquidityUSD ?? report?.liquidityUsd ?? null) as number | null;
-        const reportCreatorWallet =
-          (report?.creatorInfo?.wallet ?? report?.potentialDevWallet ?? null) as string | null;
+        const reportCreatorWalletRaw =
+          (report?.creatorInfo?.wallet ?? report?.potentialDevWallet?.address ?? null) as string | null;
+        const reportCreatorWallet = isValidWallet(reportCreatorWalletRaw) ? reportCreatorWalletRaw : null;
         const reportBondingCurvePct = (report?.bondingCurveProgress ?? null) as number | null;
         const top10Pct = (report?.distributionStats?.top10Percentage ?? null) as number | null;
         const realHolders = stats.realHolders;
@@ -918,7 +932,9 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
       console.log(`[poster] Successfully posted tweet: ${tweetResult.tweetId}`);
       
       // 🕸️ MESH FEEDER: Every posted token feeds the mesh with ALL available data
-      const creatorWalletForMesh = report?.creatorInfo?.wallet || report?.potentialDevWallet || null;
+      const creatorWalletForMeshRaw =
+        report?.creatorInfo?.wallet || report?.potentialDevWallet?.address || null;
+      const creatorWalletForMesh = isValidWallet(creatorWalletForMeshRaw) ? creatorWalletForMeshRaw : null;
       const twitterUrlForMesh = report?.socials?.twitter || null;
       const telegramUrlForMesh = report?.socials?.telegram || null;
       const websiteUrlForMesh = report?.socials?.website || null;

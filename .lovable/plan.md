@@ -1,51 +1,81 @@
-# FlipIt: Return-on-Submit Buy Path
+## Diagnosis — yes, it's a real bug, not a UI glitch
 
-Goal: make manual buys feel sub-second like Trojan, by responding the moment the tx is submitted to Solana, then finishing confirmation + accounting in the background.
+The "Dev Wallet" column on `/super-admin` Master Token Directory shows things like `{"addr…ed"}` because the underlying row literally contains a **JSON object stringified into a TEXT column**.
 
-## What the user sees
+Confirmed via DB:
 
-1. Click FLIP IT
-2. Within ~1.5 s: toast "Buy submitted — sig: 5xK…", row appears in Active Flips with status `pending`, signature link to Solscan
-3. Background: row auto-updates to `confirmed` (with real token quantity) or `failed` (with retry/error) within 2–8 s
+```
+pumpfun_watchlist.creator_wallet
+  = '{"address":"65eY9uU5...","balance":33881204.27,"usdValue":3527.03,
+      "percentageOfSupply":3.39,"confidence":45,
+      "detectionMethod":"top_holder",
+      "reason":"Top non-LP holder (3.4%) — creator unverified"}'
+```
 
-## Files to change
+That's an entire `potentialDevWallet` payload shoved into a column that is supposed to hold a 32–44 char Solana address.
 
-### 1. `supabase/functions/raydium-swap/index.ts`
-- Add `fastReturn?: boolean` flag in request body (default false, opt-in for buys only)
-- Add `positionId?: string` in request body so background task can update the row
-- For Jupiter V0 path (the main buy path) wrap the confirm+retry block in `EdgeRuntime.waitUntil(...)`:
-  - Return `{ signatures: [sig], status: 'submitted', venue: 'jupiter' }` immediately after `sendTransaction` resolves
-  - Background task runs `hardConfirmTransaction` + retries + writes outcome to `flip_positions` (`status`, `error_code`, `confirmed_at`)
-- Pump.fun, Meteora, Bags.fm, Legacy paths: leave synchronous for now (smaller traffic, higher complexity). Out of scope.
+### Source of the corruption
 
-### 2. `supabase/functions/flipit-execute/index.ts`
-- Pass `fastReturn: true` and `positionId: position.id` to raydium-swap on the buy path only (sells still wait — user needs to know proceeds)
-- When `swapResult.status === 'submitted'`:
-  - Skip Helius Parse Transaction (the 500–2000 ms accounting step)
-  - Set position to `status: 'pending'`, store signature, return success to frontend
-  - Schedule a follow-up via `EdgeRuntime.waitUntil` that calls Helius Parse 4 s later to back-fill exact `quantity_tokens` / `quantity_tokens_raw` / `entry_price`
-- Keep the synchronous confirmation as a fallback when `fastReturn` is false (auto-rebuy, deep-order monitor) so those paths are unchanged
+`supabase/functions/holders-intel-poster/index.ts` has three sites where it falls back to the **whole object** instead of `.address`:
 
-### 3. `src/components/admin/FlipItDashboard.tsx`
-- Toast text: "Buy submitted ✓" with Solscan signature link instead of "Buy filled"
-- Active Flips row already realtime-subscribes to `flip_positions` so it'll auto-update when the background task writes `confirmed`/`failed` — no polling code needed
+- Line 625: `const creatorWallet = report?.creatorInfo?.wallet || report?.potentialDevWallet;`
+- Line 680: `(report?.creatorInfo?.wallet ?? report?.potentialDevWallet ?? null) as string | null;`
+- Line 921: `const creatorWalletForMesh = report?.creatorInfo?.wallet || report?.potentialDevWallet || null;`
+
+`bagless-holders-report` builds `potentialDevWallet` as `{ address, balance, percentageOfSupply, confidence, detectionMethod, reason, ... }`. The other consumers (`token-vigil`, `holdersintel-bot-webhook`) correctly use `potentialDevWallet?.address`. Only `holders-intel-poster` uses the bare object — and it's the one writing to `pumpfun_watchlist.creator_wallet`, which is exactly what the Master Token Directory view (`master_token_directory`) coalesces from first.
+
+### Why the UI renders weirdly
+
+`MasterDBTab.tsx` does `wallet.slice(0,6)…wallet.slice(-4)` — when `wallet` is the JSON blob string, `slice(0,6)` = `{"addr` and `slice(-4)` = `ed"}`, hence the `{"addr…ed"}` chip and the broken Solscan hover URL `solscan.io/account/{"address":"…","detectionMethod":"top_holder",…}`.
+
+## Plan
+
+### 1. Fix the writer (stop the bleed)
+
+In `supabase/functions/holders-intel-poster/index.ts`, change all three fallbacks from `report?.potentialDevWallet` to `report?.potentialDevWallet?.address`. Add a defensive guard so only a string of length 32–44 (base58-shaped) is ever assigned to `creator_wallet`. Deploy.
+
+### 2. Clean up corrupted rows
+
+One-shot SQL migration to scrub `pumpfun_watchlist.creator_wallet` (and any other table that may have caught the same blob) where the value starts with `{`:
+
+```sql
+UPDATE pumpfun_watchlist
+   SET creator_wallet = (creator_wallet::jsonb ->> 'address')
+ WHERE creator_wallet LIKE '{%'
+   AND creator_wallet ~ '^\{.*"address"';
+
+UPDATE pumpfun_watchlist
+   SET creator_wallet = NULL
+ WHERE creator_wallet LIKE '{%';   -- safety: anything still malformed → null
+```
+
+Audit the same pattern in `scraped_tokens.creator_wallet`, `token_lifecycle.creator_wallet`, `funnel_feed_discoveries.creator_wallet`, and `developer_tokens.creator_wallet` (cheap `WHERE creator_wallet LIKE '{%'` check). Apply the same extract-or-null cleanup to anything that matches.
+
+### 3. Add a permanent guard at the column level
+
+Add a CHECK constraint to `pumpfun_watchlist` (and the four other tables above) so this can never silently re-occur:
+
+```sql
+ALTER TABLE pumpfun_watchlist
+  ADD CONSTRAINT creator_wallet_is_address
+  CHECK (creator_wallet IS NULL
+      OR (length(creator_wallet) BETWEEN 32 AND 44
+          AND creator_wallet !~ '[^1-9A-HJ-NP-Za-km-z]'));
+```
+
+This is base58 + correct-length, matching the same regex `validateTokenAddress` uses on the frontend. Any future buggy writer will fail loudly instead of poisoning the directory.
+
+### 4. UI hardening (cheap belt-and-suspenders)
+
+In `MasterDBTab.tsx` line 429, before slicing, validate the wallet shape; if it looks like JSON (starts with `{` or length > 44), render `—` instead of a broken link. This protects against any other source we haven't found yet.
+
+### 5. Verify
+
+After deploy + migration, re-query a sample (`BadAni`, `s0la`, `MOM`, etc.) and confirm `creator_wallet` is either a clean base58 string or null. Reload the Master Token Directory page and confirm Dev Wallet column shows real addresses or `—`, never `{"addr…ed"}`.
 
 ## Technical notes
 
-- `EdgeRuntime.waitUntil(promise)` is the Supabase/Deno-deploy primitive that lets an edge function return a response while the promise keeps running. Already used elsewhere in the project.
-- The position row gets `status` enum: `pending` (submitted, not confirmed) → `confirmed` | `failed`. Need a tiny migration to add `pending` if it isn't already a valid value.
-- Idempotency: background task only updates the row if it's still `pending` (avoids overwriting a manual sell that came in between).
-- Failure UX: if confirmation fails, the row flips to `failed` with `error_code` populated and the existing toast/notification system surfaces it.
-
-## Out of scope
-
-- Pump.fun / Meteora / Bags.fm fast path (do later if Jupiter wins prove the pattern)
-- Sell side (intentionally kept synchronous)
-- Pre-warming the RPC connection (separate optimization)
-- Parallelizing venue hint + blockhash + priority fee (separate optimization, also worthwhile)
-
-## Expected impact
-
-- Click → toast: **6–15 s → 0.8–1.8 s** for Jupiter buys (the common case for graduated tokens)
-- Confirmation reliability: identical (same `hardConfirmTransaction` + retries, just running in background)
-- Risk: a pending row could linger if the edge worker dies mid-confirmation. Mitigation: a 60 s sweeper (existing `flipit-deep-order-monitor` already runs frequently) can mark rows stuck on `pending` >60 s as `failed` and re-query the chain.
+- Migrations under `supabase/migrations/` are read-only; we'll add a new timestamped migration for the data backfill + CHECK constraints.
+- `master_token_directory` is a view, not a table — no schema change needed there. Once base tables are clean, the view is automatically clean.
+- Only `holders-intel-poster` needs to be redeployed; the other consumers were already correct.
+- Root cause is a long-standing typo where the variable was renamed from a string to an object payload but one consumer was never updated.

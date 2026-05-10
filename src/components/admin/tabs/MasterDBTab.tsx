@@ -427,7 +427,13 @@ export default function MasterDBTab() {
                     <TableCell>
                       {(() => {
                         const wallet = r.creator_wallet || (r.dev_wallets && r.dev_wallets[0]);
-                        if (!wallet) return <span className="text-muted-foreground text-xs">—</span>;
+                        // Defensive: only render if it looks like a real base58 Solana address.
+                        // Older bad data wrote JSON blobs into creator_wallet — guard against that.
+                        const looksValid =
+                          typeof wallet === 'string' &&
+                          wallet.length >= 32 && wallet.length <= 44 &&
+                          /^[1-9A-HJ-NP-Za-km-z]+$/.test(wallet);
+                        if (!looksValid) return <span className="text-muted-foreground text-xs">—</span>;
                         return (
                           <a href={`https://solscan.io/account/${wallet}`} target="_blank" rel="noopener noreferrer"
                             className="flex items-center gap-1 font-mono text-xs text-blue-400 hover:text-blue-300">
