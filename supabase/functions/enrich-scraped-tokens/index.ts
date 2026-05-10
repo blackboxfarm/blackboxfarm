@@ -329,16 +329,56 @@ async function pushDerivativeWrites(supabaseClient: any, target: EnrichTarget, f
   const creator = cleanText(facts.creatorWallet ?? target.token.creator_wallet);
   if (creator) {
     await assertUpsert(
-      supabaseClient.from('developer_tokens').upsert({
+      supabaseClient.from('developer_profiles').upsert({
+        master_wallet_address: creator,
+        display_name: creator.slice(0, 8),
+        source: 'mint_hydrator',
+        kyc_verified: false,
+        trust_level: 'unknown',
+        metadata: { seeded_from_token: target.mint, provider },
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'master_wallet_address', ignoreDuplicates: false }),
+      'developer_profiles',
+    );
+
+    const { data: profile, error: profileError } = await supabaseClient
+      .from('developer_profiles')
+      .select('id')
+      .eq('master_wallet_address', creator)
+      .maybeSingle();
+    if (profileError) throw profileError;
+
+    if (profile?.id) {
+      const { data: existingDevToken, error: existingError } = await supabaseClient
+        .from('developer_tokens')
+        .select('id')
+        .eq('token_mint', target.mint)
+        .maybeSingle();
+      if (existingError) throw existingError;
+
+      const devTokenRow = {
+        developer_id: profile.id,
         token_mint: target.mint,
         creator_wallet: creator,
         launchpad: facts.launchpad ?? rowLaunchpad(target),
         launch_date: facts.createdAt ?? target.token.created_at_blockchain ?? target.token.pair_created_at ?? target.token.first_seen_at ?? null,
         current_market_cap_usd: facts.marketCapUsd ?? null,
         notes: `Auto-hydrated from mint via ${provider}`,
-      }, { onConflict: 'token_mint', ignoreDuplicates: false }),
-      'developer_tokens',
-    );
+        updated_at: new Date().toISOString(),
+      };
+
+      if (existingDevToken?.id) {
+        await assertUpdate(
+          supabaseClient.from('developer_tokens').update(devTokenRow).eq('id', existingDevToken.id),
+          'developer_tokens',
+        );
+      } else {
+        await assertUpsert(
+          supabaseClient.from('developer_tokens').upsert(devTokenRow, { onConflict: 'developer_id,token_mint', ignoreDuplicates: false }),
+          'developer_tokens',
+        );
+      }
+    }
   }
 }
 
