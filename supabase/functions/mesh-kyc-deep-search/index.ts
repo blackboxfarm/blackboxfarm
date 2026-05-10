@@ -186,6 +186,63 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
     const shouldDiscoverBundle = discoverBundle !== false; // Default: true
     console.log(`[KYCDeep] Starting depth-${depth} Helius trace for ${walletAddress} (bundle discovery: ${shouldDiscoverBundle})`);
 
+    // Warm DB-backed CEX dictionary so isKnownCex hits the latest labels
+    // (file dictionary + every wallet ever discovered via Solscan label).
+    try { await warmCexCache(); } catch { /* non-fatal */ }
+
+    // ═══ SOLSCAN-DIRECT FAST PATH ═══
+    // Solscan Pro v2 already returns the wallet's "funded_by" label in a single
+    // /account/detail call. If that label is a known CEX, we can return a KYC
+    // root in 1 API hit instead of walking up to 8 hops via Helius.
+    try {
+      const solscanErrors: string[] = [];
+      const fast = await solscanCheckAccountLabel(walletAddress, solscanErrors);
+      const directCex = canonicalCexFromLabel(fast.label);
+      if (fast.isCex && directCex) {
+        console.log(`[KYCDeep] ⚡ Solscan-direct hit: ${walletAddress.slice(0, 8)}... funded_by="${fast.label}" → ${directCex}`);
+
+        // Self-expand the dictionary so future calls don't even need Solscan.
+        // We tag this wallet's *funder* as the CEX address only if we can later
+        // trace it; for now we just record the direct relationship in the mesh.
+        await supabase
+          .from('reputation_mesh')
+          .upsert({
+            source_type: 'wallet',
+            source_id: walletAddress,
+            linked_type: 'kyc_root',
+            linked_id: directCex,
+            relationship: 'is_kyc_root',
+            confidence: 95,
+            discovered_via: 'mesh-kyc-deep-search:solscan-direct',
+            discovered_at: new Date().toISOString(),
+            evidence: { source: 'solscan-account-detail', rawLabel: fast.label, tags: fast.tags },
+          }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true });
+
+        return new Response(
+          JSON.stringify({
+            walletAddress,
+            kycRoot: walletAddress,        // wallet itself is the leaf node funded by CEX
+            kycRootLabel: directCex,
+            kycRootCex: directCex,
+            chainDepth: 0,
+            walletsTraced: 1,
+            meshLinksAdded: 1,
+            siblingCount: 0,
+            chain: [],
+            siblings: [],
+            fastPath: 'solscan-direct',
+            errors: solscanErrors,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      if (fast.label) {
+        console.log(`[KYCDeep] Solscan-direct: ${walletAddress.slice(0, 8)} has label "${fast.label}" but not a known CEX — falling through to BFS`);
+      }
+    } catch (e) {
+      console.warn('[KYCDeep] Solscan-direct fast path failed, falling through:', e);
+    }
+
     const visited = new Set<string>();
     const chain: Array<{ wallet: string; funder: string; funderName: string | null; funderType: string | null; amountSol: number; depth: number }> = [];
     const errors: string[] = [];
