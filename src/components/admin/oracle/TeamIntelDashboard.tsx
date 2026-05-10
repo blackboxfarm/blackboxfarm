@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { 
   Users, 
@@ -24,7 +25,9 @@ import {
   Loader2,
   Brain,
   TrendingUp,
-  Link2
+  Link2,
+  Copy,
+  Info
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -82,6 +85,15 @@ export function TeamIntelDashboard() {
   const [analyzing, setAnalyzing] = useState(false);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
+
+  // Real DB totals (not page-size capped)
+  const [totalTeamsCount, setTotalTeamsCount] = useState<number | null>(null);
+  const [totalTokensCount, setTotalTokensCount] = useState<number | null>(null);
+  const [totalRotators, setTotalRotators] = useState<number | null>(null);
+
+  // Per-team enrichment caches (keyed by team id)
+  const [tokenInfo, setTokenInfo] = useState<Record<string, Record<string, { symbol: string | null; hasPair: boolean }>>>({});
+  const [walletOwners, setWalletOwners] = useState<Record<string, Record<string, string | null>>>({});
   
   // Pagination state
   const [teamsPage, setTeamsPage] = useState(0);
@@ -176,6 +188,68 @@ export function TeamIntelDashboard() {
       setLoading(false);
     }
   }, [PAGE_SIZE]);
+
+  // Fetch real DB totals (not page-capped)
+  useEffect(() => {
+    (async () => {
+      const [{ count: teamsCount }, tokensAgg, rotCount] = await Promise.all([
+        supabase.from('dev_teams').select('id', { count: 'exact', head: true }).eq('is_active', true),
+        supabase.rpc('count_rotation_patterns' as any, { min_communities: 2 }).then(() => null).catch(() => null),
+        supabase.rpc('count_rotation_patterns' as any, { min_communities: 2 }),
+      ]);
+      if (typeof teamsCount === 'number') setTotalTeamsCount(teamsCount);
+      if (rotCount && !rotCount.error && rotCount.data != null) {
+        setTotalRotators(Number(rotCount.data));
+      }
+      // Tokens total (sum of tokens_created across all active teams)
+      const { data: tokSum } = await supabase
+        .from('dev_teams')
+        .select('tokens_created')
+        .eq('is_active', true);
+      if (tokSum) setTotalTokensCount(tokSum.reduce((s: number, r: any) => s + (r.tokens_created || 0), 0));
+    })();
+  }, []);
+
+  // Enrich a team's tokens + wallets when it expands
+  const enrichTeam = useCallback(async (team: DevTeam) => {
+    // Tokens → symbols + dex presence
+    if (!tokenInfo[team.id] && team.linked_token_mints?.length) {
+      const mints = team.linked_token_mints.slice(0, 50);
+      const [tlRes, pfRes] = await Promise.all([
+        supabase.from('token_lifecycle').select('token_mint, symbol, liquidity_usd').in('token_mint', mints),
+        supabase.from('pumpfun_watchlist').select('token_mint, token_symbol').in('token_mint', mints),
+      ]);
+      const map: Record<string, { symbol: string | null; hasPair: boolean }> = {};
+      for (const m of mints) map[m] = { symbol: null, hasPair: false };
+      (tlRes.data || []).forEach((r: any) => {
+        map[r.token_mint] = { symbol: r.symbol || map[r.token_mint]?.symbol || null, hasPair: (r.liquidity_usd || 0) > 0 };
+      });
+      (pfRes.data || []).forEach((r: any) => {
+        if (!map[r.token_mint]?.symbol) map[r.token_mint] = { ...map[r.token_mint], symbol: r.token_symbol || null };
+      });
+      setTokenInfo(prev => ({ ...prev, [team.id]: map }));
+    }
+    // Wallets → owner labels
+    if (!walletOwners[team.id] && team.member_wallets?.length) {
+      const wallets = team.member_wallets.slice(0, 50);
+      const { data: devs } = await supabase
+        .from('developer_profiles')
+        .select('master_wallet_address, twitter_handle, display_name')
+        .in('master_wallet_address', wallets);
+      const map: Record<string, string | null> = {};
+      for (const w of wallets) map[w] = null;
+      (devs || []).forEach((d: any) => {
+        const label = d.twitter_handle ? `Dev: @${d.twitter_handle}` : d.display_name ? `Dev: ${d.display_name}` : 'Known Dev';
+        map[d.master_wallet_address] = label;
+      });
+      setWalletOwners(prev => ({ ...prev, [team.id]: map }));
+    }
+  }, [tokenInfo, walletOwners]);
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success('Copied');
+  };
 
   const loadMoreTeams = async () => {
     const nextPage = teamsPage + 1;
