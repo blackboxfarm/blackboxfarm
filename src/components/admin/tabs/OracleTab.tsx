@@ -8,6 +8,7 @@ import OracleBackfillStatus from "@/components/admin/oracle/OracleBackfillStatus
 import OracleMeshViewer from "@/components/admin/oracle/OracleMeshViewer";
 import { ManualKycOverride } from "@/components/admin/ManualKycOverride";
 import DevKycCoveragePanel from "@/components/admin/oracle/DevKycCoveragePanel";
+import MilestoneSmsLogPanel from "@/components/admin/oracle/MilestoneSmsLogPanel";
 
 const ProviderHealthPanel = lazy(() => import("@/components/admin/oracle/ProviderHealthPanel"));
 
@@ -49,6 +50,9 @@ const OracleTab = ({ initialSubTab, initialWallet }: OracleTabProps) => {
 
       {/* Live Dev Wallet + KYC backfill coverage */}
       <DevKycCoveragePanel />
+
+      {/* SMS milestone notifier log */}
+      <MilestoneSmsLogPanel />
 
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
         <TabsList className="flex flex-wrap gap-1">

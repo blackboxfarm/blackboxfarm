@@ -3952,6 +3952,45 @@ export type Database = {
           },
         ]
       }
+      coverage_milestone_sms_log: {
+        Row: {
+          body: string | null
+          count_at_send: number | null
+          error: string | null
+          id: string
+          metric_key: string
+          pct: number
+          sent_at: string
+          status: string
+          to_phone: string | null
+          total_at_send: number | null
+        }
+        Insert: {
+          body?: string | null
+          count_at_send?: number | null
+          error?: string | null
+          id?: string
+          metric_key: string
+          pct: number
+          sent_at?: string
+          status?: string
+          to_phone?: string | null
+          total_at_send?: number | null
+        }
+        Update: {
+          body?: string | null
+          count_at_send?: number | null
+          error?: string | null
+          id?: string
+          metric_key?: string
+          pct?: number
+          sent_at?: string
+          status?: string
+          to_phone?: string | null
+          total_at_send?: number | null
+        }
+        Relationships: []
+      }
       coverage_milestone_state: {
         Row: {
           last_notified_at: string | null
