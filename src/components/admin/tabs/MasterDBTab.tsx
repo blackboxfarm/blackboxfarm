@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/tooltip";
 import { LazyLoader } from "@/components/ui/lazy-loader";
 import { isNonTokenHost, hostFromUrl } from "@/lib/non-token-domains";
+import { RecycledCommunityBadge, type RecycledCommunityScore } from "@/components/admin/RecycledCommunityBadge";
 
 const MasterDBHistory = lazy(() => import("@/components/admin/MasterDBHistory"));
 
@@ -189,18 +190,36 @@ function WebsitesCell({ urls, sources }: { urls: string[] | null; sources: Websi
   );
 }
 
-function XCommunityCell({ urls, names }: { urls: string[] | null; names: string[] | null }) {
+function extractCommunityId(url: string): string | null {
+  const m = url.match(/\/communities\/(\d+)/);
+  return m ? m[1] : null;
+}
+
+function XCommunityCell({
+  urls,
+  names,
+  scores,
+}: {
+  urls: string[] | null;
+  names: string[] | null;
+  scores?: Record<string, RecycledCommunityScore>;
+}) {
   if (!urls || urls.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
   return (
     <div className="flex flex-col gap-0.5 max-w-[240px]">
       {urls.map((url, i) => {
         const name = names?.[i] || url.split('/').pop() || 'Community';
+        const cid = extractCommunityId(url);
+        const score = cid && scores ? scores[cid] : null;
         return (
-          <a key={i} href={url} target="_blank" rel="noopener noreferrer"
-            className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5 truncate">
-            🏛️ {truncate(name, 28)}
-            <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-          </a>
+          <div key={i} className="flex items-center gap-1">
+            <a href={url} target="_blank" rel="noopener noreferrer"
+              className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5 truncate">
+              🏛️ {truncate(name, 24)}
+              <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+            </a>
+            {score && <RecycledCommunityBadge data={score} />}
+          </div>
         );
       })}
     </div>
@@ -344,6 +363,41 @@ export default function MasterDBTab() {
   const total = data?.total ?? 0;
   const rows = data?.rows ?? [];
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // Collect all community IDs visible on this page and batch-fetch recycled scores
+  const visibleCommunityIds = React.useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of rows) {
+      for (const url of (r.x_community_urls || []) as string[]) {
+        const m = url.match(/\/communities\/(\d+)/);
+        if (m) ids.add(m[1]);
+      }
+    }
+    return Array.from(ids);
+  }, [rows]);
+
+  const { data: communityScores } = useQuery({
+    queryKey: ["master-db-recycled-scores", visibleCommunityIds.join(",")],
+    enabled: visibleCommunityIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("x_communities")
+        .select("community_id, recycled_score, recycled_band, recycled_signals, recycled_evaluated_at")
+        .in("community_id", visibleCommunityIds);
+      if (error) throw error;
+      const map: Record<string, RecycledCommunityScore> = {};
+      for (const row of data || []) {
+        map[(row as any).community_id] = {
+          score: (row as any).recycled_score,
+          band: (row as any).recycled_band,
+          signals: (row as any).recycled_signals,
+          evaluated_at: (row as any).recycled_evaluated_at,
+        };
+      }
+      return map;
+    },
+    staleTime: 60_000,
+  });
 
   return (
     <div className="space-y-6">
@@ -507,7 +561,7 @@ export default function MasterDBTab() {
                     <TableCell><MintCell mint={r.token_mint} /></TableCell>
                     <TableCell><LaunchpadCell launchpad={r.launchpad} mint={r.token_mint} /></TableCell>
                     <TableCell><WebsitesCell urls={r.websites} sources={r.website_sources as WebsiteSource[] | null} /></TableCell>
-                    <TableCell><XCommunityCell urls={r.x_community_urls} names={r.x_community_names} /></TableCell>
+                    <TableCell><XCommunityCell urls={r.x_community_urls} names={r.x_community_names} scores={communityScores} /></TableCell>
                     <TableCell>
                       <XHandlesCell
                         mesh={r.mesh_x_handles}

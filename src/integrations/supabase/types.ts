@@ -630,6 +630,13 @@ export type Database = {
             referencedRelation: "developer_profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "allstar_dev_registry_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "v_community_admin_dev_link"
+            referencedColumns: ["developer_id"]
+          },
         ]
       }
       allstar_mint_alerts: {
@@ -4075,6 +4082,13 @@ export type Database = {
             referencedRelation: "developer_profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "creator_identity_aliases_creator_id_fkey"
+            columns: ["creator_id"]
+            isOneToOne: false
+            referencedRelation: "v_community_admin_dev_link"
+            referencedColumns: ["developer_id"]
+          },
         ]
       }
       creator_merge_log: {
@@ -4122,6 +4136,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "developer_profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creator_merge_log_surviving_id_fkey"
+            columns: ["surviving_id"]
+            isOneToOne: false
+            referencedRelation: "v_community_admin_dev_link"
+            referencedColumns: ["developer_id"]
           },
         ]
       }
@@ -4648,6 +4669,13 @@ export type Database = {
             referencedRelation: "developer_profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "developer_alerts_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "v_community_admin_dev_link"
+            referencedColumns: ["developer_id"]
+          },
         ]
       }
       developer_analysis_jobs: {
@@ -4717,6 +4745,13 @@ export type Database = {
             referencedRelation: "developer_profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "developer_analysis_jobs_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "v_community_admin_dev_link"
+            referencedColumns: ["developer_id"]
+          },
         ]
       }
       developer_mint_alerts: {
@@ -4785,6 +4820,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "developer_profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "developer_mint_alerts_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "v_community_admin_dev_link"
+            referencedColumns: ["developer_id"]
           },
         ]
       }
@@ -4930,6 +4972,13 @@ export type Database = {
             referencedRelation: "developer_profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "developer_profiles_merged_into_fkey"
+            columns: ["merged_into"]
+            isOneToOne: false
+            referencedRelation: "v_community_admin_dev_link"
+            referencedColumns: ["developer_id"]
+          },
         ]
       }
       developer_tokens: {
@@ -5032,6 +5081,13 @@ export type Database = {
             referencedRelation: "developer_profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "developer_tokens_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "v_community_admin_dev_link"
+            referencedColumns: ["developer_id"]
+          },
         ]
       }
       developer_wallets: {
@@ -5097,6 +5153,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "developer_profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "developer_wallets_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "v_community_admin_dev_link"
+            referencedColumns: ["developer_id"]
           },
         ]
       }
@@ -15632,6 +15695,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "telegram_fantasy_positions_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "v_community_admin_dev_link"
+            referencedColumns: ["developer_id"]
+          },
+          {
             foreignKeyName: "telegram_fantasy_positions_interpretation_id_fkey"
             columns: ["interpretation_id"]
             isOneToOne: false
@@ -17517,6 +17587,13 @@ export type Database = {
             referencedRelation: "developer_profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "token_lifecycle_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "v_community_admin_dev_link"
+            referencedColumns: ["developer_id"]
+          },
         ]
       }
       token_lifecycle_scorecard: {
@@ -17819,6 +17896,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "developer_profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "token_mint_watchdog_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "v_community_admin_dev_link"
+            referencedColumns: ["developer_id"]
           },
         ]
       }
@@ -20086,6 +20170,13 @@ export type Database = {
             referencedRelation: "developer_profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "wallet_funding_traces_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "v_community_admin_dev_link"
+            referencedColumns: ["developer_id"]
+          },
         ]
       }
       wallet_metadata: {
@@ -20820,6 +20911,10 @@ export type Database = {
           name: string | null
           name_history: Json
           raw_data: Json | null
+          recycled_band: string | null
+          recycled_evaluated_at: string | null
+          recycled_score: number | null
+          recycled_signals: Json | null
           scrape_status: string | null
           updated_at: string | null
         }
@@ -20848,6 +20943,10 @@ export type Database = {
           name?: string | null
           name_history?: Json
           raw_data?: Json | null
+          recycled_band?: string | null
+          recycled_evaluated_at?: string | null
+          recycled_score?: number | null
+          recycled_signals?: Json | null
           scrape_status?: string | null
           updated_at?: string | null
         }
@@ -20876,6 +20975,10 @@ export type Database = {
           name?: string | null
           name_history?: Json
           raw_data?: Json | null
+          recycled_band?: string | null
+          recycled_evaluated_at?: string | null
+          recycled_score?: number | null
+          recycled_signals?: Json | null
           scrape_status?: string | null
           updated_at?: string | null
         }
@@ -21172,6 +21275,27 @@ export type Database = {
           secret_type?: string | null
           success?: boolean | null
           summary?: never
+        }
+        Relationships: []
+      }
+      v_community_admin_dev_link: {
+        Row: {
+          admin_handle: string | null
+          admin_wallet: string | null
+          community_id: string | null
+          developer_id: string | null
+          prior_failures: number | null
+          prior_tokens: number | null
+        }
+        Relationships: []
+      }
+      v_community_token_outcomes: {
+        Row: {
+          community_id: string | null
+          dead_count: number | null
+          dead_rate_pct: number | null
+          linked_token_count: number | null
+          success_count: number | null
         }
         Relationships: []
       }
