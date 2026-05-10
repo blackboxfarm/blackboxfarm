@@ -270,6 +270,14 @@ Deno.serve(withRunLog('enrich-scraped-tokens', async (req) => {
       }
     }
 
+    if (enrichedCount > 0) {
+      const { error: refreshError } = await supabaseClient.rpc('refresh_master_token_directory');
+      if (refreshError) {
+        console.error('[enrich-scraped-tokens] master directory refresh failed:', refreshError);
+        throw refreshError;
+      }
+    }
+
     console.log(`Enrichment complete: ${enrichedCount}/${tokens.length} tokens updated`);
 
     return new Response(
