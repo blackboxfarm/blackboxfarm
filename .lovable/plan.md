@@ -1,71 +1,63 @@
 
-## Quick verdict per section
+## What the 10-min cron actually does
 
-### 1. Reputation Backfill Engine — **Useful, but one-shot. Should be hidden, not removed.**
+Right now we have **two paths** that score communities, and they overlap:
 
-- **"Start Backfill"** invokes the `reputation-backfill` edge function. It walks every row in `dev_wallet_reputation` (63,432 rows) and upserts a matching row into `developer_profiles` (currently 59,712 — so it has already been run almost to completion). Pure DB-to-DB sync, no external API calls.
-- **"Reset"** just zeroes the local React state (offset/processed/errors counters) so you can re-run from scratch. It does **not** wipe any DB data.
-- **Status:** the engine itself is still wired and works. But this is a one-time migration tool — once `developer_profiles` is fully populated, ongoing sync happens through the live mesh writers (creator-fusion, fuseCreator, etc.), not this button.
-- **Recommendation:** collapse it under a "Maintenance / one-shot tools" accordion. Don't delete — we'll need it again any time `dev_wallet_reputation` schema expands.
+1. **Event-driven (mesh-ingest)** — every public CA query on `/holders`, `/bubblemap`, or any Telegram bot lookup calls `community-recycled-scorer` in `evaluate_for_token` mode. This re-scores every community linked to that mint. **This is the live path and it's already correct.**
 
----
+2. **The 10-min cron** — calls the same function in `evaluate_recent` mode. It pulls up to 50 communities whose `x_communities.updated_at` was bumped in the last 24h and re-scores each one. No event awareness, no priority — just "look at recently-touched rows."
 
-### 2. Genealogy Retracer (KYC Trail Walker) — **The panel is fine. The data behind it explains the 0%.**
+You're right to question it. The cron is a **lazy safety net** that exists because:
+- Some signals change without anyone querying the token (e.g. an X-community scraper bumps member count, a token in the community's history rugs an hour later, a community gets renamed).
+- We didn't have event hooks at those exact moments, so the cron bulk-rescores anything whose `updated_at` moved.
 
-Live numbers from the DB right now:
+The cost is small (50 rows × 10 min) but you're right that it's the wrong shape. Recycled-band scoring should be **fully event-driven**, because every signal that feeds it is itself an event:
 
-| Metric | Value |
-|---|---|
-| Lifecycle rows | 3,407 |
-| With genealogy_chain | 3,012 (88%) |
-| With kyc_status set | 3,407 (100%) |
-| With kyc_label set | 2,685 (79%) |
-| **With genealogy_kyc_root** | **0** |
-| Attempted at least once | 3,224 |
+| Signal | True trigger event | Currently captured? |
+|---|---|---|
+| Community age vs token age | Token mint appears | ✅ mesh-ingest fires on CA query |
+| Name-history length | X scraper writes new `name_history[]` row | ❌ No hook |
+| Member-to-holder ratio | X scraper bumps `member_count` OR holders sweep updates | ❌ No hook |
+| Prior-token rug rate | A linked token flips `is_rugged=true` or autopsy lands | ❌ No hook |
+| Serial-dev-admin overlap | New token mint maps community → known scammer dev | ⚠️ Partial (only on lookup) |
+| Rename frequency | X scraper bumps `name_history[]` | ❌ Same as above |
 
-**Why KYC root = 0%:** I sampled rows where `kyc_label` is populated. Every single one has `kyc_label = 'Exhausted'` and the deepest hop has `cexName: null`. Translation: the Helius walker reaches max depth (some chains go 22 hops deep) without ever landing on a wallet that exists in `_shared/cex-wallets.ts`. The retracer logic is correct — it scans every hop and stamps the first CEX hit as the root — there just aren't any hits to stamp.
-
-This is **not** a bug in the button. It's a coverage gap in the CEX dictionary (`cex-wallets.ts`). Until that file grows, every "Rescan" pass will keep returning 0 new roots.
-
-#### "Rescan KYC (free)" button
-- Calls `insiders-genealogy-rescan-kyc`. **Zero RPC cost** — pure dictionary lookup against the existing chain JSON.
-- **Useful?** Yes, but only after we expand `cex-wallets.ts`. As-is, it loops 20×, scans up to 20,000 rows, and finds nothing. Currently a no-op.
-- **Recommendation:** keep the button, but add an inline hint: "Only finds new roots after `cex-wallets.ts` is expanded — current dictionary saturated against the chain set."
-
-#### "Retrace Insiders KYC" button
-- Calls `insiders-genealogy-backfill` which **does** spend Helius credits (re-walks every chain from scratch).
-- **Useful?** Marginally. Since 88% of rows already have a chain and the chains are exhausted, re-walking won't reveal new roots without either (a) higher max depth or (b) a richer CEX dictionary. It mostly just burns Helius quota.
-- **Recommendation:** demote to a hidden "Force re-walk (Helius cost)" tool behind a confirmation dialog. The 24h-cooldown `kyc-backfill-master` cron already handles new tokens incrementally; the manual button shouldn't be front-and-center.
-
-#### "Tier A / Tier B" archive buttons
-- Calls `backfill-genealogy` (separate function for tokens outside the Insiders set). Same Helius-cost concern as above.
-- **Recommendation:** keep but move to a "Legacy / wide net" accordion.
+So the cron exists to paper over those four ❌ holes.
 
 ---
 
-## Plan — what to change
+## Plan — kill the cron, wire real events
 
-This is a planning summary; no code yet. On approval I'll execute in this order:
+This is the structural fix. On approval I'll execute:
 
-1. **Add a `KYC dictionary saturation` diagnostic line** to the panel header so the 0% number stops looking like a broken button. Show: "Chains exhausted against current CEX dictionary: 2,685 — expand `cex-wallets.ts` to unlock more roots."
+### 1. Hook the X-community scraper
+After the X scraper writes an `x_communities` row (name change, member-count update, new linked mint), fire-and-forget call to `community-recycled-scorer` with `{ mode: 'evaluate', community_id }`. This catches rename + member-bloat + linked-token signals at their actual moment of change.
 
-2. **Reorganise the panel** into three groups:
-   - **Active (free):** Rescan KYC (free) — primary CTA, with the hint above.
-   - **Maintenance (one-shot):** Reputation Backfill Engine — collapsed accordion.
-   - **Legacy / Helius-cost:** Retrace Insiders KYC + Tier A/B — collapsed accordion with a "burns Helius credits" warning.
+**Files:** whichever function writes to `x_communities` (likely `backfill-x-communities` and the universal mesh feeder — I'll grep before patching).
 
-3. **Wire the Reset button to also clear the panel's last-run status pills**, so it's actually useful and not just a counter reset. (Optional polish.)
+### 2. Hook the rug/death events
+When a token flips to `is_rugged=true` or gets an autopsy entry, look up its linked communities and re-score each one. A rug is the most informative signal — a community's "prior rug rate" just changed and we want the badge to flip in real time, not 10 minutes later.
 
-4. **No DB changes, no edge function changes** in this pass. The retracer logic is correct; the fix for 0% KYC roots is a separate, larger task: expanding `cex-wallets.ts` (manual research) or adding a Helius-tag fallback (e.g. "Binance Hot Wallet" tag classification) — that should be its own conversation.
+**Files:** `insiders-lifecycle-builder`, `token-autopsy-engine`, or whichever writer flips `is_rugged`.
+
+### 3. Keep the on-mint hook
+Already done via mesh-ingest → `evaluate_for_token`. No change needed; this is the "Check on mint" you mentioned. ✅
+
+### 4. Add a DEX-paid hook
+When `token_social_links.dex_paid_at` flips from null → timestamp (lifecycle phase shift you mentioned), the dev-quality signal changes. Fire `evaluate_for_token`. **Files:** `dex-paid-checker`.
+
+### 5. Replace the cron with a sparse safety-net
+Don't fully delete it — keep ONE cron at **6 hours** that only re-scores communities whose `recycled_evaluated_at` is older than 7 days AND whose `updated_at` is fresh. This catches edge cases where signals drift without an event (rare). Cheaper, less noisy, and clearly a fallback rather than the primary path.
+
+### 6. Update memory
+Save a constraint memory: *"Recycled community scoring is event-driven (mint, DEX paid, rug, scraper write, rename). 6h cron is a fallback only, not the source of truth."*
 
 ---
 
-## TL;DR for you
+## What you'll actually see
 
-- **Reputation Backfill / Start Backfill**: already 94% done, keep it but hide it.
-- **Reset button**: harmless local counter reset, keep it.
-- **KYC root 0%**: not a button bug — your CEX dictionary doesn't cover the wallets at the end of these chains. The walker correctly reports "Exhausted" and the panel correctly shows 0.
-- **Rescan KYC (free)**: keep, but it's a no-op until `cex-wallets.ts` is expanded.
-- **Retrace Insiders KYC**: still works, but burns Helius credits for almost no gain right now. Demote behind a warning.
+- Badges flip the moment the underlying signal moves, not on a 10-min tick.
+- Cron noise drops ~95%.
+- The four ❌ holes in the table above all become ✅.
 
-Want me to apply the reorganisation + saturation hint now, or do you want to tackle the `cex-wallets.ts` expansion first so the buttons actually have something to chew on?
+Want me to ship steps 1–5 in one pass, or do you want to start with just steps 1–2 (scraper + rug hooks) and validate before adding the rest?
