@@ -6,7 +6,7 @@ import { fetchLaunchpadCoin, detectLaunchpad, type LaunchpadCoin } from '../_sha
 import { normalizeTokenWebsite } from '../_shared/non-token-domains.ts';
 import { resolveTokenCreator } from '../_shared/creator-resolver.ts';
 import { heliusRpcFetch } from '../_shared/helius-client.ts';
-import { assertUpdate, assertUpsert } from '../_shared/db-assert.ts';
+import { assertInsert, assertUpdate, assertUpsert } from '../_shared/db-assert.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -328,25 +328,39 @@ async function pushDerivativeWrites(supabaseClient: any, target: EnrichTarget, f
   await captureSocialLinks(supabaseClient, target.mint, facts, provider);
   const creator = cleanText(facts.creatorWallet ?? target.token.creator_wallet);
   if (creator) {
-    await assertUpsert(
-      supabaseClient.from('developer_profiles').upsert({
-        master_wallet_address: creator,
-        display_name: creator.slice(0, 8),
-        source: 'mint_hydrator',
-        kyc_verified: false,
-        trust_level: 'unknown',
-        metadata: { seeded_from_token: target.mint, provider },
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'master_wallet_address', ignoreDuplicates: false }),
-      'developer_profiles',
-    );
-
-    const { data: profile, error: profileError } = await supabaseClient
+    const { data: existingProfile, error: profileReadError } = await supabaseClient
       .from('developer_profiles')
       .select('id')
       .eq('master_wallet_address', creator)
+      .order('created_at', { ascending: true })
+      .limit(1)
       .maybeSingle();
-    if (profileError) throw profileError;
+    if (profileReadError) throw profileReadError;
+
+    let profile = existingProfile;
+    if (profile?.id) {
+      await assertUpdate(
+        supabaseClient.from('developer_profiles').update({
+          source: 'mint_hydrator',
+          metadata: { seeded_from_token: target.mint, provider },
+          updated_at: new Date().toISOString(),
+        }).eq('id', profile.id),
+        'developer_profiles',
+      );
+    } else {
+      const inserted = await assertInsert(
+        supabaseClient.from('developer_profiles').insert({
+          master_wallet_address: creator,
+          display_name: creator.slice(0, 8),
+          source: 'mint_hydrator',
+          kyc_verified: false,
+          trust_level: 'unknown',
+          metadata: { seeded_from_token: target.mint, provider },
+        }).select('id').single(),
+        'developer_profiles',
+      );
+      profile = inserted;
+    }
 
     if (profile?.id) {
       const { data: existingDevToken, error: existingError } = await supabaseClient
@@ -419,8 +433,8 @@ Deno.serve(withRunLog('enrich-scraped-tokens', async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const tokenMints = Array.isArray(body.tokenMints)
-      ? [...new Set(body.tokenMints.map((m: unknown) => String(m).trim()).filter(hasText))]
+    const tokenMints: string[] = Array.isArray(body.tokenMints)
+      ? [...new Set(body.tokenMints.map((m: unknown) => String(m).trim()).filter(hasText))] as string[]
       : [];
     const batchSize = Math.min(Math.max(Number(body.batchSize ?? 25), 1), 50);
 
