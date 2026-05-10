@@ -58,15 +58,18 @@ Deno.serve(withRunLog('enrich-scraped-tokens', async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Fetch tokens that need enrichment
+    // Fetch tokens that need enrichment. Missing actual fields matter more than timestamps:
+    // old runs stamped metadata_fetched_at even when symbol/name/image/launchpad stayed empty.
+    const hasExplicitMints = tokenMints && Array.isArray(tokenMints) && tokenMints.length > 0;
     let query = supabaseClient
       .from('scraped_tokens')
       .select('*')
-      .or('metadata_fetched_at.is.null,creator_fetched_at.is.null')
       .limit(batchSize);
 
-    if (tokenMints && Array.isArray(tokenMints) && tokenMints.length > 0) {
+    if (hasExplicitMints) {
       query = query.in('token_mint', tokenMints);
+    } else {
+      query = query.or('metadata_fetched_at.is.null,creator_fetched_at.is.null,symbol.is.null,name.is.null,image_url.is.null,launchpad.is.null');
     }
 
     const { data: tokens, error: fetchError } = await query;
