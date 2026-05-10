@@ -558,3 +558,5 @@ verify_jwt = false
 
 [functions.trusted-whitelist-promoter]
 verify_jwt = false
+[functions.backfill-creator-wallets-solscan]
+verify_jwt = false

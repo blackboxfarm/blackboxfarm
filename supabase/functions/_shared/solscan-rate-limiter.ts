@@ -11,6 +11,8 @@
  *   [Solscan] GET /v2.0/token/meta hit=cache key=…  (or hit=net status=200 ms=420 rpm=124/800)
  */
 
+import { assertInsert } from './db-assert.ts';
+
 const MAX_RPM = 800;
 const WINDOW_MS = 60_000;
 const requestTimestamps: number[] = [];
@@ -42,9 +44,8 @@ function logCall(row: {
   // Fire-and-forget; never blocks the request.
   getLogClient().then((supa) => {
     if (!supa) return;
-    supa.from('solscan_api_calls').insert(row).then(({ error }: any) => {
-      if (error) console.warn('[Solscan][usage-log] insert failed:', error.message);
-    });
+    assertInsert(supa.from('solscan_api_calls').insert(row), 'solscan_api_calls')
+      .catch((error: any) => console.warn('[Solscan][usage-log] insert failed:', error?.message ?? error));
   }).catch(() => {});
 }
 
