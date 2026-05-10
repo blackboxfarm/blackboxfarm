@@ -364,6 +364,41 @@ export default function MasterDBTab() {
   const rows = data?.rows ?? [];
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+  // Collect all community IDs visible on this page and batch-fetch recycled scores
+  const visibleCommunityIds = React.useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of rows) {
+      for (const url of (r.x_community_urls || []) as string[]) {
+        const m = url.match(/\/communities\/(\d+)/);
+        if (m) ids.add(m[1]);
+      }
+    }
+    return Array.from(ids);
+  }, [rows]);
+
+  const { data: communityScores } = useQuery({
+    queryKey: ["master-db-recycled-scores", visibleCommunityIds.join(",")],
+    enabled: visibleCommunityIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("x_communities")
+        .select("community_id, recycled_score, recycled_band, recycled_signals, recycled_evaluated_at")
+        .in("community_id", visibleCommunityIds);
+      if (error) throw error;
+      const map: Record<string, RecycledCommunityScore> = {};
+      for (const row of data || []) {
+        map[(row as any).community_id] = {
+          score: (row as any).recycled_score,
+          band: (row as any).recycled_band,
+          signals: (row as any).recycled_signals,
+          evaluated_at: (row as any).recycled_evaluated_at,
+        };
+      }
+      return map;
+    },
+    staleTime: 60_000,
+  });
+
   return (
     <div className="space-y-6">
     
