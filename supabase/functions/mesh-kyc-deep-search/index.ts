@@ -339,8 +339,8 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
         continue;
       }
 
-      // Write mesh link for the funding relationship
-      const { error } = await supabase
+      // Write mesh link for the funding relationship — assertUpsert throws on failure
+      await assertUpsert(supabase
         .from('reputation_mesh')
         .upsert({
           source_type: 'wallet',
@@ -351,9 +351,8 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
           confidence: Math.min(95, 60 + funding.amount * 5),
           discovered_via: 'mesh-kyc-deep-search',
           discovered_at: new Date().toISOString(),
-        }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true });
-
-      if (!error) meshLinksAdded++;
+        }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true }), 'reputation_mesh');
+      meshLinksAdded++;
 
       // ═══ SIBLING DISCOVERY: Find other wallets funded by this same funder ═══
       if (shouldDiscoverBundle && !knownCexWallets.has(funding.funder) && current.depth <= 5) {
@@ -362,8 +361,8 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
         for (const sib of siblings) {
           siblingWallets.push({ ...sib, fundedBy: funding.funder });
           
-          // Write sibling mesh links
-          const { error: sibErr } = await supabase
+          // Write sibling mesh links — assert throws on failure
+          await assertUpsert(supabase
             .from('reputation_mesh')
             .upsert({
               source_type: 'wallet',
@@ -375,9 +374,8 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
               discovered_via: 'mesh-kyc-deep-search:sibling',
               discovered_at: new Date().toISOString(),
               evidence: { amountSol: sib.amountSol, siblingOf: current.wallet },
-            }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true });
-
-          if (!sibErr) meshLinksAdded++;
+            }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true }), 'reputation_mesh');
+          meshLinksAdded++;
         }
 
         if (siblings.length > 0) {
@@ -400,7 +398,7 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
       // bubble map render it twice (gold token + green wallet bubble).
       const isMint = (id: string) =>
         typeof id === 'string' && (id.endsWith('pump') || id.endsWith('bonk'));
-      await supabase
+      await assertUpsert(supabase
         .from('reputation_mesh')
         .upsert({
           source_type: 'wallet',
@@ -411,11 +409,11 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
           confidence: 95,
           discovered_via: 'mesh-kyc-deep-search',
           discovered_at: new Date().toISOString(),
-        }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true });
+        }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true }), 'reputation_mesh');
       meshLinksAdded++;
 
       if (!isMint(walletAddress)) {
-        await supabase
+        await assertUpsert(supabase
           .from('reputation_mesh')
           .upsert({
             source_type: 'kyc_root',
@@ -426,7 +424,7 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
             confidence: 85,
             discovered_via: 'mesh-kyc-deep-search',
             discovered_at: new Date().toISOString(),
-          }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true });
+          }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true }), 'reputation_mesh');
         meshLinksAdded++;
       }
 
@@ -439,7 +437,7 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
       for (const wallet of allWalletsUnderKyc) {
         if (wallet === kycRoot) continue;
         if (isMint(wallet)) continue; // skip mint addresses misclassified as wallets
-        await supabase
+        await assertUpsert(supabase
           .from('reputation_mesh')
           .upsert({
             source_type: 'kyc_root',
@@ -450,7 +448,7 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
             confidence: 70,
             discovered_via: 'mesh-kyc-deep-search',
             discovered_at: new Date().toISOString(),
-          }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true });
+          }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true }), 'reputation_mesh');
         meshLinksAdded++;
       }
     }
