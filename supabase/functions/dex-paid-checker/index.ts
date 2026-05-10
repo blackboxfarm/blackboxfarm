@@ -383,6 +383,19 @@ serve(withRunLog('dex-paid-checker', async (req) => {
           const phase = status.hasCTO ? 'cto' : 'dex_paid';
           await snapshotSocialsIfChanged(supabase, status.tokenMint, status.socials, status.hasCTO, phase);
         }
+
+        // Event hook: lifecycle phase shifted to dex_paid (or CTO). Re-score
+        // every community linked to this mint — dev-quality signal changed.
+        if (status.hasPaidProfile || status.hasCTO) {
+          try {
+            const { fireRecycledScorer } = await import('../_shared/trigger-recycled-scorer.ts');
+            fireRecycledScorer({
+              mode: 'evaluate_for_token',
+              token_mint: status.tokenMint,
+              reason: status.hasCTO ? 'cto-flip' : 'dex-paid-flip',
+            });
+          } catch (_e) { /* never block */ }
+        }
       }
     }
     
