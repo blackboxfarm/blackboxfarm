@@ -287,6 +287,18 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
         kycRoot = current.wallet;
         kycRootLabel = funding.funderName || funding.funderType || 'exchange';
         console.log(`[KYCDeep] 🏦 CEX-funded KYC root: ${current.wallet.slice(0, 12)} (funded by "${kycRootLabel}" ${funding.funder.slice(0, 8)})`);
+        // Self-expand: if Helius identified this funder as a CEX but it's not
+        // in our dictionary yet, record it so future scans skip the chain walk.
+        const canon = canonicalCexFromLabel(kycRootLabel);
+        if (canon && !getCexNameCached(funding.funder)) {
+          await recordCexWallet({
+            wallet: funding.funder,
+            cexName: canon,
+            cexLabel: kycRootLabel,
+            source: 'mesh-kyc-deep-search:helius-funded-by',
+            verified: false,
+          });
+        }
         continue;
       }
 
@@ -410,7 +422,7 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
 
     // Prefer our own curated CEX label over Helius's "funderName" — guarantees
     // we always say "Binance" instead of "Binance Hot Wallet 7" or null.
-    const ourCexLabel = kycRoot ? getCexName(kycRoot) : null;
+    const ourCexLabel = kycRoot ? getCexNameCached(kycRoot) : null;
     const finalKycLabel = ourCexLabel ?? kycRootLabel ?? null;
 
     return new Response(
