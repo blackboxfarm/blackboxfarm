@@ -354,7 +354,7 @@ async function pushDerivativeWrites(supabaseClient: any, target: EnrichTarget, f
           display_name: creator.slice(0, 8),
           source: 'mint_hydrator',
           kyc_verified: false,
-          trust_level: 'unknown',
+          trust_level: 'neutral',
           metadata: { seeded_from_token: target.mint, provider },
         }).select('id').single(),
         'developer_profiles',
