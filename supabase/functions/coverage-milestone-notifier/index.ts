@@ -7,12 +7,13 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 
 const ADMIN_PHONE = '+12263835975';
+const TWILIO_FROM = '+16624814161';
 
 async function sendSms(body: string): Promise<{ ok: boolean; status?: number; err?: string }> {
   const sid = Deno.env.get('TWILIO_ACCOUNT_SID');
   const token = Deno.env.get('TWILIO_AUTH_TOKEN');
-  const from = Deno.env.get('TWILIO_PHONE_NUMBER');
-  if (!sid || !token || !from) return { ok: false, err: 'missing twilio creds' };
+  const from = TWILIO_FROM;
+  if (!sid || !token) return { ok: false, err: 'missing twilio creds' };
   try {
     const auth = btoa(`${sid}:${token}`);
     const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
