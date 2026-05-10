@@ -7,6 +7,7 @@ import OracleClassificationsFeed from "@/components/admin/oracle/OracleClassific
 import OracleBackfillStatus from "@/components/admin/oracle/OracleBackfillStatus";
 import OracleMeshViewer from "@/components/admin/oracle/OracleMeshViewer";
 import { ManualKycOverride } from "@/components/admin/ManualKycOverride";
+import DevKycCoveragePanel from "@/components/admin/oracle/DevKycCoveragePanel";
 
 const ProviderHealthPanel = lazy(() => import("@/components/admin/oracle/ProviderHealthPanel"));
 
@@ -45,6 +46,9 @@ const OracleTab = ({ initialSubTab, initialWallet }: OracleTabProps) => {
       <Suspense fallback={<LazyLoader />}>
         <ProviderHealthPanel />
       </Suspense>
+
+      {/* Live Dev Wallet + KYC backfill coverage */}
+      <DevKycCoveragePanel />
 
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
         <TabsList className="flex flex-wrap gap-1">
