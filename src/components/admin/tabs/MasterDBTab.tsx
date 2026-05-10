@@ -1,6 +1,6 @@
 import React, { useState, useCallback, lazy, Suspense } from "react";
 
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -24,9 +24,9 @@ import {
   ExternalLink,
   Copy,
   Check,
-  RefreshCw,
   Pill,
   History,
+  AlertTriangle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -36,6 +36,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { LazyLoader } from "@/components/ui/lazy-loader";
+import { isNonTokenHost, hostFromUrl } from "@/lib/non-token-domains";
 
 const MasterDBHistory = lazy(() => import("@/components/admin/MasterDBHistory"));
 
@@ -48,18 +49,46 @@ function truncate(str: string | null, len = 16) {
 
 function MintCell({ mint }: { mint: string }) {
   const [copied, setCopied] = useState(false);
-  const copy = () => {
+  const copy = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     navigator.clipboard.writeText(mint);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
   return (
     <span className="flex items-center gap-1 font-mono text-xs">
-      {mint.slice(0, 6)}…{mint.slice(-4)}
+      <a
+        href={`https://solscan.io/token/${mint}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-400 hover:text-blue-300"
+      >
+        {mint.slice(0, 6)}…{mint.slice(-4)}
+      </a>
       <button onClick={copy} className="text-muted-foreground hover:text-foreground">
         {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
       </button>
     </span>
+  );
+}
+
+function LaunchpadCell({ launchpad, mint }: { launchpad: string | null; mint: string }) {
+  if (!launchpad) return <span className="text-muted-foreground text-xs">—</span>;
+  const lp = launchpad.toLowerCase();
+  const url =
+    lp === 'pump.fun' ? `https://pump.fun/coin/${mint}` :
+    lp === 'bonk.fun' ? `https://bonk.fun/${mint}` :
+    lp === 'bags.fm' ? `https://bags.fm/${mint}` :
+    null;
+  if (!url) return <Badge variant="outline" className="text-[10px]">{launchpad}</Badge>;
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1">
+      <Badge variant="outline" className="text-[10px] hover:bg-primary/10">
+        {launchpad}
+        <ExternalLink className="h-2.5 w-2.5 ml-0.5" />
+      </Badge>
+    </a>
   );
 }
 
@@ -81,84 +110,164 @@ function ArrayCell({ arr }: { arr: string[] | null }) {
   );
 }
 
-function WebsitesCell({ urls }: { urls: string[] | null }) {
+type WebsiteSource = { url: string; sources: string[]; host?: string };
+
+function WebsitesCell({ urls, sources }: { urls: string[] | null; sources: WebsiteSource[] | null }) {
+  // Prefer the structured website_sources list when available; otherwise fall back to the legacy
+  // mesh urls. Always filter out known non-token hosts at display time (no DB deletes).
+  const items: WebsiteSource[] = (() => {
+    if (sources && sources.length > 0) {
+      return sources.filter((s) => {
+        const h = (s.host || hostFromUrl(s.url) || '').toLowerCase();
+        return !!h && !isNonTokenHost(h);
+      });
+    }
+    if (!urls) return [];
+    return urls
+      .map((u) => ({ url: u, sources: [] as string[], host: hostFromUrl(u) || u }))
+      .filter((s) => !isNonTokenHost(s.host || ''));
+  })();
+
+  if (items.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
+
+  // Detect "they changed" when both launchpad and dexscreener_paid sources exist
+  // but with different urls.
+  const hasLaunchpad = items.some((i) => i.sources.includes('launchpad'));
+  const hasDexPaid = items.some((i) => i.sources.includes('dexscreener_paid'));
+  const launchpadHosts = new Set(items.filter((i) => i.sources.includes('launchpad')).map((i) => i.host));
+  const dexHosts = new Set(items.filter((i) => i.sources.includes('dexscreener_paid')).map((i) => i.host));
+  const changed = hasLaunchpad && hasDexPaid && [...launchpadHosts].some((h) => h && !dexHosts.has(h));
+
+  return (
+    <TooltipProvider delayDuration={150}>
+      <div className="flex flex-col gap-0.5 max-w-[240px]">
+        {items.slice(0, 4).map((s, i) => {
+          const display = s.host || (() => { try { return new URL(s.url).hostname.replace(/^www\./, ''); } catch { return s.url; } })();
+          const launchpadBadge = s.sources.includes('launchpad');
+          const dexBadge = s.sources.includes('dexscreener_paid');
+          return (
+            <div key={i} className="flex items-center gap-1">
+              <a href={s.url} target="_blank" rel="noopener noreferrer"
+                className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5 truncate max-w-[160px]">
+                🌐 {display}
+                <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+              </a>
+              {launchpadBadge && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="text-[10px]">🚀</span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">From launchpad MINT</TooltipContent>
+                </Tooltip>
+              )}
+              {dexBadge && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="text-[10px]">📊</span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">From DexScreener (DEX paid)</TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+          );
+        })}
+        {items.length > 4 && <span className="text-[10px] text-muted-foreground">+{items.length - 4} more</span>}
+        {changed && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-400">
+                <AlertTriangle className="h-3 w-3" /> changed
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs max-w-[260px]">
+              Launchpad MINT website ≠ DexScreener-paid website. Possible CTO or socials swap.
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+    </TooltipProvider>
+  );
+}
+
+function XCommunityCell({ urls, names }: { urls: string[] | null; names: string[] | null }) {
   if (!urls || urls.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
   return (
-    <div className="flex flex-col gap-0.5 max-w-[220px]">
-      {urls.slice(0, 3).map((url, i) => {
-        let display = url;
-        try { display = new URL(url).hostname.replace('www.', ''); } catch {}
+    <div className="flex flex-col gap-0.5 max-w-[240px]">
+      {urls.map((url, i) => {
+        const name = names?.[i] || url.split('/').pop() || 'Community';
         return (
           <a key={i} href={url} target="_blank" rel="noopener noreferrer"
-            className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5 truncate max-w-[220px]">
-            🌐 {display}
+            className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5 truncate">
+            🏛️ {truncate(name, 28)}
             <ExternalLink className="h-2.5 w-2.5 shrink-0" />
           </a>
         );
       })}
-      {urls.length > 3 && <span className="text-[10px] text-muted-foreground">+{urls.length - 3} more</span>}
     </div>
   );
 }
 
-function XCommunityCell({ urls, names, admins, mods }: { urls: string[] | null; names: string[] | null; admins: string[] | null; mods: string[] | null }) {
-  if (!urls || urls.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
-  return (
-    <div className="flex flex-col gap-1 max-w-[280px]">
-      {urls.map((url, i) => {
-        const name = names?.[i] || url.split('/').pop() || 'Community';
-        return (
-          <div key={i} className="border border-border/50 rounded px-1.5 py-1 bg-muted/30">
-            <a href={url} target="_blank" rel="noopener noreferrer"
-              className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5 truncate font-medium">
-              🏛️ {truncate(name, 28)}
-              <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-            </a>
-            {(admins && admins.length > 0) && (
-              <div className="flex flex-wrap gap-0.5 mt-0.5">
-                {admins.map((h, j) => (
-                  <a key={`a-${j}`} href={`https://x.com/${h}`} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-0.5">
-                    <Badge variant="default" className="text-[9px] px-1 py-0 bg-amber-600/80 hover:bg-amber-500">
-                      👑 @{h}
-                    </Badge>
-                  </a>
-                ))}
-              </div>
-            )}
-            {(mods && mods.length > 0) && (
-              <div className="flex flex-wrap gap-0.5 mt-0.5">
-                {mods.slice(0, 4).map((h, j) => (
-                  <a key={`m-${j}`} href={`https://x.com/${h}`} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-0.5">
-                    <Badge variant="secondary" className="text-[9px] px-1 py-0">
-                      🛡️ @{h}
-                    </Badge>
-                  </a>
-                ))}
-                {mods.length > 4 && <Badge variant="outline" className="text-[9px] px-1 py-0">+{mods.length - 4}</Badge>}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+// Unified X Handles cell: merges mesh handles, community admins, mods, and creator handle.
+// Each shown with role badge and an X profile link.
+function XHandlesCell({
+  mesh, admins, mods, creator,
+}: {
+  mesh: string[] | null;
+  admins: string[] | null;
+  mods: string[] | null;
+  creator: string | null;
+}) {
+  const norm = (s: string) => s.replace(/^@/, '').toLowerCase();
+  const seen = new Set<string>();
+  type Item = { handle: string; role: 'creator' | 'admin' | 'mod' | 'mesh' };
+  const items: Item[] = [];
+  const add = (handle: string | null | undefined, role: Item['role']) => {
+    if (!handle) return;
+    const h = norm(handle);
+    if (!h || seen.has(h)) return;
+    seen.add(h);
+    items.push({ handle: h, role });
+  };
+  add(creator, 'creator');
+  (admins || []).forEach((h) => add(h, 'admin'));
+  (mods || []).forEach((h) => add(h, 'mod'));
+  (mesh || []).forEach((h) => add(h, 'mesh'));
 
-function XHandlesCell({ handles }: { handles: string[] | null }) {
-  if (!handles || handles.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
+  if (items.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
+
+  const ROLE: Record<Item['role'], { emoji: string; cls: string; label: string }> = {
+    creator: { emoji: '🧑‍🚀', cls: 'bg-emerald-700/70 hover:bg-emerald-600',  label: 'Creator' },
+    admin:   { emoji: '👑',  cls: 'bg-amber-600/80 hover:bg-amber-500',     label: 'Community admin' },
+    mod:     { emoji: '🛡️', cls: '',                                       label: 'Community mod' },
+    mesh:    { emoji: '@',   cls: '',                                       label: 'Mesh-discovered' },
+  };
+
   return (
-    <div className="flex flex-wrap gap-0.5 max-w-[200px]">
-      {handles.slice(0, 3).map((h, i) => (
-        <a key={i} href={`https://x.com/${h}`} target="_blank" rel="noopener noreferrer">
-          <Badge variant="outline" className="text-[10px] px-1 py-0 text-blue-400 hover:text-blue-300">
-            @{h}
-          </Badge>
-        </a>
-      ))}
-      {handles.length > 3 && <Badge variant="secondary" className="text-[10px] px-1 py-0">+{handles.length - 3}</Badge>}
-    </div>
+    <TooltipProvider delayDuration={150}>
+      <div className="flex flex-wrap gap-0.5 max-w-[240px]">
+        {items.slice(0, 6).map((it, i) => {
+          const r = ROLE[it.role];
+          return (
+            <Tooltip key={i}>
+              <TooltipTrigger asChild>
+                <a href={`https://x.com/${it.handle}`} target="_blank" rel="noopener noreferrer">
+                  <Badge
+                    variant={it.role === 'mesh' || it.role === 'mod' ? 'outline' : 'default'}
+                    className={`text-[10px] px-1 py-0 ${r.cls}`}
+                  >
+                    {r.emoji} @{it.handle}
+                  </Badge>
+                </a>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">{r.label}</TooltipContent>
+            </Tooltip>
+          );
+        })}
+        {items.length > 6 && (
+          <Badge variant="secondary" className="text-[10px] px-1 py-0">+{items.length - 6}</Badge>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }
 
@@ -199,29 +308,7 @@ export default function MasterDBTab() {
   const [filterPump, setFilterPump] = useState(false);
   const [activeView, setActiveView] = useState<"directory" | "history">("directory");
   const { toast } = useToast();
-
-  const backfillMutation = useMutation({
-    mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("ath-24h-backfill", {
-        body: { batchSize: 50 },
-      });
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: (data: any) => {
-      toast({
-        title: "ATH 24h Backfill Started",
-        description: `Processed ${data?.processed ?? 0} tokens. ${data?.remaining ?? "?"} remaining.`,
-      });
-    },
-    onError: (err: any) => {
-      toast({
-        title: "Backfill Failed",
-        description: err.message,
-        variant: "destructive",
-      });
-    },
-  });
+  void toast;
 
   const doSearch = useCallback(() => {
     setSearch(searchInput.trim());
@@ -320,16 +407,6 @@ export default function MasterDBTab() {
             >
               <Pill className="h-3.5 w-3.5" />
               {filterPump ? "Pump Monitor Hidden" : "Hide Pump Monitor"}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 px-3 gap-1.5"
-              disabled={backfillMutation.isPending}
-              onClick={() => backfillMutation.mutate()}
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${backfillMutation.isPending ? "animate-spin" : ""}`} />
-              Backfill ATH
             </Button>
           </form>
         </div>
