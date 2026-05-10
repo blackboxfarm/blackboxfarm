@@ -13,6 +13,7 @@
 
 import { getHeliusApiKey, getHeliusRestUrl, getHeliusRpcUrl } from './helius-client.ts';
 import { fetchPumpFunCoin } from './pumpfun-fetch.ts';
+import { assertUpdate } from './db-assert.ts';
 
 export interface CreatorResolution {
   creatorWallet: string | null;
@@ -42,13 +43,16 @@ export async function resolveTokenCreator(
       // by this dev") don't return zero. Fire-and-forget — never block.
       try {
         if (supabase?.from) {
-          await supabase
-            .from('token_lifecycle')
-            .update({ creator_wallet: data.creator })
-            .eq('token_mint', tokenMint)
-            .is('creator_wallet', null);
+          await assertUpdate(
+            supabase
+              .from('token_lifecycle')
+              .update({ creator_wallet: data.creator })
+              .eq('token_mint', tokenMint)
+              .is('creator_wallet', null),
+            'token_lifecycle.creator_wallet',
+          );
         }
-      } catch (_) { /* fire-and-forget */ }
+      } catch (e) { throw e; }
       return {
         creatorWallet: data.creator,
         source: 'pumpfun',
@@ -78,13 +82,16 @@ export async function resolveTokenCreator(
       if (resp.ok && typeof creator === 'string' && creator.length >= 32 && creator !== tokenMint) {
         try {
           if (supabase?.from) {
-            await supabase
-              .from('token_lifecycle')
-              .update({ creator_wallet: creator })
-              .eq('token_mint', tokenMint)
-              .is('creator_wallet', null);
+            await assertUpdate(
+              supabase
+                .from('token_lifecycle')
+                .update({ creator_wallet: creator })
+                .eq('token_mint', tokenMint)
+                .is('creator_wallet', null),
+              'token_lifecycle.creator_wallet',
+            );
           }
-        } catch (_) { /* fire-and-forget */ }
+        } catch (e) { throw e; }
         return {
           creatorWallet: creator,
           source: 'solscan_meta',
