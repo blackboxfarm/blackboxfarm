@@ -2,6 +2,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import { createApiLogger } from "../_shared/api-logger.ts";
+import { normalizeTokenWebsite } from '../_shared/non-token-domains.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -349,6 +350,19 @@ serve(withRunLog('dex-paid-checker', async (req) => {
           if (status.socials.website) updateData.website_url = status.socials.website;
           if (status.socials.telegram) updateData.telegram_url = status.socials.telegram;
           console.log(`Syncing socials for ${status.tokenMint} from DexScreener:`, status.socials);
+
+          // ── DexScreener-Paid website capture (one-time on flip) ──
+          // Persisted into token_website_sources so UI can compare against
+          // the launchpad website and badge ⚠️ if they differ.
+          const dpw = normalizeTokenWebsite(status.socials.website);
+          if (dpw) {
+            await supabase
+              .from('token_website_sources')
+              .upsert(
+                { token_mint: status.tokenMint, url: dpw.url, host: dpw.host, source: 'dexscreener_paid' },
+                { onConflict: 'token_mint,url,source', ignoreDuplicates: true }
+              );
+          }
         }
         
         const { error } = await supabase
