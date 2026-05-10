@@ -448,7 +448,7 @@ export default function MasterDBTab() {
                 <TableHead>Websites</TableHead>
                 <TableHead>X Communities</TableHead>
                 <TableHead>X Handles</TableHead>
-                <TableHead>ATH 24h</TableHead>
+                <TableHead>ATH (all-time)</TableHead>
                 <TableHead>Grad</TableHead>
                 <TableHead>Graduated At</TableHead>
                 <TableHead>Dev Wallet</TableHead>
@@ -491,16 +491,75 @@ export default function MasterDBTab() {
                         <div className="h-5 w-5 rounded-full bg-muted" />
                       )}
                     </TableCell>
-                    <TableCell className="font-semibold">{r.symbol ?? "—"}</TableCell>
+                    <TableCell className="font-semibold">
+                      {r.symbol ? (
+                        <a
+                          href={`https://dexscreener.com/solana/${r.token_mint}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:text-blue-300"
+                        >
+                          {r.symbol}
+                        </a>
+                      ) : "—"}
+                    </TableCell>
                     <TableCell>{truncate(r.name, 20)}</TableCell>
                     <TableCell><MintCell mint={r.token_mint} /></TableCell>
-                    <TableCell><Badge variant="outline" className="text-[10px]">{r.launchpad ?? "—"}</Badge></TableCell>
-                    <TableCell><WebsitesCell urls={r.websites} /></TableCell>
-                    <TableCell><XCommunityCell urls={r.x_community_urls} names={r.x_community_names} admins={r.community_admin_handles} mods={r.community_mod_handles} /></TableCell>
-                    <TableCell><XHandlesCell handles={r.mesh_x_handles} /></TableCell>
-                    <TableCell className="text-muted-foreground">{r.ath_24h_usd != null ? `$${Number(r.ath_24h_usd).toFixed(6)}` : "—"}</TableCell>
+                    <TableCell><LaunchpadCell launchpad={r.launchpad} mint={r.token_mint} /></TableCell>
+                    <TableCell><WebsitesCell urls={r.websites} sources={r.website_sources as WebsiteSource[] | null} /></TableCell>
+                    <TableCell><XCommunityCell urls={r.x_community_urls} names={r.x_community_names} /></TableCell>
+                    <TableCell>
+                      <XHandlesCell
+                        mesh={r.mesh_x_handles}
+                        admins={r.community_admin_handles}
+                        mods={r.community_mod_handles}
+                        creator={null}
+                      />
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {(() => {
+                        const ath = r.ath_market_cap_usd != null ? Number(r.ath_market_cap_usd) : null;
+                        const ath24 = r.ath_24h_usd != null ? Number(r.ath_24h_usd) : null;
+                        if (ath != null) {
+                          const fmt = ath >= 1000 ? `$${(ath / 1000).toFixed(1)}k` : `$${ath.toFixed(2)}`;
+                          return (
+                            <TooltipProvider delayDuration={150}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span>{fmt}</span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">
+                                  ATH market cap (all-time){r.ath_market_cap_at ? ` · ${new Date(r.ath_market_cap_at).toLocaleString()}` : ''}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          );
+                        }
+                        if (ath24 != null) {
+                          return (
+                            <TooltipProvider delayDuration={150}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="opacity-70">${ath24.toFixed(6)} <span className="text-[9px]">(24h)</span></span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs max-w-[220px]">
+                                  Only 24h ATH price recorded; all-time market cap not yet captured.
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          );
+                        }
+                        return "—";
+                      })()}
+                    </TableCell>
                     <TableCell>{r.is_graduated ? "✅" : "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">{r.graduated_at ? new Date(r.graduated_at).toLocaleDateString() : "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {r.graduated_at ? (
+                        <span title={new Date(r.graduated_at).toLocaleString()}>
+                          {new Date(r.graduated_at).toLocaleDateString()}
+                        </span>
+                      ) : "—"}
+                    </TableCell>
                     <TableCell>
                       {(() => {
                         const wallet = r.creator_wallet || (r.dev_wallets && r.dev_wallets[0]);
