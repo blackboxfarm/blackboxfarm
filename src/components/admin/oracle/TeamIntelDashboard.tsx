@@ -716,7 +716,24 @@ Focus on actionable intelligence for identifying potential coordinated rug opera
                       <TableHead>Admin Of</TableHead>
                       <TableHead>Mod Of</TableHead>
                       <TableHead>Co-Mods</TableHead>
-                      <TableHead>Risk Score</TableHead>
+                      <TableHead>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center gap-1 cursor-help">
+                                Rotation Score
+                                <Info className="h-3 w-3 text-muted-foreground" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              <div className="text-xs space-y-1">
+                                <div className="font-mono">admin × 30 + mod × 20 + min(co_mod, 20) × 5</div>
+                                <div className="text-muted-foreground">Higher = more communities controlled. Not capped at 100.</div>
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -766,12 +783,12 @@ Focus on actionable intelligence for identifying potential coordinated rug opera
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Progress 
-                                value={pattern.risk_score} 
+                                value={Math.min(pattern.risk_score / 1000, 1) * 100}
                                 className="w-16 h-2"
                               />
                               <span className={`font-mono text-sm ${
-                                pattern.risk_score >= 70 ? 'text-destructive' :
-                                pattern.risk_score >= 40 ? 'text-orange-400' : 'text-muted-foreground'
+                                pattern.risk_score >= 300 ? 'text-destructive' :
+                                pattern.risk_score >= 150 ? 'text-orange-400' : 'text-muted-foreground'
                               }`}>
                                 {pattern.risk_score}
                               </span>
