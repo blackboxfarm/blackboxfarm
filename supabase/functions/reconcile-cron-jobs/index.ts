@@ -1,5 +1,6 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { assertInsert } from '../_shared/db-assert.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -343,6 +344,8 @@ Deno.serve(withRunLog('reconcile-cron-jobs', async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const body = await req.json().catch(() => ({}));
+    const forceJobs = new Set<string>(Array.isArray(body?.forceJobs) ? body.forceJobs : []);
 
     // Get current cron jobs
     const { data: currentJobs, error: fetchErr } = await supabase
@@ -365,9 +368,29 @@ Deno.serve(withRunLog('reconcile-cron-jobs', async (req) => {
     const existingNames = new Set((currentJobs || []).map((r: any) => r.jobname));
 
     const missing: string[] = [];
+    const forced: string[] = [];
     const restored: string[] = [];
 
     for (const cron of REQUIRED_CRONS) {
+      if (forceJobs.has(cron.jobname) && existingNames.has(cron.jobname)) {
+        forced.push(cron.jobname);
+        const unscheduleSQL = `SELECT cron.unschedule('${cron.jobname}');`;
+        const unscheduleRes = await fetch(`${supabaseUrl}/rest/v1/rpc/exec_sql`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${serviceRoleKey}`,
+            'apikey': serviceRoleKey,
+          },
+          body: JSON.stringify({ query: unscheduleSQL }),
+        });
+        if (!unscheduleRes.ok) {
+          console.error(`Failed to force-unschedule ${cron.jobname}:`, await unscheduleRes.text());
+          continue;
+        }
+        existingNames.delete(cron.jobname);
+      }
+
       if (!existingNames.has(cron.jobname)) {
         missing.push(cron.jobname);
 
@@ -394,12 +417,15 @@ Deno.serve(withRunLog('reconcile-cron-jobs', async (req) => {
 
     // If any were restored, create admin alert
     if (restored.length > 0) {
-      await supabase.from('admin_notifications').insert({
-        title: `🔧 Cron Reconciler: Restored ${restored.length} jobs`,
-        message: `Missing cron jobs detected and restored: ${restored.join(', ')}`,
-        notification_type: 'cron_reconcile',
-        metadata: { missing, restored, total_required: REQUIRED_CRONS.length },
-      });
+      await assertInsert(
+        supabase.from('admin_notifications').insert({
+          title: `🔧 Cron Reconciler: Restored ${restored.length} jobs`,
+          message: `Missing/forced cron jobs restored: ${restored.join(', ')}`,
+          notification_type: 'cron_reconcile',
+          metadata: { missing, forced, restored, total_required: REQUIRED_CRONS.length },
+        }),
+        'admin_notifications',
+      );
     }
 
     return new Response(
@@ -407,6 +433,7 @@ Deno.serve(withRunLog('reconcile-cron-jobs', async (req) => {
         total_required: REQUIRED_CRONS.length,
         existing: existingNames.size,
         missing,
+        forced,
         restored,
         status: missing.length === 0 ? 'all_present' : `restored_${restored.length}_of_${missing.length}`,
       }),
