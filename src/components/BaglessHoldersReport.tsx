@@ -1011,9 +1011,6 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
         </CardContent>
       </Card>
 
-      {/* Ad Banner under Generate Button */}
-      <AdBanner size="leaderboard" position={1} />
-
       {/* Token Metadata - show as soon as metadata is fetched (before report) */}
       {tokenData && (
         <div className="mb-4 md:mb-6">
@@ -1046,6 +1043,9 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
           />
         </div>
       )}
+
+      {/* Ad Banner under Token Snapshot */}
+      <AdBanner size="leaderboard" position={1} />
 
       {/* Bundle Analysis Section - RugCheck Insiders */}
       {report?.insidersGraph?.hasInsiders && (
@@ -1912,6 +1912,11 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                       }}
                       liquidityPoolsDetected={report.liquidityPoolsDetected}
                       isPro={isPro}
+                      showRetentionAnalysis={
+                        (tokenAge ?? 0) >= 168 &&
+                        report.healthScore?.phase !== 'on_curve' &&
+                        (report.bondingCurveProgress == null || report.bondingCurveProgress >= 100)
+                      }
                     />
                   );
                 })()}

@@ -70,6 +70,7 @@ interface ExtendedAnalysisSectionProps {
   lpAnalysis: LPAnalysisData;
   liquidityPoolsDetected: number;
   isPro?: boolean;
+  showRetentionAnalysis?: boolean;
 }
 
 export function ExtendedAnalysisSection({
@@ -84,6 +85,7 @@ export function ExtendedAnalysisSection({
   lpAnalysis,
   liquidityPoolsDetected,
   isPro = false,
+  showRetentionAnalysis = false,
 }: ExtendedAnalysisSectionProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -241,7 +243,7 @@ export function ExtendedAnalysisSection({
       )}
 
       {/* Retention Analysis */}
-      {tokenMint && (
+      {tokenMint && showRetentionAnalysis && (
         <RetentionAnalysis tokenMint={tokenMint} tokenAge={tokenAge} />
       )}
     </div>

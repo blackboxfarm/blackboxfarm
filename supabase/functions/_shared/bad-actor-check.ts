@@ -140,6 +140,17 @@ export async function runBadActorCheck(
   const recycledCommunities: BadActorDetails['recycledCommunities'] = [];
   const launchHistory: BadActorDetails['launchHistory'] = [];
 
+  const addCommunityFlag = (c: any) => {
+    if (!recycledCommunities.some((x) => x.community_id === c.community_id)) {
+      recycledCommunities.push({
+        community_id: c.community_id,
+        name: c.name,
+        recycled_band: c.recycled_band || 'shared-risk',
+        recycled_score: c.recycled_score ?? null,
+      });
+    }
+  };
+
   // Build identifiers list to check against blacklist
   const identifiers: Array<{ id: string; subject: 'token' | 'creator' | 'x_handle' }> = [];
   if (tokenMint) identifiers.push({ id: tokenMint, subject: 'token' });
@@ -267,6 +278,68 @@ export async function runBadActorCheck(
         if (!subjects.includes('x_handle')) subjects.push('x_handle');
         if (!reasons.includes('recycled_community')) reasons.push('recycled_community');
         if (level === 'clean') level = 'warn';
+      }
+    } catch (_) { /* ignore */ }
+  }
+
+  // Shared X-community risk: token → community → sibling tokens.
+  // This is the missing MOM/UU edge: do not rely only on admin handles or recycled_band.
+  if (tokenMint) {
+    try {
+      const communityIds = new Set<string>();
+
+      const { data: directComms } = await supabase
+        .from('x_communities')
+        .select('community_id, name, recycled_band, recycled_score, linked_token_mints')
+        .contains('linked_token_mints', [tokenMint])
+        .limit(10);
+      for (const c of directComms ?? []) communityIds.add(c.community_id);
+
+      const { data: socialComms } = await supabase
+        .from('token_social_links')
+        .select('community_id, url')
+        .eq('token_mint', tokenMint)
+        .limit(20);
+      for (const s of socialComms ?? []) {
+        if (s.community_id) communityIds.add(s.community_id);
+        const m = String(s.url || '').match(/communities\/(\d{6,25})/i);
+        if (m) communityIds.add(m[1]);
+      }
+
+      if (communityIds.size > 0) {
+        const { data: commRows } = await supabase
+          .from('x_communities')
+          .select('community_id, name, recycled_band, recycled_score, linked_token_mints')
+          .in('community_id', [...communityIds])
+          .limit(10);
+
+        for (const c of commRows ?? []) {
+          const linkedMints = Array.isArray(c.linked_token_mints) ? c.linked_token_mints.filter(Boolean) : [];
+          if (['likely', 'confirmed', 'suspicious'].includes(c.recycled_band)) {
+            addCommunityFlag(c);
+            if (!reasons.includes('recycled_community')) reasons.push('recycled_community');
+          }
+
+          if (linkedMints.length >= 2) {
+            const { data: siblings } = await supabase
+              .from('pumpfun_watchlist')
+              .select('token_mint, token_symbol, token_name, status, market_cap_usd, is_graduated')
+              .in('token_mint', linkedMints)
+              .limit(25);
+
+            const failedSibling = (siblings ?? []).find((t: any) =>
+              ['dead', 'rugged', 'rejected', 'permanent_reject', 'pruned'].includes(String(t.status || '').toLowerCase()) ||
+              ((Number(t.market_cap_usd) || 0) > 0 && (Number(t.market_cap_usd) || 0) < 5000 && t.is_graduated !== true)
+            );
+
+            if (failedSibling) {
+              addCommunityFlag(c);
+              if (!subjects.includes('x_handle')) subjects.push('x_handle');
+              if (!reasons.includes('shared_rug_community')) reasons.push('shared_rug_community');
+              if (level === 'clean' || level === 'warn') level = 'high';
+            }
+          }
+        }
       }
     } catch (_) { /* ignore */ }
   }

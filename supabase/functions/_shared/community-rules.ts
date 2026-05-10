@@ -12,6 +12,7 @@ export interface CommunityRuleInput {
   rename_events: Array<{ at: string }>;    // for frequency calc
   prior_dead_rate_pct: number;             // 0-100
   prior_linked_token_count: number;
+  prior_dead_count?: number;
   admin_prior_failures: number;            // max across admins
   admin_prior_tokens: number;              // max across admins
 }
@@ -98,14 +99,15 @@ export function evaluateCommunity(input: CommunityRuleInput): CommunityScoreResu
   // 4. Prior linked mints dead-rate
   let deadPts = 0;
   if (input.prior_linked_token_count >= 2) {
-    if (input.prior_dead_rate_pct > 80) deadPts = 35;
-    else if (input.prior_dead_rate_pct > 50) deadPts = 20;
+    if (input.prior_dead_rate_pct >= 80) deadPts = 35;
+    else if (input.prior_dead_rate_pct >= 50) deadPts = 25;
+    else if ((input.prior_dead_count ?? 0) >= 1) deadPts = 15;
   }
   signals.push({
     key: 'prior_dead_rate',
     label: 'Prior linked mints dead/rugged',
     fired: deadPts > 0,
-    detail: `${input.prior_dead_rate_pct}% dead across ${input.prior_linked_token_count} prior linked tokens`,
+    detail: `${input.prior_dead_rate_pct}% dead across ${input.prior_linked_token_count} linked tokens`,
     points: deadPts,
   });
   score += deadPts;
