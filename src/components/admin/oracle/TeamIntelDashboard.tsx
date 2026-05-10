@@ -141,24 +141,8 @@ export function TeamIntelDashboard() {
           unique_communities: Number(meshSummary.unique_communities) || 0
         });
       } else {
-        // Fallback to direct query if materialized view not yet populated
-        console.log('Materialized view not available, using fallback query');
-        const { data: meshData } = await supabase
-          .from('reputation_mesh')
-          .select('relationship, source_type, linked_type')
-          .in('relationship', ['admin_of', 'mod_of', 'co_mod', 'community_for']);
-
-        if (meshData) {
-          setMeshStats({
-            total_links: meshData.length,
-            admin_links: meshData.filter(m => m.relationship === 'admin_of').length,
-            mod_links: meshData.filter(m => m.relationship === 'mod_of').length,
-            co_mod_links: meshData.filter(m => m.relationship === 'co_mod').length,
-            token_links: meshData.filter(m => m.relationship === 'community_for').length,
-            unique_accounts: new Set(meshData.filter(m => m.source_type === 'x_account').map(m => m.source_type)).size,
-            unique_communities: new Set(meshData.filter(m => m.linked_type === 'x_community').map(m => m.linked_type)).size
-          });
-        }
+        // Materialized view not yet populated — show empty rather than a fake 1000-row sample
+        setMeshStats(null);
       }
 
       // Use server-side Postgres function for rotation patterns (SCALING FIX)
