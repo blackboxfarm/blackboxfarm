@@ -419,11 +419,26 @@ async function buildTargets(supabaseClient: any, tokenMints: string[], batchSize
 
   const perTableLimit = Math.max(1, Math.ceil(batchSize / specs.length));
   for (const spec of specs) {
-    let query = supabaseClient.from(spec.table).select(spec.select).limit(hasExplicitMints ? Math.min(tokenMints.length, 100) : perTableLimit);
-    if (hasExplicitMints) query = query.in('token_mint', tokenMints);
-    else query = query.or(spec.gaps);
+    let query = supabaseClient.from(spec.table).select(spec.select);
+    if (hasExplicitMints) {
+      query = query.in('token_mint', tokenMints).limit(Math.min(tokenMints.length, 100));
+    } else {
+      // Randomize starting offset so parallel batches do not fight over the
+      // same head-of-table rows. Keeps every concurrent worker productive.
+      const randomOffset = Math.floor(Math.random() * 500);
+      query = query
+        .or(spec.gaps)
+        .range(randomOffset, randomOffset + perTableLimit - 1);
+    }
     const { data, error } = await query;
-    if (error) throw error;
+    if (error) {
+      // Range may overshoot when fewer gap rows remain — fall back to no-offset.
+      const { data: retry, error: retryErr } = await supabaseClient
+        .from(spec.table).select(spec.select).or(spec.gaps).limit(perTableLimit);
+      if (retryErr) throw retryErr;
+      addRows(spec.table, retry);
+      continue;
+    }
     addRows(spec.table, data);
   }
 
