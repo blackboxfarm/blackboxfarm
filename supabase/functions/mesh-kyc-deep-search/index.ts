@@ -8,6 +8,8 @@ const corsHeaders = {
 };
 
 import { isCexWallet, getCexName } from '../_shared/cex-wallets.ts';
+import { getCexNameAny, getCexNameCached, recordCexWallet, warmCexCache } from '../_shared/cex-wallets-db.ts';
+import { solscanCheckAccountLabel } from '../_shared/solscan-intelligence.ts';
 
 import { enableHeliusTracking } from "../_shared/helius-fetch-interceptor.ts";
 enableHeliusTracking("mesh-kyc-deep-search");
@@ -26,11 +28,26 @@ interface HeliusFundedByResult {
 }
 
 function isKnownCex(funderAddress: string, funderName: string | null, funderType: string | null): boolean {
-  // Check shared CEX wallet database first (most reliable)
-  if (isCexWallet(funderAddress)) return true;
+  // 1) curated file dictionary + DB cache (warmed at handler start)
+  if (getCexNameCached(funderAddress)) return true;
+  // 2) Helius hint
   if (funderType === 'exchange' || funderType === 'cex') return true;
+  // 3) keyword in funder display name
   const name = (funderName || '').toLowerCase();
   return CEX_KEYWORDS.some(k => name.includes(k));
+}
+
+/** Map a Solscan-returned label string ("Binance 2", "Coinbase 5") to a canonical CEX name. */
+function canonicalCexFromLabel(label: string | null): string | null {
+  if (!label) return null;
+  const lower = label.toLowerCase();
+  const match = CEX_KEYWORDS.find(k => lower.includes(k));
+  if (!match) return null;
+  // Title-case + special-case fixups
+  if (match === 'gate.io') return 'Gate.io';
+  if (match === 'crypto.com') return 'Crypto.com';
+  if (match === 'htx' || match === 'huobi') return 'HTX';
+  return match.charAt(0).toUpperCase() + match.slice(1);
 }
 
 async function heliusFundedBy(
