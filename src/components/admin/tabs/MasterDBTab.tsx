@@ -561,7 +561,7 @@ export default function MasterDBTab() {
                     <TableCell><MintCell mint={r.token_mint} /></TableCell>
                     <TableCell><LaunchpadCell launchpad={r.launchpad} mint={r.token_mint} /></TableCell>
                     <TableCell><WebsitesCell urls={r.websites} sources={r.website_sources as WebsiteSource[] | null} /></TableCell>
-                    <TableCell><XCommunityCell urls={r.x_community_urls} names={r.x_community_names} /></TableCell>
+                    <TableCell><XCommunityCell urls={r.x_community_urls} names={r.x_community_names} scores={communityScores} /></TableCell>
                     <TableCell>
                       <XHandlesCell
                         mesh={r.mesh_x_handles}
