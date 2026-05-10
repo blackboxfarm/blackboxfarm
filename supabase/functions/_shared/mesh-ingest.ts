@@ -159,6 +159,23 @@ async function _ingestImpl(supabase: any, params: IngestParams): Promise<void> {
       console.warn('[mesh-ingest] queue threw:', e);
     }
   }
+
+  // 4) Fire-and-forget: trigger Recycled X Community evaluation for any
+  //    communities linked to this mint. Pure mesh-pipeline write — never
+  //    blocks the caller, never throws. Score lands on x_communities and
+  //    auto-tags reputation_mesh when band ∈ {likely, confirmed}.
+  try {
+    supabase.functions
+      .invoke('community-recycled-scorer', {
+        body: { mode: 'evaluate_for_token', token_mint: mint },
+      })
+      .then(({ error }: any) => {
+        if (error) console.warn('[mesh-ingest] scorer:', error.message ?? error);
+      })
+      .catch((e: any) => console.warn('[mesh-ingest] scorer threw:', e?.message ?? e));
+  } catch (e) {
+    console.warn('[mesh-ingest] scorer dispatch threw:', e);
+  }
 }
 
 /**
