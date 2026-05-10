@@ -350,17 +350,21 @@ Focus on actionable intelligence for identifying potential coordinated rug opera
       case 'high': return <Badge variant="destructive">High Risk</Badge>;
       case 'medium': return <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30">Medium</Badge>;
       case 'low': return <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Low</Badge>;
-      default: return <Badge variant="outline">Unknown</Badge>;
+      default: return (
+        <Badge variant="outline" className="text-muted-foreground" title="Auto-classifier hasn't scored this team yet">
+          Unrated
+        </Badge>
+      );
     }
   };
 
   // Summary stats
   const summaryStats = {
-    totalTeams: teams.length,
+    totalTeams: totalTeamsCount ?? teams.length,
     highRiskTeams: teams.filter(t => t.risk_level === 'high').length,
-    totalTokensTracked: teams.reduce((sum, t) => sum + (t.tokens_created || 0), 0),
+    totalTokensTracked: totalTokensCount ?? teams.reduce((sum, t) => sum + (t.tokens_created || 0), 0),
     totalRugged: teams.reduce((sum, t) => sum + (t.tokens_rugged || 0), 0),
-    rotationAccounts: rotationPatterns.length,
+    rotationAccounts: totalRotators ?? rotationPatterns.length,
     avgTeamSize: teams.length > 0 
       ? (teams.reduce((sum, t) => sum + (t.member_wallets?.length || 0) + (t.member_twitter_accounts?.length || 0), 0) / teams.length).toFixed(1)
       : 0
