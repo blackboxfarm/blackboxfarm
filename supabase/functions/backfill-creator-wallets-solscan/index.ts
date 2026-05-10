@@ -1,7 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { withRunLog } from '../_shared/run-logger.ts';
 import { solscanFetch } from '../_shared/solscan-rate-limiter.ts';
-import { assertInsert, assertUpdate, assertUpsert } from '../_shared/db-assert.ts';
+import { assertUpdate, assertUpsert } from '../_shared/db-assert.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
