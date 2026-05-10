@@ -354,7 +354,7 @@ async function pushDerivativeWrites(supabaseClient: any, target: EnrichTarget, f
           display_name: creator.slice(0, 8),
           source: 'mint_hydrator',
           kyc_verified: false,
-          trust_level: 'unknown',
+          trust_level: 'neutral',
           metadata: { seeded_from_token: target.mint, provider },
         }).select('id').single(),
         'developer_profiles',
@@ -407,12 +407,14 @@ async function buildTargets(supabaseClient: any, tokenMints: string[], batchSize
     }
   };
 
+  // Keep gap filters narrow — we rely on partial indexes (idx_*_metadata_gaps) and broad NULL checks
+  // on a few widely-missing columns. Avoid huge OR predicates that blow past statement_timeout.
   const specs: Array<{ table: TargetTable; select: string; gaps: string }> = [
-    { table: 'scraped_tokens', select: '*', gaps: 'metadata_fetched_at.is.null,creator_fetched_at.is.null,symbol.is.null,symbol.eq.,name.is.null,name.eq.,image_url.is.null,image_url.eq.,description.is.null,description.eq.,launchpad.is.null,launchpad.eq.,creator_wallet.is.null,creator_wallet.eq.,twitter_url.is.null,telegram_url.is.null,website_url.is.null' },
-    { table: 'pumpfun_watchlist', select: '*', gaps: 'token_symbol.is.null,token_symbol.eq.,token_name.is.null,token_name.eq.,image_url.is.null,image_url.eq.,creator_wallet.is.null,creator_wallet.eq.,created_at_blockchain.is.null,twitter_url.is.null,telegram_url.is.null,website_url.is.null' },
-    { table: 'token_lifecycle', select: '*', gaps: 'symbol.is.null,symbol.eq.,name.is.null,name.eq.,image_url.is.null,image_url.eq.,description.is.null,description.eq.,creator_wallet.is.null,creator_wallet.eq.,launchpad.is.null,launchpad.eq.,twitter_url.is.null,telegram_url.is.null,website_url.is.null' },
-    { table: 'holders_intel_seen_tokens', select: '*', gaps: 'metadata_fetched_at.is.null,creator_fetched_at.is.null,symbol.is.null,symbol.eq.,name.is.null,name.eq.,image_uri.is.null,image_uri.eq.,description.is.null,description.eq.,creator_wallet.is.null,creator_wallet.eq.,launchpad.is.null,launchpad.eq.,twitter_url.is.null,telegram_url.is.null,website_url.is.null' },
-    { table: 'funnel_feed_discoveries', select: '*', gaps: 'metadata_fetched_at.is.null,creator_fetched_at.is.null,token_symbol.is.null,token_symbol.eq.,token_name.is.null,token_name.eq.,image_url.is.null,image_url.eq.,description.is.null,description.eq.,creator_wallet.is.null,creator_wallet.eq.,launchpad.is.null,launchpad.eq.,twitter_url.is.null,telegram_url.is.null,website_url.is.null' },
+    { table: 'scraped_tokens',           select: '*', gaps: 'creator_wallet.is.null,symbol.is.null,name.is.null,image_url.is.null,launchpad.is.null' },
+    { table: 'pumpfun_watchlist',        select: '*', gaps: 'creator_wallet.is.null,token_symbol.is.null,token_name.is.null,image_url.is.null' },
+    { table: 'token_lifecycle',          select: '*', gaps: 'creator_wallet.is.null,symbol.is.null,name.is.null,image_url.is.null,launchpad.is.null' },
+    { table: 'holders_intel_seen_tokens',select: '*', gaps: 'creator_wallet.is.null,symbol.is.null,name.is.null,image_uri.is.null,launchpad.is.null' },
+    { table: 'funnel_feed_discoveries',  select: '*', gaps: 'creator_wallet.is.null,token_symbol.is.null,token_name.is.null,image_url.is.null,launchpad.is.null' },
   ];
 
   const perTableLimit = Math.max(1, Math.ceil(batchSize / specs.length));
@@ -553,9 +555,11 @@ Deno.serve(withRunLog('enrich-scraped-tokens', async (req) => {
       await delay(200);
     }
 
+    // Best-effort directory refresh — never block the batch on it
     if (enrichedCount > 0) {
-      const { error: refreshError } = await supabaseClient.rpc('refresh_master_token_directory');
-      if (refreshError) throw refreshError;
+      supabaseClient.rpc('refresh_master_token_directory')
+        .then(({ error }: any) => { if (error) console.warn('[enrich] directory refresh failed:', error.message); })
+        .catch((e: any) => console.warn('[enrich] directory refresh threw:', e?.message));
     }
 
     return new Response(
