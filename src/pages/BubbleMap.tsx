@@ -58,11 +58,11 @@ export default function BubbleMapPage() {
           </div>
         </div>
 
-        <PublicBubbleMap mode="authenticated" showUpgradePrompt initialToken={initialToken} />
-
         {initialToken && (
           <BadActorAlert tokenMint={initialToken} />
         )}
+
+        <PublicBubbleMap mode="authenticated" showUpgradePrompt initialToken={initialToken} />
 
         {!isPro && (
           <Card>
