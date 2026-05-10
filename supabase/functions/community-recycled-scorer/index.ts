@@ -10,7 +10,7 @@ const corsHeaders = {
 const PAID_TIERS = new Set(["x_subscriber", "pro", "dev", "enterprise"]);
 
 interface ReqBody {
-  mode: "evaluate" | "read" | "evaluate_recent";
+  mode: "evaluate" | "read" | "evaluate_recent" | "evaluate_for_token";
   community_id?: string;
   token_mint?: string; // optional override for which "fresh token" to evaluate against
 }
@@ -218,6 +218,60 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ processed }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    if (mode === "evaluate_for_token") {
+      // Mesh-pipeline path: given a token mint, evaluate every community linked to it.
+      if (!body.token_mint) {
+        return new Response(JSON.stringify({ error: "token_mint required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const mint = body.token_mint;
+      const seen = new Set<string>();
+
+      // Source 1: x_communities.linked_token_mints contains mint
+      const { data: viaArray } = await supabase
+        .from("x_communities")
+        .select("community_id")
+        .contains("linked_token_mints", [mint])
+        .limit(20);
+      for (const r of viaArray ?? []) seen.add((r as any).community_id);
+
+      // Source 2: token_social_links rows for this mint with a community URL
+      const { data: socials } = await supabase
+        .from("token_social_links")
+        .select("url, platform")
+        .eq("token_mint", mint)
+        .limit(20);
+      for (const s of socials ?? []) {
+        const m = (s as any).url?.match?.(/communities\/(\d{6,25})/i);
+        if (m) seen.add(m[1]);
+      }
+
+      // Source 3: reputation_mesh links token → x_community
+      const { data: meshRows } = await supabase
+        .from("reputation_mesh")
+        .select("linked_id")
+        .eq("source_type", "token")
+        .eq("source_id", mint)
+        .eq("linked_type", "x_community")
+        .limit(20);
+      for (const r of meshRows ?? []) seen.add((r as any).linked_id);
+
+      const results: any[] = [];
+      for (const cid of seen) {
+        try {
+          results.push(await evaluateOne(cid, mint));
+        } catch (e) {
+          console.warn("[scorer] eval_for_token failed", cid, (e as Error).message);
+        }
+      }
+      return new Response(
+        JSON.stringify({ token_mint: mint, evaluated: results.length, results }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     // mode === 'read' (tier-gated)
