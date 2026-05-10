@@ -218,6 +218,20 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
             evidence: { source: 'solscan-account-detail', rawLabel: fast.label, tags: fast.tags },
           }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true });
 
+        // ═══ CRITICAL: Persist KYC verification on the developer profile ═══
+        // Without this, master_token_directory.kyc_verified stays false forever
+        // because the matview reads developer_profiles.kyc_verified, not reputation_mesh.
+        await supabase
+          .from('developer_profiles')
+          .upsert({
+            master_wallet_address: walletAddress,
+            kyc_verified: true,
+            kyc_source: `solscan_direct:${directCex}`,
+            kyc_verification_date: new Date().toISOString(),
+            kyc_last_checked_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'master_wallet_address', ignoreDuplicates: false });
+
         return new Response(
           JSON.stringify({
             walletAddress,
