@@ -1467,7 +1467,10 @@ async function handleDev(chatId: number, telegramUserId: string, args: string) {
   }
 
   // ── Build message ──
-  let msg = `🏗 *Dev Intel Report*\n`;
+  const badActorBanner = await buildBadActorBanner(ca, gate.tier);
+  let msg = '';
+  if (badActorBanner) msg += badActorBanner;
+  msg += `🏗 *Dev Intel Report*\n`;
   if (tokenSymbol) {
     msg += `Token: *$${tokenSymbol.replace(/\$/g, '')}*${tokenName ? ` (${tokenName})` : ''}\n`;
   }
