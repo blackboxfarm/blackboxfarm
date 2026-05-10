@@ -232,6 +232,28 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
             updated_at: new Date().toISOString(),
           }, { onConflict: 'master_wallet_address', ignoreDuplicates: false });
 
+        // ── KYC Discovery Log (fast path) ──
+        try {
+          const { data: toks } = await supabase
+            .from('master_token_directory')
+            .select('token_mint')
+            .eq('creator_wallet', walletAddress)
+            .limit(50);
+          const tokenList = (toks ?? []).map(t => t.token_mint as string);
+          await supabase.from('kyc_discovery_log').upsert({
+            dev_wallet: walletAddress,
+            kyc_wallet: walletAddress,
+            kyc_label: directCex,
+            kyc_source: `solscan_direct:${directCex}`,
+            chain: [{ wallet: walletAddress, depth: 0, funderName: directCex, funderType: 'cex' }],
+            chain_depth: 0,
+            tokens: tokenList,
+            token_count: tokenList.length,
+            discovered_via: 'mesh-kyc-deep-search:solscan-direct',
+            discovered_at: new Date().toISOString(),
+          }, { onConflict: 'dev_wallet,kyc_wallet', ignoreDuplicates: true });
+        } catch (e) { console.warn('[KYCDeep] discovery_log fast-path insert failed', e); }
+
         return new Response(
           JSON.stringify({
             walletAddress,
@@ -456,6 +478,33 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
     await supabase
       .from('developer_profiles')
       .upsert(profilePayload, { onConflict: 'master_wallet_address', ignoreDuplicates: false });
+
+    // ── KYC Discovery Log (BFS path) ──
+    if (kycRoot) {
+      try {
+        const { data: toks } = await supabase
+          .from('master_token_directory')
+          .select('token_mint')
+          .eq('creator_wallet', walletAddress)
+          .limit(50);
+        const tokenList = (toks ?? []).map(t => t.token_mint as string);
+        await supabase.from('kyc_discovery_log').upsert({
+          dev_wallet: walletAddress,
+          kyc_wallet: kycRoot,
+          kyc_label: finalKycLabel,
+          kyc_source: profilePayload.kyc_source as string ?? null,
+          chain: chain.map(c => ({
+            wallet: c.wallet, funder: c.funder, funderName: c.funderName,
+            funderType: c.funderType, amountSol: c.amountSol, depth: c.depth,
+          })),
+          chain_depth: chain.length,
+          tokens: tokenList,
+          token_count: tokenList.length,
+          discovered_via: 'mesh-kyc-deep-search',
+          discovered_at: new Date().toISOString(),
+        }, { onConflict: 'dev_wallet,kyc_wallet', ignoreDuplicates: true });
+      } catch (e) { console.warn('[KYCDeep] discovery_log BFS insert failed', e); }
+    }
 
     return new Response(
       JSON.stringify({
