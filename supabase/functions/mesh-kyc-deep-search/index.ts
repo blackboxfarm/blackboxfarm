@@ -1,6 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { createApiLogger } from '../_shared/api-logger.ts';
+import { assertUpsert } from '../_shared/db-assert.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -204,7 +205,7 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
         // Self-expand the dictionary so future calls don't even need Solscan.
         // We tag this wallet's *funder* as the CEX address only if we can later
         // trace it; for now we just record the direct relationship in the mesh.
-        await supabase
+        await assertUpsert(supabase
           .from('reputation_mesh')
           .upsert({
             source_type: 'wallet',
@@ -216,12 +217,12 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
             discovered_via: 'mesh-kyc-deep-search:solscan-direct',
             discovered_at: new Date().toISOString(),
             evidence: { source: 'solscan-account-detail', rawLabel: fast.label, tags: fast.tags },
-          }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true });
+          }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true }), 'reputation_mesh');
 
         // ═══ CRITICAL: Persist KYC verification on the developer profile ═══
         // Without this, master_token_directory.kyc_verified stays false forever
         // because the matview reads developer_profiles.kyc_verified, not reputation_mesh.
-        await supabase
+        await assertUpsert(supabase
           .from('developer_profiles')
           .upsert({
             master_wallet_address: walletAddress,
@@ -230,17 +231,17 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
             kyc_verification_date: new Date().toISOString(),
             kyc_last_checked_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-          }, { onConflict: 'master_wallet_address', ignoreDuplicates: false });
+          }, { onConflict: 'master_wallet_address', ignoreDuplicates: false }), 'developer_profiles');
 
         // ── KYC Discovery Log (fast path) ──
-        try {
+        {
           const { data: toks } = await supabase
             .from('master_token_directory')
             .select('token_mint')
             .eq('creator_wallet', walletAddress)
             .limit(50);
           const tokenList = (toks ?? []).map(t => t.token_mint as string);
-          await supabase.from('kyc_discovery_log').upsert({
+          await assertUpsert(supabase.from('kyc_discovery_log').upsert({
             dev_wallet: walletAddress,
             kyc_wallet: walletAddress,
             kyc_label: directCex,
@@ -251,8 +252,8 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
             token_count: tokenList.length,
             discovered_via: 'mesh-kyc-deep-search:solscan-direct',
             discovered_at: new Date().toISOString(),
-          }, { onConflict: 'dev_wallet,kyc_wallet', ignoreDuplicates: true });
-        } catch (e) { console.warn('[KYCDeep] discovery_log fast-path insert failed', e); }
+          }, { onConflict: 'dev_wallet,kyc_wallet', ignoreDuplicates: true }), 'kyc_discovery_log');
+        }
 
         return new Response(
           JSON.stringify({
