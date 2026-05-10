@@ -1,8 +1,10 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { meshFeed } from '../_shared/mesh-feeder.ts';
 import { withRunLog } from '../_shared/run-logger.ts';
-import { fetchPumpFunCoin, resetPumpFunRunStats } from '../_shared/pumpfun-fetch.ts';
+import { fetchDexScreenerData } from '../_shared/dexscreener-api.ts';
+import { fetchLaunchpadCoin, detectLaunchpad, type LaunchpadCoin } from '../_shared/launchpad-fetch.ts';
 import { normalizeTokenWebsite } from '../_shared/non-token-domains.ts';
+import { resolveTokenCreator } from '../_shared/creator-resolver.ts';
 import { assertUpdate, assertUpsert } from '../_shared/db-assert.ts';
 
 const corsHeaders = {
@@ -11,39 +13,185 @@ const corsHeaders = {
 };
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
 const hasText = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
-
-const pumpImageUrl = (data: any): string | null =>
-  data?.image_uri || data?.image || data?.image_url || data?.imageUrl || null;
-
-const needsMetadata = (token: any) =>
-  !hasText(token.symbol) || !hasText(token.name) || !hasText(token.image_url) || !hasText(token.launchpad) || !token.metadata_fetched_at;
-
-// Detect launchpad based on token mint and DEX data
-const detectLaunchpad = (tokenMint: string, pairData: any): string | null => {
-  // Check for pump.fun pattern (typically starts with 'pump' in URL or specific indicators)
-  if (pairData?.url?.includes('pump.fun') || pairData?.info?.websites?.some((w: any) => w.url?.includes('pump.fun'))) {
-    return 'pump.fun';
+const asNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
   }
-  
-  // Check for bonk.fun
-  if (pairData?.url?.includes('bonk.fun') || pairData?.info?.websites?.some((w: any) => w.url?.includes('bonk.fun'))) {
-    return 'bonk.fun';
-  }
-  
-  // Check for bags.fm
-  if (pairData?.url?.includes('bags.fm') || pairData?.info?.websites?.some((w: any) => w.url?.includes('bags.fm'))) {
-    return 'bags.fm';
-  }
-  
-  // Check based on DEX ID
-  if (pairData?.dexId === 'raydium') {
-    return 'raydium';
-  }
-  
   return null;
 };
+
+const launchpadLabel = (lp: string | null | undefined): string | null => {
+  if (lp === 'pumpfun') return 'pump.fun';
+  if (lp === 'bagsfm') return 'bags.fm';
+  if (lp === 'bonkfun') return 'bonk.fun';
+  if (lp === 'meteora') return 'meteora';
+  return null;
+};
+
+type TargetTable = 'scraped_tokens' | 'pumpfun_watchlist';
+interface EnrichTarget { table: TargetTable; token: any; mint: string; }
+
+function rowSymbol(target: EnrichTarget): string | null {
+  return target.table === 'scraped_tokens' ? target.token.symbol : target.token.token_symbol;
+}
+function rowName(target: EnrichTarget): string | null {
+  return target.table === 'scraped_tokens' ? target.token.name : target.token.token_name;
+}
+function needsIdentity(target: EnrichTarget): boolean {
+  return !hasText(rowSymbol(target)) || !hasText(rowName(target)) || !hasText(target.token.image_url);
+}
+function needsCreator(target: EnrichTarget): boolean {
+  return !hasText(target.token.creator_wallet);
+}
+function needsLaunchpad(target: EnrichTarget): boolean {
+  return target.table === 'scraped_tokens' && !hasText(target.token.launchpad);
+}
+function setTextIfMissing(updates: Record<string, unknown>, column: string, current: unknown, value: unknown) {
+  if (!hasText(current) && hasText(value)) updates[column] = value.trim();
+}
+function setNumberIfPositive(updates: Record<string, unknown>, column: string, value: unknown) {
+  const n = asNumber(value);
+  if (n !== null && n > 0) updates[column] = n;
+}
+function bestDexPair(dexResult: any): any | null {
+  const pairs = Array.isArray(dexResult?.pairs) ? dexResult.pairs.filter((p: any) => p?.chainId === 'solana' || !p?.chainId) : [];
+  if (pairs.length === 0) return null;
+  return pairs.reduce((best: any, p: any) => (p?.liquidity?.usd || 0) > (best?.liquidity?.usd || 0) ? p : best, pairs[0]);
+}
+
+async function captureWebsite(supabaseClient: any, mint: string, rawUrl: string | null | undefined, source: string) {
+  const normalized = normalizeTokenWebsite(rawUrl);
+  if (!normalized) return;
+  await assertUpsert(
+    supabaseClient
+      .from('token_website_sources')
+      .upsert(
+        { token_mint: mint, url: normalized.url, host: normalized.host, source },
+        { onConflict: 'token_mint,url,source', ignoreDuplicates: true }
+      ),
+    'token_website_sources',
+  );
+}
+
+function applyLaunchpadData(target: EnrichTarget, updates: Record<string, unknown>, data: LaunchpadCoin) {
+  const now = new Date().toISOString();
+  if (target.table === 'scraped_tokens') {
+    setTextIfMissing(updates, 'symbol', target.token.symbol, data.symbol);
+    setTextIfMissing(updates, 'name', target.token.name, data.name);
+    setTextIfMissing(updates, 'image_url', target.token.image_url, data.imageUri);
+    setTextIfMissing(updates, 'creator_wallet', target.token.creator_wallet, data.creator);
+    setTextIfMissing(updates, 'launchpad', target.token.launchpad, launchpadLabel(data.launchpad));
+    if (hasText(data.creator) || hasText(target.token.creator_wallet)) updates.creator_fetched_at = now;
+    if (hasText(data.symbol) || hasText(data.name) || hasText(data.imageUri)) updates.metadata_fetched_at = now;
+  } else {
+    setTextIfMissing(updates, 'token_symbol', target.token.token_symbol, data.symbol);
+    setTextIfMissing(updates, 'token_name', target.token.token_name, data.name);
+    setTextIfMissing(updates, 'image_url', target.token.image_url, data.imageUri);
+    setTextIfMissing(updates, 'creator_wallet', target.token.creator_wallet, data.creator);
+    setTextIfMissing(updates, 'twitter_url', target.token.twitter_url, data.twitter);
+    setTextIfMissing(updates, 'telegram_url', target.token.telegram_url, data.telegram);
+    setTextIfMissing(updates, 'website_url', target.token.website_url, data.website);
+    if (data.createdAt && !target.token.created_at_blockchain) updates.created_at_blockchain = data.createdAt;
+    setNumberIfPositive(updates, 'market_cap_usd', data.marketCapUsd);
+    setNumberIfPositive(updates, 'ath_market_cap_usd', data.athMarketCapUsd);
+    if (asNumber(data.athMarketCapUsd) && !target.token.ath_market_cap_at) updates.ath_market_cap_at = now;
+    if (hasText(data.imageUri)) updates.has_image = true;
+    const socialsCount = [data.twitter, data.telegram, data.website, data.discord].filter(hasText).length;
+    if (socialsCount > (target.token.socials_count ?? 0)) updates.socials_count = socialsCount;
+    updates.last_checked_at = now;
+    updates.last_processor = 'enrich-scraped-tokens';
+    updates.metadata = {
+      ...(target.token.metadata ?? {}),
+      launchpad: data.launchpad,
+      description: data.description ?? (target.token.metadata?.description ?? null),
+      discord: data.discord ?? (target.token.metadata?.discord ?? null),
+      launchpad_raw_present: !!data.raw,
+      launchpad_fetched_at: now,
+    };
+  }
+}
+
+function applyDexData(target: EnrichTarget, updates: Record<string, unknown>, dexResult: any, pair: any) {
+  const now = new Date().toISOString();
+  const symbol = pair?.baseToken?.symbol;
+  const name = pair?.baseToken?.name;
+  const imageUrl = pair?.info?.imageUrl;
+  const marketCap = pair?.marketCap ?? pair?.fdv;
+  const priceUsd = dexResult?.priceUsd || pair?.priceUsd;
+  const liquidityUsd = dexResult?.vitality?.liquidityUsd ?? pair?.liquidity?.usd;
+  const pairCreatedAt = pair?.pairCreatedAt ? new Date(pair.pairCreatedAt).toISOString() : null;
+
+  if (target.table === 'scraped_tokens') {
+    setTextIfMissing(updates, 'symbol', target.token.symbol, symbol);
+    setTextIfMissing(updates, 'name', target.token.name, name);
+    setTextIfMissing(updates, 'image_url', target.token.image_url, imageUrl);
+    if (pairCreatedAt && !target.token.raydium_date) updates.raydium_date = pairCreatedAt;
+    if (!hasText(target.token.launchpad)) {
+      const dexLaunchpad = dexResult?.launchpadInfo?.detected ? dexResult.launchpadInfo.name : launchpadLabel(detectLaunchpad(target.mint));
+      if (hasText(dexLaunchpad)) updates.launchpad = dexLaunchpad;
+    }
+    if (hasText(symbol) || hasText(name) || hasText(imageUrl)) updates.metadata_fetched_at = now;
+  } else {
+    setTextIfMissing(updates, 'token_symbol', target.token.token_symbol, symbol);
+    setTextIfMissing(updates, 'token_name', target.token.token_name, name);
+    setTextIfMissing(updates, 'image_url', target.token.image_url, imageUrl);
+    setTextIfMissing(updates, 'twitter_url', target.token.twitter_url, dexResult?.socials?.twitter);
+    setTextIfMissing(updates, 'telegram_url', target.token.telegram_url, dexResult?.socials?.telegram);
+    setTextIfMissing(updates, 'website_url', target.token.website_url, dexResult?.socials?.website);
+    if (pairCreatedAt && !target.token.created_at_blockchain) updates.created_at_blockchain = pairCreatedAt;
+    setTextIfMissing(updates, 'raydium_pool_address', target.token.raydium_pool_address, pair?.pairAddress);
+    setNumberIfPositive(updates, 'price_usd', priceUsd);
+    setNumberIfPositive(updates, 'price_current', priceUsd);
+    setNumberIfPositive(updates, 'market_cap_usd', marketCap);
+    setNumberIfPositive(updates, 'liquidity_usd', liquidityUsd);
+    if (hasText(imageUrl)) updates.has_image = true;
+    updates.last_checked_at = now;
+    updates.last_processor = 'enrich-scraped-tokens';
+    updates.metadata = {
+      ...(target.token.metadata ?? {}),
+      dexscreener: {
+        pairAddress: pair?.pairAddress ?? null,
+        dexId: pair?.dexId ?? null,
+        url: pair?.url ?? null,
+        fetchedAt: now,
+      },
+    };
+  }
+}
+
+async function buildTargets(supabaseClient: any, tokenMints: string[], batchSize: number): Promise<EnrichTarget[]> {
+  const hasExplicitMints = tokenMints.length > 0;
+  const targets: EnrichTarget[] = [];
+
+  let scrapedQuery = supabaseClient.from('scraped_tokens').select('*').limit(batchSize);
+  if (hasExplicitMints) {
+    scrapedQuery = scrapedQuery.in('token_mint', tokenMints);
+  } else {
+    scrapedQuery = scrapedQuery.or('metadata_fetched_at.is.null,creator_fetched_at.is.null,symbol.is.null,symbol.eq.,name.is.null,name.eq.,image_url.is.null,image_url.eq.,launchpad.is.null,launchpad.eq.,creator_wallet.is.null,creator_wallet.eq.');
+  }
+  const { data: scrapedTokens, error: scrapedError } = await scrapedQuery;
+  if (scrapedError) throw scrapedError;
+  for (const token of scrapedTokens ?? []) {
+    if (hasText(token.token_mint)) targets.push({ table: 'scraped_tokens', token, mint: token.token_mint });
+  }
+
+  let watchlistQuery = supabaseClient.from('pumpfun_watchlist').select('*').limit(batchSize);
+  if (hasExplicitMints) {
+    watchlistQuery = watchlistQuery.in('token_mint', tokenMints);
+  } else {
+    watchlistQuery = watchlistQuery.or('token_symbol.is.null,token_symbol.eq.,token_name.is.null,token_name.eq.,image_url.is.null,image_url.eq.,creator_wallet.is.null,creator_wallet.eq.,created_at_blockchain.is.null');
+  }
+  const { data: watchlistTokens, error: watchlistError } = await watchlistQuery;
+  if (watchlistError) throw watchlistError;
+  for (const token of watchlistTokens ?? []) {
+    if (hasText(token.token_mint)) targets.push({ table: 'pumpfun_watchlist', token, mint: token.token_mint });
+  }
+
+  return targets;
+}
 
 Deno.serve(withRunLog('enrich-scraped-tokens', async (req) => {
   if (req.method === 'OPTIONS') {
@@ -51,243 +199,139 @@ Deno.serve(withRunLog('enrich-scraped-tokens', async (req) => {
   }
 
   try {
-    const { tokenMints, batchSize = 50 } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const tokenMints = Array.isArray(body.tokenMints)
+      ? [...new Set(body.tokenMints.map((m: unknown) => String(m).trim()).filter(hasText))]
+      : [];
+    const batchSize = Math.min(Math.max(Number(body.batchSize ?? 25), 1), 25);
 
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Fetch tokens that need enrichment. Missing actual fields matter more than timestamps:
-    // old runs stamped metadata_fetched_at even when symbol/name/image/launchpad stayed empty.
-    const hasExplicitMints = tokenMints && Array.isArray(tokenMints) && tokenMints.length > 0;
-    let query = supabaseClient
-      .from('scraped_tokens')
-      .select('*')
-      .limit(batchSize);
-
-    if (hasExplicitMints) {
-      query = query.in('token_mint', tokenMints);
-    } else {
-      query = query.or('metadata_fetched_at.is.null,creator_fetched_at.is.null,symbol.is.null,name.is.null,image_url.is.null,launchpad.is.null');
-    }
-
-    const { data: tokens, error: fetchError } = await query;
-
-    if (fetchError) {
-      throw fetchError;
-    }
-
-    if (!tokens || tokens.length === 0) {
+    const targets = await buildTargets(supabaseClient, tokenMints, batchSize);
+    if (targets.length === 0) {
       return new Response(
-        JSON.stringify({ message: 'No tokens need enrichment', enriched: 0 }),
+        JSON.stringify({ message: 'No tokens need enrichment', enriched: 0, total: 0 }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       );
     }
 
-    console.log(`Enriching ${tokens.length} tokens...`);
+    console.log(`Enriching ${targets.length} token rows across scraped_tokens + pumpfun_watchlist...`);
 
+    const launchpadCache = new Map<string, Awaited<ReturnType<typeof fetchLaunchpadCoin>>>();
+    const dexCache = new Map<string, Awaited<ReturnType<typeof fetchDexScreenerData>>>();
     let enrichedCount = 0;
-    const results = [];
+    const byTable: Record<TargetTable, number> = { scraped_tokens: 0, pumpfun_watchlist: 0 };
+    const results: any[] = [];
 
-    for (const token of tokens) {
+    for (const target of targets) {
       try {
-        const updates: any = {};
-        let needsUpdate = false;
+        const updates: Record<string, unknown> = {};
+        const providerNotes: string[] = [];
+        const shouldFetchLaunchpad = detectLaunchpad(target.mint) !== 'unknown' && (needsIdentity(target) || needsCreator(target) || needsLaunchpad(target));
 
-        const isPumpToken = token.token_mint?.endsWith('pump') || token.launchpad === 'pump.fun';
-
-        // Pump.fun is authoritative for pump mints. Fetch it even if creator_wallet is already filled,
-        // because symbol/name/image often remain blank when rows came from HTML/mint-only discovery.
-        if (isPumpToken && (needsMetadata(token) || !token.creator_wallet || !token.creator_fetched_at)) {
-          try {
-            const pumpData = await fetchPumpFunCoin(token.token_mint, 'enrich-scraped-tokens');
-
-            if (pumpData) {
-              if (!hasText(token.symbol) && hasText(pumpData.symbol)) updates.symbol = pumpData.symbol.trim();
-              if (!hasText(token.name) && hasText(pumpData.name)) updates.name = pumpData.name.trim();
-              const image = pumpImageUrl(pumpData);
-              if (!hasText(token.image_url) && hasText(image)) updates.image_url = image;
-              if (!hasText(token.launchpad)) updates.launchpad = 'pump.fun';
-              if (!token.creator_wallet && hasText(pumpData.creator)) updates.creator_wallet = pumpData.creator;
-              if (hasText(token.creator_wallet) || hasText(pumpData.creator)) updates.creator_fetched_at = new Date().toISOString();
-              if (hasText(pumpData.symbol) || hasText(pumpData.name) || hasText(image)) updates.metadata_fetched_at = new Date().toISOString();
-              needsUpdate = Object.keys(updates).length > 0;
-
-              const lp = normalizeTokenWebsite(pumpData.website);
-              if (lp) {
-                await assertUpsert(
-                  supabaseClient
-                    .from('token_website_sources')
-                    .upsert(
-                      { token_mint: token.token_mint, url: lp.url, host: lp.host, source: 'launchpad' },
-                      { onConflict: 'token_mint,url,source', ignoreDuplicates: true }
-                    ),
-                  'token_website_sources',
-                );
-              }
-            }
-          } catch (error) {
-            console.error(`Failed to fetch Pump.fun data for ${token.token_mint}:`, error);
+        if (shouldFetchLaunchpad) {
+          let lp = launchpadCache.get(target.mint);
+          if (!lp) {
+            lp = await fetchLaunchpadCoin(target.mint, 'enrich-scraped-tokens');
+            launchpadCache.set(target.mint, lp);
           }
-
-          await delay(250);
+          if (lp.data) {
+            applyLaunchpadData(target, updates, lp.data);
+            await captureWebsite(supabaseClient, target.mint, lp.data.website, 'launchpad');
+            providerNotes.push(`launchpad:${lp.data.launchpad}`);
+          } else {
+            providerNotes.push(`launchpad_empty:${lp.launchpad}:${lp.reason ?? 'no_reason'}`);
+          }
         }
 
-        // Fetch metadata from DexScreener if still missing (or for non-pump tokens)
-        if (!updates.metadata_fetched_at && (!token.metadata_fetched_at || !token.symbol || !token.name || !token.image_url)) {
-          try {
-            const dexResponse = await fetch(
-              `https://api.dexscreener.com/latest/dex/tokens/${token.token_mint}`
-            );
-
-            if (dexResponse.ok) {
-              const dexData = await dexResponse.json();
-              const pair = dexData.pairs?.[0];
-              
-              if (pair) {
-                // Update symbol and name from baseToken
-                if (!token.symbol && pair.baseToken?.symbol) {
-                  updates.symbol = pair.baseToken.symbol;
-                }
-                if (!token.name && pair.baseToken?.name) {
-                  updates.name = pair.baseToken.name;
-                }
-                if (!token.image_url && pair.info?.imageUrl) {
-                  updates.image_url = pair.info.imageUrl;
-                }
-                if (pair.pairCreatedAt) {
-                  updates.raydium_date = new Date(pair.pairCreatedAt).toISOString();
-                }
-                
-                // Detect launchpad
-                const launchpad = detectLaunchpad(token.token_mint, pair);
-                if (launchpad) {
-                  updates.launchpad = launchpad;
-                }
-                
-                updates.metadata_fetched_at = new Date().toISOString();
-                needsUpdate = true;
-              }
-            }
-          } catch (error) {
-            console.error(`Failed to fetch DexScreener data for ${token.token_mint}:`, error);
+        if (needsIdentity(target) || target.table === 'pumpfun_watchlist') {
+          let dex = dexCache.get(target.mint);
+          if (!dex) {
+            dex = await fetchDexScreenerData(target.mint);
+            dexCache.set(target.mint, dex);
           }
-
-          await delay(250); // Rate limiting
+          const pair = bestDexPair(dex);
+          if (pair) {
+            applyDexData(target, updates, dex, pair);
+            await captureWebsite(supabaseClient, target.mint, dex.socials?.website, 'dexscreener');
+            providerNotes.push('dexscreener');
+          } else {
+            providerNotes.push('dexscreener_empty');
+          }
         }
 
-        // Fetch creator wallet if missing
-        if (!token.creator_wallet && !updates.creator_wallet) {
-          try {
-            // For pump.fun tokens, call pump.fun API directly (authoritative source)
-            if (isPumpToken) {
-              const pumpData = await fetchPumpFunCoin(token.token_mint, 'enrich-scraped-tokens');
-
-              if (pumpData?.creator) {
-                updates.creator_wallet = pumpData.creator;
-                updates.creator_fetched_at = new Date().toISOString();
-                needsUpdate = true;
-              }
-
-              // ── Launchpad website capture (one-time, event-driven) ──
-              // Pump.fun's /coins/{mint} returns the creator-set website.
-              // We record it once into token_website_sources; the UNIQUE
-              // (mint,url,source) constraint guarantees no re-checks.
-              const lp = normalizeTokenWebsite(pumpData?.website);
-              if (lp) {
-                await assertUpsert(
-                  supabaseClient
-                    .from('token_website_sources')
-                    .upsert(
-                      { token_mint: token.token_mint, url: lp.url, host: lp.host, source: 'launchpad' },
-                      { onConflict: 'token_mint,url,source', ignoreDuplicates: true }
-                    ),
-                  'token_website_sources',
-                );
-              }
-            } else {
-              // For non-pump tokens, use solscan-creator-lookup
-              const creatorResponse = await fetch(
-                `${Deno.env.get('SUPABASE_URL')}/functions/v1/solscan-creator-lookup`,
-                {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`
-                  },
-                  body: JSON.stringify({ tokenMint: token.token_mint })
-                }
-              );
-
-              if (creatorResponse.ok) {
-                const creatorData = await creatorResponse.json();
-                if (creatorData.creatorWallet) {
-                  updates.creator_wallet = creatorData.creatorWallet;
-                  updates.creator_fetched_at = new Date().toISOString();
-                  needsUpdate = true;
-                }
-              }
-            }
-          } catch (error) {
-            console.error(`Failed to fetch creator for ${token.token_mint}:`, error);
+        if (needsCreator(target) && !hasText(updates.creator_wallet)) {
+          const errors: string[] = [];
+          const resolved = await resolveTokenCreator(target.mint, supabaseClient, errors);
+          if (resolved.creatorWallet) {
+            updates.creator_wallet = resolved.creatorWallet;
+            if (target.table === 'scraped_tokens') updates.creator_fetched_at = new Date().toISOString();
+            providerNotes.push(`creator:${resolved.source}`);
+          } else {
+            providerNotes.push(`creator_empty:${errors.join('|') || 'no_source'}`);
           }
-
-          await delay(250); // Rate limiting
         }
 
-        // Update database if we have new data
-        if (needsUpdate) {
+        if (Object.keys(updates).length > 0) {
           await assertUpdate(
             supabaseClient
-              .from('scraped_tokens')
+              .from(target.table)
               .update(updates)
-              .eq('token_mint', token.token_mint),
-            'scraped_tokens',
+              .eq('token_mint', target.mint),
+            target.table,
           );
-
           enrichedCount++;
-          results.push({
-            token_mint: token.token_mint,
-            success: true,
-            updates
-          });
-          
-          // 🕸️ MESH FEEDER: Every enriched token feeds the mesh
+          byTable[target.table]++;
+
           meshFeed.token(supabaseClient, {
-            mint: token.token_mint,
-            symbol: updates.symbol || token.symbol,
-            name: updates.name || token.name,
-            creatorWallet: updates.creator_wallet || token.creator_wallet,
+            mint: target.mint,
+            symbol: String(updates.symbol ?? updates.token_symbol ?? rowSymbol(target) ?? ''),
+            name: String(updates.name ?? updates.token_name ?? rowName(target) ?? ''),
+            creatorWallet: String(updates.creator_wallet ?? target.token.creator_wallet ?? ''),
+            twitterUrl: String(updates.twitter_url ?? target.token.twitter_url ?? ''),
+            telegramUrl: String(updates.telegram_url ?? target.token.telegram_url ?? ''),
+            websiteUrl: String(updates.website_url ?? target.token.website_url ?? ''),
             source: 'enrich-scraped-tokens',
           }).catch(e => console.warn('[mesh-feeder] enrich feed failed:', e));
         }
 
-      } catch (error) {
-        console.error(`Error enriching token ${token.token_mint}:`, error);
         results.push({
-          token_mint: token.token_mint,
+          token_mint: target.mint,
+          table: target.table,
+          success: Object.keys(updates).length > 0,
+          updates,
+          providers: providerNotes,
+          reason: Object.keys(updates).length > 0 ? undefined : 'no_provider_data_returned',
+        });
+      } catch (error) {
+        if ((error as any)?.name === 'DbWriteError') throw error;
+        console.error(`Error enriching ${target.table} ${target.mint}:`, error);
+        results.push({
+          token_mint: target.mint,
+          table: target.table,
           success: false,
-          error: (error as Error).message
+          error: (error as Error).message,
         });
       }
+      await delay(150);
     }
 
     if (enrichedCount > 0) {
       const { error: refreshError } = await supabaseClient.rpc('refresh_master_token_directory');
-      if (refreshError) {
-        console.error('[enrich-scraped-tokens] master directory refresh failed:', refreshError);
-        throw refreshError;
-      }
+      if (refreshError) throw refreshError;
     }
 
-    console.log(`Enrichment complete: ${enrichedCount}/${tokens.length} tokens updated`);
+    console.log(`Enrichment complete: ${enrichedCount}/${targets.length} token rows updated`);
 
     return new Response(
       JSON.stringify({
-        message: `Enriched ${enrichedCount} of ${tokens.length} tokens`,
+        message: `Enriched ${enrichedCount} of ${targets.length} token rows`,
         enriched: enrichedCount,
-        total: tokens.length,
+        total: targets.length,
+        byTable,
         results
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }

@@ -1073,8 +1073,9 @@ serve(withRunLog('bagless-holders-report', async (req) => {
       console.warn('[TokenSearchLogger] Background logging error:', e)
     );
 
-    // Write health snapshot for Litmus Strip (fire-and-forget)
-    upsertHealthSnapshot(supabaseForMesh, {
+    // Write health snapshot for Litmus Strip. This is a primary stats write:
+    // if it fails, the run must fail loudly instead of returning a fake success.
+    await upsertHealthSnapshot(supabaseForMesh, {
       tokenMint,
       healthScore,
       healthGrade,
@@ -1084,27 +1085,28 @@ serve(withRunLog('bagless-holders-report', async (req) => {
       whaleCount: simpleTiers.whales.count,
       top10Pct: distributionStats?.top10Percentage ?? null,
       source: 'holders_query',
-    }).catch(e => console.warn('[bagless] Snapshot write failed:', e));
+    });
 
     // Upsert into holders_intel_seen_tokens — every scan grows the intelligence layer
-    Promise.resolve(supabaseForMesh.from('holders_intel_seen_tokens').upsert({
-      token_mint: tokenMint,
-      symbol: tokenSymbol || null,
-      name: tokenName || null,
-      last_seen_at: new Date().toISOString(),
-      times_seen: 1, // Will increment via ON CONFLICT if supported, otherwise just marks seen
-      market_cap_at_discovery: inferredMarketCapUSD || null,
-      health_grade: healthGrade || null,
-    }, { onConflict: 'token_mint' })).then(({ error }: { error: any }) => {
-      if (error) console.warn('[bagless] seen_tokens upsert failed:', (error as Error).message);
-      else console.log(`[bagless] ✅ Upserted ${tokenMint.slice(0,8)} into seen_tokens`);
-    }).catch((e: any) => console.warn('[bagless] seen_tokens upsert error:', e));
+    await assertDbWrite(
+      supabaseForMesh.from('holders_intel_seen_tokens').upsert({
+        token_mint: tokenMint,
+        symbol: tokenSymbol || null,
+        name: tokenName || null,
+        last_seen_at: new Date().toISOString(),
+        times_seen: 1, // Will increment via ON CONFLICT if supported, otherwise just marks seen
+        market_cap_at_discovery: inferredMarketCapUSD || null,
+        health_grade: healthGrade || null,
+      }, { onConflict: 'token_mint' }),
+      'holders_intel_seen_tokens',
+      'UPSERT',
+    );
+    console.log(`[bagless] ✅ Upserted ${tokenMint.slice(0,8)} into seen_tokens`);
 
     // 🪣 Hydrate pumpfun_watchlist with this scan's decision data so the admin
     // Token Funnel Pool reflects real holder/grade/MC values instead of zeros.
-    // Fire-and-forget — never block the response on this write.
-    (async () => {
-      try {
+    // This is not optional. The table must reflect the fetched scan facts.
+    {
         const { data: existingWl } = await supabaseForMesh
           .from('pumpfun_watchlist')
           .select('id, ath_market_cap_usd, price_ath_usd, holder_count_peak')
@@ -1119,8 +1121,13 @@ serve(withRunLog('bagless-holders-report', async (req) => {
           last_processor: 'bagless-holders-report',
           token_symbol: tokenSymbol || null,
           token_name: tokenName || null,
+          image_url: dexPair0?.info?.imageUrl || null,
+          twitter_url: socials?.twitter || null,
+          telegram_url: socials?.telegram || null,
+          website_url: socials?.website || null,
           holder_count: totalHolders,
         };
+        if (vitality?.pairCreatedAt) hydrate.created_at_blockchain = new Date(vitality.pairCreatedAt).toISOString();
         if (typeof tokenPriceUSD === 'number' && tokenPriceUSD > 0) {
           hydrate.price_usd = tokenPriceUSD;
           hydrate.price_current = tokenPriceUSD;
@@ -1146,21 +1153,24 @@ serve(withRunLog('bagless-holders-report', async (req) => {
         hydrate.holder_count_peak = Math.max(existingWl?.holder_count_peak ?? 0, totalHolders);
 
         if (existingWl?.id) {
-          const { error } = await supabaseForMesh.from('pumpfun_watchlist').update(hydrate).eq('id', existingWl.id);
-          if (error) console.warn('[bagless] pumpfun_watchlist update failed:', error.message);
-          else console.log(`[bagless] 🪣 Hydrated pumpfun_watchlist row for ${tokenMint.slice(0, 8)}`);
-        } else {
-          const { error } = await supabaseForMesh.from('pumpfun_watchlist').upsert(
-            { token_mint: tokenMint, status: 'pending_triage', source: 'bagless-holders-report', ...hydrate },
-            { onConflict: 'token_mint' }
+          await assertDbWrite(
+            supabaseForMesh.from('pumpfun_watchlist').update(hydrate).eq('id', existingWl.id),
+            'pumpfun_watchlist',
+            'UPDATE',
           );
-          if (error) console.warn('[bagless] pumpfun_watchlist upsert failed:', error.message);
-          else console.log(`[bagless] 🪣 Created+hydrated pumpfun_watchlist row for ${tokenMint.slice(0, 8)}`);
+          console.log(`[bagless] 🪣 Hydrated pumpfun_watchlist row for ${tokenMint.slice(0, 8)}`);
+        } else {
+          await assertDbWrite(
+            supabaseForMesh.from('pumpfun_watchlist').upsert(
+              { token_mint: tokenMint, status: 'pending_triage', source: 'bagless-holders-report', ...hydrate },
+              { onConflict: 'token_mint' }
+            ),
+            'pumpfun_watchlist',
+            'UPSERT',
+          );
+          console.log(`[bagless] 🪣 Created+hydrated pumpfun_watchlist row for ${tokenMint.slice(0, 8)}`);
         }
-      } catch (e) {
-        console.warn('[bagless] pumpfun_watchlist hydrate error (non-blocking):', e);
-      }
-    })();
+    }
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
