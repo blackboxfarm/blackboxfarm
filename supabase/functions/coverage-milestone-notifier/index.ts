@@ -6,7 +6,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 
-const ADMIN_PHONE = '+12263835975';
+const ADMIN_PHONE = '+12265835975';
 const TWILIO_FROM = '+16624814161';
 
 async function sendSms(body: string): Promise<{ ok: boolean; status?: number; err?: string }> {
