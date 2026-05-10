@@ -1975,6 +1975,7 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
   }
 
   const isLite = !hasTier(gate.tier, "x_subscriber");
+  const badActorBanner = await buildBadActorBanner(ca, gate.tier);
 
   const totalHolders = data.realHolders ?? data.totalHolders ?? "?";
   const healthScore = data.healthScore?.score ?? data.stabilityScore ?? "?";
@@ -1987,6 +1988,7 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
 
   let header = `\`${ca}\`\n` +
     `${tokenHeaderLine(symbol, name, mcap)}\n\n`;
+  if (badActorBanner) header = badActorBanner + header;
 
   if (isLite) {
     await sendMessage(chatId,
