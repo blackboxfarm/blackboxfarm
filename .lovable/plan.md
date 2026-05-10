@@ -1,88 +1,71 @@
-# Recycled X Community Detection — Final Plan
 
-## Pattern recap
-Serial ruggers re-skin one X Community across many launches to inherit member counts. Signals: community age >> token age, multiple prior names, member count >> holder count, prior linked mints mostly dead, admin handle = known serial dev.
+## Quick verdict per section
 
-## Scoring rules
+### 1. Reputation Backfill Engine — **Useful, but one-shot. Should be hidden, not removed.**
 
-```text
-Signal                           Threshold              Score
-─────────────────────────────────────────────────────────────
-community_age_vs_mint_gap        > 30 days              +15
-                                 > 90 days              +25
-                                 > 180 days             +40
-name_history_count               >= 2 prior names       +20
-                                 >= 4 prior names       +35
-member_count_vs_holders_ratio    members > 3× holders   +15
-                                 members > 10× holders  +25
-prior_linked_mints_dead_rate     >50% rugged/dead       +20
-                                 >80% rugged/dead       +35
-admin_handle_serial_dev          admin = creator of
-                                 ≥2 prior failed mints  +30
-rename_frequency                 ≥1 rename per 30d      +15
-```
+- **"Start Backfill"** invokes the `reputation-backfill` edge function. It walks every row in `dev_wallet_reputation` (63,432 rows) and upserts a matching row into `developer_profiles` (currently 59,712 — so it has already been run almost to completion). Pure DB-to-DB sync, no external API calls.
+- **"Reset"** just zeroes the local React state (offset/processed/errors counters) so you can re-run from scratch. It does **not** wipe any DB data.
+- **Status:** the engine itself is still wired and works. But this is a one-time migration tool — once `developer_profiles` is fully populated, ongoing sync happens through the live mesh writers (creator-fusion, fuseCreator, etc.), not this button.
+- **Recommendation:** collapse it under a "Maintenance / one-shot tools" accordion. Don't delete — we'll need it again any time `dev_wallet_reputation` schema expands.
 
-Sum capped at 100 → `recycled_community_score`. Bands:
-- 0-24 clean
-- 25-49 ⚠ suspicious (warn)
-- 50-74 🟠 likely recycled (warn)
-- 75+ 🔴 confirmed recycle (warn — never block)
+---
 
-Per your decisions: **warn only**, never auto-blacklist. Anyone can remake a community, but these actors don't because the bloated member count is the asset.
+### 2. Genealogy Retracer (KYC Trail Walker) — **The panel is fine. The data behind it explains the 0%.**
 
-## Tier gating (Pro-only)
-Score is **paid-subscriber gated**:
-- Anon / free / auth: see a locked teaser badge "🔒 Recycled Community Score — Pro" with a one-line explanation and an upgrade CTA. No numeric score, no signal breakdown.
-- `x_subscriber` / `pro` / `dev` / `enterprise`: full score, band, and signal-by-signal breakdown.
-- Edge function returns the full payload only when caller's tier ≥ `x_subscriber`; otherwise returns `{ locked: true, tier_required: 'pro' }`.
-- This is consistent with `useUserTier` / `PremiumFeatureGate` patterns already in the codebase.
+Live numbers from the DB right now:
 
-## DB additions (one migration)
-- Add to `x_communities`: `recycled_score int`, `recycled_band text`, `recycled_signals jsonb`, `recycled_evaluated_at timestamptz`.
-- View `v_community_token_outcomes` — per community, aggregate linked mints' outcomes (peak mcap, rugged flag, age) from `developer_tokens` + `pumpfun_watchlist`.
-- View `v_community_admin_dev_link` — joins `admin_usernames` against `developer_profiles.x_handle` to surface "this admin is a serial dev with N prior failures".
-- RLS: `x_communities` already admin-readable; the score columns inherit. The edge function enforces tier gating before returning the JSON, not RLS.
+| Metric | Value |
+|---|---|
+| Lifecycle rows | 3,407 |
+| With genealogy_chain | 3,012 (88%) |
+| With kyc_status set | 3,407 (100%) |
+| With kyc_label set | 2,685 (79%) |
+| **With genealogy_kyc_root** | **0** |
+| Attempted at least once | 3,224 |
 
-## New edge function `community-recycled-scorer`
-- Modes: `evaluate` (server-internal, no auth) and `read` (frontend, JWT required, tier-gated).
-- `evaluate(community_id)`: pulls community + its currently-linked fresh token, computes the 6 signals via `_shared/community-rules.ts`, writes `recycled_score / band / signals / evaluated_at` back to row. No PII returned.
-- `read(community_id)`: validates JWT, looks up tier via `web_user_subscriptions` (mirroring `useUserTier`), returns:
-  - locked stub for free/auth users
-  - full payload for x_subscriber+
-- Cron `*/10 * * * *`: re-evaluates communities touched in the last 24 h (only when a new mint binds, matching your "don't check all the time" rule).
+**Why KYC root = 0%:** I sampled rows where `kyc_label` is populated. Every single one has `kyc_label = 'Exhausted'` and the deepest hop has `cexName: null`. Translation: the Helius walker reaches max depth (some chains go 22 hops deep) without ever landing on a wallet that exists in `_shared/cex-wallets.ts`. The retracer logic is correct — it scans every hop and stamps the first CEX hit as the root — there just aren't any hits to stamp.
 
-## Mesh impact
-When `recycled_band ∈ {likely, confirmed}` AND community is linked to a fresh token:
-- Insert `reputation_mesh` link `token → community` with `relationship='recycled_community_vehicle'`, confidence = score.
-- When admin handle resolves to a known dev wallet, insert `admin_handle → token` with `relationship='serial_rug_operator'`.
-- Add a strike to `dev_wallet_reputation` for that wallet.
-- All entries respect existing fail-open policy — they tag, never block.
+This is **not** a bug in the button. It's a coverage gap in the CEX dictionary (`cex-wallets.ts`). Until that file grows, every "Rescan" pass will keep returning 0 new roots.
 
-## UI surfaces
-All gated through a small `<RecycledCommunityBadge>` component:
-- **Pro**: 🔴/🟠/⚠/🟢 chip + hover popover with the 6 signal rows.
-- **Non-Pro**: dimmed 🔒 chip with tooltip "Recycled Community Score — Pro feature" + upgrade CTA.
+#### "Rescan KYC (free)" button
+- Calls `insiders-genealogy-rescan-kyc`. **Zero RPC cost** — pure dictionary lookup against the existing chain JSON.
+- **Useful?** Yes, but only after we expand `cex-wallets.ts`. As-is, it loops 20×, scans up to 20,000 rows, and finds nothing. Currently a no-op.
+- **Recommendation:** keep the button, but add an inline hint: "Only finds new roots after `cex-wallets.ts` is expanded — current dictionary saturated against the chain set."
 
-Placements:
-- `MasterDBTab.tsx` — new column next to X Communities.
-- `TeamIntelDashboard.tsx` — inline on each community row.
-- `BubbleMap` — community node ring color follows band; non-Pro see only neutral ring + lock icon on hover.
+#### "Retrace Insiders KYC" button
+- Calls `insiders-genealogy-backfill` which **does** spend Helius credits (re-walks every chain from scratch).
+- **Useful?** Marginally. Since 88% of rows already have a chain and the chains are exhausted, re-walking won't reveal new roots without either (a) higher max depth or (b) a richer CEX dictionary. It mostly just burns Helius quota.
+- **Recommendation:** demote to a hidden "Force re-walk (Helius cost)" tool behind a confirmation dialog. The 24h-cooldown `kyc-backfill-master` cron already handles new tokens incrementally; the manual button shouldn't be front-and-center.
 
-## Files
-- `supabase/migrations/<ts>_recycled_community_scoring.sql` — columns + 2 views.
-- `supabase/functions/community-recycled-scorer/index.ts` — new (evaluate + read modes, tier gating).
-- `supabase/functions/_shared/community-rules.ts` — pure rule fn, unit-testable.
-- `src/components/admin/RecycledCommunityBadge.tsx` — new (Pro vs locked variant).
-- `src/components/admin/tabs/MasterDBTab.tsx` — add column.
-- `src/components/admin/oracle/TeamIntelDashboard.tsx` — inline badge.
-- `src/components/bubble-map/*` — community node ring tinting (small touch).
-- pg_cron: `community-recycled-scorer-10m`.
+#### "Tier A / Tier B" archive buttons
+- Calls `backfill-genealogy` (separate function for tokens outside the Insiders set). Same Helius-cost concern as above.
+- **Recommendation:** keep but move to a "Legacy / wide net" accordion.
 
-## Out of scope
-- Periodic re-scrapes of every X Community (we re-evaluate only when a new mint binds).
-- Auto-blacklist or bot-block of admin handles (warn-only per your call).
-- Deleting or sanitizing existing rows.
+---
 
-## Memory updates after build
-- `mem://features/intelligence/recycled-community-detection` — rule set, bands, gating policy.
-- Add Core line: "Recycled Community Score is Pro-gated; free tiers see locked teaser only."
+## Plan — what to change
+
+This is a planning summary; no code yet. On approval I'll execute in this order:
+
+1. **Add a `KYC dictionary saturation` diagnostic line** to the panel header so the 0% number stops looking like a broken button. Show: "Chains exhausted against current CEX dictionary: 2,685 — expand `cex-wallets.ts` to unlock more roots."
+
+2. **Reorganise the panel** into three groups:
+   - **Active (free):** Rescan KYC (free) — primary CTA, with the hint above.
+   - **Maintenance (one-shot):** Reputation Backfill Engine — collapsed accordion.
+   - **Legacy / Helius-cost:** Retrace Insiders KYC + Tier A/B — collapsed accordion with a "burns Helius credits" warning.
+
+3. **Wire the Reset button to also clear the panel's last-run status pills**, so it's actually useful and not just a counter reset. (Optional polish.)
+
+4. **No DB changes, no edge function changes** in this pass. The retracer logic is correct; the fix for 0% KYC roots is a separate, larger task: expanding `cex-wallets.ts` (manual research) or adding a Helius-tag fallback (e.g. "Binance Hot Wallet" tag classification) — that should be its own conversation.
+
+---
+
+## TL;DR for you
+
+- **Reputation Backfill / Start Backfill**: already 94% done, keep it but hide it.
+- **Reset button**: harmless local counter reset, keep it.
+- **KYC root 0%**: not a button bug — your CEX dictionary doesn't cover the wallets at the end of these chains. The walker correctly reports "Exhausted" and the panel correctly shows 0.
+- **Rescan KYC (free)**: keep, but it's a no-op until `cex-wallets.ts` is expanded.
+- **Retrace Insiders KYC**: still works, but burns Helius credits for almost no gain right now. Demote behind a warning.
+
+Want me to apply the reorganisation + saturation hint now, or do you want to tackle the `cex-wallets.ts` expansion first so the buttons actually have something to chew on?
