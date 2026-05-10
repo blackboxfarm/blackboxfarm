@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useUserTier } from "@/hooks/useUserTier";
 import PublicBubbleMap from "@/components/bubble-map/PublicBubbleMap";
 import { BubbleMapTierGrid } from "@/components/bubble-map/BubbleMapTierGrid";
+import { BadActorAlert } from "@/components/security/BadActorAlert";
 
 export default function BubbleMapPage() {
   const navigate = useNavigate();
@@ -58,6 +59,10 @@ export default function BubbleMapPage() {
         </div>
 
         <PublicBubbleMap mode="authenticated" showUpgradePrompt initialToken={initialToken} />
+
+        {initialToken && (
+          <BadActorAlert tokenMint={initialToken} />
+        )}
 
         {!isPro && (
           <Card>
