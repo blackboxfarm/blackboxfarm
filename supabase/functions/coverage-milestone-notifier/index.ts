@@ -5,7 +5,34 @@
 // milestone crossed. Self-throttling: never sends the same % twice.
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
-import { sendAdminSms } from '../_shared/sms-notify.ts';
+
+const ADMIN_PHONE = '+12263835975';
+
+async function sendSms(body: string): Promise<{ ok: boolean; status?: number; err?: string }> {
+  const sid = Deno.env.get('TWILIO_ACCOUNT_SID');
+  const token = Deno.env.get('TWILIO_AUTH_TOKEN');
+  const from = Deno.env.get('TWILIO_PHONE_NUMBER');
+  if (!sid || !token || !from) return { ok: false, err: 'missing twilio creds' };
+  try {
+    const auth = btoa(`${sid}:${token}`);
+    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({ To: ADMIN_PHONE, From: from, Body: body.slice(0, 1500) }),
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      console.warn('[notifier-sms] twilio error', res.status, t.slice(0, 200));
+      return { ok: false, status: res.status, err: t.slice(0, 200) };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, err: (e as Error).message };
+  }
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -50,10 +77,9 @@ Deno.serve(withRunLog('coverage-milestone-notifier', async (req) => {
   async function checkAndNotify(key: string, label: string, current: number, count: number) {
     const last = stateMap.get(key) ?? -1;
     if (current <= last) return;
-    // Send ONE SMS for the latest milestone (avoid burst when multiple % cross between runs)
     const msg = `📊 ${current}% ${label}\n\n${count.toLocaleString()} / ${total.toLocaleString()} tokens.${current >= 100 ? '\n\n✅ COMPLETE.' : ''}`;
-    const ok = await sendAdminSms(msg);
-    if (ok) {
+    const r = await sendSms(msg);
+    if (r.ok) {
       await supabase.from('coverage_milestone_state').upsert({
         metric_key: key,
         last_pct: current,
@@ -61,6 +87,8 @@ Deno.serve(withRunLog('coverage-milestone-notifier', async (req) => {
         updated_at: new Date().toISOString(),
       }, { onConflict: 'metric_key' });
       sent.push({ key, pct: current });
+    } else {
+      sent.push({ key, pct: current, failed: r.err, status: r.status });
     }
   }
 
