@@ -9,6 +9,7 @@ import OracleMeshViewer from "@/components/admin/oracle/OracleMeshViewer";
 import { ManualKycOverride } from "@/components/admin/ManualKycOverride";
 import DevKycCoveragePanel from "@/components/admin/oracle/DevKycCoveragePanel";
 import MilestoneSmsLogPanel from "@/components/admin/oracle/MilestoneSmsLogPanel";
+import KycDiscoveryLogPanel from "@/components/admin/oracle/KycDiscoveryLogPanel";
 
 const ProviderHealthPanel = lazy(() => import("@/components/admin/oracle/ProviderHealthPanel"));
 
@@ -95,6 +96,9 @@ const OracleTab = ({ initialSubTab, initialWallet }: OracleTabProps) => {
           <TabsTrigger value="kyc-override" className="data-[state=active]:bg-amber-500/20">
             🔑 KYC Override
           </TabsTrigger>
+          <TabsTrigger value="kyc-discovery" className="data-[state=active]:bg-emerald-500/20">
+            🔗 KYC Discovery
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="spider" className="space-y-4">
@@ -163,6 +167,10 @@ const OracleTab = ({ initialSubTab, initialWallet }: OracleTabProps) => {
 
         <TabsContent value="kyc-override" className="space-y-4">
           <ManualKycOverride />
+        </TabsContent>
+
+        <TabsContent value="kyc-discovery" className="space-y-4">
+          <KycDiscoveryLogPanel />
         </TabsContent>
       </Tabs>
     </div>
