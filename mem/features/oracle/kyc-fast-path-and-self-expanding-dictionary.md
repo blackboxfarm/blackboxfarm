@@ -17,7 +17,14 @@ type: feature
 Result: every KYC trace either hits an existing dictionary entry or *adds* a new one. The dictionary grows automatically; no manual edits to `cex-wallets.ts` are required to expand it. The file dictionary remains as the seed/baseline.
 
 Always-on automation:
-- `kyc-backfill-master-10m` (cron, every 10 min) — newest-first KYC trace for unverified `master_token_directory` creators with 24h cooldown.
+- `kyc-backfill-master-2m` (cron, every 2 min, batch 100) — newest-first KYC trace for unverified `master_token_directory` creators. Cooldown enforced via `developer_profiles.kyc_last_checked_at` (column is `master_wallet_address`, NOT `developer_wallet` — old code had a silent bug there).
+- `creator-wallet-resolver-2m` (cron, every 2 min, batch 50) — fills missing `creator_wallet` on tokens by calling `resolveTokenCreator()` (Pump.fun → Helius DAS → Helius RPC). Writes to `pumpfun_watchlist` for pump mints, otherwise upserts `scraped_tokens`. Also creates a `developer_profiles` shell so the KYC backfill picks it up next cycle.
 - `backfill-genealogy-tier-b` (cron, every 6h) — Tier-B reputation backfill for pumpfun_watchlist creators; skips wallets with `trail_end_reason in ('hit_cex','cycle_detected')`.
 
 No clicking required — these run automatically and skip already-completed work.
+
+## Critical persistence path (do not break)
+
+`master_token_directory.kyc_verified` is computed from `developer_profiles.kyc_verified` (joined on `master_wallet_address = creator_wallet`). `mesh-kyc-deep-search` MUST upsert `developer_profiles` with `kyc_verified=true, kyc_source, kyc_verification_date, kyc_last_checked_at` whenever a KYC root is found (both Solscan-direct fast path AND BFS path). Writing only to `reputation_mesh` is not enough — the matview won't flip green.
+
+Live coverage is visible on `/super-admin → Oracle tab → Dev Wallet + KYC Coverage` panel.
