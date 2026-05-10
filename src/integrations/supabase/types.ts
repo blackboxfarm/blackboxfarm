@@ -6829,58 +6829,82 @@ export type Database = {
       funnel_feed_discoveries: {
         Row: {
           created_at: string
+          creator_fetched_at: string | null
           creator_wallet: string | null
+          description: string | null
           dex_data: Json | null
           discovered_at: string
           id: string
+          image_url: string | null
+          launchpad: string | null
           mesh_processed_at: string | null
           mesh_status: string
+          metadata_fetched_at: string | null
           notes: string | null
           source_id: string | null
           source_message_id: number | null
+          telegram_url: string | null
           token_mint: string
           token_name: string | null
           token_symbol: string | null
+          twitter_url: string | null
           watchlist_processed_at: string | null
           watchlist_status: string
+          website_url: string | null
           xpost_processed_at: string | null
           xpost_status: string
         }
         Insert: {
           created_at?: string
+          creator_fetched_at?: string | null
           creator_wallet?: string | null
+          description?: string | null
           dex_data?: Json | null
           discovered_at?: string
           id?: string
+          image_url?: string | null
+          launchpad?: string | null
           mesh_processed_at?: string | null
           mesh_status?: string
+          metadata_fetched_at?: string | null
           notes?: string | null
           source_id?: string | null
           source_message_id?: number | null
+          telegram_url?: string | null
           token_mint: string
           token_name?: string | null
           token_symbol?: string | null
+          twitter_url?: string | null
           watchlist_processed_at?: string | null
           watchlist_status?: string
+          website_url?: string | null
           xpost_processed_at?: string | null
           xpost_status?: string
         }
         Update: {
           created_at?: string
+          creator_fetched_at?: string | null
           creator_wallet?: string | null
+          description?: string | null
           dex_data?: Json | null
           discovered_at?: string
           id?: string
+          image_url?: string | null
+          launchpad?: string | null
           mesh_processed_at?: string | null
           mesh_status?: string
+          metadata_fetched_at?: string | null
           notes?: string | null
           source_id?: string | null
           source_message_id?: number | null
+          telegram_url?: string | null
           token_mint?: string
           token_name?: string | null
           token_symbol?: string | null
+          twitter_url?: string | null
           watchlist_processed_at?: string | null
           watchlist_status?: string
+          website_url?: string | null
           xpost_processed_at?: string | null
           xpost_status?: string
         }
@@ -7423,61 +7447,85 @@ export type Database = {
           banner_url: string | null
           bonded_at: string | null
           community_checked_at: string | null
+          creator_fetched_at: string | null
+          creator_wallet: string | null
+          description: string | null
           first_seen_at: string
           health_grade: string | null
           image_uri: string | null
           last_seen_at: string
           last_trigger_source: string | null
+          launchpad: string | null
           market_cap_at_discovery: number | null
+          metadata_fetched_at: string | null
           minted_at: string | null
           name: string | null
           paid_composite_url: string | null
           snapshot_slot: string | null
           symbol: string | null
+          telegram_url: string | null
           times_posted: number | null
           times_seen: number
           token_mint: string
+          twitter_url: string | null
           was_posted: boolean
+          website_url: string | null
         }
         Insert: {
           banner_url?: string | null
           bonded_at?: string | null
           community_checked_at?: string | null
+          creator_fetched_at?: string | null
+          creator_wallet?: string | null
+          description?: string | null
           first_seen_at?: string
           health_grade?: string | null
           image_uri?: string | null
           last_seen_at?: string
           last_trigger_source?: string | null
+          launchpad?: string | null
           market_cap_at_discovery?: number | null
+          metadata_fetched_at?: string | null
           minted_at?: string | null
           name?: string | null
           paid_composite_url?: string | null
           snapshot_slot?: string | null
           symbol?: string | null
+          telegram_url?: string | null
           times_posted?: number | null
           times_seen?: number
           token_mint: string
+          twitter_url?: string | null
           was_posted?: boolean
+          website_url?: string | null
         }
         Update: {
           banner_url?: string | null
           bonded_at?: string | null
           community_checked_at?: string | null
+          creator_fetched_at?: string | null
+          creator_wallet?: string | null
+          description?: string | null
           first_seen_at?: string
           health_grade?: string | null
           image_uri?: string | null
           last_seen_at?: string
           last_trigger_source?: string | null
+          launchpad?: string | null
           market_cap_at_discovery?: number | null
+          metadata_fetched_at?: string | null
           minted_at?: string | null
           name?: string | null
           paid_composite_url?: string | null
           snapshot_slot?: string | null
           symbol?: string | null
+          telegram_url?: string | null
           times_posted?: number | null
           times_seen?: number
           token_mint?: string
+          twitter_url?: string | null
           was_posted?: boolean
+          website_url?: string | null
         }
         Relationships: []
       }
@@ -13639,6 +13687,7 @@ export type Database = {
           created_at: string
           creator_fetched_at: string | null
           creator_wallet: string | null
+          description: string | null
           discovery_source: string
           first_seen_at: string
           id: string
@@ -13649,17 +13698,21 @@ export type Database = {
           name: string | null
           raydium_date: string | null
           symbol: string | null
+          telegram_url: string | null
           token_mint: string
+          twitter_url: string | null
           updated_at: string
           validation_attempts: number | null
           validation_error: string | null
           validation_status: string | null
+          website_url: string | null
         }
         Insert: {
           community_checked_at?: string | null
           created_at?: string
           creator_fetched_at?: string | null
           creator_wallet?: string | null
+          description?: string | null
           discovery_source?: string
           first_seen_at?: string
           id?: string
@@ -13670,17 +13723,21 @@ export type Database = {
           name?: string | null
           raydium_date?: string | null
           symbol?: string | null
+          telegram_url?: string | null
           token_mint: string
+          twitter_url?: string | null
           updated_at?: string
           validation_attempts?: number | null
           validation_error?: string | null
           validation_status?: string | null
+          website_url?: string | null
         }
         Update: {
           community_checked_at?: string | null
           created_at?: string
           creator_fetched_at?: string | null
           creator_wallet?: string | null
+          description?: string | null
           discovery_source?: string
           first_seen_at?: string
           id?: string
@@ -13691,11 +13748,14 @@ export type Database = {
           name?: string | null
           raydium_date?: string | null
           symbol?: string | null
+          telegram_url?: string | null
           token_mint?: string
+          twitter_url?: string | null
           updated_at?: string
           validation_attempts?: number | null
           validation_error?: string | null
           validation_status?: string | null
+          website_url?: string | null
         }
         Relationships: []
       }
@@ -17536,6 +17596,7 @@ export type Database = {
           current_status: string | null
           death_cause: string | null
           death_confidence: number | null
+          description: string | null
           developer_id: string | null
           dex_id: string | null
           dex_socials_checked_at: string | null
@@ -17568,11 +17629,14 @@ export type Database = {
           price_usd: number | null
           socials_discovery_status: string
           symbol: string | null
+          telegram_url: string | null
           times_entered_top_200: number | null
           token_mint: string
           total_hours_in_top_200: number | null
+          twitter_url: string | null
           updated_at: string | null
           volume_24h: number | null
+          website_url: string | null
         }
         Insert: {
           active_boosts?: number | null
@@ -17586,6 +17650,7 @@ export type Database = {
           current_status?: string | null
           death_cause?: string | null
           death_confidence?: number | null
+          description?: string | null
           developer_id?: string | null
           dex_id?: string | null
           dex_socials_checked_at?: string | null
@@ -17618,11 +17683,14 @@ export type Database = {
           price_usd?: number | null
           socials_discovery_status?: string
           symbol?: string | null
+          telegram_url?: string | null
           times_entered_top_200?: number | null
           token_mint: string
           total_hours_in_top_200?: number | null
+          twitter_url?: string | null
           updated_at?: string | null
           volume_24h?: number | null
+          website_url?: string | null
         }
         Update: {
           active_boosts?: number | null
@@ -17636,6 +17704,7 @@ export type Database = {
           current_status?: string | null
           death_cause?: string | null
           death_confidence?: number | null
+          description?: string | null
           developer_id?: string | null
           dex_id?: string | null
           dex_socials_checked_at?: string | null
@@ -17668,11 +17737,14 @@ export type Database = {
           price_usd?: number | null
           socials_discovery_status?: string
           symbol?: string | null
+          telegram_url?: string | null
           times_entered_top_200?: number | null
           token_mint?: string
           total_hours_in_top_200?: number | null
+          twitter_url?: string | null
           updated_at?: string | null
           volume_24h?: number | null
+          website_url?: string | null
         }
         Relationships: [
           {
@@ -21286,6 +21358,7 @@ export type Database = {
           community_mod_handles: string[] | null
           created_at: string | null
           creator_wallet: string | null
+          description: string | null
           dev_auto_blacklisted: boolean | null
           dev_is_legitimate_builder: boolean | null
           dev_is_serial_spammer: boolean | null
@@ -21307,9 +21380,12 @@ export type Database = {
           mesh_x_handles: string[] | null
           name: string | null
           symbol: string | null
+          telegram_url: string | null
           token_mint: string | null
+          twitter_url: string | null
           was_posted: boolean | null
           website_sources: Json | null
+          website_url: string | null
           websites: string[] | null
           x_community_names: string[] | null
           x_community_urls: string[] | null
