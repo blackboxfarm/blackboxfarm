@@ -91,6 +91,16 @@ Deno.serve(withRunLog('coverage-milestone-notifier', async (req) => {
     } else {
       sent.push({ key, pct: current, failed: r.err, status: r.status });
     }
+    await supabase.from('coverage_milestone_sms_log').insert({
+      metric_key: key,
+      pct: current,
+      count_at_send: count,
+      total_at_send: total,
+      body: msg,
+      to_phone: ADMIN_PHONE,
+      status: r.ok ? 'sent' : 'failed',
+      error: r.ok ? null : (r.err ?? null),
+    });
   }
 
   await checkAndNotify('dev_wallet', 'Dev Wallets Discovered', devPct, dev);
