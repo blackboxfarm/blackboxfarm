@@ -389,6 +389,15 @@ async function persistCommunity(
   }
   if (error) throw new Error(`x_communities persist failed for ${resolved.communityId}: ${error.message}`);
 
+  // Event hook: re-score recycled-band whenever a community row is written.
+  // Catches name renames, member-count bumps, new linked mints, admin changes.
+  try {
+    const { fireRecycledScorer } = await import('./trigger-recycled-scorer.ts');
+    fireRecycledScorer({ mode: 'evaluate', community_id: resolved.communityId, reason: 'x-community-resolver-write' });
+  } catch (_e) {
+    // never block the resolver
+  }
+
   // Registry for every observed handle
   const allMembers = [
     ...(resolved.admin ? [resolved.admin] : []),

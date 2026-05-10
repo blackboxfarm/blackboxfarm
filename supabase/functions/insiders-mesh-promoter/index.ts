@@ -167,6 +167,12 @@ serve(async (req) => {
             })
             .eq('id', c.id);
           skippedRug++;
+          // Event hook: a token in the system just rugged → re-score every
+          // community linked to that mint so prior-rug-rate band updates live.
+          try {
+            const { fireRecycledScorer } = await import('../_shared/trigger-recycled-scorer.ts');
+            fireRecycledScorer({ mode: 'evaluate_for_token', token_mint: c.token_mint, reason: 'rug-flip-promoter' });
+          } catch (_e) { /* never block */ }
           continue;
         }
 

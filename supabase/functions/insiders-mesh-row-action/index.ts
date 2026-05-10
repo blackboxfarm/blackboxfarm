@@ -174,6 +174,10 @@ serve(async (req) => {
             mesh_decision_trace: { ...baseTrace, decision: 'rejected_rug', reason: 'this_token_rug_reconfirmed' },
           })
           .eq('id', row.id);
+        try {
+          const { fireRecycledScorer } = await import('../_shared/trigger-recycled-scorer.ts');
+          fireRecycledScorer({ mode: 'evaluate_for_token', token_mint, reason: 'rug-flip-row-action' });
+        } catch (_e) { /* never block */ }
       } else {
         const peakX = row.peak_multiplier || 0;
         const baseLabel = `${peakX}x token (${row.token_symbol || token_mint.slice(0, 8)})`;
