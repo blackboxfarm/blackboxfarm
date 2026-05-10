@@ -192,11 +192,11 @@ export function TeamIntelDashboard() {
   // Fetch real DB totals (not page-capped)
   useEffect(() => {
     (async () => {
-      const [{ count: teamsCount }, tokensAgg, rotCount] = await Promise.all([
+      const [teamsRes, rotCount] = await Promise.all([
         supabase.from('dev_teams').select('id', { count: 'exact', head: true }).eq('is_active', true),
-        supabase.rpc('count_rotation_patterns' as any, { min_communities: 2 }).then(() => null).catch(() => null),
         supabase.rpc('count_rotation_patterns' as any, { min_communities: 2 }),
       ]);
+      const teamsCount = teamsRes.count;
       if (typeof teamsCount === 'number') setTotalTeamsCount(teamsCount);
       if (rotCount && !rotCount.error && rotCount.data != null) {
         setTotalRotators(Number(rotCount.data));
