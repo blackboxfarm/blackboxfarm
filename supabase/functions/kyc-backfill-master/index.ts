@@ -2,7 +2,8 @@
 // Newest-first KYC backfill driver for the Master Token Directory.
 // Picks unverified creators from master_token_directory, skips any developer
 // whose kyc_last_checked_at is within 24h, and delegates the actual on-chain
-// trace to the proven mesh-kyc-deep-search function. Never deletes data.
+// trace to mesh-kyc-deep-search (which now writes kyc_verified +
+// kyc_last_checked_at into developer_profiles itself). Never deletes data.
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 
@@ -11,7 +12,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const BATCH_DEFAULT = 25;
+const BATCH_DEFAULT = 100;
 const COOLDOWN_HOURS = 24;
 
 Deno.serve(withRunLog('kyc-backfill-master', async (req) => {
@@ -55,16 +56,18 @@ Deno.serve(withRunLog('kyc-backfill-master', async (req) => {
   }
 
   // 2) Cooldown filter via developer_profiles.kyc_last_checked_at
+  // FIX: column is master_wallet_address, not developer_wallet. Old code
+  // matched zero rows so cooldown never applied. Also drop already-verified.
   const wallets = ordered.map(o => o.wallet);
   const { data: profs } = await supabase
     .from('developer_profiles')
-    .select('developer_wallet, kyc_last_checked_at')
-    .in('developer_wallet', wallets);
+    .select('master_wallet_address, kyc_last_checked_at, kyc_verified')
+    .in('master_wallet_address', wallets);
 
   const recent = new Set(
     (profs ?? [])
-      .filter(p => p.kyc_last_checked_at && p.kyc_last_checked_at > cutoff)
-      .map(p => p.developer_wallet),
+      .filter(p => p.kyc_verified === true || (p.kyc_last_checked_at && p.kyc_last_checked_at > cutoff))
+      .map(p => p.master_wallet_address),
   );
 
   const targets = ordered.filter(o => !recent.has(o.wallet)).slice(0, batchSize);
@@ -84,12 +87,9 @@ Deno.serve(withRunLog('kyc-backfill-master', async (req) => {
       const ok = res.ok;
       const json = ok ? await res.json().catch(() => ({})) : { error: await res.text() };
 
-      // Stamp cooldown regardless of outcome so we don't re-hit the same wallet within 24h.
-      await supabase
-        .from('developer_profiles')
-        .update({ kyc_last_checked_at: new Date().toISOString() })
-        .eq('developer_wallet', t.wallet);
-
+      // mesh-kyc-deep-search now upserts kyc_last_checked_at itself, so no
+      // separate stamp here (and the old eq('developer_wallet', …) matched
+      // zero rows anyway because the column is master_wallet_address).
       results.push({ wallet: t.wallet, mint: t.mint, ok, ...(ok ? { kycRoot: json?.kycRoot ?? null } : { error: json?.error }) });
     } catch (e) {
       results.push({ wallet: t.wallet, mint: t.mint, ok: false, error: (e as Error).message });
