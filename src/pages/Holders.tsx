@@ -5,6 +5,7 @@ import { TelegramWebViewBanner } from "@/components/TelegramWebViewBanner";
 import { SiteLayout } from "@/components/layout/SiteLayout";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { AnalysisOverview } from "@/components/holders/AnalysisOverview";
+import { BadActorAlert } from "@/components/security/BadActorAlert";
 
 export default function Holders() {
   const [tokenFromUrl, setTokenFromUrl] = useState<string>("");
@@ -29,6 +30,9 @@ export default function Holders() {
       <TelegramWebViewBanner />
 
       <div className="mx-auto py-6 space-y-4 px-2 md:px-4 max-w-6xl" data-oracle-hint="Paste a token address — I'll walk you through the results" data-oracle-zone="holders-input">
+        {tokenFromUrl && (
+          <BadActorAlert tokenMint={tokenFromUrl} />
+        )}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="mb-4">
             <TabsTrigger value="report">Token Holders Report</TabsTrigger>
