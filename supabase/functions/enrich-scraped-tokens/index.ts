@@ -555,9 +555,11 @@ Deno.serve(withRunLog('enrich-scraped-tokens', async (req) => {
       await delay(200);
     }
 
+    // Best-effort directory refresh — never block the batch on it
     if (enrichedCount > 0) {
-      const { error: refreshError } = await supabaseClient.rpc('refresh_master_token_directory');
-      if (refreshError) throw refreshError;
+      supabaseClient.rpc('refresh_master_token_directory')
+        .then(({ error }: any) => { if (error) console.warn('[enrich] directory refresh failed:', error.message); })
+        .catch((e: any) => console.warn('[enrich] directory refresh threw:', e?.message));
     }
 
     return new Response(
