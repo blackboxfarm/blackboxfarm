@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { evaluateCommunity, BAND_LABEL } from "../_shared/community-rules.ts";
+import { assertDbWrite } from "../_shared/db-assert.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -81,7 +82,7 @@ async function evaluateOne(communityId: string, tokenMintOverride?: string) {
   // Outcomes view
   const { data: outcome } = await supabase
     .from("v_community_token_outcomes")
-    .select("linked_token_count, dead_rate_pct")
+    .select("linked_token_count, dead_count, dead_rate_pct")
     .eq("community_id", communityId)
     .maybeSingle();
 
@@ -115,12 +116,13 @@ async function evaluateOne(communityId: string, tokenMintOverride?: string) {
     rename_events: renameEvents,
     prior_dead_rate_pct: outcome?.dead_rate_pct ?? 0,
     prior_linked_token_count: outcome?.linked_token_count ?? 0,
+    prior_dead_count: outcome?.dead_count ?? 0,
     admin_prior_failures: maxPriorFailures,
     admin_prior_tokens: maxPriorTokens,
   });
 
   const evaluated_at = new Date().toISOString();
-  await supabase
+  await assertDbWrite(supabase
     .from("x_communities")
     .update({
       recycled_score: result.score,
@@ -128,11 +130,11 @@ async function evaluateOne(communityId: string, tokenMintOverride?: string) {
       recycled_signals: result.signals as any,
       recycled_evaluated_at: evaluated_at,
     })
-    .eq("community_id", communityId);
+    .eq("community_id", communityId), "x_communities", "UPDATE recycled score");
 
   // Mesh tagging when likely/confirmed
   if ((result.band === "likely" || result.band === "confirmed") && freshMint) {
-    await supabase.from("reputation_mesh").upsert(
+    await assertDbWrite(supabase.from("reputation_mesh").upsert(
       [
         {
           source_type: "token",
@@ -149,11 +151,11 @@ async function evaluateOne(communityId: string, tokenMintOverride?: string) {
         onConflict: "source_type,source_id,linked_type,linked_id,relationship",
         ignoreDuplicates: true,
       },
-    );
+    ), "reputation_mesh", "UPSERT recycled community token link");
 
     for (const a of adminLinks ?? []) {
       if ((a as any).admin_wallet && (a as any).prior_failures >= 2) {
-        await supabase.from("reputation_mesh").upsert(
+        await assertDbWrite(supabase.from("reputation_mesh").upsert(
           [
             {
               source_type: "wallet",
@@ -170,7 +172,7 @@ async function evaluateOne(communityId: string, tokenMintOverride?: string) {
             onConflict: "source_type,source_id,linked_type,linked_id,relationship",
             ignoreDuplicates: true,
           },
-        );
+        ), "reputation_mesh", "UPSERT serial rug operator link");
       }
     }
   }
