@@ -1,0 +1,1 @@
+DELETE FROM public.coverage_milestone_state;
