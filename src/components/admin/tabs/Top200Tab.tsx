@@ -361,14 +361,32 @@ export default function Top200Tab() {
 
       if (error) throw error;
 
-      return (data || [])
+      const rows = (data || [])
         .filter((t: any) => !SOL_MINTS.has(t.token_mint))
-        .filter((t: any) => !isStablecoin(t))
-        .map((t: any, index: number) => ({
-          ...t,
-          dex_url: `https://dexscreener.com/solana/${t.token_mint}`,
-          _rank: 201 + index,
-        }));
+        .filter((t: any) => !isStablecoin(t));
+
+      // Fallback creator_wallet lookup for overflow rows missing it.
+      const missing = rows.filter((r: any) => !r.creator_wallet).map((r: any) => r.token_mint);
+      const fallback = new Map<string, string>();
+      if (missing.length > 0) {
+        const [pf, sc] = await Promise.all([
+          supabase.from("pumpfun_watchlist").select("token_mint, creator_wallet").in("token_mint", missing).not("creator_wallet", "is", null),
+          supabase.from("scraped_tokens").select("token_mint, creator_wallet").in("token_mint", missing).not("creator_wallet", "is", null),
+        ]);
+        for (const row of (pf.data || []) as any[]) {
+          if (row.creator_wallet) fallback.set(row.token_mint, row.creator_wallet);
+        }
+        for (const row of (sc.data || []) as any[]) {
+          if (row.creator_wallet && !fallback.has(row.token_mint)) fallback.set(row.token_mint, row.creator_wallet);
+        }
+      }
+
+      return rows.map((t: any, index: number) => ({
+        ...t,
+        creator_wallet: t.creator_wallet || fallback.get(t.token_mint) || null,
+        dex_url: `https://dexscreener.com/solana/${t.token_mint}`,
+        _rank: 201 + index,
+      }));
     },
   });
 
