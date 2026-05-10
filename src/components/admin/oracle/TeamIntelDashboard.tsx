@@ -497,7 +497,11 @@ Focus on actionable intelligence for identifying potential coordinated rug opera
                       <Collapsible
                         key={team.id}
                         open={expandedTeam === team.id}
-                        onOpenChange={() => setExpandedTeam(expandedTeam === team.id ? null : team.id)}
+                        onOpenChange={() => {
+                          const next = expandedTeam === team.id ? null : team.id;
+                          setExpandedTeam(next);
+                          if (next) enrichTeam(team);
+                        }}
                       >
                         <CollapsibleTrigger className="w-full px-4 py-3 hover:bg-muted/50 transition-colors">
                           <div className="flex items-center justify-between">
