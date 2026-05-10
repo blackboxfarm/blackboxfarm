@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { 
   Users, 
@@ -24,7 +25,9 @@ import {
   Loader2,
   Brain,
   TrendingUp,
-  Link2
+  Link2,
+  Copy,
+  Info
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -82,6 +85,15 @@ export function TeamIntelDashboard() {
   const [analyzing, setAnalyzing] = useState(false);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
+
+  // Real DB totals (not page-size capped)
+  const [totalTeamsCount, setTotalTeamsCount] = useState<number | null>(null);
+  const [totalTokensCount, setTotalTokensCount] = useState<number | null>(null);
+  const [totalRotators, setTotalRotators] = useState<number | null>(null);
+
+  // Per-team enrichment caches (keyed by team id)
+  const [tokenInfo, setTokenInfo] = useState<Record<string, Record<string, { symbol: string | null; hasPair: boolean }>>>({});
+  const [walletOwners, setWalletOwners] = useState<Record<string, Record<string, string | null>>>({});
   
   // Pagination state
   const [teamsPage, setTeamsPage] = useState(0);
@@ -129,24 +141,8 @@ export function TeamIntelDashboard() {
           unique_communities: Number(meshSummary.unique_communities) || 0
         });
       } else {
-        // Fallback to direct query if materialized view not yet populated
-        console.log('Materialized view not available, using fallback query');
-        const { data: meshData } = await supabase
-          .from('reputation_mesh')
-          .select('relationship, source_type, linked_type')
-          .in('relationship', ['admin_of', 'mod_of', 'co_mod', 'community_for']);
-
-        if (meshData) {
-          setMeshStats({
-            total_links: meshData.length,
-            admin_links: meshData.filter(m => m.relationship === 'admin_of').length,
-            mod_links: meshData.filter(m => m.relationship === 'mod_of').length,
-            co_mod_links: meshData.filter(m => m.relationship === 'co_mod').length,
-            token_links: meshData.filter(m => m.relationship === 'community_for').length,
-            unique_accounts: new Set(meshData.filter(m => m.source_type === 'x_account').map(m => m.source_type)).size,
-            unique_communities: new Set(meshData.filter(m => m.linked_type === 'x_community').map(m => m.linked_type)).size
-          });
-        }
+        // Materialized view not yet populated — show empty rather than a fake 1000-row sample
+        setMeshStats(null);
       }
 
       // Use server-side Postgres function for rotation patterns (SCALING FIX)
@@ -176,6 +172,68 @@ export function TeamIntelDashboard() {
       setLoading(false);
     }
   }, [PAGE_SIZE]);
+
+  // Fetch real DB totals (not page-capped)
+  useEffect(() => {
+    (async () => {
+      const [teamsRes, rotCount] = await Promise.all([
+        supabase.from('dev_teams').select('id', { count: 'exact', head: true }).eq('is_active', true),
+        supabase.rpc('count_rotation_patterns' as any, { min_communities: 2 }),
+      ]);
+      const teamsCount = teamsRes.count;
+      if (typeof teamsCount === 'number') setTotalTeamsCount(teamsCount);
+      if (rotCount && !rotCount.error && rotCount.data != null) {
+        setTotalRotators(Number(rotCount.data));
+      }
+      // Tokens total (sum of tokens_created across all active teams)
+      const { data: tokSum } = await supabase
+        .from('dev_teams')
+        .select('tokens_created')
+        .eq('is_active', true);
+      if (tokSum) setTotalTokensCount(tokSum.reduce((s: number, r: any) => s + (r.tokens_created || 0), 0));
+    })();
+  }, []);
+
+  // Enrich a team's tokens + wallets when it expands
+  const enrichTeam = useCallback(async (team: DevTeam) => {
+    // Tokens → symbols + dex presence
+    if (!tokenInfo[team.id] && team.linked_token_mints?.length) {
+      const mints = team.linked_token_mints.slice(0, 50);
+      const [tlRes, pfRes] = await Promise.all([
+        supabase.from('token_lifecycle').select('token_mint, symbol, liquidity_usd').in('token_mint', mints),
+        supabase.from('pumpfun_watchlist').select('token_mint, token_symbol').in('token_mint', mints),
+      ]);
+      const map: Record<string, { symbol: string | null; hasPair: boolean }> = {};
+      for (const m of mints) map[m] = { symbol: null, hasPair: false };
+      (tlRes.data || []).forEach((r: any) => {
+        map[r.token_mint] = { symbol: r.symbol || map[r.token_mint]?.symbol || null, hasPair: (r.liquidity_usd || 0) > 0 };
+      });
+      (pfRes.data || []).forEach((r: any) => {
+        if (!map[r.token_mint]?.symbol) map[r.token_mint] = { ...map[r.token_mint], symbol: r.token_symbol || null };
+      });
+      setTokenInfo(prev => ({ ...prev, [team.id]: map }));
+    }
+    // Wallets → owner labels
+    if (!walletOwners[team.id] && team.member_wallets?.length) {
+      const wallets = team.member_wallets.slice(0, 50);
+      const { data: devs } = await supabase
+        .from('developer_profiles')
+        .select('master_wallet_address, twitter_handle, display_name')
+        .in('master_wallet_address', wallets);
+      const map: Record<string, string | null> = {};
+      for (const w of wallets) map[w] = null;
+      (devs || []).forEach((d: any) => {
+        const label = d.twitter_handle ? `Dev: @${d.twitter_handle}` : d.display_name ? `Dev: ${d.display_name}` : 'Known Dev';
+        map[d.master_wallet_address] = label;
+      });
+      setWalletOwners(prev => ({ ...prev, [team.id]: map }));
+    }
+  }, [tokenInfo, walletOwners]);
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success('Copied');
+  };
 
   const loadMoreTeams = async () => {
     const nextPage = teamsPage + 1;
@@ -276,17 +334,21 @@ Focus on actionable intelligence for identifying potential coordinated rug opera
       case 'high': return <Badge variant="destructive">High Risk</Badge>;
       case 'medium': return <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30">Medium</Badge>;
       case 'low': return <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Low</Badge>;
-      default: return <Badge variant="outline">Unknown</Badge>;
+      default: return (
+        <Badge variant="outline" className="text-muted-foreground" title="Auto-classifier hasn't scored this team yet">
+          Unrated
+        </Badge>
+      );
     }
   };
 
   // Summary stats
   const summaryStats = {
-    totalTeams: teams.length,
+    totalTeams: totalTeamsCount ?? teams.length,
     highRiskTeams: teams.filter(t => t.risk_level === 'high').length,
-    totalTokensTracked: teams.reduce((sum, t) => sum + (t.tokens_created || 0), 0),
+    totalTokensTracked: totalTokensCount ?? teams.reduce((sum, t) => sum + (t.tokens_created || 0), 0),
     totalRugged: teams.reduce((sum, t) => sum + (t.tokens_rugged || 0), 0),
-    rotationAccounts: rotationPatterns.length,
+    rotationAccounts: totalRotators ?? rotationPatterns.length,
     avgTeamSize: teams.length > 0 
       ? (teams.reduce((sum, t) => sum + (t.member_wallets?.length || 0) + (t.member_twitter_accounts?.length || 0), 0) / teams.length).toFixed(1)
       : 0
@@ -419,7 +481,11 @@ Focus on actionable intelligence for identifying potential coordinated rug opera
                       <Collapsible
                         key={team.id}
                         open={expandedTeam === team.id}
-                        onOpenChange={() => setExpandedTeam(expandedTeam === team.id ? null : team.id)}
+                        onOpenChange={() => {
+                          const next = expandedTeam === team.id ? null : team.id;
+                          setExpandedTeam(next);
+                          if (next) enrichTeam(team);
+                        }}
                       >
                         <CollapsibleTrigger className="w-full px-4 py-3 hover:bg-muted/50 transition-colors">
                           <div className="flex items-center justify-between">
@@ -459,16 +525,36 @@ Focus on actionable intelligence for identifying potential coordinated rug opera
                               </div>
                               <div className="space-y-1">
                                 {team.member_wallets?.slice(0, 5).map((wallet) => (
-                                  <div key={wallet} className="text-xs font-mono bg-muted/50 px-2 py-1 rounded flex items-center justify-between">
-                                    <span>{wallet.slice(0, 8)}...{wallet.slice(-6)}</span>
-                                    <a 
-                                      href={`https://solscan.io/account/${wallet}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-sky-400 hover:text-sky-300"
-                                    >
-                                      <ExternalLink className="h-3 w-3" />
-                                    </a>
+                                  <div key={wallet} className="text-xs bg-muted/50 px-2 py-1 rounded space-y-0.5">
+                                    <div className="flex items-center gap-2">
+                                      <a
+                                        href={`https://solscan.io/account/${wallet}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="font-mono break-all text-sky-400 hover:text-sky-300 flex-1"
+                                      >
+                                        {wallet}
+                                      </a>
+                                      <button
+                                        onClick={(e) => { e.preventDefault(); copyToClipboard(wallet); }}
+                                        className="text-muted-foreground hover:text-foreground shrink-0"
+                                        title="Copy"
+                                      >
+                                        <Copy className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                    {(() => {
+                                      const owner = walletOwners[team.id]?.[wallet];
+                                      return (
+                                        <div className="text-[10px] pl-0.5">
+                                          {owner ? (
+                                            <span className="text-green-400">{owner}</span>
+                                          ) : (
+                                            <span className="italic text-muted-foreground">Unlinked</span>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
                                 ))}
                                 {(team.member_wallets?.length || 0) > 5 && (
@@ -487,23 +573,29 @@ Focus on actionable intelligence for identifying potential coordinated rug opera
                               </div>
                               <div className="flex flex-wrap gap-1">
                                 {team.admin_usernames?.map((admin) => (
-                                  <Badge key={admin} variant="outline" className="text-xs text-yellow-400 border-yellow-500/30">
-                                    <Crown className="h-2.5 w-2.5 mr-1" />
-                                    @{admin}
-                                  </Badge>
+                                  <a key={admin} href={`https://x.com/${admin}`} target="_blank" rel="noopener noreferrer">
+                                    <Badge variant="outline" className="text-xs text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/10 cursor-pointer">
+                                      <Crown className="h-2.5 w-2.5 mr-1" />
+                                      @{admin}
+                                    </Badge>
+                                  </a>
                                 ))}
                                 {team.moderator_usernames?.map((mod) => (
-                                  <Badge key={mod} variant="outline" className="text-xs text-blue-400 border-blue-500/30">
-                                    <Shield className="h-2.5 w-2.5 mr-1" />
-                                    @{mod}
-                                  </Badge>
+                                  <a key={mod} href={`https://x.com/${mod}`} target="_blank" rel="noopener noreferrer">
+                                    <Badge variant="outline" className="text-xs text-blue-400 border-blue-500/30 hover:bg-blue-500/10 cursor-pointer">
+                                      <Shield className="h-2.5 w-2.5 mr-1" />
+                                      @{mod}
+                                    </Badge>
+                                  </a>
                                 ))}
                                 {team.member_twitter_accounts?.filter(a => 
                                   !team.admin_usernames?.includes(a) && !team.moderator_usernames?.includes(a)
                                 ).map((account) => (
-                                  <Badge key={account} variant="outline" className="text-xs">
-                                    @{account}
-                                  </Badge>
+                                  <a key={account} href={`https://x.com/${account}`} target="_blank" rel="noopener noreferrer">
+                                    <Badge variant="outline" className="text-xs hover:bg-muted cursor-pointer">
+                                      @{account}
+                                    </Badge>
+                                  </a>
                                 ))}
                               </div>
                             </div>
@@ -514,10 +606,23 @@ Focus on actionable intelligence for identifying potential coordinated rug opera
                                 <div className="text-sm font-medium">Linked Communities</div>
                                 <div className="flex flex-wrap gap-1">
                                   {team.linked_x_communities.slice(0, 5).map((comm) => (
-                                    <Badge key={comm} variant="secondary" className="text-xs">
-                                      #{comm.slice(0, 10)}...
-                                    </Badge>
+                                    <a
+                                      key={comm}
+                                      href={`https://x.com/i/communities/${comm}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                    >
+                                      <Badge variant="secondary" className="text-xs hover:bg-muted cursor-pointer gap-1">
+                                        #{comm.slice(0, 10)}...
+                                        <ExternalLink className="h-2.5 w-2.5" />
+                                      </Badge>
+                                    </a>
                                   ))}
+                                  {(team.linked_x_communities?.length || 0) > 5 && (
+                                    <span className="text-xs text-muted-foreground self-center">
+                                      +{team.linked_x_communities.length - 5} more
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             )}
@@ -530,20 +635,34 @@ Focus on actionable intelligence for identifying potential coordinated rug opera
                                   Linked Tokens
                                 </div>
                                 <div className="flex flex-wrap gap-1">
-                                  {team.linked_token_mints.slice(0, 5).map((mint) => (
-                                    <a
-                                      key={mint}
-                                      href={`https://dexscreener.com/solana/${mint}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-xs font-mono bg-muted/50 px-2 py-1 rounded hover:bg-muted transition-colors"
-                                    >
-                                      {mint.slice(0, 6)}...
-                                    </a>
-                                  ))}
+                                  {team.linked_token_mints.slice(0, 8).map((mint) => {
+                                    const info = tokenInfo[team.id]?.[mint];
+                                    const symbol = info?.symbol;
+                                    const hasPair = info?.hasPair;
+                                    const url = hasPair
+                                      ? `https://dexscreener.com/solana/${mint}`
+                                      : `https://pump.fun/coin/${mint}`;
+                                    const label = symbol ? `$${symbol}` : `${mint.slice(0, 4)}…${mint.slice(-3)}`;
+                                    return (
+                                      <a
+                                        key={mint}
+                                        href={url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        title={`${mint}${hasPair ? ' · DexScreener' : ' · pump.fun'}`}
+                                        className={`text-xs px-2 py-1 rounded transition-colors ${
+                                          symbol
+                                            ? 'bg-green-500/10 text-green-400 hover:bg-green-500/20 border border-green-500/20'
+                                            : 'bg-muted/50 hover:bg-muted font-mono text-muted-foreground'
+                                        }`}
+                                      >
+                                        {label}
+                                      </a>
+                                    );
+                                  })}
                                   {(team.linked_token_mints?.length || 0) > 5 && (
-                                    <span className="text-xs text-muted-foreground">
-                                      +{team.linked_token_mints.length - 5} more
+                                    <span className="text-xs text-muted-foreground self-center">
+                                      +{Math.max(0, team.linked_token_mints.length - 8)} more
                                     </span>
                                   )}
                                 </div>
@@ -581,7 +700,24 @@ Focus on actionable intelligence for identifying potential coordinated rug opera
                       <TableHead>Admin Of</TableHead>
                       <TableHead>Mod Of</TableHead>
                       <TableHead>Co-Mods</TableHead>
-                      <TableHead>Risk Score</TableHead>
+                      <TableHead>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center gap-1 cursor-help">
+                                Rotation Score
+                                <Info className="h-3 w-3 text-muted-foreground" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              <div className="text-xs space-y-1">
+                                <div className="font-mono">admin × 30 + mod × 20 + min(co_mod, 20) × 5</div>
+                                <div className="text-muted-foreground">Higher = more communities controlled. Not capped at 100.</div>
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -631,12 +767,12 @@ Focus on actionable intelligence for identifying potential coordinated rug opera
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Progress 
-                                value={pattern.risk_score} 
+                                value={Math.min(pattern.risk_score / 1000, 1) * 100}
                                 className="w-16 h-2"
                               />
                               <span className={`font-mono text-sm ${
-                                pattern.risk_score >= 70 ? 'text-destructive' :
-                                pattern.risk_score >= 40 ? 'text-orange-400' : 'text-muted-foreground'
+                                pattern.risk_score >= 300 ? 'text-destructive' :
+                                pattern.risk_score >= 150 ? 'text-orange-400' : 'text-muted-foreground'
                               }`}>
                                 {pattern.risk_score}
                               </span>

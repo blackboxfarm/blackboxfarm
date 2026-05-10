@@ -21280,6 +21280,10 @@ export type Database = {
       }
       count_distinct_tg_users: { Args: never; Returns: number }
       count_registered_tg_users: { Args: never; Returns: number }
+      count_rotation_patterns: {
+        Args: { min_communities?: number }
+        Returns: number
+      }
       count_telegram_announcement_recipients: {
         Args: { p_audiences: string[] }
         Returns: number
