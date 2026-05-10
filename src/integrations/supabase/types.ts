@@ -8252,6 +8252,48 @@ export type Database = {
         }
         Relationships: []
       }
+      kyc_discovery_log: {
+        Row: {
+          chain: Json
+          chain_depth: number
+          dev_wallet: string
+          discovered_at: string
+          discovered_via: string | null
+          id: string
+          kyc_label: string | null
+          kyc_source: string | null
+          kyc_wallet: string
+          token_count: number
+          tokens: string[]
+        }
+        Insert: {
+          chain?: Json
+          chain_depth?: number
+          dev_wallet: string
+          discovered_at?: string
+          discovered_via?: string | null
+          id?: string
+          kyc_label?: string | null
+          kyc_source?: string | null
+          kyc_wallet: string
+          token_count?: number
+          tokens?: string[]
+        }
+        Update: {
+          chain?: Json
+          chain_depth?: number
+          dev_wallet?: string
+          discovered_at?: string
+          discovered_via?: string | null
+          id?: string
+          kyc_label?: string | null
+          kyc_source?: string | null
+          kyc_wallet?: string
+          token_count?: number
+          tokens?: string[]
+        }
+        Relationships: []
+      }
       launchpad_creator_profiles: {
         Row: {
           created_at: string | null
