@@ -22,6 +22,7 @@ const REASON_LABELS: Record<string, string> = {
   fee_farmer: 'Developer pattern: fee farmer',
   mesh_linked: 'Wallet linked to blacklisted entity via funding chain',
   recycled_community: 'X community is a recycled vehicle for prior rugs',
+  shared_rug_community: 'Shares an X community with dead/rugged launches',
 };
 
 export function BadActorAlert({ tokenMint, walletAddress, xHandle, className = '' }: Props) {
