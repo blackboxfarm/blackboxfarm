@@ -47,6 +47,29 @@ import { formatDistanceToNow } from "date-fns";
 
 const SOL_MINTS = new Set(["So11111111111111111111111111111111111111112"]);
 
+// Stablecoins / non-meme tokens that DexScreener sometimes ranks but should never
+// appear in our meme-token Top 200 view.
+const STABLECOIN_MINTS = new Set<string>([
+  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
+  "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
+  "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo", // PYUSD
+  "USDSwr9ApdHk5bvJKMjzff41FfuX8bSxdKcR81vTwcA",  // USDS
+  "HzwqbKZw8HxMN6bF2yFZNrht3c2iXXzpKcFu7uBEDKtr", // EURC
+  "Fu7SNdg5wSwXRYu2LP1F4Ym9qMy6kU2WPByLd7QkDAjo", // USD1 / United States Drip
+]);
+const STABLE_NAME_RX = /^(usdc|usdt|usd1|pyusd|usds|fdusd|eurc|dai|usde)$/i;
+const STABLE_FULLNAME_RX = /\b(usd coin|tether|stablecoin|dollar coin|united states drip)\b/i;
+
+function isStablecoin(t: any): boolean {
+  if (!t) return false;
+  if (STABLECOIN_MINTS.has(t.tokenMint || t.token_mint)) return true;
+  const sym = (t.symbol || "").trim();
+  const nm = (t.name || "").trim();
+  // Exact stablecoin ticker match — but only if name also looks stable.
+  if (STABLE_NAME_RX.test(sym) && STABLE_FULLNAME_RX.test(nm)) return true;
+  return false;
+}
+
 interface WorkerPair {
   pairId: string;
   tokenMint: string;
