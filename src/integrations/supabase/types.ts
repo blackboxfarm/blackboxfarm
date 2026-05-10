@@ -3952,6 +3952,27 @@ export type Database = {
           },
         ]
       }
+      coverage_milestone_state: {
+        Row: {
+          last_notified_at: string | null
+          last_pct: number
+          metric_key: string
+          updated_at: string
+        }
+        Insert: {
+          last_notified_at?: string | null
+          last_pct?: number
+          metric_key: string
+          updated_at?: string
+        }
+        Update: {
+          last_notified_at?: string | null
+          last_pct?: number
+          metric_key?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       creator_audit_results: {
         Row: {
           batch_offset: number
