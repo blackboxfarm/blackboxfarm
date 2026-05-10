@@ -8,6 +8,7 @@ import { ingestPublicCAQuery, type IngestSource } from "../_shared/mesh-ingest.t
 import { getTokenWarnings, writeEarlyWarnings, generateWarningsFromHoldersData } from "../_shared/early-warning-writer.ts";
 import { sanitizeTelegramInput, isInputSafeToProcess } from "../_shared/telegram-input-sanitizer.ts";
 import { obfuscateTicker } from "../_shared/ticker-obfuscator.ts";
+import { runBadActorCheck } from "../_shared/bad-actor-check.ts";
 
 const BOT_TOKEN = Deno.env.get("TELEGRAM_HOLDERSINTEL_BOT_TOKEN")!;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
@@ -18,6 +19,60 @@ const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
   auth: { persistSession: false },
 });
+
+// ─── Bad Actor Banner — prepended to /holders /risk /dev replies ───
+async function buildBadActorBanner(ca: string, tier: string): Promise<string> {
+  try {
+    const alert = await runBadActorCheck(supabase, { tokenMint: ca });
+    if (!alert.isBadActor) return '';
+    const isPaid = ['x_subscriber', 'pro', 'dev', 'enterprise'].includes(tier);
+    const reasonLabels: Record<string, string> = {
+      blacklisted_token: 'Token blacklisted',
+      blacklisted_dev: 'Dev wallet blacklisted',
+      blacklisted_x_handle: 'X handle blacklisted',
+      scammer: 'Dev flagged: scammer',
+      serial_rugger: 'Dev: serial rugger',
+      blacklisted: 'Dev: blacklisted',
+      serial_spammer: 'Dev: serial spammer',
+      fee_farmer: 'Dev: fee farmer',
+      mesh_linked: 'Linked to bad actors',
+      recycled_community: 'Recycled X community',
+    };
+    const emoji = alert.level === 'critical' ? '🚨' : alert.level === 'high' ? '🔴' : '⚠️';
+    let banner = `${emoji} *${alert.headline.replace(/^[^A-Z]*/, '')}*\n`;
+    const labels = alert.reasons.map((r) => reasonLabels[r] || r.replace(/_/g, ' '));
+    if (labels.length > 0) banner += `_${labels.slice(0, 4).join(' · ')}_\n`;
+    if (!isPaid) {
+      const ev =
+        (alert.details?.blacklistEntries?.length ? 1 : 0) +
+        (alert.details?.devReputation ? 1 : 0) +
+        (alert.details?.meshLinks?.length ? 1 : 0) +
+        (alert.details?.recycledCommunities?.length ? 1 : 0) +
+        (alert.details?.launchHistory?.length ? 1 : 0);
+      banner += `🔒 _Full Dev Reputation, KYC, launch history & mesh — Pro subscribers only${
+        ev > 0 ? ` (${ev} evidence categories on file)` : ''
+      }._\n`;
+    } else {
+      const dr = alert.details?.devReputation;
+      if (dr) {
+        banner += `Dev: \`${dr.wallet?.slice(0, 8)}…${dr.wallet?.slice(-4)}\` · trust:*${dr.trust_level || '—'}* · score:*${dr.reputation_score ?? '—'}* · rugged:*${dr.tokens_rugged ?? 0}*/${dr.tokens_launched ?? 0}\n`;
+      }
+      const lh = alert.details?.launchHistory || [];
+      if (lh.length > 0) {
+        const failed = lh.filter((t: any) => t.outcome === 'failed' || t.outcome === 'rugged').length;
+        banner += `Prior launches: *${lh.length}* (failed:*${failed}*)\n`;
+      }
+      const ml = alert.details?.meshLinks || [];
+      if (ml.length > 0) banner += `Funding-chain links to blacklisted entities: *${ml.length}*\n`;
+      const rc = alert.details?.recycledCommunities || [];
+      if (rc.length > 0) banner += `Recycled communities: *${rc.length}*\n`;
+    }
+    return banner + '\n';
+  } catch (e) {
+    console.warn('[bad-actor-banner] failed:', e);
+    return '';
+  }
+}
 
 // ─── Helper: Generate a one-time tokenized action link ───
 async function generateActionLink(userId: string, actionType: string, payload: Record<string, unknown> = {}): Promise<string> {
@@ -1170,6 +1225,8 @@ async function handleRisk(chatId: number, telegramUserId: string, args: string, 
   await sendMessage(chatId, `🛡 Assessing risk for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
   await logUsage(telegramUserId, "/risk", ca);
 
+  const badActorBanner = await buildBadActorBanner(ca, gate.tier);
+
   // Parallel: holders + oracle + momentum
   const [holdersData, oracleData, momentumData] = await Promise.all([
     invokeFunction("bagless-holders-report", { tokenMint: ca }),
@@ -1252,6 +1309,7 @@ async function handleRisk(chatId: number, telegramUserId: string, args: string, 
   let msg = `\`${ca}\`\n` +
     `${tokenHeaderLine(symbol, name, mcap)}\n\n` +
     `${riskEmoji} *${riskLabels[riskLevel]}*\n\n`;
+  if (badActorBanner) msg = badActorBanner + msg;
 
   if (isLite) {
     // Auth tier: score + top 3 signals only
@@ -1409,7 +1467,10 @@ async function handleDev(chatId: number, telegramUserId: string, args: string) {
   }
 
   // ── Build message ──
-  let msg = `🏗 *Dev Intel Report*\n`;
+  const badActorBanner = await buildBadActorBanner(ca, gate.tier);
+  let msg = '';
+  if (badActorBanner) msg += badActorBanner;
+  msg += `🏗 *Dev Intel Report*\n`;
   if (tokenSymbol) {
     msg += `Token: *$${tokenSymbol.replace(/\$/g, '')}*${tokenName ? ` (${tokenName})` : ''}\n`;
   }
@@ -1917,6 +1978,7 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
   }
 
   const isLite = !hasTier(gate.tier, "x_subscriber");
+  const badActorBanner = await buildBadActorBanner(ca, gate.tier);
 
   const totalHolders = data.realHolders ?? data.totalHolders ?? "?";
   const healthScore = data.healthScore?.score ?? data.stabilityScore ?? "?";
@@ -1929,6 +1991,7 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
 
   let header = `\`${ca}\`\n` +
     `${tokenHeaderLine(symbol, name, mcap)}\n\n`;
+  if (badActorBanner) header = badActorBanner + header;
 
   if (isLite) {
     await sendMessage(chatId,
