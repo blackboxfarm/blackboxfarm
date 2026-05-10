@@ -199,13 +199,18 @@ Deno.serve(async (req) => {
     }
 
     if (mode === "evaluate_recent") {
-      // Cron path: evaluate communities touched in last 24h
-      const since = new Date(Date.now() - 24 * 3600_000).toISOString();
+      // Sparse fallback (6h cron): only re-score communities that haven't
+      // been evaluated in the last 7 days. Real-time scoring is event-driven
+      // (mesh-ingest on mint, x-community-resolver on scraper write,
+      // insiders-mesh-* on rug, dex-paid-checker on phase flip). This path
+      // exists ONLY to catch slow drift on rows no event ever touched.
+      const staleCutoff = new Date(Date.now() - 7 * 24 * 3600_000).toISOString();
       const { data: rows } = await supabase
         .from("x_communities")
-        .select("community_id")
-        .gte("updated_at", since)
-        .limit(50);
+        .select("community_id, recycled_evaluated_at")
+        .or(`recycled_evaluated_at.is.null,recycled_evaluated_at.lt.${staleCutoff}`)
+        .order("recycled_evaluated_at", { ascending: true, nullsFirst: true })
+        .limit(25);
       let processed = 0;
       for (const r of rows ?? []) {
         try {
