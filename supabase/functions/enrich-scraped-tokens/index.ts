@@ -109,7 +109,7 @@ Deno.serve(withRunLog('enrich-scraped-tokens', async (req) => {
               if (!token.creator_wallet && hasText(pumpData.creator)) updates.creator_wallet = pumpData.creator;
               if (hasText(token.creator_wallet) || hasText(pumpData.creator)) updates.creator_fetched_at = new Date().toISOString();
               if (hasText(pumpData.symbol) || hasText(pumpData.name) || hasText(image)) updates.metadata_fetched_at = new Date().toISOString();
-              needsUpdate = true;
+              needsUpdate = Object.keys(updates).length > 0;
 
               const lp = normalizeTokenWebsite(pumpData.website);
               if (lp) {
@@ -175,7 +175,7 @@ Deno.serve(withRunLog('enrich-scraped-tokens', async (req) => {
         }
 
         // Fetch creator wallet if missing
-        if (!token.creator_wallet) {
+        if (!token.creator_wallet && !updates.creator_wallet) {
           try {
             // For pump.fun tokens, call pump.fun API directly (authoritative source)
             if (isPumpToken) {
