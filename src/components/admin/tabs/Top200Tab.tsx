@@ -274,7 +274,8 @@ export default function Top200Tab() {
       const tokens = (edgeData.tokens || [])
         .filter((t: any) => t.tokenMint)
         .filter((t: any) => !SOL_MINTS.has(t.tokenMint))
-        .filter((t: any) => !(t.symbol === "SOL" && t.name === "Solana"));
+        .filter((t: any) => !(t.symbol === "SOL" && t.name === "Solana"))
+        .filter((t: any) => !isStablecoin(t));
 
       // Dedupe by tokenMint
       const uniqueTokens = tokens.filter(
@@ -294,14 +295,45 @@ export default function Top200Tab() {
 
       const dbMap = new Map((dbTokens || []).map((token: any) => [token.token_mint, token]));
 
+      // Fallback creator lookup for mints missing creator_wallet in token_lifecycle.
+      const missingCreator = mints.filter(
+        (m: string) => !(dbMap.get(m) as any)?.creator_wallet,
+      );
+      const creatorFallback = new Map<string, string>();
+      if (missingCreator.length > 0) {
+        const [pf, sc] = await Promise.all([
+          supabase
+            .from("pumpfun_watchlist")
+            .select("token_mint, creator_wallet")
+            .in("token_mint", missingCreator)
+            .not("creator_wallet", "is", null),
+          supabase
+            .from("scraped_tokens")
+            .select("token_mint, creator_wallet")
+            .in("token_mint", missingCreator)
+            .not("creator_wallet", "is", null),
+        ]);
+        for (const row of (pf.data || []) as any[]) {
+          if (row.creator_wallet) creatorFallback.set(row.token_mint, row.creator_wallet);
+        }
+        for (const row of (sc.data || []) as any[]) {
+          if (row.creator_wallet && !creatorFallback.has(row.token_mint)) {
+            creatorFallback.set(row.token_mint, row.creator_wallet);
+          }
+        }
+      }
+
       return uniqueTokens.map((t: any, index: number) => {
         const dbToken: any = dbMap.get(t.tokenMint) || {};
+        const creatorWallet =
+          dbToken.creator_wallet || creatorFallback.get(t.tokenMint) || null;
 
         return {
           ...dbToken,
           token_mint: t.tokenMint,
           symbol: dbToken.symbol ?? t.symbol ?? null,
           name: dbToken.name ?? t.name ?? null,
+          creator_wallet: creatorWallet,
           liquidity_usd: t.liquidityUsd ?? dbToken.liquidity_usd ?? null,
           volume_24h: t.volume24h ?? dbToken.volume_24h ?? null,
           price_usd: t.priceUsd ?? dbToken.price_usd ?? null,
@@ -331,6 +363,7 @@ export default function Top200Tab() {
 
       return (data || [])
         .filter((t: any) => !SOL_MINTS.has(t.token_mint))
+        .filter((t: any) => !isStablecoin(t))
         .map((t: any, index: number) => ({
           ...t,
           dex_url: `https://dexscreener.com/solana/${t.token_mint}`,
