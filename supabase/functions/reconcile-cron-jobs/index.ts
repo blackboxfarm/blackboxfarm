@@ -111,6 +111,11 @@ const REQUIRED_CRONS: CronDef[] = [
     command: httpPost('dexscreener-top-200-scraper', '{}'),
   },
   {
+    jobname: 'enrich-scraped-tokens-2m',
+    schedule: '*/2 * * * *',
+    command: httpPost('enrich-scraped-tokens', '{\"batchSize\": 25}'),
+  },
+  {
     jobname: 'oracle-historical-backfill',
     schedule: '*/30 * * * *',
     command: `
