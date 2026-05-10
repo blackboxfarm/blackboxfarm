@@ -244,6 +244,7 @@ Deno.serve(withRunLog('backfill-creator-wallets-solscan', async (req, logger) =>
     const body = await req.json().catch(() => ({}));
     const batchSize = Math.min(Math.max(Number(body.batchSize ?? 100), 1), 400);
     const requestDelayMs = Math.min(Math.max(Number(body.requestDelayMs ?? 20), 0), 1000);
+    const includeResults = body.includeResults === true;
     const tokenMints = Array.isArray(body.tokenMints)
       ? [...new Set(body.tokenMints.map((mint: unknown) => String(mint).trim()).filter(isLikelyAddress))]
       : [];
@@ -321,7 +322,7 @@ Deno.serve(withRunLog('backfill-creator-wallets-solscan', async (req, logger) =>
       derivativeWrites,
       uniqueSolscanRequests: creatorCache.size,
       byTable,
-      results,
+      results: includeResults ? results : undefined,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
   } catch (error) {
     console.error('Error in backfill-creator-wallets-solscan:', error);
