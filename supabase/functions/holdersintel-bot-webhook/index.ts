@@ -1225,6 +1225,8 @@ async function handleRisk(chatId: number, telegramUserId: string, args: string, 
   await sendMessage(chatId, `🛡 Assessing risk for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
   await logUsage(telegramUserId, "/risk", ca);
 
+  const badActorBanner = await buildBadActorBanner(ca, gate.tier);
+
   // Parallel: holders + oracle + momentum
   const [holdersData, oracleData, momentumData] = await Promise.all([
     invokeFunction("bagless-holders-report", { tokenMint: ca }),
@@ -1307,6 +1309,7 @@ async function handleRisk(chatId: number, telegramUserId: string, args: string, 
   let msg = `\`${ca}\`\n` +
     `${tokenHeaderLine(symbol, name, mcap)}\n\n` +
     `${riskEmoji} *${riskLabels[riskLevel]}*\n\n`;
+  if (badActorBanner) msg = badActorBanner + msg;
 
   if (isLite) {
     // Auth tier: score + top 3 signals only
