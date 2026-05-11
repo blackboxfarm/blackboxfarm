@@ -1,12 +1,11 @@
 /**
  * Unified Creator Resolver
  * 
- * Canonical 5-step chain to resolve token creator wallet:
- * 1. Pump.fun user-created API (authoritative for pump tokens)
- * 2. Helius TOKEN_MINT transaction proof
- * 3. Helius DAS getAsset (authorities/creators)
- * 4. Helius RPC getSignaturesForAddress → getTransaction (on-chain fallback)
- * 5. Internal DB records (token_lifecycle, developer_tokens)
+ * Canonical chain to resolve token creator wallet:
+ * 1. Pump.fun coin API (pump-suffixed mints only)
+ * 2. Helius DAS getAsset (authorities/creators)
+ * 3. Helius RPC getSignaturesForAddress → getTransaction (on-chain fallback)
+ * 4. Internal DB records (token_lifecycle, developer_tokens)
  * 
  * Replaces the old Solscan-based creator lookup path.
  */
@@ -17,7 +16,7 @@ import { assertUpdate } from './db-assert.ts';
 
 export interface CreatorResolution {
   creatorWallet: string | null;
-  source: 'pumpfun' | 'helius_mint_tx' | 'helius_das' | 'helius_rpc_onchain' | 'db_cache' | 'none';
+  source: 'pumpfun' | 'helius_das' | 'helius_rpc_onchain' | 'db_cache' | 'none';
   confidence: number;
   errors: string[];
 }
@@ -35,61 +34,38 @@ export async function resolveTokenCreator(
   supabase: any,
   apiErrors: string[] = []
 ): Promise<CreatorResolution> {
-  // Step 1: Pump.fun API via shared wrapper (primary for pump tokens)
-  try {
-    const data = await fetchPumpFunCoin(tokenMint, 'creator-resolver');
-    if (data?.creator) {
-      // Backfill token_lifecycle so downstream queries (e.g. "tokens minted
-      // by this dev") don't return zero. Fire-and-forget — never block.
-      try {
-        if (supabase?.from) {
-          await assertUpdate(
-            supabase
-              .from('token_lifecycle')
-              .update({ creator_wallet: data.creator })
-              .eq('token_mint', tokenMint)
-              .is('creator_wallet', null),
-            'token_lifecycle.creator_wallet',
-          );
-        }
-      } catch (e) { throw e; }
-      return {
-        creatorWallet: data.creator,
-        source: 'pumpfun',
-        confidence: 100,
-        errors: [],
-      };
-    }
-  } catch (e) {
-    apiErrors.push(`Pump.fun API error: ${e instanceof Error ? e.message : 'timeout'}`);
-  }
-
-  // Step 2: Helius TOKEN_MINT transaction proof
-  const heliusKey = getHeliusApiKey();
-  if (heliusKey) {
+  // Step 1: Pump.fun API via shared wrapper (only for pump-suffixed mints)
+  if (isPumpFunToken(tokenMint)) {
     try {
-      const txUrl = getHeliusRestUrl(`/v0/addresses/${tokenMint}/transactions`, { type: 'TOKEN_MINT', limit: '5' });
-      const txRes = await fetch(txUrl, { signal: AbortSignal.timeout(12000) });
-      if (txRes.ok) {
-        const transactions = await txRes.json();
-        if (Array.isArray(transactions) && transactions.length > 0) {
-          // The fee payer of the mint tx is typically the creator
-          const feePayer = transactions[0]?.feePayer;
-          if (feePayer) {
-            return {
-              creatorWallet: feePayer,
-              source: 'helius_mint_tx',
-              confidence: 95,
-              errors: [],
-            };
+      const data = await fetchPumpFunCoin(tokenMint, 'creator-resolver');
+      if (data?.creator) {
+        try {
+          if (supabase?.from) {
+            await assertUpdate(
+              supabase
+                .from('token_lifecycle')
+                .update({ creator_wallet: data.creator })
+                .eq('token_mint', tokenMint)
+                .is('creator_wallet', null),
+              'token_lifecycle.creator_wallet',
+            );
           }
-        }
+        } catch (e) { throw e; }
+        return {
+          creatorWallet: data.creator,
+          source: 'pumpfun',
+          confidence: 100,
+          errors: [],
+        };
       }
     } catch (e) {
-      apiErrors.push(`Helius TOKEN_MINT error: ${e instanceof Error ? e.message : 'timeout'}`);
+      apiErrors.push(`Pump.fun API error: ${e instanceof Error ? e.message : 'timeout'}`);
     }
+  }
 
-    // Step 3: Helius DAS getAsset (reverse lookup)
+  // Step 2: Helius DAS getAsset + Step 3: Helius RPC on-chain fallback
+  const heliusKey = getHeliusApiKey();
+  if (heliusKey) {
     try {
       const rpcUrl = getHeliusRpcUrl(heliusKey);
       const dasRes = await fetch(rpcUrl, {
