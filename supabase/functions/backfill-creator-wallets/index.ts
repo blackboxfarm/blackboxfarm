@@ -164,7 +164,17 @@ async function buildTargets(supabase: any, explicitMints: string[], batchSize: n
   }
 
   const allSpecs: Array<{ table: TargetTable; column: 'creator_wallet' | 'dev_wallet' }> = [
-    ...CREATOR_TABLES.map((table) => ({ table, column: 'creator_wallet' as const })),
+    // PRIORITY: the 5 tables that feed master_token_directory.creator_wallet.
+    // Resolving these moves the Dev Wallet Coverage metric directly.
+    { table: 'pumpfun_watchlist', column: 'creator_wallet' as const },
+    { table: 'holders_intel_seen_tokens', column: 'creator_wallet' as const },
+    { table: 'scraped_tokens', column: 'creator_wallet' as const },
+    { table: 'token_lifecycle', column: 'creator_wallet' as const },
+    { table: 'funnel_feed_discoveries', column: 'creator_wallet' as const },
+    // Then the rest of the derivative tables.
+    ...CREATOR_TABLES
+      .filter((t) => !['pumpfun_watchlist','holders_intel_seen_tokens','scraped_tokens','token_lifecycle','funnel_feed_discoveries'].includes(t))
+      .map((table) => ({ table, column: 'creator_wallet' as const })),
     ...DEV_TABLES.map((table) => ({ table, column: 'dev_wallet' as const })),
   ];
   const perTable = Math.max(1, Math.ceil(batchSize / allSpecs.length));
@@ -276,6 +286,35 @@ async function seedDeveloperChain(supabase: any, mint: string, creator: string, 
   }
 }
 
+// The master_token_directory matview sources `creator_wallet` ONLY from these 5
+// tables (via COALESCE). If we resolve a creator for a mint that lives in
+// flip_positions / autopsy_backlog / proven_dev_tokens / etc. but the matview
+// source tables still have NULL, coverage never moves. Propagate to all of
+// them whenever the row exists with a null creator.
+const MATVIEW_SOURCE_TABLES: Array<{ table: string; column: 'creator_wallet'; orderCol?: string }> = [
+  { table: 'pumpfun_watchlist', column: 'creator_wallet' },
+  { table: 'holders_intel_seen_tokens', column: 'creator_wallet' },
+  { table: 'scraped_tokens', column: 'creator_wallet' },
+  { table: 'token_lifecycle', column: 'creator_wallet' },
+  { table: 'funnel_feed_discoveries', column: 'creator_wallet' },
+];
+
+async function propagateToMatviewSources(supabase: any, mint: string, creator: string): Promise<number> {
+  let writes = 0;
+  for (const spec of MATVIEW_SOURCE_TABLES) {
+    try {
+      const payload = updatePayload(spec.table as TargetTable, spec.column, creator);
+      const { error, count } = await supabase
+        .from(spec.table)
+        .update(payload, { count: 'exact' })
+        .eq('token_mint', mint)
+        .or(`${spec.column}.is.null,${spec.column}.eq.`);
+      if (!error && (count ?? 0) > 0) writes += (count ?? 0);
+    } catch (_) { /* best-effort propagation */ }
+  }
+  return writes;
+}
+
 Deno.serve(withRunLog('backfill-creator-wallets', async (req, logger) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -351,6 +390,12 @@ Deno.serve(withRunLog('backfill-creator-wallets', async (req, logger) => {
         await updateMissingCreator(supabase, target, lookup.creator);
         updated++;
         byTable[target.table] = (byTable[target.table] ?? 0) + 1;
+
+        // Propagate to the 5 matview-source tables so master_token_directory
+        // coverage actually moves. No-op if those rows already have a creator
+        // or the mint isn't present in that table.
+        const propagated = await propagateToMatviewSources(supabase, target.mint, lookup.creator);
+        if (propagated > 0) byTable['__matview_propagation__'] = (byTable['__matview_propagation__'] ?? 0) + propagated;
 
         if (target.table !== 'developer_tokens') {
           await seedDeveloperChain(supabase, target.mint, lookup.creator, lookup.source);
