@@ -164,7 +164,17 @@ async function buildTargets(supabase: any, explicitMints: string[], batchSize: n
   }
 
   const allSpecs: Array<{ table: TargetTable; column: 'creator_wallet' | 'dev_wallet' }> = [
-    ...CREATOR_TABLES.map((table) => ({ table, column: 'creator_wallet' as const })),
+    // PRIORITY: the 5 tables that feed master_token_directory.creator_wallet.
+    // Resolving these moves the Dev Wallet Coverage metric directly.
+    { table: 'pumpfun_watchlist', column: 'creator_wallet' as const },
+    { table: 'holders_intel_seen_tokens', column: 'creator_wallet' as const },
+    { table: 'scraped_tokens', column: 'creator_wallet' as const },
+    { table: 'token_lifecycle', column: 'creator_wallet' as const },
+    { table: 'funnel_feed_discoveries', column: 'creator_wallet' as const },
+    // Then the rest of the derivative tables.
+    ...CREATOR_TABLES
+      .filter((t) => !['pumpfun_watchlist','holders_intel_seen_tokens','scraped_tokens','token_lifecycle','funnel_feed_discoveries'].includes(t))
+      .map((table) => ({ table, column: 'creator_wallet' as const })),
     ...DEV_TABLES.map((table) => ({ table, column: 'dev_wallet' as const })),
   ];
   const perTable = Math.max(1, Math.ceil(batchSize / allSpecs.length));
