@@ -10,6 +10,7 @@ import { ManualKycOverride } from "@/components/admin/ManualKycOverride";
 import DevKycCoveragePanel from "@/components/admin/oracle/DevKycCoveragePanel";
 import MilestoneSmsLogPanel from "@/components/admin/oracle/MilestoneSmsLogPanel";
 import KycDiscoveryLogPanel from "@/components/admin/oracle/KycDiscoveryLogPanel";
+import CreatorBackfillRawLogPanel from "@/components/admin/oracle/CreatorBackfillRawLogPanel";
 
 const ProviderHealthPanel = lazy(() => import("@/components/admin/oracle/ProviderHealthPanel"));
 
@@ -54,6 +55,9 @@ const OracleTab = ({ initialSubTab, initialWallet }: OracleTabProps) => {
 
       {/* SMS milestone notifier log */}
       <MilestoneSmsLogPanel />
+
+      {/* Real-time raw event stream of Solscan creator-wallet backfill */}
+      <CreatorBackfillRawLogPanel />
 
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
         <TabsList className="flex flex-wrap gap-1">
