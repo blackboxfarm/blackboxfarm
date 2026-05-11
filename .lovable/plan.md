@@ -1,63 +1,65 @@
+## Goal
+The current `backfill-creator-wallets-solscan` function is a silent no-op for almost every token because Solscan `/v2.0/token/meta` does **not** return a `creator` field. Replace its API logic with the proven 3-step Helius chain so it actually resolves missing creator/dev wallets across the 26 tables.
 
-## What the 10-min cron actually does
+## What changes
 
-Right now we have **two paths** that score communities, and they overlap:
+### 1. Rebuild the resolver inside `backfill-creator-wallets-solscan`
+Swap the broken `fetchCreatorFromSolscan(mint)` for a new `resolveCreator(mint)` that runs this chain per mint, stopping at the first success:
 
-1. **Event-driven (mesh-ingest)** — every public CA query on `/holders`, `/bubblemap`, or any Telegram bot lookup calls `community-recycled-scorer` in `evaluate_for_token` mode. This re-scores every community linked to that mint. **This is the live path and it's already correct.**
+```text
+1. Pump.fun API (only if mint ends in "pump") → data.creator                conf 100
+2. Helius DAS getAsset → result.creators[0].address (verified || share===100) conf  90
+   (fallback: result.authorities[0].address when creators[] is empty)
+3. Helius RPC getSignaturesForAddress(mint) → take oldest sig
+   → getTransaction(sig) → feePayer = creator                                conf  85
+```
 
-2. **The 10-min cron** — calls the same function in `evaluate_recent` mode. It pulls up to 50 communities whose `x_communities.updated_at` was bumped in the last 24h and re-scores each one. No event awareness, no priority — just "look at recently-touched rows."
+This is the exact chain already battle-tested in `_shared/creator-resolver.ts` — we just inline a slimmer version that returns the raw provider JSON so we can keep logging it to `creator_backfill_events`.
 
-You're right to question it. The cron is a **lazy safety net** that exists because:
-- Some signals change without anyone querying the token (e.g. an X-community scraper bumps member count, a token in the community's history rugs an hour later, a community gets renamed).
-- We didn't have event hooks at those exact moments, so the cron bulk-rescores anything whose `updated_at` moved.
+### 2. Keep newest-first ordering and the raw event log
+- Per-table `ORDER_COLUMN` stays as-is (newest mints first).
+- `creator_backfill_events` table stays. Each event now records:
+  - `solscan_url` → renamed semantically but keep column for compatibility; store the actual provider URL (`https://mainnet.helius-rpc.com/...` or `https://frontend-api.pump.fun/coins/{mint}`).
+  - `response_preview` → raw JSON from whichever provider answered.
+  - new field in JSON body: `provider` (`pumpfun` | `helius_das` | `helius_rpc`).
+- The super-admin **"Creator Wallet Backfill — Raw Event Stream"** panel keeps working unchanged.
 
-The cost is small (50 rows × 10 min) but you're right that it's the wrong shape. Recycled-band scoring should be **fully event-driven**, because every signal that feeds it is itself an event:
+### 3. Rename the function for accuracy
+Rename `backfill-creator-wallets-solscan` → `backfill-creator-wallets`. This requires:
+- Create new edge function `backfill-creator-wallets/index.ts` with the new logic.
+- Update `supabase/config.toml` (add new function, remove old, keep `verify_jwt = false`).
+- Update the cron job that currently invokes the Solscan version to invoke the new name (search `pg_cron` jobs + any UI buttons in `CronStatusPanel`/Oracle tab).
+- Delete the old function directory.
 
-| Signal | True trigger event | Currently captured? |
-|---|---|---|
-| Community age vs token age | Token mint appears | ✅ mesh-ingest fires on CA query |
-| Name-history length | X scraper writes new `name_history[]` row | ❌ No hook |
-| Member-to-holder ratio | X scraper bumps `member_count` OR holders sweep updates | ❌ No hook |
-| Prior-token rug rate | A linked token flips `is_rugged=true` or autopsy lands | ❌ No hook |
-| Serial-dev-admin overlap | New token mint maps community → known scammer dev | ⚠️ Partial (only on lookup) |
-| Rename frequency | X scraper bumps `name_history[]` | ❌ Same as above |
+### 4. Cost & throughput
+- Pump.fun tokens (95% of our backlog) → 1 free API call, no Helius credits burned.
+- Non-Pump tokens → 1 Helius DAS call (~1 credit). Worst case adds 2 RPC calls.
+- At batchSize=100, expected ~100-200 Helius credits per run. Well within the 10M monthly budget.
+- Reuse existing `helius-rate-limiter` wrapper for DAS calls (already imported elsewhere).
 
-So the cron exists to paper over those four ❌ holes.
+### 5. What we do NOT touch
+- The `creator-resolver.ts` shared module stays as-is — production traffic still uses it.
+- The Solscan rate limiter and `creator_backfill_events` table stay.
+- The admin UI panel `CreatorBackfillRawLogPanel.tsx` stays unchanged.
+- All other crons keep their schedules.
 
----
+## Verification
+1. Deploy new function.
+2. Hit it once via curl with `{ batchSize: 20, includeResults: true }`.
+3. Confirm the JSON response shows `resolved > 0` and `byTable` populated.
+4. Open the Super-Admin → Oracle tab → watch the raw event stream show `provider: pumpfun` and `provider: helius_das` events with valid creator addresses.
+5. SQL check:
+   ```sql
+   SELECT COUNT(*) FILTER (WHERE creator_wallet IS NULL) AS still_null,
+          COUNT(*) FILTER (WHERE creator_wallet IS NOT NULL) AS resolved
+   FROM scraped_tokens
+   WHERE created_at > NOW() - INTERVAL '1 day';
+   ```
+   Run before/after to confirm the gap is closing.
 
-## Plan — kill the cron, wire real events
-
-This is the structural fix. On approval I'll execute:
-
-### 1. Hook the X-community scraper
-After the X scraper writes an `x_communities` row (name change, member-count update, new linked mint), fire-and-forget call to `community-recycled-scorer` with `{ mode: 'evaluate', community_id }`. This catches rename + member-bloat + linked-token signals at their actual moment of change.
-
-**Files:** whichever function writes to `x_communities` (likely `backfill-x-communities` and the universal mesh feeder — I'll grep before patching).
-
-### 2. Hook the rug/death events
-When a token flips to `is_rugged=true` or gets an autopsy entry, look up its linked communities and re-score each one. A rug is the most informative signal — a community's "prior rug rate" just changed and we want the badge to flip in real time, not 10 minutes later.
-
-**Files:** `insiders-lifecycle-builder`, `token-autopsy-engine`, or whichever writer flips `is_rugged`.
-
-### 3. Keep the on-mint hook
-Already done via mesh-ingest → `evaluate_for_token`. No change needed; this is the "Check on mint" you mentioned. ✅
-
-### 4. Add a DEX-paid hook
-When `token_social_links.dex_paid_at` flips from null → timestamp (lifecycle phase shift you mentioned), the dev-quality signal changes. Fire `evaluate_for_token`. **Files:** `dex-paid-checker`.
-
-### 5. Replace the cron with a sparse safety-net
-Don't fully delete it — keep ONE cron at **6 hours** that only re-scores communities whose `recycled_evaluated_at` is older than 7 days AND whose `updated_at` is fresh. This catches edge cases where signals drift without an event (rare). Cheaper, less noisy, and clearly a fallback rather than the primary path.
-
-### 6. Update memory
-Save a constraint memory: *"Recycled community scoring is event-driven (mint, DEX paid, rug, scraper write, rename). 6h cron is a fallback only, not the source of truth."*
-
----
-
-## What you'll actually see
-
-- Badges flip the moment the underlying signal moves, not on a 10-min tick.
-- Cron noise drops ~95%.
-- The four ❌ holes in the table above all become ✅.
-
-Want me to ship steps 1–5 in one pass, or do you want to start with just steps 1–2 (scraper + rug hooks) and validate before adding the rest?
+## Files touched
+- `supabase/functions/backfill-creator-wallets/index.ts` (new)
+- `supabase/functions/backfill-creator-wallets-solscan/` (deleted)
+- `supabase/config.toml` (function registration)
+- Any cron entry pointing to the old name (migration)
+- `src/components/admin/oracle/CreatorBackfillRawLogPanel.tsx` (cosmetic header rename only — "Helius/Pump.fun" instead of "Solscan")
