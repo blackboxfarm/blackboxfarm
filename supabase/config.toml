@@ -561,3 +561,6 @@ verify_jwt = false
 
 [functions.backfill-creator-wallets]
 verify_jwt = false
+
+[functions.kyc-bulk-mesh-runner]
+verify_jwt = false
