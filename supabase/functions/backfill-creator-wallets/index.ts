@@ -127,6 +127,18 @@ async function birdeyeResolveCreator(
   apiKey: string,
   supabase: any,
 ): Promise<{ creator: string | null; status: number; durationMs: number; error: string | null }> {
+  // INFRA blocklist — Birdeye `data.owner` returns the mint-authority owner,
+  // which for Pump.fun-suffixed mints is the launchpad program wallet, not the
+  // real human creator. Any wallet here is observed on >=30 unrelated tokens.
+  const INFRA_BLOCKLIST = new Set<string>([
+    'TSLvdd1pWpHVjahSpsvCXUbgwsL3JAcvokwaKt1eokM',
+    '2oCXSSTk2XcF4xFfjxJZjDu66c18MfzkMb8woem6K4rc',
+    'FhVo3mqL8PW5pH5U2CN4XE33DokiyZnUwuGpH2hmHLuM',
+    'FWymgf7GwMXczUmqQ6jeeE4MukdZNuaRom4twz3U45nz',
+    '7sA5em1nTKmLvGm8H85cpgA9hM9YvCoPp729mwe6akhh',
+    'HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC',
+    '7naFFwuEJWeWwWYQUkgAWHsxYKg3KctEuUj42JdAMidP',
+  ]);
   const url = `https://public-api.birdeye.so/defi/token_creation_info?address=${mint}`;
   const start = Date.now();
   let status = 0;
@@ -142,7 +154,11 @@ async function birdeyeResolveCreator(
       const j = await res.json().catch(() => null);
       const owner = j?.data?.owner;
       if (owner && typeof owner === 'string' && owner.length >= 32 && owner !== mint) {
-        creator = owner;
+        if (INFRA_BLOCKLIST.has(owner)) {
+          errorMsg = `infra_wallet_rejected:${owner.slice(0, 8)}`;
+        } else {
+          creator = owner;
+        }
       }
     } else {
       errorMsg = `HTTP ${res.status}`;
