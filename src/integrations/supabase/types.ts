@@ -4057,6 +4057,54 @@ export type Database = {
         }
         Relationships: []
       }
+      creator_backfill_events: {
+        Row: {
+          column_name: string | null
+          created_at: string
+          duration_ms: number | null
+          error_message: string | null
+          from_cache: boolean | null
+          function_name: string
+          http_status: number | null
+          id: string
+          mint: string
+          resolved_creator: string | null
+          response_preview: Json | null
+          solscan_url: string | null
+          table_name: string | null
+        }
+        Insert: {
+          column_name?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          from_cache?: boolean | null
+          function_name?: string
+          http_status?: number | null
+          id?: string
+          mint: string
+          resolved_creator?: string | null
+          response_preview?: Json | null
+          solscan_url?: string | null
+          table_name?: string | null
+        }
+        Update: {
+          column_name?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          from_cache?: boolean | null
+          function_name?: string
+          http_status?: number | null
+          id?: string
+          mint?: string
+          resolved_creator?: string | null
+          response_preview?: Json | null
+          solscan_url?: string | null
+          table_name?: string | null
+        }
+        Relationships: []
+      }
       creator_fusion_audit: {
         Row: {
           aliases_written: number | null
