@@ -8,7 +8,7 @@
  * 4. Helius RPC getSignaturesForAddress → getTransaction (on-chain fallback)
  * 5. Internal DB records (token_lifecycle, developer_tokens)
  * 
- * Replaces solscan-creator-lookup internals.
+ * Replaces the old Solscan-based creator lookup path.
  */
 
 import { getHeliusApiKey, getHeliusRestUrl, getHeliusRpcUrl } from './helius-client.ts';
