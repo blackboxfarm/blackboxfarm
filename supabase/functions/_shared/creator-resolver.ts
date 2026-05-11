@@ -10,7 +10,7 @@
  * Replaces the old Solscan-based creator lookup path.
  */
 
-import { getHeliusApiKey, getHeliusRestUrl, getHeliusRpcUrl } from './helius-client.ts';
+import { getHeliusApiKey, getHeliusRpcUrl } from './helius-client.ts';
 import { fetchPumpFunCoin } from './pumpfun-fetch.ts';
 import { assertUpdate } from './db-assert.ts';
 
