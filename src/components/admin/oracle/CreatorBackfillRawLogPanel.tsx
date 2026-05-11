@@ -156,8 +156,8 @@ export default function CreatorBackfillRawLogPanel() {
             Creator Wallet Backfill — Raw Event Stream
           </CardTitle>
           <CardDescription>
-            Live raw JSON of every Solscan /v2.0/token/meta call from
-            <span className="font-mono"> backfill-creator-wallets-solscan</span>.
+            Live raw JSON of every Pump.fun / Helius DAS / Helius RPC resolution from
+            <span className="font-mono"> backfill-creator-wallets</span>.
             Newest-first. Auto-pruned to the last 5,000 events.
           </CardDescription>
         </div>
