@@ -1,0 +1,1 @@
+SELECT cron.unschedule('kyc-backfill-master-2m');
