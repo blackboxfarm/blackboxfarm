@@ -49,7 +49,8 @@ Deno.serve(async (req) => {
     };
     await assertDbWrite(
       supa.from('token_lifecycle').update(patch).eq('token_mint', t.token_mint),
-      { table: 'token_lifecycle', op: 'update', context: 'first-24h-ath-sealer' },
+      'token_lifecycle',
+      'first-24h-ath-sealer',
     );
     if (res.source === 'no_pool') no_pool++; else sealed++;
   }
