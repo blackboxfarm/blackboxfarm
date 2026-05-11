@@ -9,8 +9,9 @@ const corsHeaders = {
 };
 
 import { isCexWallet, getCexName } from '../_shared/cex-wallets.ts';
-import { getCexNameAny, getCexNameCached, recordCexWallet, warmCexCache } from '../_shared/cex-wallets-db.ts';
+import { getCexNameAny, getCexNameCached, getEntityCached, recordCexWallet, warmCexCache } from '../_shared/cex-wallets-db.ts';
 import { solscanCheckAccountLabel, solscanDiscoverFunders } from '../_shared/solscan-intelligence.ts';
+import { classifyEntityFromLabel } from '../_shared/kyc-entity-classifier.ts';
 
 import { enableHeliusTracking } from "../_shared/helius-fetch-interceptor.ts";
 enableHeliusTracking("mesh-kyc-deep-search");
@@ -28,14 +29,29 @@ interface HeliusFundedByResult {
   slot: number;
 }
 
-function isKnownCex(funderAddress: string, funderName: string | null, funderType: string | null): boolean {
+/**
+ * Identify whether a funder is a KYC-attributable entity (CEX, bridge,
+ * on-ramp, custodian, MM desk, aggregator). Returns the matched entity or
+ * null if the funder looks like an ordinary wallet.
+ */
+function identifyKycEntity(
+  funderAddress: string,
+  funderName: string | null,
+  funderType: string | null,
+): { name: string; type: string } | null {
   // 1) curated file dictionary + DB cache (warmed at handler start)
-  if (getCexNameCached(funderAddress)) return true;
-  // 2) Helius hint
-  if (funderType === 'exchange' || funderType === 'cex') return true;
-  // 3) keyword in funder display name
-  const name = (funderName || '').toLowerCase();
-  return CEX_KEYWORDS.some(k => name.includes(k));
+  const cached = getEntityCached(funderAddress);
+  if (cached) return cached;
+  // 2) Helius hint — exchange/cex marker
+  if (funderType === 'exchange' || funderType === 'cex') {
+    const fromName = classifyEntityFromLabel(funderName);
+    if (fromName) return fromName;
+    return { name: funderName || 'exchange', type: 'cex' };
+  }
+  // 3) classify by display name (broader than CEX-only)
+  const fromName = classifyEntityFromLabel(funderName);
+  if (fromName) return fromName;
+  return null;
 }
 
 /** Map a Solscan-returned label string ("Binance 2", "Coinbase 5") to a canonical CEX name. */
@@ -258,9 +274,10 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
     try {
       const solscanErrors: string[] = [];
       const fast = await solscanCheckAccountLabel(walletAddress, solscanErrors);
-      const directCex = canonicalCexFromLabel(fast.label);
-      if (fast.isCex && directCex) {
-        console.log(`[KYCDeep] ⚡ Solscan-direct hit: ${walletAddress.slice(0, 8)}... funded_by="${fast.label}" → ${directCex}`);
+      const directEntity = classifyEntityFromLabel(fast.label);
+      if (directEntity) {
+        const directCex = directEntity.name;
+        console.log(`[KYCDeep] ⚡ Solscan-direct hit (${directEntity.type}): ${walletAddress.slice(0, 8)}... funded_by="${fast.label}" → ${directCex}`);
 
         // Self-expand the dictionary so future calls don't even need Solscan.
         // We tag this wallet's *funder* as the CEX address only if we can later
@@ -287,7 +304,9 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
           .upsert({
             master_wallet_address: walletAddress,
             kyc_verified: true,
-            kyc_source: `solscan_direct:${directCex}`,
+            kyc_source: `solscan_direct_${directEntity.type}:${directCex}`,
+            kyc_source_type: directEntity.type,
+            kyc_trail_status: 'verified',
             kyc_verification_date: new Date().toISOString(),
             kyc_last_checked_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -379,24 +398,27 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
         depth: current.depth + 1,
       });
 
-      if (isKnownCex(funding.funder, funding.funderName, funding.funderType)) {
-        knownCexWallets.add(funding.funder);
-        kycRoot = current.wallet;
-        kycRootLabel = funding.funderName || funding.funderType || 'exchange';
-        console.log(`[KYCDeep] 🏦 CEX-funded KYC root: ${current.wallet.slice(0, 12)} (funded by "${kycRootLabel}" ${funding.funder.slice(0, 8)})`);
-        // Self-expand: if Helius identified this funder as a CEX but it's not
-        // in our dictionary yet, record it so future scans skip the chain walk.
-        const canon = canonicalCexFromLabel(kycRootLabel);
-        if (canon && !getCexNameCached(funding.funder)) {
-          await recordCexWallet({
-            wallet: funding.funder,
-            cexName: canon,
-            cexLabel: kycRootLabel,
-            source: 'mesh-kyc-deep-search:helius-funded-by',
-            verified: false,
-          });
+      {
+        const entity = identifyKycEntity(funding.funder, funding.funderName, funding.funderType);
+        if (entity) {
+          knownCexWallets.add(funding.funder);
+          kycRoot = current.wallet;
+          kycRootLabel = entity.name;
+          (globalThis as any).__lastEntityType = entity.type;
+          console.log(`[KYCDeep] 🏦 ${entity.type.toUpperCase()}-funded KYC root: ${current.wallet.slice(0, 12)} (funded by "${entity.name}" ${funding.funder.slice(0, 8)})`);
+          // Self-expand: record this funder under correct entity_type.
+          if (!getEntityCached(funding.funder)) {
+            await recordCexWallet({
+              wallet: funding.funder,
+              cexName: entity.name,
+              cexLabel: funding.funderName || entity.name,
+              source: `mesh-kyc-deep-search:${entity.type}`,
+              verified: false,
+              entityType: entity.type,
+            });
+          }
+          continue;
         }
-        continue;
       }
 
       // Write mesh link for the funding relationship — assertUpsert throws on failure
@@ -515,10 +537,13 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
 
     console.log(`[KYCDeep] Done: ${chain.length} chain links, ${siblingWallets.length} siblings, KYC root: ${kycRoot?.slice(0, 12) || 'not found'} (${kycRootLabel || 'N/A'}), ${meshLinksAdded} mesh links added`);
 
-    // Prefer our own curated CEX label over Helius's "funderName" — guarantees
+    // Prefer our own curated label over Helius's "funderName" — guarantees
     // we always say "Binance" instead of "Binance Hot Wallet 7" or null.
-    const ourCexLabel = kycRoot ? getCexNameCached(kycRoot) : null;
+    const ourEntity = kycRoot ? getEntityCached(kycRoot) : null;
+    const ourCexLabel = ourEntity?.name ?? null;
     const finalKycLabel = ourCexLabel ?? kycRootLabel ?? null;
+    const finalEntityType: string =
+      (globalThis as any).__lastEntityType ?? ourEntity?.type ?? (kycRoot ? 'cex' : 'unknown');
 
     // ═══ CRITICAL: Persist KYC outcome on the developer profile ═══
     // - On hit: kyc_verified=true so master_token_directory matview flips green.
@@ -531,8 +556,18 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
     };
     if (kycRoot) {
       profilePayload.kyc_verified = true;
-      profilePayload.kyc_source = finalKycLabel ? `helius_chain:${finalKycLabel}` : 'helius_chain';
+      profilePayload.kyc_source = finalKycLabel
+        ? `${finalEntityType}_chain:${finalKycLabel}`
+        : `${finalEntityType}_chain`;
+      profilePayload.kyc_source_type = finalEntityType;
+      profilePayload.kyc_trail_status = 'verified';
       profilePayload.kyc_verification_date = new Date().toISOString();
+    } else {
+      // No KYC root found within depth budget. Tag the trail outcome so the
+      // UI can distinguish "we couldn't trace" from "self-custody origin".
+      // chain.length === 0 → no funding info at any depth → likely self-custody.
+      // chain.length > 0 but exhausted → depth limit hit, may resolve later.
+      profilePayload.kyc_trail_status = chain.length === 0 ? 'trail_no_kyc' : 'trail_incomplete';
     }
     await assertUpsert(supabase
       .from('developer_profiles')
