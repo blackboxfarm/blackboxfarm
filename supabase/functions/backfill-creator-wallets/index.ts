@@ -119,6 +119,57 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const hasText = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
 const isLikelyAddress = (value: unknown): value is string => hasText(value) && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(value.trim());
 
+// ---- Birdeye fast-path -----------------------------------------------------
+// Single-call resolver: defi/token_creation_info → data.owner. ~1 credit.
+// Logs every call into birdeye_api_usage so we can budget against the plan.
+async function birdeyeResolveCreator(
+  mint: string,
+  apiKey: string,
+  supabase: any,
+): Promise<{ creator: string | null; status: number; durationMs: number; error: string | null }> {
+  const url = `https://public-api.birdeye.so/defi/token_creation_info?address=${mint}`;
+  const start = Date.now();
+  let status = 0;
+  let creator: string | null = null;
+  let errorMsg: string | null = null;
+  try {
+    const res = await fetch(url, {
+      headers: { accept: 'application/json', 'x-chain': 'solana', 'X-API-KEY': apiKey },
+      signal: AbortSignal.timeout(8000),
+    });
+    status = res.status;
+    if (res.ok) {
+      const j = await res.json().catch(() => null);
+      const owner = j?.data?.owner;
+      if (owner && typeof owner === 'string' && owner.length >= 32 && owner !== mint) {
+        creator = owner;
+      }
+    } else {
+      errorMsg = `HTTP ${res.status}`;
+    }
+  } catch (e) {
+    errorMsg = e instanceof Error ? e.message : 'fetch_failed';
+  }
+  const durationMs = Date.now() - start;
+  // Fire-and-forget usage log
+  try {
+    await supabase.from('birdeye_api_usage').insert({
+      function_name: 'backfill-creator-wallets',
+      endpoint: '/defi/token_creation_info',
+      method: 'GET',
+      request_params: { address: mint },
+      response_status: status,
+      response_time_ms: durationMs,
+      success: !!creator,
+      error_message: errorMsg,
+      credits_used: 1,
+      token_mint: mint,
+      resolved_creator: creator,
+    });
+  } catch (_) { /* don't let logging block backfill */ }
+  return { creator, status, durationMs, error: errorMsg };
+}
+
 async function selectMissingRows(supabase: any, table: TargetTable, column: 'creator_wallet' | 'dev_wallet', limit: number): Promise<TargetRow[]> {
   const orderCol = ORDER_COLUMN[table] ?? 'created_at';
   let { data, error } = await supabase
@@ -344,6 +395,10 @@ Deno.serve(withRunLog('backfill-creator-wallets', async (req, logger) => {
     const batchSize = Math.min(Math.max(Number(body.batchSize ?? 100), 1), 400);
     const requestDelayMs = Math.min(Math.max(Number(body.requestDelayMs ?? 20), 0), 1000);
     const includeResults = body.includeResults === true;
+    // Birdeye-only fast-path: skip the Pump.fun / Helius DAS / Helius RPC waterfall.
+    // Defaults ON because Birdeye resolves with a single ~1-credit call and is the
+    // bottleneck-free path for high-throughput backfill.
+    const birdeyeOnly = body.birdeyeOnly !== false;
     const tokenMints = Array.isArray(body.tokenMints)
       ? [...new Set(body.tokenMints.map((mint: unknown) => String(mint).trim()).filter(isLikelyAddress))]
       : [];
@@ -355,7 +410,14 @@ Deno.serve(withRunLog('backfill-creator-wallets', async (req, logger) => {
     );
 
     const targets = await buildTargets(supabase, tokenMints, batchSize);
-    logger?.info('Creator backfill targets claimed', { targets: targets.length, batchSize });
+    logger?.info('Creator backfill targets claimed', { targets: targets.length, batchSize, birdeyeOnly });
+
+    const birdeyeKey = Deno.env.get('BIRDEYE_API_KEY');
+    if (birdeyeOnly && !birdeyeKey) {
+      return new Response(JSON.stringify({ error: 'BIRDEYE_API_KEY not configured but birdeyeOnly=true' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     type Lookup = { creator: string | null; source: string; confidence: number; errors: string[]; durationMs: number };
     const creatorCache = new Map<string, Lookup>();
@@ -372,16 +434,27 @@ Deno.serve(withRunLog('backfill-creator-wallets', async (req, logger) => {
       try {
         let lookup = creatorCache.get(target.mint);
         if (!lookup) {
-          const start = Date.now();
-          const errs: string[] = [];
-          const resolution = await resolveTokenCreator(target.mint, supabase, errs);
-          lookup = {
-            creator: resolution.creatorWallet,
-            source: resolution.source,
-            confidence: resolution.confidence,
-            errors: resolution.errors,
-            durationMs: Date.now() - start,
-          };
+          if (birdeyeOnly) {
+            const be = await birdeyeResolveCreator(target.mint, birdeyeKey!, supabase);
+            lookup = {
+              creator: be.creator,
+              source: be.creator ? 'birdeye' : 'birdeye_miss',
+              confidence: be.creator ? 95 : 0,
+              errors: be.error ? [be.error] : [],
+              durationMs: be.durationMs,
+            };
+          } else {
+            const start = Date.now();
+            const errs: string[] = [];
+            const resolution = await resolveTokenCreator(target.mint, supabase, errs);
+            lookup = {
+              creator: resolution.creatorWallet,
+              source: resolution.source,
+              confidence: resolution.confidence,
+              errors: resolution.errors,
+              durationMs: Date.now() - start,
+            };
+          }
           creatorCache.set(target.mint, lookup);
           if (requestDelayMs > 0) await delay(requestDelayMs);
         }
