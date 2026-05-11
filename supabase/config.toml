@@ -564,3 +564,6 @@ verify_jwt = false
 
 [functions.kyc-bulk-mesh-runner]
 verify_jwt = false
+
+[functions.pumpfun-profile-scrape-test]
+verify_jwt = false
