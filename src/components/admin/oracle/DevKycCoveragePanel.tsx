@@ -85,6 +85,33 @@ export default function DevKycCoveragePanel() {
     refetchInterval: 30_000,
   });
 
+  // Backfill queue depth — counts what the resolver crons will *actually*
+  // attempt, after the dead+<$25k pump.fun exclusion. The master_token_directory
+  // "missing" count is broader (includes mesh-only / scraped / lifecycle rows),
+  // so this surfaces the real addressable work + how much noise we dropped.
+  const { data: queue } = useQuery({
+    queryKey: ['oracle-dev-backfill-queue'],
+    queryFn: async () => {
+      const [pwAddr, pwSkipped, st, hist, tl, ffd] = await Promise.all([
+        supabase.from('pumpfun_watchlist').select('token_mint', { count: 'exact', head: true })
+          .is('creator_wallet', null)
+          .not('status', 'in', '("dead","rejected")')
+          .or('ath_market_cap_usd.gte.25000,ath_market_cap_usd.is.null'),
+        supabase.from('pumpfun_watchlist').select('token_mint', { count: 'exact', head: true })
+          .is('creator_wallet', null)
+          .or('status.in.("dead","rejected"),and(ath_market_cap_usd.not.is.null,ath_market_cap_usd.lt.25000)'),
+        supabase.from('scraped_tokens').select('token_mint', { count: 'exact', head: true }).is('creator_wallet', null),
+        supabase.from('holders_intel_seen_tokens').select('token_mint', { count: 'exact', head: true }).is('creator_wallet', null),
+        supabase.from('token_lifecycle').select('token_mint', { count: 'exact', head: true }).is('creator_wallet', null),
+        supabase.from('funnel_feed_discoveries').select('token_mint', { count: 'exact', head: true }).is('creator_wallet', null),
+      ]);
+      const addressable =
+        (pwAddr.count ?? 0) + (st.count ?? 0) + (hist.count ?? 0) + (tl.count ?? 0) + (ffd.count ?? 0);
+      return { addressable, skipped: pwSkipped.count ?? 0 };
+    },
+    refetchInterval: 30_000,
+  });
+
   const { data: kycBreakdown } = useQuery({
     queryKey: ['oracle-dev-kyc-entity-breakdown'],
     queryFn: async (): Promise<KycEntityBreakdown> => {
@@ -131,7 +158,9 @@ export default function DevKycCoveragePanel() {
   //   kyc-backfill-master-2m: ~100 wallets / 2 min  = 3,000/hr.
   const remainingDev = data?.missing_dev_wallet ?? 0;
   const remainingKyc = total - kyc;
-  const etaDevHours = remainingDev / 3000;
+  const addressableQueue = queue?.addressable ?? remainingDev;
+  const skippedLowAth = queue?.skipped ?? 0;
+  const etaDevHours = addressableQueue / 3000;
   const etaKycHours = remainingKyc / 3000;
 
   // Next-SMS milestone countdown — notifier sends on each new whole-percent
@@ -175,7 +204,10 @@ export default function DevKycCoveragePanel() {
               <Progress value={devPct} className="h-2" />
               {remainingDev > 0 && (
                 <div className="text-[11px] text-muted-foreground mt-1">
-                  {remainingDev.toLocaleString()} missing — ETA ~{etaDevHours.toFixed(1)}h at current cron rate
+                  {addressableQueue.toLocaleString()} in backfill queue — ETA ~{etaDevHours.toFixed(1)}h at current cron rate
+                  {skippedLowAth > 0 && (
+                    <> · <span className="text-zinc-500">{skippedLowAth.toLocaleString()} dead pump.fun tokens skipped (ATH &lt; $25k)</span></>
+                  )}
                   {tokensToNextDevSms > 0 && (
                     <> · next SMS at <span className="text-amber-400 font-mono">{nextDevPct}%</span> ({tokensToNextDevSms.toLocaleString()} more)</>
                   )}
