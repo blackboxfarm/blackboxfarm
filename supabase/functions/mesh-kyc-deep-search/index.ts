@@ -274,9 +274,10 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
     try {
       const solscanErrors: string[] = [];
       const fast = await solscanCheckAccountLabel(walletAddress, solscanErrors);
-      const directCex = canonicalCexFromLabel(fast.label);
-      if (fast.isCex && directCex) {
-        console.log(`[KYCDeep] ⚡ Solscan-direct hit: ${walletAddress.slice(0, 8)}... funded_by="${fast.label}" → ${directCex}`);
+      const directEntity = classifyEntityFromLabel(fast.label);
+      if (directEntity) {
+        const directCex = directEntity.name;
+        console.log(`[KYCDeep] ⚡ Solscan-direct hit (${directEntity.type}): ${walletAddress.slice(0, 8)}... funded_by="${fast.label}" → ${directCex}`);
 
         // Self-expand the dictionary so future calls don't even need Solscan.
         // We tag this wallet's *funder* as the CEX address only if we can later
@@ -303,7 +304,9 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
           .upsert({
             master_wallet_address: walletAddress,
             kyc_verified: true,
-            kyc_source: `solscan_direct:${directCex}`,
+            kyc_source: `solscan_direct_${directEntity.type}:${directCex}`,
+            kyc_source_type: directEntity.type,
+            kyc_trail_status: 'verified',
             kyc_verification_date: new Date().toISOString(),
             kyc_last_checked_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
