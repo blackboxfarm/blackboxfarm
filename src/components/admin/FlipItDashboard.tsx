@@ -2712,9 +2712,9 @@ export function FlipItDashboard() {
       let launchpadInfo: { platform?: string; creatorProfile?: string; creatorId?: string } = {};
       
       if (!creatorWallet) {
-        // Fetch creator wallet from solscan-creator-lookup
+        // Fetch creator wallet from Pump.fun/Helius resolver
         try {
-          const { data: creatorData } = await supabase.functions.invoke('solscan-creator-lookup', {
+          const { data: creatorData } = await supabase.functions.invoke('creator-lookup', {
             body: { tokenMint }
           });
           if (creatorData?.creatorWallet) {
@@ -3022,7 +3022,7 @@ export function FlipItDashboard() {
         
         if (!creatorWallet) {
           try {
-            const { data: creatorData } = await supabase.functions.invoke('solscan-creator-lookup', {
+            const { data: creatorData } = await supabase.functions.invoke('creator-lookup', {
               body: { tokenMint }
             });
             if (creatorData?.creatorWallet) {

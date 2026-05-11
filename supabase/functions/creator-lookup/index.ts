@@ -7,7 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-Deno.serve(withRunLog('solscan-creator-lookup', async (req) => {
+Deno.serve(withRunLog('creator-lookup', async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -66,7 +66,7 @@ Deno.serve(withRunLog('solscan-creator-lookup', async (req) => {
     );
 
   } catch (error) {
-    console.error('Error in solscan-creator-lookup:', error);
+    console.error('Error in creator-lookup:', error);
     return new Response(
       JSON.stringify({ error: (error as Error).message, creatorWallet: null }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }

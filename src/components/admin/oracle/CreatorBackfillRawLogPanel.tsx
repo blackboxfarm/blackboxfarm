@@ -54,7 +54,7 @@ function renderEntry(e: BackfillEvent): string {
   const ts = fmtTs(e.created_at);
   const tbl = (e.table_name ?? '—').padEnd(26).slice(0, 26);
   const head = `[${ts}] ${marker} ${tbl} ${shortMint(e.mint).padEnd(13)} ${String(e.http_status ?? '—').padStart(3)} ${ms.padStart(7)} ${cache}`;
-  const req = `  GET ${e.solscan_url ?? '/v2.0/token/meta?address=' + e.mint}`;
+  const req = `  GET ${e.solscan_url ?? 'internal://creator-resolution/' + e.mint}`;
   const outcome = e.resolved_creator
     ? `  ← creator: ${e.resolved_creator}`
     : `  ← ${e.error_message ?? 'miss'}`;

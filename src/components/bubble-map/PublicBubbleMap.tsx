@@ -289,10 +289,10 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: Publ
       setDevWalletAddress(devNode.fullId || devNode.id.replace(/^wallet:/, ''));
       return;
     }
-    // If no dev node in graph yet, try API lookup
+    // If no dev node in graph yet, try Pump.fun/Helius creator lookup
     if (!devWalletLoading && !devWalletAddress) {
       setDevWalletLoading(true);
-      supabase.functions.invoke('solscan-creator-lookup', { body: { tokenMint: input } })
+      supabase.functions.invoke('creator-lookup', { body: { tokenMint: input } })
         .then(({ data }) => {
           if (data?.creatorWallet) {
             setDevWalletAddress(data.creatorWallet);
