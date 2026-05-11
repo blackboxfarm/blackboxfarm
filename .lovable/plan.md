@@ -1,53 +1,55 @@
-## Why the Birdeye 1,862 ≠ Dev Wallet coverage delta
+## KYC Coverage Expansion — Approved Build (no Arkham)
 
-Two real problems, one cosmetic:
+### Goal
+Lift KYC-verified dev wallets from current 94/62,795 (0.15%) toward a meaningful number using only the providers we already pay for: **Helius, Solscan, Birdeye, our own label DB**.
 
-### Problem 1 — Most Birdeye calls are invisible to us
-`supabase/functions/_shared/creator-resolver.ts` Step 2 calls Birdeye inline and **never logs to `birdeye_api_usage`**. That path is used by `creator-wallet-resolver`, `creator-lookup`, `enrich-scraped-tokens`, and the non-fast-path branch of `backfill-creator-wallets`. Result: dashboard shows 1,862, our table shows 330. We're flying blind on ~82% of Birdeye spend.
+### Why current coverage is so low
+- BFS only marks `kyc_verified=true` when the chain terminates at a known **CEX** label.
+- Most Solana dev wallets are funded by **bridges, on-ramps, aggregators, MM desks** — these are KYC-origin in the real world but our model treats them as "unverified".
+- BFS hops only call Helius `funded-by`; per-hop Solscan label lookup runs only at depth-0.
 
-### Problem 2 — Resolved owners aren't all landing in coverage
-Of 286 Birdeye-resolved owners logged from `backfill-creator-wallets`:
-- 197 visible in MTD ✅
-- 89 — mint isn't in MTD at all (resolved but wrote to a base table not joined into the matview, or the upsert went to `scraped_tokens` for a pump-suffixed mint that isn't in `pumpfun_watchlist`)
-- The MTD coverage delta (+~1,000) is well below the implied ~1,500+ resolutions across all paths
+### Build steps
 
-### Problem 3 (cosmetic) — Matview refresh lag
-MTD refreshes every 10 min. UI updates won't be instant even when writes succeed.
+**1. Schema — broaden the KYC label model**
+- Migration: add `entity_type text` to `known_cex_wallets` (values: `cex | bridge | onramp | aggregator | mm_desk | custodian`). Default existing rows to `cex`.
+- Migration: add `kyc_source_type text` to `developer_profiles` (`cex | bridge | onramp | aggregator | mm_desk | unknown`).
+- Migration: add `kyc_trail_status text` to `developer_profiles` (`verified | trail_no_kyc | trail_incomplete | not_attempted`) so UI can stop conflating "couldn't trace" with "self-custody".
 
----
+**2. Seed bridge / on-ramp / aggregator deposit wallets**
+- New migration seeding ~30–50 well-known Solana addresses for: Wormhole, deBridge, Allbridge, Mayan, MoonPay, Transak, Phantom on-ramp, Coinbase Pay, Jupiter aggregator referral wallets, Kamino/Drift custody, Squads multisig deployer.
+- Each row: `entity_type` set appropriately; `cex_name` is human label.
 
-## Plan
+**3. `_shared/cex-wallets-db.ts` — return entity type**
+- Extend `getCexNameCached/Any` to also return `entity_type`. New helper `getEntityCached(addr): { name, type } | null`.
+- `recordCexWallet()` accepts `entityType` param (default `cex`).
 
-### Step 1 — Instrument the hidden path (highest ROI)
-Refactor `_shared/creator-resolver.ts` Step 2 to call the existing `birdeyeResolveCreator()` helper from `_shared/birdeye-creator.ts` instead of its own inline `fetch`. That helper already logs to `birdeye_api_usage` with full status / latency / resolved owner. After this we'll see **all** Birdeye calls in one place and the 1,862 number will reconcile.
+**4. `mesh-kyc-deep-search` — per-hop Solscan label + broadened terminator**
+- In BFS hop loop, after each Helius `funded-by` resolves a funder, immediately call `solscanCheckAccountLabel(funder)` and consult local dict. Match on **any** `entity_type` not just CEX.
+- On match: write `kyc_verified=true`, `kyc_source_type=<entity_type>`, `kyc_source=<provider>:<label>`, `kyc_trail_status='verified'`.
+- If BFS exhausts depth without a hit: set `kyc_trail_status='trail_no_kyc'` (terminal wallet looks self-custody) or `'trail_incomplete'` (depth limit hit, funder still resolving).
 
-### Step 2 — Diagnose the write-back leak in `backfill-creator-wallets`
-The fast-path (`birdeyeOnly=true`) in `backfill-creator-wallets/index.ts` resolves an owner but I need to verify its write-back logic mirrors the slow-path:
-- pump-suffixed mints → `pumpfun_watchlist.creator_wallet`
-- everything else → `scraped_tokens.creator_wallet`
-- `developer_profiles` shell row created so KYC backfill picks it up
+**5. Rescan helper — apply the expanded dictionary**
+- Extend existing `insiders-genealogy-rescan-kyc` pattern to a new function `kyc-rescan-master-dict` that walks `developer_profiles` where `kyc_verified=false AND genealogy_chain IS NOT NULL`, re-checks every hop against the now-broader dictionary, and flips rows without any new API calls. One-shot + cron every 6 h.
 
-Then audit the matview definition for `master_token_directory` to confirm it actually selects `creator_wallet` from both base tables (so the writes surface). If the matview only joins one, that explains the 89 missing mints.
+**6. UI — `DevKycCoveragePanel` 3-state breakdown**
+- Replace single "KYC root traced" bar with stacked: `Verified KYC (CEX/Bridge/Onramp split) | Trail no KYC | Trail incomplete | Not attempted`.
+- Add small legend showing per-`entity_type` counts.
 
-### Step 3 — Add a "Birdeye usage" panel to admin Oracle
-Small card next to `DevKycCoveragePanel` showing:
-- Calls today / this hour
-- Success vs failure split
-- % that returned an owner
-- Last 10 resolved mints
+**7. Memory updates**
+- Update `mem://features/oracle/kyc-fast-path-and-self-expanding-dictionary.md`: dictionary now multi-entity-type, terminator broadened, per-hop Solscan label in BFS.
+- Add `mem://features/oracle/kyc-trail-status-model.md`: 4-state model + entity types.
 
-Reads from `birdeye_api_usage` (RLS already restricts to super-admins).
+### Out of scope
+- Arkham / TRM / Chainalysis (cost rejected).
+- Birdeye for KYC (no relevant endpoint).
 
-### Step 4 — Force a matview refresh after backfill batches
-Have `backfill-creator-wallets` call `refresh materialized view concurrently master_token_directory` (or trigger the existing cron's RPC) when a batch resolves > 0 owners, so the UI reflects writes within seconds rather than up to 10 min.
+### Expected lift
+After steps 1–5 ship, the rescan pass alone should reclassify a large share of the 62,701 currently-unverified rows because most chains do touch a bridge or on-ramp within 5 hops. Realistic target: **15–35% verified coverage** post-rescan, with the remainder honestly bucketed as `trail_no_kyc` / `trail_incomplete` instead of false-zero.
 
----
-
-## Technical notes
-
-- `_shared/birdeye-creator.ts` already exists, already returns `string | null`, already does the same retry-free single call. Step 2's retry-on-429 logic should move into the helper so the unified logger keeps that nuance.
-- Step 2 fix is ~15 LOC delta; it's a strict refactor with no behavior change other than logging.
-- Matview refresh: prefer `concurrently` to avoid blocking reads. Requires a unique index on the matview (likely already present since 10-min cron uses it).
-- No DB schema changes required for steps 1, 2, 4. Step 3 is read-only UI.
-
-After step 1 ships you'll be able to verify in one query that `count(*) from birdeye_api_usage` matches the Birdeye dashboard within ~1%, which isolates whether the remaining coverage gap is a write-back bug (Step 2) or just owners Birdeye couldn't resolve.
+### Order of execution
+1. Migrations (schema + bridge seed)
+2. `cex-wallets-db.ts` entity_type plumbing
+3. `mesh-kyc-deep-search` per-hop label + broadened terminator
+4. `kyc-rescan-master-dict` function + cron
+5. `DevKycCoveragePanel` 3-state UI
+6. Memory file updates
