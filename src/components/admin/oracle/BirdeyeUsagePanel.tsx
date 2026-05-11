@@ -13,6 +13,15 @@ interface UsageStats {
   recent: Array<{ token_mint: string; resolved_creator: string | null; function_name: string; timestamp: string; response_status: number | null; success: boolean }>;
 }
 
+interface MasterImpact {
+  unique_mints_resolved: number;
+  unique_creators: number;
+  in_master_with_creator: number;
+  in_master_missing_creator: number;
+  excluded_dead_or_rejected: number;
+  not_in_master: number;
+}
+
 export default function BirdeyeUsagePanel() {
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['birdeye-usage-stats'],
@@ -43,6 +52,17 @@ export default function BirdeyeUsagePanel() {
       };
     },
     refetchInterval: 30_000,
+  });
+
+  const { data: impact } = useQuery({
+    queryKey: ['birdeye-master-impact-24h'],
+    queryFn: async (): Promise<MasterImpact | null> => {
+      const { data, error } = await supabase.rpc('get_birdeye_master_impact', { window_hours: 24 });
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      return (row ?? null) as MasterImpact | null;
+    },
+    refetchInterval: 60_000,
   });
 
   const ownerRateHr = data?.hour_success ? ((data.hour_with_owner / data.hour_success) * 100).toFixed(0) : '—';
@@ -105,6 +125,45 @@ export default function BirdeyeUsagePanel() {
                 )}
               </div>
             </div>
+
+            {impact && (
+              <div className="border-t border-border/40 pt-3">
+                <div className="text-[11px] uppercase text-muted-foreground mb-2">
+                  Master directory impact (last 24h)
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
+                  <div className="rounded border border-emerald-500/30 bg-emerald-500/5 p-2">
+                    <div className="font-mono text-emerald-400">{impact.unique_mints_resolved.toLocaleString()}</div>
+                    <div className="text-muted-foreground">unique mints resolved</div>
+                  </div>
+                  <div className="rounded border border-emerald-500/30 bg-emerald-500/5 p-2">
+                    <div className="font-mono text-emerald-400">{impact.unique_creators.toLocaleString()}</div>
+                    <div className="text-muted-foreground">unique dev wallets</div>
+                  </div>
+                  <div className="rounded border border-green-500/30 bg-green-500/5 p-2">
+                    <div className="font-mono text-green-400">{impact.in_master_with_creator.toLocaleString()}</div>
+                    <div className="text-muted-foreground">already covered in master</div>
+                  </div>
+                  <div className="rounded border border-amber-500/30 bg-amber-500/5 p-2">
+                    <div className="font-mono text-amber-400">{impact.in_master_missing_creator.toLocaleString()}</div>
+                    <div className="text-muted-foreground">in master · pending propagation</div>
+                  </div>
+                  <div className="rounded border border-zinc-500/30 bg-zinc-500/5 p-2">
+                    <div className="font-mono text-zinc-400">{impact.excluded_dead_or_rejected.toLocaleString()}</div>
+                    <div className="text-muted-foreground">excluded (dead/rejected)</div>
+                  </div>
+                  <div className="rounded border border-rose-500/30 bg-rose-500/5 p-2">
+                    <div className="font-mono text-rose-400">{impact.not_in_master.toLocaleString()}</div>
+                    <div className="text-muted-foreground">not in master directory</div>
+                  </div>
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-2">
+                  Resolved-owner counts above are <em>API lookups</em>, not net new dev wallets — many tokens
+                  share a single creator (e.g. one wallet accounted for thousands of mints today). The Dev/KYC
+                  Coverage panel reflects canonical master-directory progress.
+                </div>
+              </div>
+            )}
 
             <div className="text-[11px] text-muted-foreground border-t border-border/40 pt-2">
               Logged via <code className="text-emerald-400">birdeye_api_usage</code>. All callers route through{' '}
