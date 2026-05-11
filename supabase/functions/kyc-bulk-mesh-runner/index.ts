@@ -38,12 +38,15 @@ Deno.serve(withRunLog('kyc-bulk-mesh-runner', async (req) => {
   const cutoff = new Date(Date.now() - cooldownHours * 3600_000).toISOString();
 
   // Pull candidates: unverified, never-checked OR cooled-down.
+  // NEWEST-FIRST: prioritize freshly-discovered dev wallets so new tokens
+  // entering the mesh get KYC-traced before older backlog. The cron loops
+  // every 5 min so it naturally laps back to the new top once caught up.
   const { data: candidates, error } = await supabase
     .from('developer_profiles')
-    .select('master_wallet_address, kyc_last_checked_at')
+    .select('master_wallet_address, kyc_last_checked_at, created_at')
     .or('kyc_verified.is.null,kyc_verified.eq.false')
     .or(`kyc_last_checked_at.is.null,kyc_last_checked_at.lt.${cutoff}`)
-    .order('kyc_last_checked_at', { ascending: true, nullsFirst: true })
+    .order('created_at', { ascending: false, nullsFirst: false })
     .limit(batchSize);
 
   if (error) {
