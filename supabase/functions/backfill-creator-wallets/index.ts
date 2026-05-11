@@ -191,7 +191,6 @@ function truncateForLog(body: any): any {
 function providerUrl(source: string, mint: string): string {
   switch (source) {
     case 'pumpfun': return `https://frontend-api.pump.fun/coins/${mint}`;
-    case 'helius_mint_tx': return `https://api.helius.xyz/v0/addresses/${mint}/transactions?type=TOKEN_MINT`;
     case 'helius_das': return `https://mainnet.helius-rpc.com/?method=getAsset&id=${mint}`;
     case 'helius_rpc_onchain': return `https://mainnet.helius-rpc.com/?method=getSignaturesForAddress&address=${mint}`;
     case 'db_cache': return `internal://db_cache/${mint}`;
