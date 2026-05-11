@@ -44,6 +44,14 @@ const corsHeaders = {
 Deno.serve(withRunLog('coverage-milestone-notifier', async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
+  let force = false;
+  if (req.method === 'POST') {
+    try {
+      const body = await req.json();
+      force = body?.force === true;
+    } catch { /* no body, fine */ }
+  }
+
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
@@ -78,8 +86,9 @@ Deno.serve(withRunLog('coverage-milestone-notifier', async (req) => {
 
   async function checkAndNotify(key: string, label: string, current: number, count: number) {
     const last = stateMap.get(key) ?? -1;
-    if (current <= last) return;
-    const msg = `📊 ${current}% ${label}\n\n${count.toLocaleString()} / ${total.toLocaleString()} tokens.${current >= 100 ? '\n\n✅ COMPLETE.' : ''}`;
+    if (!force && current <= last) return;
+    const prefix = force && current <= last ? '🔄 (re-send) ' : '';
+    const msg = `${prefix}📊 ${current}% ${label}\n\n${count.toLocaleString()} / ${total.toLocaleString()} tokens.${current >= 100 ? '\n\n✅ COMPLETE.' : ''}`;
     const r = await sendSms(msg);
     if (r.ok) {
       await assertUpsert(supabase.from('coverage_milestone_state').upsert({
