@@ -2428,6 +2428,57 @@ export type Database = {
           },
         ]
       }
+      birdeye_api_usage: {
+        Row: {
+          created_at: string
+          credits_used: number
+          endpoint: string
+          error_message: string | null
+          function_name: string
+          id: string
+          method: string
+          request_params: Json | null
+          resolved_creator: string | null
+          response_status: number | null
+          response_time_ms: number | null
+          success: boolean
+          timestamp: string
+          token_mint: string | null
+        }
+        Insert: {
+          created_at?: string
+          credits_used?: number
+          endpoint: string
+          error_message?: string | null
+          function_name: string
+          id?: string
+          method?: string
+          request_params?: Json | null
+          resolved_creator?: string | null
+          response_status?: number | null
+          response_time_ms?: number | null
+          success?: boolean
+          timestamp?: string
+          token_mint?: string | null
+        }
+        Update: {
+          created_at?: string
+          credits_used?: number
+          endpoint?: string
+          error_message?: string | null
+          function_name?: string
+          id?: string
+          method?: string
+          request_params?: Json | null
+          resolved_creator?: string | null
+          response_status?: number | null
+          response_time_ms?: number | null
+          success?: boolean
+          timestamp?: string
+          token_mint?: string | null
+        }
+        Relationships: []
+      }
       blackbox_campaigns: {
         Row: {
           created_at: string | null
