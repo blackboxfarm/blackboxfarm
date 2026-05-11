@@ -172,21 +172,43 @@ async function birdeyeResolveCreator(
 
 async function selectMissingRows(supabase: any, table: TargetTable, column: 'creator_wallet' | 'dev_wallet', limit: number): Promise<TargetRow[]> {
   const orderCol = ORDER_COLUMN[table] ?? 'created_at';
-  let { data, error } = await supabase
+  // Build base query
+  let q = supabase
     .from(table)
     .select('token_mint')
     .not('token_mint', 'is', null)
-    .or(`${column}.is.null,${column}.eq.`)
+    .or(`${column}.is.null,${column}.eq.`);
+
+  // EXCLUSION: dead bonding-curve tokens that never broke $20k ATH are
+  // already filtered out of master_token_directory (status='dead'/'rejected'
+  // are excluded by the matview), so resolving their creators is pure waste
+  // and pushes good tokens further back in the queue. Skip them at source.
+  if (table === 'pumpfun_watchlist') {
+    q = q
+      .not('status', 'in', '("dead","rejected")')
+      .or('ath_market_cap_usd.gte.20000,ath_market_cap_usd.is.null');
+    // Note: the second .or() clause keeps tokens with no ATH yet (still
+    // tracking) but drops dead tokens whose ATH was tiny. Combined with the
+    // status filter above, only dead tokens with >=20k ATH (real launches
+    // that died) get through — those still matter for autopsy.
+  }
+
+  let { data, error } = await q
     .order(orderCol, { ascending: false, nullsFirst: false })
     .limit(limit);
 
   if (error) {
-    const retry = await supabase
+    let retryQ = supabase
       .from(table)
       .select('token_mint')
       .not('token_mint', 'is', null)
-      .or(`${column}.is.null,${column}.eq.`)
-      .limit(limit);
+      .or(`${column}.is.null,${column}.eq.`);
+    if (table === 'pumpfun_watchlist') {
+      retryQ = retryQ
+        .not('status', 'in', '("dead","rejected")')
+        .or('ath_market_cap_usd.gte.20000,ath_market_cap_usd.is.null');
+    }
+    const retry = await retryQ.limit(limit);
     if (retry.error) throw retry.error;
     data = retry.data;
   }
