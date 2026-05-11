@@ -21893,6 +21893,17 @@ export type Database = {
           total_credits: number
         }[]
       }
+      get_birdeye_master_impact: {
+        Args: { window_hours?: number }
+        Returns: {
+          excluded_dead_or_rejected: number
+          in_master_missing_creator: number
+          in_master_with_creator: number
+          not_in_master: number
+          unique_creators: number
+          unique_mints_resolved: number
+        }[]
+      }
       get_blackbox_user_decrypted: {
         Args: { user_id_param: string }
         Returns: {

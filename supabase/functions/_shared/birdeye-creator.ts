@@ -64,6 +64,23 @@ export async function birdeyeResolveCreator(
         resolved_creator: owner,
       });
     } catch { /* ignore logging errors */ }
+
+    // Persist creator → token edge into reputation_mesh so mesh-only tokens
+    // (no row in pumpfun_watchlist / scraped_tokens / lifecycle / holders_intel /
+    // funnel_feed) still surface a creator inside master_token_directory.
+    if (owner) {
+      try {
+        await supabase.from('reputation_mesh').upsert({
+          source_type: 'wallet',
+          source_id: owner,
+          linked_type: 'token',
+          linked_id: tokenMint,
+          relationship: 'created_token',
+          confidence: 95,
+          discovered_via: `birdeye:${fnName}`,
+        }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true });
+      } catch { /* mesh write is best-effort augmentation */ }
+    }
   }
 
   return owner;

@@ -134,6 +134,13 @@ export default function DevKycCoveragePanel() {
   const etaDevHours = remainingDev / 3000;
   const etaKycHours = remainingKyc / 3000;
 
+  // Next-SMS milestone countdown — notifier sends on each new whole-percent
+  // crossing of dev_wallet / kyc_traced coverage.
+  const nextDevPct = Math.floor(devPct) + 1;
+  const nextKycPct = Math.floor(kycPct) + 1;
+  const tokensToNextDevSms = total > 0 ? Math.max(0, Math.ceil((nextDevPct / 100) * total) - dev) : 0;
+  const tokensToNextKycSms = total > 0 ? Math.max(0, Math.ceil((nextKycPct / 100) * total) - kyc) : 0;
+
   return (
     <Card className="border-amber-500/30 bg-gradient-to-br from-amber-950/10 to-yellow-950/5">
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
@@ -169,6 +176,9 @@ export default function DevKycCoveragePanel() {
               {remainingDev > 0 && (
                 <div className="text-[11px] text-muted-foreground mt-1">
                   {remainingDev.toLocaleString()} missing — ETA ~{etaDevHours.toFixed(1)}h at current cron rate
+                  {tokensToNextDevSms > 0 && (
+                    <> · next SMS at <span className="text-amber-400 font-mono">{nextDevPct}%</span> ({tokensToNextDevSms.toLocaleString()} more)</>
+                  )}
                 </div>
               )}
               {remainingDev === 0 && total > 0 && (
@@ -187,6 +197,9 @@ export default function DevKycCoveragePanel() {
               {remainingKyc > 0 && (
                 <div className="text-[11px] text-muted-foreground mt-1">
                   {remainingKyc.toLocaleString()} pending — ETA ~{etaKycHours.toFixed(1)}h at current cron rate
+                  {tokensToNextKycSms > 0 && (
+                    <> · next SMS at <span className="text-amber-400 font-mono">{nextKycPct}%</span> ({tokensToNextKycSms.toLocaleString()} more)</>
+                  )}
                 </div>
               )}
               {remainingKyc === 0 && total > 0 && (
