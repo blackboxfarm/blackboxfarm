@@ -312,6 +312,27 @@ async function propagateToMatviewSources(supabase: any, mint: string, creator: s
       if (!error && (count ?? 0) > 0) writes += (count ?? 0);
     } catch (_) { /* best-effort propagation */ }
   }
+  // ORPHAN FALLBACK: if no source table had a row for this mint, the matview
+  // (which only reads creator_wallet from these 5 base tables) will never
+  // surface our resolution. ~89% of missing-creator mints are orphans that
+  // live only in reputation_mesh / token_social_links. Seed scraped_tokens
+  // with a minimal row so the matview picks the creator up on next refresh.
+  if (writes === 0) {
+    try {
+      const { error } = await supabase
+        .from('scraped_tokens')
+        .upsert(
+          {
+            token_mint: mint,
+            creator_wallet: creator,
+            creator_fetched_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'token_mint', ignoreDuplicates: false },
+        );
+      if (!error) writes = 1;
+    } catch (_) { /* best-effort */ }
+  }
   return writes;
 }
 
