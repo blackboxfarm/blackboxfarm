@@ -5,6 +5,7 @@ import { trackFunnelStage } from '../_shared/funnel-tracker.ts';
 import { isInfrastructureToken } from "../_shared/excluded-tokens.ts";
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 import { isFunctionEnabled } from '../_shared/function-toggle.ts';
+import { birdeyeResolveCreator } from '../_shared/birdeye-creator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -92,7 +93,7 @@ interface RichMeta {
   telegramUrl?: string;
   websiteUrl?: string;
 }
-async function fetchRichMeta(mint: string): Promise<RichMeta> {
+async function fetchRichMeta(mint: string, supabase?: any): Promise<RichMeta> {
   const out: RichMeta = {};
   // Pump.fun (throttled) — gives us creator + bonding curve when on-curve.
   try {
@@ -131,6 +132,15 @@ async function fetchRichMeta(mint: string): Promise<RichMeta> {
       }
     }
   } catch { /* ignore */ }
+
+  // Birdeye fast-path — pre-resolve creator on insertion so the backfill
+  // queue stays small. 1 credit, ~150-400ms. Only if Pump.fun didn't give one.
+  if (!out.creatorWallet) {
+    try {
+      const owner = await birdeyeResolveCreator(mint, 'funnel-feed-scanner', supabase);
+      if (owner) out.creatorWallet = owner;
+    } catch { /* ignore */ }
+  }
 
   return out;
 }
@@ -456,7 +466,7 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
     let tokenName = validation.name || watchlistEntry?.token_name || null;
     // Always pull rich metadata for new tokens — symbol/name + price/mcap/liquidity/creator.
     // For tokens already in the watchlist, only refresh symbol/name if missing.
-    const richMeta = !watchlistEntry ? await fetchRichMeta(mint) : ({} as RichMeta);
+    const richMeta = !watchlistEntry ? await fetchRichMeta(mint, supabase) : ({} as RichMeta);
     if (!tokenSymbol) tokenSymbol = richMeta.symbol || null;
     if (!tokenName) tokenName = richMeta.name || null;
     if (!tokenSymbol) {
