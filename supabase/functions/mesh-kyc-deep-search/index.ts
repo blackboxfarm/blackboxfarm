@@ -10,7 +10,7 @@ const corsHeaders = {
 
 import { isCexWallet, getCexName } from '../_shared/cex-wallets.ts';
 import { getCexNameAny, getCexNameCached, recordCexWallet, warmCexCache } from '../_shared/cex-wallets-db.ts';
-import { solscanCheckAccountLabel } from '../_shared/solscan-intelligence.ts';
+import { solscanCheckAccountLabel, solscanDiscoverFunders } from '../_shared/solscan-intelligence.ts';
 
 import { enableHeliusTracking } from "../_shared/helius-fetch-interceptor.ts";
 enableHeliusTracking("mesh-kyc-deep-search");
@@ -108,6 +108,66 @@ async function heliusFundedBy(
     console.error(`[KYCDeep] ${msg}`);
     return null;
   }
+}
+
+/**
+ * Solscan-first per-hop funder discovery. Uses
+ *   1) /v2.0/account/transfer (top SOL funder) — solscanDiscoverFunders
+ *   2) /v2.0/account/detail   (CEX label on the funder) — solscanCheckAccountLabel
+ * Returns null if Solscan can't identify a funder so the caller can fall back
+ * to Helius. Cuts Helius usage drastically: every chain step that Solscan can
+ * resolve costs 1–2 cheap Solscan credits instead of a Helius funded-by call.
+ */
+async function solscanFundedBy(
+  walletAddress: string,
+  errors: string[]
+): Promise<HeliusFundedByResult | null> {
+  try {
+    const funders = await solscanDiscoverFunders(walletAddress, errors, 1);
+    if (!funders || funders.length === 0) return null;
+    const top = funders[0];
+    if (!top?.wallet) return null;
+
+    // Cheap label probe on the funder so we can short-circuit if it's a CEX.
+    let funderName: string | null = null;
+    let funderType: string | null = null;
+    try {
+      const label = await solscanCheckAccountLabel(top.wallet, errors);
+      if (label?.label) funderName = label.label;
+      if (label?.isCex) funderType = 'exchange';
+    } catch { /* non-fatal */ }
+
+    return {
+      funder: top.wallet,
+      funderName,
+      funderType,
+      amount: top.amountSol || 0,
+      amountRaw: String(Math.round((top.amountSol || 0) * 1e9)),
+      signature: top.txSignature || '',
+      timestamp: top.timestamp || 0,
+      slot: 0,
+    };
+  } catch (e) {
+    const msg = `Solscan funded-by error: ${e instanceof Error ? e.message : 'timeout'}`;
+    errors.push(msg);
+    return null;
+  }
+}
+
+/**
+ * Per-hop funder lookup: Solscan first (cheap), Helius fallback (expensive).
+ */
+async function tryFundedBy(
+  walletAddress: string,
+  heliusApiKey: string,
+  errors: string[]
+): Promise<HeliusFundedByResult | null> {
+  const viaSolscan = await solscanFundedBy(walletAddress, errors);
+  if (viaSolscan) {
+    console.log(`[KYCDeep] ⚡ Solscan-hop ${walletAddress.slice(0, 8)} → funder ${viaSolscan.funder.slice(0, 8)} (${viaSolscan.funderName || 'unlabeled'})`);
+    return viaSolscan;
+  }
+  return await heliusFundedBy(walletAddress, heliusApiKey, errors);
 }
 
 /**
@@ -300,7 +360,7 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
 
       console.log(`[KYCDeep] Tracing depth ${current.depth}: ${current.wallet.slice(0, 12)}...`);
 
-      const funding = await heliusFundedBy(current.wallet, heliusApiKey, errors);
+      const funding = await tryFundedBy(current.wallet, heliusApiKey, errors);
 
       if (!funding) {
         if (current.depth > 0 && !kycRoot) {

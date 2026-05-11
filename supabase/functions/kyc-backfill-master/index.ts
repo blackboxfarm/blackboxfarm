@@ -82,7 +82,11 @@ Deno.serve(withRunLog('kyc-backfill-master', async (req) => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${serviceKey}`,
         },
-        body: JSON.stringify({ walletAddress: t.wallet, maxDepth: 6 }),
+        // Cron path: Solscan-first per-hop, depth 5, and skip Helius-heavy
+        // sibling discovery. Sibling/bundle expansion still runs on-demand
+        // (UI calls without discoverBundle:false), this only affects the
+        // every-2-min backfill loop where Helius credits add up fast.
+        body: JSON.stringify({ walletAddress: t.wallet, maxDepth: 5, discoverBundle: false }),
       });
       const ok = res.ok;
       const json = ok ? await res.json().catch(() => ({})) : { error: await res.text() };
