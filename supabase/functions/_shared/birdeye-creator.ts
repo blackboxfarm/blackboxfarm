@@ -13,6 +13,25 @@ export async function birdeyeResolveCreator(
   const key = Deno.env.get('BIRDEYE_API_KEY');
   if (!key) return null;
 
+  // ---- INFRA / LAUNCHPAD BLOCKLIST ----------------------------------------
+  // Birdeye's `data.owner` is the **mint authority owner**, which on Pump.fun
+  // is the launchpad program / shared router wallet — NOT the human creator.
+  // Any wallet here is a known infrastructure address that has been observed
+  // attributed to dozens or thousands of unrelated tokens. If we see one, we
+  // treat it as a miss so the caller can fall through to Pump.fun coin API or
+  // the deeper Helius/mesh chain.
+  const INFRA_BLOCKLIST = new Set<string>([
+    // Pump.fun launchpad / shared mint-authority wallet (seen on 1,294+ pump tokens)
+    'TSLvdd1pWpHVjahSpsvCXUbgwsL3JAcvokwaKt1eokM',
+    // Other high-frequency infra wallets observed in pumpfun_watchlist (>30 tokens each)
+    '2oCXSSTk2XcF4xFfjxJZjDu66c18MfzkMb8woem6K4rc',
+    'FhVo3mqL8PW5pH5U2CN4XE33DokiyZnUwuGpH2hmHLuM',
+    'FWymgf7GwMXczUmqQ6jeeE4MukdZNuaRom4twz3U45nz',
+    '7sA5em1nTKmLvGm8H85cpgA9hM9YvCoPp729mwe6akhh',
+    'HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC',
+    '7naFFwuEJWeWwWYQUkgAWHsxYKg3KctEuUj42JdAMidP',
+  ]);
+
   const started = Date.now();
   let status = 0;
   let success = false;
@@ -36,8 +55,14 @@ export async function birdeyeResolveCreator(
       const j = await res.json();
       const o = j?.data?.owner;
       if (typeof o === 'string' && o.length >= 32 && o !== tokenMint) {
-        owner = o;
-        success = true;
+        if (INFRA_BLOCKLIST.has(o)) {
+          // Reject infrastructure wallets — caller must fall through.
+          errorMessage = `infra_wallet_rejected:${o.slice(0, 8)}`;
+          success = true; // 200 OK, just not usable
+        } else {
+          owner = o;
+          success = true;
+        }
       } else {
         success = true; // 200 but no owner
       }
