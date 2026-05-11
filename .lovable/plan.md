@@ -1,86 +1,53 @@
+## Why the Birdeye 1,862 ≠ Dev Wallet coverage delta
 
-## Current state
+Two real problems, one cosmetic:
 
-| Table | Missing | Filled |
-|---|---|---|
-| `holders_intel_seen_tokens` | 6,013 | 374 |
-| `pumpfun_watchlist` | 10,453 | 16,857 |
-| `scraped_tokens` | 459 | 1,878 |
+### Problem 1 — Most Birdeye calls are invisible to us
+`supabase/functions/_shared/creator-resolver.ts` Step 2 calls Birdeye inline and **never logs to `birdeye_api_usage`**. That path is used by `creator-wallet-resolver`, `creator-lookup`, `enrich-scraped-tokens`, and the non-fast-path branch of `backfill-creator-wallets`. Result: dashboard shows 1,862, our table shows 330. We're flying blind on ~82% of Birdeye spend.
 
-Two functions exist that both resolve creator wallets via the same chain (Pump.fun → Helius DAS → Helius RPC on-chain):
+### Problem 2 — Resolved owners aren't all landing in coverage
+Of 286 Birdeye-resolved owners logged from `backfill-creator-wallets`:
+- 197 visible in MTD ✅
+- 89 — mint isn't in MTD at all (resolved but wrote to a base table not joined into the matview, or the upsert went to `scraped_tokens` for a pump-suffixed mint that isn't in `pumpfun_watchlist`)
+- The MTD coverage delta (+~1,000) is well below the implied ~1,500+ resolutions across all paths
 
-1. **`creator-wallet-resolver`** — driven by the `creator-wallet-resolver-2m` cron every 2 min, `batchSize=50`. Reads `master_token_directory` matview only, writes back to `pumpfun_watchlist` / `scraped_tokens`. **Does NOT log to `creator_backfill_events`**, so you can't see it work.
-2. **`backfill-creator-wallets`** — the new function. Sweeps **all 26 tables** directly (incl. `holders_intel_seen_tokens`), logs every attempt to `creator_backfill_events` (visible in Oracle Tab). `batchSize` up to 400.
+### Problem 3 (cosmetic) — Matview refresh lag
+MTD refreshes every 10 min. UI updates won't be instant even when writes succeed.
 
-The 2-min cron is doing some work but invisible, and it's blind to the 6k `holders_intel_seen_tokens` backlog (only sees what's in the matview, which lags). That's why the Oracle log panel looks dead.
+---
 
-## Recommended approach
+## Plan
 
-### 1. Repoint the 2-min cron at `backfill-creator-wallets`
-- One function = one observable pipeline.
-- Every resolution shows up live in the Oracle Raw Event Stream panel.
-- It already drains all 26 tables newest-first, including `holders_intel_seen_tokens`.
-- Keep `batchSize: 100` for the 2-min cadence (~3,000/hr theoretical, realistically ~1,500–2,000/hr after Helius rate limits).
+### Step 1 — Instrument the hidden path (highest ROI)
+Refactor `_shared/creator-resolver.ts` Step 2 to call the existing `birdeyeResolveCreator()` helper from `_shared/birdeye-creator.ts` instead of its own inline `fetch`. That helper already logs to `birdeye_api_usage` with full status / latency / resolved owner. After this we'll see **all** Birdeye calls in one place and the 1,862 number will reconcile.
 
-### 2. Add a high-volume catch-up sweep (every 10 min)
-- Same function, `batchSize: 300`, runs every 10 min.
-- Purpose: drain the legacy 17k backlog in 1–2 days, then naturally tapers off (it only picks rows with NULL creator).
-- After backlog clears it will mostly idle since the 2-min cron handles fresh inflow.
+### Step 2 — Diagnose the write-back leak in `backfill-creator-wallets`
+The fast-path (`birdeyeOnly=true`) in `backfill-creator-wallets/index.ts` resolves an owner but I need to verify its write-back logic mirrors the slow-path:
+- pump-suffixed mints → `pumpfun_watchlist.creator_wallet`
+- everything else → `scraped_tokens.creator_wallet`
+- `developer_profiles` shell row created so KYC backfill picks it up
 
-### 3. Retire `creator-wallet-resolver` (or leave dormant)
-- No longer scheduled. Keep the file for now in case anything calls it ad-hoc; remove next pass.
+Then audit the matview definition for `master_token_directory` to confirm it actually selects `creator_wallet` from both base tables (so the writes surface). If the matview only joins one, that explains the 89 missing mints.
 
-### 4. Estimated drain time
-- ~17k missing across all tables.
-- New cadence: ~100 every 2 min + ~300 every 10 min = ~4,800/hr ceiling.
-- Helius/Pump.fun realistic throughput: ~1,500–2,500 resolved/hr.
-- Full drain: **~7–10 hours**, fully visible in the Oracle log panel.
+### Step 3 — Add a "Birdeye usage" panel to admin Oracle
+Small card next to `DevKycCoveragePanel` showing:
+- Calls today / this hour
+- Success vs failure split
+- % that returned an owner
+- Last 10 resolved mints
 
-## Technical changes
+Reads from `birdeye_api_usage` (RLS already restricts to super-admins).
 
-```sql
--- Unschedule old cron
-SELECT cron.unschedule('creator-wallet-resolver-2m');
+### Step 4 — Force a matview refresh after backfill batches
+Have `backfill-creator-wallets` call `refresh materialized view concurrently master_token_directory` (or trigger the existing cron's RPC) when a batch resolves > 0 owners, so the UI reflects writes within seconds rather than up to 10 min.
 
--- New: every 2 min, modest batch, all tables, logged
-SELECT cron.schedule(
-  'backfill-creator-wallets-2m',
-  '*/2 * * * *',
-  $$ SELECT net.http_post(
-       url := 'https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/backfill-creator-wallets',
-       headers := '{"Content-Type":"application/json","Authorization":"Bearer <anon>"}'::jsonb,
-       body := '{"batchSize":100,"requestDelayMs":50}'::jsonb
-     ); $$
-);
+---
 
--- New: every 10 min, big batch, drains backlog
-SELECT cron.schedule(
-  'backfill-creator-wallets-catchup-10m',
-  '*/10 * * * *',
-  $$ SELECT net.http_post(
-       url := 'https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/backfill-creator-wallets',
-       headers := '{"Content-Type":"application/json","Authorization":"Bearer <anon>"}'::jsonb,
-       body := '{"batchSize":300,"requestDelayMs":30}'::jsonb
-     ); $$
-);
-```
+## Technical notes
 
-No code changes required — `backfill-creator-wallets` already handles everything. Only DB cron config changes.
+- `_shared/birdeye-creator.ts` already exists, already returns `string | null`, already does the same retry-free single call. Step 2's retry-on-429 logic should move into the helper so the unified logger keeps that nuance.
+- Step 2 fix is ~15 LOC delta; it's a strict refactor with no behavior change other than logging.
+- Matview refresh: prefer `concurrently` to avoid blocking reads. Requires a unique index on the matview (likely already present since 10-min cron uses it).
+- No DB schema changes required for steps 1, 2, 4. Step 3 is read-only UI.
 
-## Verification after deploy
-
-1. Wait 2 min, then check Oracle Tab → Creator Wallet Backfill log panel: resolutions should appear live.
-2. Run:
-   ```sql
-   SELECT COUNT(*) FILTER (WHERE creator_wallet IS NULL) FROM holders_intel_seen_tokens;
-   ```
-   Should decrease by ~100–200 per 10 min interval.
-3. Check `creator_backfill_events` for sustained inflow + low `error_message` rate.
-
-## Why not just bump `creator-wallet-resolver`?
-
-- It's blind to `holders_intel_seen_tokens` (matview lag).
-- It doesn't log, so we can't see what it's actually doing or failing on.
-- Two parallel pipelines competing for the same Helius credits = waste.
-
-One pipeline, observable, drains everything. That's the move.
+After step 1 ships you'll be able to verify in one query that `count(*) from birdeye_api_usage` matches the Birdeye dashboard within ~1%, which isolates whether the remaining coverage gap is a write-back bug (Step 2) or just owners Birdeye couldn't resolve.
