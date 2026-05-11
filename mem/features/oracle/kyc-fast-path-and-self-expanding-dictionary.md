@@ -20,12 +20,16 @@ as KYC origin (column `developer_profiles.kyc_source_type`).
 Result: every KYC trace either hits an existing dictionary entry or *adds* a new one. The dictionary grows automatically; no manual edits to `cex-wallets.ts` are required to expand it. The file dictionary remains as the seed/baseline.
 
 Always-on automation:
-- `kyc-backfill-master-2m` (cron, every 2 min, batch 100) — newest-first KYC trace for unverified `master_token_directory` creators. Cooldown enforced via `developer_profiles.kyc_last_checked_at` (column is `master_wallet_address`, NOT `developer_wallet` — old code had a silent bug there).
-- `creator-wallet-resolver-2m` (cron, every 2 min, batch 50) — fills missing `creator_wallet` on tokens by calling `resolveTokenCreator()` (Pump.fun → Helius DAS → Helius RPC). Writes to `pumpfun_watchlist` for pump mints, otherwise upserts `scraped_tokens`. Also creates a `developer_profiles` shell so the KYC backfill picks it up next cycle.
+- `backfill-creator-wallets-2m` (jobid 231, every 2 min) + `backfill-creator-wallets-catchup-10m` (jobid 232) — fill missing `creator_wallet` on tokens NEWEST-FIRST by calling `resolveTokenCreator()` (Pump.fun → Helius DAS → Helius RPC). Writes to `pumpfun_watchlist` for pump mints, otherwise upserts `scraped_tokens`. Also creates a `developer_profiles` shell so the KYC backfill picks it up next cycle. (Replaces the older `kyc-backfill-master-2m` which is no longer scheduled — `kyc-bulk-mesh-runner-5m` covers that role.)
 - `backfill-genealogy-tier-b` (cron, every 6h) — Tier-B reputation backfill for pumpfun_watchlist creators; skips wallets with `trail_end_reason in ('hit_cex','cycle_detected')`.
-- `kyc-rescan-master-dict` (on-demand / 6h cron) — ZERO API cost. Walks unverified `developer_profiles` and re-checks the in-DB `reputation_mesh` funding graph against the broadened entity dictionary, flipping wallets retroactively when the dictionary grows. Stamps `kyc_trail_status` (`verified | trail_no_kyc | trail_incomplete`) so the UI can split honestly instead of treating "not traceable" as "unverified".
-- `kyc-bulk-mesh-runner` (cron, every 5 min, batch 20, concurrency 5) — fires `mesh-kyc-deep-search` against the NEWEST unverified `developer_profiles` (ordered by `created_at desc`). When the top of the queue is exhausted within the 24h cooldown window, it naturally laps back to fresh entries. Job name: `kyc-bulk-mesh-runner-5m`.
+- `kyc-rescan-master-dict-6h` (jobid 234, cron `0 */6 * * *`, batch 1000) — ZERO API cost. Walks unverified `developer_profiles` and re-checks the in-DB `reputation_mesh` funding graph against the broadened entity dictionary, flipping wallets retroactively when the dictionary grows. Stamps `kyc_trail_status` (`verified | trail_no_kyc | trail_incomplete`) so the UI can split honestly instead of treating "not traceable" as "unverified".
+- `kyc-bulk-mesh-runner-5m` (jobid 233, every 5 min, batch 20, concurrency 5) — fires `mesh-kyc-deep-search` against the NEWEST unverified `developer_profiles` (ordered by `created_at desc`). When the top of the queue is exhausted within the 24h cooldown window, it naturally laps back to fresh entries.
 - **Inline mesh-funnel hook**: `creator-wallet-resolver` fires `mesh-kyc-deep-search` (fire-and-forget) right after upserting the dev-profile shell, so newly-discovered creators get KYC-traced immediately instead of waiting up to 5 min for the cron.
+
+## Two pipelines, two "newest" queues (don't confuse them)
+1. **Newest tokens missing a dev wallet** → `backfill-creator-wallets-2m` orders `master_token_directory` by `created_at desc` where `creator_wallet IS NULL`.
+2. **Newest dev wallets missing KYC** → `kyc-bulk-mesh-runner-5m` orders `developer_profiles` by `created_at desc` where `kyc_verified` is null/false.
+Stage 1 feeds Stage 2 automatically (creator-wallet-resolver creates the dev-profile shell). The inline mesh-funnel hook bypasses the 5-min wait for fresh wallets.
 
 No clicking required — these run automatically and skip already-completed work.
 
