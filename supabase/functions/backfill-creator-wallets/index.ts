@@ -1,6 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { withRunLog } from '../_shared/run-logger.ts';
-import { solscanFetch } from '../_shared/solscan-rate-limiter.ts';
+import { resolveTokenCreator } from '../_shared/creator-resolver.ts';
 import { assertInsert, assertUpdate, assertUpsert } from '../_shared/db-assert.ts';
 
 const corsHeaders = {
@@ -86,7 +86,6 @@ const TABLE_CAPS: Record<TargetTable, TableCaps> = {
   token_lifecycle_tracking: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
 };
 
-// Per-table column used for newest-first ordering. Falls back to id if select fails.
 const ORDER_COLUMN: Record<TargetTable, string> = {
   allstar_mint_alerts: 'created_at',
   autopsy_backlog: 'created_at',
@@ -130,7 +129,6 @@ async function selectMissingRows(supabase: any, table: TargetTable, column: 'cre
     .order(orderCol, { ascending: false, nullsFirst: false })
     .limit(limit);
 
-  // Fallback: some tables may not have the assumed order column
   if (error) {
     const retry = await supabase
       .from(table)
@@ -180,33 +178,6 @@ async function buildTargets(supabase: any, explicitMints: string[], batchSize: n
   return targets.slice(0, batchSize);
 }
 
-async function fetchCreatorFromSolscan(mint: string, apiKey: string): Promise<{ creator: string | null; status: number; error?: string; fromCache: boolean; url: string; durationMs: number; rawBody: any }> {
-  const url = `https://pro-api.solscan.io/v2.0/token/meta?address=${encodeURIComponent(mint)}`;
-  const start = Date.now();
-  const resp = await solscanFetch(url, {
-    headers: { Accept: 'application/json', token: apiKey },
-    cacheTtlMs: 300_000,
-    timeoutMs: 6000,
-    callerName: 'backfill-creator-wallets-solscan',
-  });
-  const durationMs = Date.now() - start;
-
-  const creator = resp.body?.data?.creator;
-  if (resp.ok && isLikelyAddress(creator) && creator !== mint) {
-    return { creator: creator.trim(), status: resp.status, fromCache: resp.fromCache, url, durationMs, rawBody: resp.body };
-  }
-
-  return {
-    creator: null,
-    status: resp.status,
-    fromCache: resp.fromCache,
-    url,
-    durationMs,
-    rawBody: resp.body,
-    error: resp.ok ? 'creator_missing_in_solscan_meta' : String(resp.body?.error ?? resp.body?.message ?? `http_${resp.status}`),
-  };
-}
-
 function truncateForLog(body: any): any {
   try {
     const str = JSON.stringify(body);
@@ -214,6 +185,18 @@ function truncateForLog(body: any): any {
     return { _truncated: true, preview: str.slice(0, 4096) };
   } catch {
     return { _unstringifiable: true };
+  }
+}
+
+function providerUrl(source: string, mint: string): string {
+  switch (source) {
+    case 'pumpfun': return `https://frontend-api.pump.fun/coins/${mint}`;
+    case 'solscan_meta': return `https://pro-api.solscan.io/v2.0/token/meta?address=${mint}`;
+    case 'helius_mint_tx': return `https://api.helius.xyz/v0/addresses/${mint}/transactions?type=TOKEN_MINT`;
+    case 'helius_das': return `https://mainnet.helius-rpc.com/?method=getAsset&id=${mint}`;
+    case 'helius_rpc_onchain': return `https://mainnet.helius-rpc.com/?method=getSignaturesForAddress&address=${mint}`;
+    case 'db_cache': return `internal://db_cache/${mint}`;
+    default: return `internal://none/${mint}`;
   }
 }
 
@@ -233,13 +216,13 @@ async function logBackfillEvent(supabase: any, row: {
     await assertInsert(
       supabase.from('creator_backfill_events').insert({
         ...row,
+        function_name: 'backfill-creator-wallets',
         response_preview: truncateForLog(row.response_preview),
       }),
       'creator_backfill_events',
     );
   } catch (e) {
-    // Logging must never break the backfill loop; log to console for visibility.
-    console.warn('[backfill-creator-wallets-solscan][event-log] insert failed:', e instanceof Error ? e.message : e);
+    console.warn('[backfill-creator-wallets][event-log] insert failed:', e instanceof Error ? e.message : e);
   }
 }
 
@@ -265,15 +248,15 @@ async function updateMissingCreator(supabase: any, target: TargetRow, creator: s
   );
 }
 
-async function seedDeveloperChain(supabase: any, mint: string, creator: string) {
+async function seedDeveloperChain(supabase: any, mint: string, creator: string, source: string) {
   const profile = await assertUpsert(
     supabase.from('developer_profiles').upsert({
       master_wallet_address: creator,
       display_name: creator.slice(0, 8),
-      source: 'solscan_v2_creator_backfill',
+      source: `creator_backfill:${source}`,
       kyc_verified: false,
       trust_level: 'neutral',
-      metadata: { seeded_from_token: mint, provider: 'solscan_v2_token_meta' },
+      metadata: { seeded_from_token: mint, provider: source },
       updated_at: new Date().toISOString(),
     }, { onConflict: 'master_wallet_address', ignoreDuplicates: false }).select('id').single(),
     'developer_profiles',
@@ -287,7 +270,7 @@ async function seedDeveloperChain(supabase: any, mint: string, creator: string) 
         developer_id: developerId,
         token_mint: mint,
         creator_wallet: creator,
-        notes: 'Auto-linked by Solscan v2 creator backfill',
+        notes: `Auto-linked by creator backfill (${source})`,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'developer_id,token_mint', ignoreDuplicates: false }),
       'developer_tokens',
@@ -295,7 +278,7 @@ async function seedDeveloperChain(supabase: any, mint: string, creator: string) 
   }
 }
 
-Deno.serve(withRunLog('backfill-creator-wallets-solscan', async (req, logger) => {
+Deno.serve(withRunLog('backfill-creator-wallets', async (req, logger) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
@@ -307,10 +290,6 @@ Deno.serve(withRunLog('backfill-creator-wallets-solscan', async (req, logger) =>
       ? [...new Set(body.tokenMints.map((mint: unknown) => String(mint).trim()).filter(isLikelyAddress))]
       : [];
 
-    const apiKey = Deno.env.get('SOLSCAN_API_KEY');
-    if (!apiKey) throw new Error('SOLSCAN_API_KEY secret is not configured');
-    if (Deno.env.get('SOLSCAN_DISABLED') === 'true') throw new Error('SOLSCAN_DISABLED=true; refusing Solscan calls');
-
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -318,11 +297,13 @@ Deno.serve(withRunLog('backfill-creator-wallets-solscan', async (req, logger) =>
     );
 
     const targets = await buildTargets(supabase, tokenMints, batchSize);
-    logger?.info('Solscan creator backfill targets claimed', { targets: targets.length, batchSize });
+    logger?.info('Creator backfill targets claimed', { targets: targets.length, batchSize });
 
-    const creatorCache = new Map<string, Awaited<ReturnType<typeof fetchCreatorFromSolscan>>>();
+    type Lookup = { creator: string | null; source: string; confidence: number; errors: string[]; durationMs: number };
+    const creatorCache = new Map<string, Lookup>();
     const results: any[] = [];
     const byTable: Record<string, number> = {};
+    const bySource: Record<string, number> = {};
     let resolved = 0;
     let updated = 0;
     let misses = 0;
@@ -333,71 +314,81 @@ Deno.serve(withRunLog('backfill-creator-wallets-solscan', async (req, logger) =>
       try {
         let lookup = creatorCache.get(target.mint);
         if (!lookup) {
-          lookup = await fetchCreatorFromSolscan(target.mint, apiKey);
+          const start = Date.now();
+          const errs: string[] = [];
+          const resolution = await resolveTokenCreator(target.mint, supabase, errs);
+          lookup = {
+            creator: resolution.creatorWallet,
+            source: resolution.source,
+            confidence: resolution.confidence,
+            errors: resolution.errors,
+            durationMs: Date.now() - start,
+          };
           creatorCache.set(target.mint, lookup);
           if (requestDelayMs > 0) await delay(requestDelayMs);
         }
 
-        // Real-time raw event log for the super-admin viewer
         await logBackfillEvent(supabase, {
           mint: target.mint,
           table_name: target.table,
           column_name: target.column,
-          solscan_url: lookup.url,
-          http_status: lookup.status,
+          solscan_url: providerUrl(lookup.source, target.mint),
+          http_status: lookup.creator ? 200 : 404,
           duration_ms: lookup.durationMs,
-          from_cache: lookup.fromCache,
+          from_cache: lookup.source === 'db_cache',
           resolved_creator: lookup.creator,
-          error_message: lookup.error ?? null,
-          response_preview: lookup.rawBody,
+          error_message: lookup.creator ? null : (lookup.errors.join(' | ') || 'creator_not_found'),
+          response_preview: { source: lookup.source, confidence: lookup.confidence, creator: lookup.creator, errors: lookup.errors },
         });
 
         if (!lookup.creator) {
           misses++;
-          if (lookup.status === 0 || lookup.status >= 400) apiErrors++;
-          results.push({ ...target, success: false, status: lookup.status, error: lookup.error, fromCache: lookup.fromCache });
+          if (lookup.errors.length > 0) apiErrors++;
+          results.push({ ...target, success: false, source: lookup.source, errors: lookup.errors });
           continue;
         }
 
         resolved++;
+        bySource[lookup.source] = (bySource[lookup.source] ?? 0) + 1;
         await updateMissingCreator(supabase, target, lookup.creator);
         updated++;
         byTable[target.table] = (byTable[target.table] ?? 0) + 1;
 
         if (target.table !== 'developer_tokens') {
-          await seedDeveloperChain(supabase, target.mint, lookup.creator);
+          await seedDeveloperChain(supabase, target.mint, lookup.creator, lookup.source);
           derivativeWrites++;
         }
 
-        results.push({ ...target, success: true, creator_wallet: lookup.creator, status: lookup.status, fromCache: lookup.fromCache });
+        results.push({ ...target, success: true, creator_wallet: lookup.creator, source: lookup.source, confidence: lookup.confidence });
       } catch (error) {
         if ((error as any)?.name === 'DbWriteError') throw error;
         apiErrors++;
-        console.error(`[backfill-creator-wallets-solscan] ${target.table} ${target.mint} failed:`, error);
+        console.error(`[backfill-creator-wallets] ${target.table} ${target.mint} failed:`, error);
         results.push({ ...target, success: false, error: error instanceof Error ? error.message : String(error) });
       }
     }
 
     if (updated > 0) {
       supabase.rpc('refresh_master_token_directory')
-        .then(({ error }: any) => { if (error) console.warn('[backfill-creator-wallets-solscan] directory refresh failed:', error.message); })
-        .catch((e: any) => console.warn('[backfill-creator-wallets-solscan] directory refresh threw:', e?.message));
+        .then(({ error }: any) => { if (error) console.warn('[backfill-creator-wallets] directory refresh failed:', error.message); })
+        .catch((e: any) => console.warn('[backfill-creator-wallets] directory refresh threw:', e?.message));
     }
 
     return new Response(JSON.stringify({
-      message: `Solscan creator backfill updated ${updated} of ${targets.length} claimed rows`,
+      message: `Creator backfill updated ${updated} of ${targets.length} claimed rows`,
       claimed: targets.length,
       resolved,
       updated,
       misses,
       apiErrors,
       derivativeWrites,
-      uniqueSolscanRequests: creatorCache.size,
+      uniqueLookups: creatorCache.size,
       byTable,
+      bySource,
       results: includeResults ? results : undefined,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
   } catch (error) {
-    console.error('Error in backfill-creator-wallets-solscan:', error);
+    console.error('Error in backfill-creator-wallets:', error);
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
