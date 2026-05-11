@@ -179,17 +179,17 @@ async function selectMissingRows(supabase: any, table: TargetTable, column: 'cre
     .not('token_mint', 'is', null)
     .or(`${column}.is.null,${column}.eq.`);
 
-  // EXCLUSION: dead bonding-curve tokens that never broke $20k ATH are
+  // EXCLUSION: dead bonding-curve tokens that never broke $25k ATH are
   // already filtered out of master_token_directory (status='dead'/'rejected'
   // are excluded by the matview), so resolving their creators is pure waste
   // and pushes good tokens further back in the queue. Skip them at source.
   if (table === 'pumpfun_watchlist') {
     q = q
       .not('status', 'in', '("dead","rejected")')
-      .or('ath_market_cap_usd.gte.20000,ath_market_cap_usd.is.null');
+      .or('ath_market_cap_usd.gte.25000,ath_market_cap_usd.is.null');
     // Note: the second .or() clause keeps tokens with no ATH yet (still
     // tracking) but drops dead tokens whose ATH was tiny. Combined with the
-    // status filter above, only dead tokens with >=20k ATH (real launches
+    // status filter above, only dead tokens with >=25k ATH (real launches
     // that died) get through — those still matter for autopsy.
   }
 
@@ -206,7 +206,7 @@ async function selectMissingRows(supabase: any, table: TargetTable, column: 'cre
     if (table === 'pumpfun_watchlist') {
       retryQ = retryQ
         .not('status', 'in', '("dead","rejected")')
-        .or('ath_market_cap_usd.gte.20000,ath_market_cap_usd.is.null');
+        .or('ath_market_cap_usd.gte.25000,ath_market_cap_usd.is.null');
     }
     const retry = await retryQ.limit(limit);
     if (retry.error) throw retry.error;
