@@ -47,11 +47,14 @@ export default function DevKycCoveragePanel() {
   const kyc = data?.kyc_verified ?? 0;
   const devPct = total ? (dev / total) * 100 : 0;
   const kycPct = total ? (kyc / total) * 100 : 0;
-  // Throughput estimate: kyc-backfill processes ~100 wallets / 2 min = 3000/hr
-  // creator-resolver: ~50 / 2 min = 1500/hr
+  // Throughput estimates (Birdeye-powered creator resolver):
+  //   backfill-creator-wallets-2m: 60 mints / 2 min  = 1,800/hr
+  //   backfill-creator-wallets-catchup-10m: 200 / 10 min = 1,200/hr
+  //   → combined ~3,000 creator-wallets resolved per hour.
+  //   kyc-backfill-master-2m: ~100 wallets / 2 min  = 3,000/hr.
   const remainingDev = data?.missing_dev_wallet ?? 0;
   const remainingKyc = total - kyc;
-  const etaDevHours = remainingDev / 1500;
+  const etaDevHours = remainingDev / 3000;
   const etaKycHours = remainingKyc / 3000;
 
   return (
@@ -115,8 +118,10 @@ export default function DevKycCoveragePanel() {
             </div>
 
             <div className="text-[11px] text-muted-foreground border-t border-border/40 pt-2">
-              Crons: <code className="text-amber-400">creator-wallet-resolver-2m</code> (50/run) +{' '}
-              <code className="text-amber-400">kyc-backfill-master-2m</code> (100/run). Both auto-skip when complete — no clicking required.
+              Crons:{' '}
+              <code className="text-amber-400">backfill-creator-wallets-2m</code> (60/run, Birdeye → Helius) +{' '}
+              <code className="text-amber-400">backfill-creator-wallets-catchup-10m</code> (200/run) +{' '}
+              <code className="text-amber-400">kyc-backfill-master-2m</code> (100/run). SMS milestone alerts fire every 5 min on each new whole-percent crossing. All auto-skip when complete.
             </div>
           </>
         )}
