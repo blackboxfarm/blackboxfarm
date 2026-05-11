@@ -21,6 +21,14 @@ interface DailyUsage {
   credits: number;
 }
 
+interface UsageByMethod {
+  method: string;
+  total_calls: number;
+  total_credits: number;
+  avg_ms: number;
+  errors: number;
+}
+
 const COLORS = [
   'hsl(var(--primary))',
   'hsl(210, 80%, 55%)',
@@ -38,6 +46,8 @@ export function HeliusUsageBreakdown() {
   const [liveData, setLiveData] = useState<UsageByFunction[]>([]);
   const [snapshotData, setSnapshotData] = useState<UsageByFunction[]>([]);
   const [dailyData, setDailyData] = useState<DailyUsage[]>([]);
+  const [methodData, setMethodData] = useState<UsageByMethod[]>([]);
+  const [methodWindow, setMethodWindow] = useState<'24h' | '7d' | '30d'>('24h');
   const [loading, setLoading] = useState(false);
   const [snapshotting, setSnapshotting] = useState(false);
   const [activeView, setActiveView] = useState('live');
@@ -104,10 +114,46 @@ export function HeliusUsageBreakdown() {
     }
   }, []);
 
+  const fetchMethodData = useCallback(async () => {
+    try {
+      const hours = methodWindow === '24h' ? 24 : methodWindow === '7d' ? 168 : 720;
+      const since = new Date(Date.now() - hours * 3600_000).toISOString();
+      const { data, error } = await supabase
+        .from('helius_api_usage')
+        .select('method, credits_used, response_time_ms, success')
+        .gte('created_at', since)
+        .limit(50000);
+      if (error) throw error;
+      const byMethod: Record<string, { calls: number; credits: number; ms: number; errors: number }> = {};
+      for (const r of (data ?? []) as any[]) {
+        const m = r.method || 'unknown';
+        if (!byMethod[m]) byMethod[m] = { calls: 0, credits: 0, ms: 0, errors: 0 };
+        byMethod[m].calls += 1;
+        byMethod[m].credits += r.credits_used || 1;
+        byMethod[m].ms += r.response_time_ms || 0;
+        if (!r.success) byMethod[m].errors += 1;
+      }
+      const mapped: UsageByMethod[] = Object.entries(byMethod).map(([method, v]) => ({
+        method,
+        total_calls: v.calls,
+        total_credits: v.credits,
+        avg_ms: v.calls ? Math.round(v.ms / v.calls) : 0,
+        errors: v.errors,
+      })).sort((a, b) => b.total_credits - a.total_credits);
+      setMethodData(mapped);
+    } catch (err: any) {
+      console.error('Failed to fetch method breakdown:', err.message);
+    }
+  }, [methodWindow]);
+
   useEffect(() => {
     fetchLiveData();
     fetchSnapshotData();
   }, [fetchLiveData, fetchSnapshotData]);
+
+  useEffect(() => {
+    fetchMethodData();
+  }, [fetchMethodData]);
 
   const takeSnapshot = async () => {
     setSnapshotting(true);
@@ -198,6 +244,7 @@ export function HeliusUsageBreakdown() {
       <Tabs value={activeView} onValueChange={setActiveView}>
         <TabsList>
           <TabsTrigger value="live">📡 Live (30d)</TabsTrigger>
+          <TabsTrigger value="methods">🎯 By Endpoint</TabsTrigger>
           <TabsTrigger value="historical">📸 Historical Snapshots</TabsTrigger>
         </TabsList>
 
@@ -207,6 +254,15 @@ export function HeliusUsageBreakdown() {
             <BreakdownTable data={currentData} totalCredits={totalCredits} />
           </div>
           {dailyData.length > 0 && <DailyTrendChart data={dailyData} />}
+        </TabsContent>
+
+        <TabsContent value="methods" className="space-y-4">
+          <MethodBreakdown
+            data={methodData}
+            window={methodWindow}
+            onWindowChange={(w) => setMethodWindow(w)}
+            onRefresh={fetchMethodData}
+          />
         </TabsContent>
 
         <TabsContent value="historical" className="space-y-4">
