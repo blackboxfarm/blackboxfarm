@@ -38,3 +38,14 @@ No clicking required — these run automatically and skip already-completed work
 `master_token_directory.kyc_verified` is computed from `developer_profiles.kyc_verified` (joined on `master_wallet_address = creator_wallet`). `mesh-kyc-deep-search` MUST upsert `developer_profiles` with `kyc_verified=true, kyc_source, kyc_source_type, kyc_trail_status='verified', kyc_verification_date, kyc_last_checked_at` whenever a KYC root is found (both Solscan-direct fast path AND BFS path). Writing only to `reputation_mesh` is not enough — the matview won't flip green.
 
 Live coverage is visible on `/super-admin → Oracle tab → Dev Wallet + KYC Coverage` panel.
+
+## Pump.fun creator-coins resolver (3-tier fallback)
+
+`_shared/pumpfun-creator-coins-resolver.ts` exports `resolveCreatorCoins(wallet, opts)` used in place of `fetchPumpFunCreatorCoins` whenever fallback resilience matters. Chain:
+1. **API** — existing `frontend-api-v3.pump.fun /coins/user-created-coins` (paginated).
+2. **Browserless** — scrapes `https://pump.fun/profile/{wallet}` and parses `/coin/{mint}` anchors.
+3. **Apify** — `apify/web-scraper` actor, gated to "important" wallets (KYC-verified OR `total_tokens_created > 5`) and capped at 50 runs/day.
+
+Cooldown is enforced via `pumpfun_profile_scrape_log` (PK `wallet_address`): 6h default, 1h for KYC-verified. Diagnostic endpoint: `pumpfun-profile-scrape-test` (admin button on Dev/KYC Coverage panel; `bypassCooldown` + `allowApify` toggles).
+
+Wired callers: `mesh-wallet-token-discovery` (full chain) and `_shared/copycat-detector.ts` (Browserless fallback when API returns 0). Other pump.fun callers still use `fetchPumpFunCreatorCoins` directly to avoid double-scraping in latency-sensitive paths.
