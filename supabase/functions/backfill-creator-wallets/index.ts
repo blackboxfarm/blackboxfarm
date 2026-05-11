@@ -472,7 +472,11 @@ Deno.serve(withRunLog('backfill-creator-wallets', async (req, logger) => {
       try {
         let lookup = creatorCache.get(target.mint);
         if (!lookup) {
-          if (birdeyeOnly) {
+          // Pump-suffixed mints MUST go through the canonical chain so
+          // Pump.fun coin API (Step 1) runs first — Birdeye returns the
+          // launchpad program wallet for these, not the human creator.
+          const isPumpMint = target.mint.endsWith('pump');
+          if (birdeyeOnly && !isPumpMint) {
             const be = await birdeyeResolveCreator(target.mint, birdeyeKey!, supabase);
             lookup = {
               creator: be.creator,
