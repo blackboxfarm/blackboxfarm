@@ -13,6 +13,7 @@
 import { getHeliusApiKey, getHeliusRpcUrl } from './helius-client.ts';
 import { fetchPumpFunCoin } from './pumpfun-fetch.ts';
 import { assertUpdate } from './db-assert.ts';
+import { birdeyeResolveCreator } from './birdeye-creator.ts';
 
 export interface CreatorResolution {
   creatorWallet: string | null;
@@ -65,48 +66,20 @@ export async function resolveTokenCreator(
 
   // Step 2: Birdeye token_creation_info — single call returns creator wallet (`data.owner`).
   // This is the Helius-killer: replaces the multi-page getSignaturesForAddress walk.
-  const birdeyeKey = Deno.env.get('BIRDEYE_API_KEY');
-  if (birdeyeKey) {
-    // Birdeye account rate-limit ceiling: 900 rpm (15 rps) shared across ALL keys.
-    // Respect 429 Retry-After and retry once before falling through to Helius.
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const beRes = await fetch(
-          `https://public-api.birdeye.so/defi/token_creation_info?address=${tokenMint}`,
-          {
-            headers: {
-              'accept': 'application/json',
-              'x-chain': 'solana',
-              'X-API-KEY': birdeyeKey,
-            },
-            signal: AbortSignal.timeout(10000),
-          },
-        );
-        if (beRes.ok) {
-          const beJson = await beRes.json();
-          const owner = beJson?.data?.owner;
-          if (owner && typeof owner === 'string' && owner.length >= 32 && owner !== tokenMint) {
-            return {
-              creatorWallet: owner,
-              source: 'birdeye',
-              confidence: 95,
-              errors: [],
-            };
-          }
-          break; // 200 but no owner — no point retrying
-        }
-        if (beRes.status === 429 && attempt === 0) {
-          const ra = parseInt(beRes.headers.get('retry-after') || '1', 10);
-          const waitMs = Math.min(Math.max(ra * 1000, 500), 5000);
-          await new Promise((r) => setTimeout(r, waitMs));
-          continue;
-        }
-        apiErrors.push(`Birdeye HTTP ${beRes.status}`);
-        break;
-      } catch (e) {
-        apiErrors.push(`Birdeye error: ${e instanceof Error ? e.message : 'timeout'}`);
-        break;
+  // ALL calls go through the shared helper so they're logged to birdeye_api_usage.
+  if (Deno.env.get('BIRDEYE_API_KEY')) {
+    try {
+      const owner = await birdeyeResolveCreator(tokenMint, 'creator-resolver', supabase);
+      if (owner) {
+        return {
+          creatorWallet: owner,
+          source: 'birdeye',
+          confidence: 95,
+          errors: [],
+        };
       }
+    } catch (e) {
+      apiErrors.push(`Birdeye error: ${e instanceof Error ? e.message : 'unknown'}`);
     }
   }
 
