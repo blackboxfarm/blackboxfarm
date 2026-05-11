@@ -430,7 +430,7 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
           linked_type: 'wallet',
           linked_id: current.wallet,
           relationship: 'funded_by',
-          confidence: Math.min(95, 60 + funding.amount * 5),
+          confidence: Math.round(Math.min(95, 60 + funding.amount * 5)),
           discovered_via: 'mesh-kyc-deep-search',
           discovered_at: new Date().toISOString(),
         }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship', ignoreDuplicates: true }), 'reputation_mesh');
@@ -452,7 +452,7 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
               linked_type: 'wallet',
               linked_id: sib.wallet,
               relationship: 'funded_by',
-              confidence: Math.min(90, 50 + sib.amountSol * 3),
+              confidence: Math.round(Math.min(90, 50 + sib.amountSol * 3)),
               discovered_via: 'mesh-kyc-deep-search:sibling',
               discovered_at: new Date().toISOString(),
               evidence: { amountSol: sib.amountSol, siblingOf: current.wallet },
