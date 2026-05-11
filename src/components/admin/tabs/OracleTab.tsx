@@ -8,6 +8,7 @@ import OracleBackfillStatus from "@/components/admin/oracle/OracleBackfillStatus
 import OracleMeshViewer from "@/components/admin/oracle/OracleMeshViewer";
 import { ManualKycOverride } from "@/components/admin/ManualKycOverride";
 import DevKycCoveragePanel from "@/components/admin/oracle/DevKycCoveragePanel";
+import BirdeyeUsagePanel from "@/components/admin/oracle/BirdeyeUsagePanel";
 import MilestoneSmsLogPanel from "@/components/admin/oracle/MilestoneSmsLogPanel";
 import KycDiscoveryLogPanel from "@/components/admin/oracle/KycDiscoveryLogPanel";
 import CreatorBackfillRawLogPanel from "@/components/admin/oracle/CreatorBackfillRawLogPanel";
@@ -52,6 +53,9 @@ const OracleTab = ({ initialSubTab, initialWallet }: OracleTabProps) => {
 
       {/* Live Dev Wallet + KYC backfill coverage */}
       <DevKycCoveragePanel />
+
+      {/* Birdeye API usage tracker */}
+      <BirdeyeUsagePanel />
 
       {/* SMS milestone notifier log */}
       <MilestoneSmsLogPanel />
