@@ -17,7 +17,7 @@ import { assertUpdate } from './db-assert.ts';
 
 export interface CreatorResolution {
   creatorWallet: string | null;
-  source: 'pumpfun' | 'solscan_meta' | 'helius_mint_tx' | 'helius_das' | 'helius_rpc_onchain' | 'db_cache' | 'none';
+  source: 'pumpfun' | 'helius_mint_tx' | 'helius_das' | 'helius_rpc_onchain' | 'db_cache' | 'none';
   confidence: number;
   errors: string[];
 }
@@ -62,46 +62,6 @@ export async function resolveTokenCreator(
     }
   } catch (e) {
     apiErrors.push(`Pump.fun API error: ${e instanceof Error ? e.message : 'timeout'}`);
-  }
-
-  // Step 1.5: Solscan Pro v2.0 /token/meta — cheap (1 cached call), authoritative when present.
-  // Inserted ahead of Helius TOKEN_MINT scan (which costs 5 enhanced-tx credits) because
-  // Solscan returns the canonical creator field directly for most tokens.
-  const solscanKey = Deno.env.get('SOLSCAN_API_KEY');
-  if (solscanKey) {
-    try {
-      const { solscanFetch } = await import('./solscan-rate-limiter.ts');
-      const url = `https://pro-api.solscan.io/v2.0/token/meta?address=${tokenMint}`;
-      const resp = await solscanFetch(url, {
-        headers: { Accept: 'application/json', token: solscanKey },
-        cacheTtlMs: 300_000, // 5min — creator never changes
-        timeoutMs: 6000,
-        callerName: 'creator-resolver',
-      });
-      const creator = (resp.body as any)?.data?.creator;
-      if (resp.ok && typeof creator === 'string' && creator.length >= 32 && creator !== tokenMint) {
-        try {
-          if (supabase?.from) {
-            await assertUpdate(
-              supabase
-                .from('token_lifecycle')
-                .update({ creator_wallet: creator })
-                .eq('token_mint', tokenMint)
-                .is('creator_wallet', null),
-              'token_lifecycle.creator_wallet',
-            );
-          }
-        } catch (e) { throw e; }
-        return {
-          creatorWallet: creator,
-          source: 'solscan_meta',
-          confidence: 95,
-          errors: [],
-        };
-      }
-    } catch (e) {
-      apiErrors.push(`Solscan /token/meta error: ${e instanceof Error ? e.message : 'timeout'}`);
-    }
   }
 
   // Step 2: Helius TOKEN_MINT transaction proof
