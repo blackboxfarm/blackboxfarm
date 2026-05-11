@@ -16,7 +16,7 @@ import { assertUpdate } from './db-assert.ts';
 
 export interface CreatorResolution {
   creatorWallet: string | null;
-  source: 'pumpfun' | 'helius_das' | 'helius_rpc_onchain' | 'db_cache' | 'none';
+  source: 'pumpfun' | 'birdeye' | 'helius_das' | 'helius_rpc_onchain' | 'db_cache' | 'none';
   confidence: number;
   errors: string[];
 }
@@ -63,7 +63,42 @@ export async function resolveTokenCreator(
     }
   }
 
-  // Step 2: Helius DAS getAsset + Step 3: Helius RPC on-chain fallback
+  // Step 2: Birdeye token_creation_info — single call returns creator wallet (`data.owner`).
+  // This is the Helius-killer: replaces the multi-page getSignaturesForAddress walk.
+  const birdeyeKey = Deno.env.get('BIRDEYE_API_KEY');
+  if (birdeyeKey) {
+    try {
+      const beRes = await fetch(
+        `https://public-api.birdeye.so/defi/token_creation_info?address=${tokenMint}`,
+        {
+          headers: {
+            'accept': 'application/json',
+            'x-chain': 'solana',
+            'X-API-KEY': birdeyeKey,
+          },
+          signal: AbortSignal.timeout(10000),
+        },
+      );
+      if (beRes.ok) {
+        const beJson = await beRes.json();
+        const owner = beJson?.data?.owner;
+        if (owner && typeof owner === 'string' && owner.length >= 32 && owner !== tokenMint) {
+          return {
+            creatorWallet: owner,
+            source: 'birdeye',
+            confidence: 95,
+            errors: [],
+          };
+        }
+      } else {
+        apiErrors.push(`Birdeye HTTP ${beRes.status}`);
+      }
+    } catch (e) {
+      apiErrors.push(`Birdeye error: ${e instanceof Error ? e.message : 'timeout'}`);
+    }
+  }
+
+  // Step 3: Helius DAS getAsset + Step 4: Helius RPC on-chain fallback (LAST RESORT)
   const heliusKey = getHeliusApiKey();
   if (heliusKey) {
     try {
