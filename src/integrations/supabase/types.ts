@@ -5005,6 +5005,8 @@ export type Database = {
           integrity_score: number | null
           kyc_last_checked_at: string | null
           kyc_source: string | null
+          kyc_source_type: string | null
+          kyc_trail_status: string | null
           kyc_verification_date: string | null
           kyc_verified: boolean | null
           last_analysis_at: string | null
@@ -5047,6 +5049,8 @@ export type Database = {
           integrity_score?: number | null
           kyc_last_checked_at?: string | null
           kyc_source?: string | null
+          kyc_source_type?: string | null
+          kyc_trail_status?: string | null
           kyc_verification_date?: string | null
           kyc_verified?: boolean | null
           last_analysis_at?: string | null
@@ -5089,6 +5093,8 @@ export type Database = {
           integrity_score?: number | null
           kyc_last_checked_at?: string | null
           kyc_source?: string | null
+          kyc_source_type?: string | null
+          kyc_trail_status?: string | null
           kyc_verification_date?: string | null
           kyc_verified?: boolean | null
           last_analysis_at?: string | null
@@ -8280,6 +8286,7 @@ export type Database = {
           cex_name: string
           chain: string
           created_at: string
+          entity_type: string
           id: string
           is_verified: boolean
           updated_at: string
@@ -8291,6 +8298,7 @@ export type Database = {
           cex_name: string
           chain?: string
           created_at?: string
+          entity_type?: string
           id?: string
           is_verified?: boolean
           updated_at?: string
@@ -8302,6 +8310,7 @@ export type Database = {
           cex_name?: string
           chain?: string
           created_at?: string
+          entity_type?: string
           id?: string
           is_verified?: boolean
           updated_at?: string
