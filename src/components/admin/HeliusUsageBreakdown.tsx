@@ -21,6 +21,14 @@ interface DailyUsage {
   credits: number;
 }
 
+interface UsageByMethod {
+  method: string;
+  total_calls: number;
+  total_credits: number;
+  avg_ms: number;
+  errors: number;
+}
+
 const COLORS = [
   'hsl(var(--primary))',
   'hsl(210, 80%, 55%)',
@@ -38,6 +46,8 @@ export function HeliusUsageBreakdown() {
   const [liveData, setLiveData] = useState<UsageByFunction[]>([]);
   const [snapshotData, setSnapshotData] = useState<UsageByFunction[]>([]);
   const [dailyData, setDailyData] = useState<DailyUsage[]>([]);
+  const [methodData, setMethodData] = useState<UsageByMethod[]>([]);
+  const [methodWindow, setMethodWindow] = useState<'24h' | '7d' | '30d'>('24h');
   const [loading, setLoading] = useState(false);
   const [snapshotting, setSnapshotting] = useState(false);
   const [activeView, setActiveView] = useState('live');
@@ -104,10 +114,46 @@ export function HeliusUsageBreakdown() {
     }
   }, []);
 
+  const fetchMethodData = useCallback(async () => {
+    try {
+      const hours = methodWindow === '24h' ? 24 : methodWindow === '7d' ? 168 : 720;
+      const since = new Date(Date.now() - hours * 3600_000).toISOString();
+      const { data, error } = await supabase
+        .from('helius_api_usage')
+        .select('method, credits_used, response_time_ms, success')
+        .gte('created_at', since)
+        .limit(50000);
+      if (error) throw error;
+      const byMethod: Record<string, { calls: number; credits: number; ms: number; errors: number }> = {};
+      for (const r of (data ?? []) as any[]) {
+        const m = r.method || 'unknown';
+        if (!byMethod[m]) byMethod[m] = { calls: 0, credits: 0, ms: 0, errors: 0 };
+        byMethod[m].calls += 1;
+        byMethod[m].credits += r.credits_used || 1;
+        byMethod[m].ms += r.response_time_ms || 0;
+        if (!r.success) byMethod[m].errors += 1;
+      }
+      const mapped: UsageByMethod[] = Object.entries(byMethod).map(([method, v]) => ({
+        method,
+        total_calls: v.calls,
+        total_credits: v.credits,
+        avg_ms: v.calls ? Math.round(v.ms / v.calls) : 0,
+        errors: v.errors,
+      })).sort((a, b) => b.total_credits - a.total_credits);
+      setMethodData(mapped);
+    } catch (err: any) {
+      console.error('Failed to fetch method breakdown:', err.message);
+    }
+  }, [methodWindow]);
+
   useEffect(() => {
     fetchLiveData();
     fetchSnapshotData();
   }, [fetchLiveData, fetchSnapshotData]);
+
+  useEffect(() => {
+    fetchMethodData();
+  }, [fetchMethodData]);
 
   const takeSnapshot = async () => {
     setSnapshotting(true);
@@ -198,6 +244,7 @@ export function HeliusUsageBreakdown() {
       <Tabs value={activeView} onValueChange={setActiveView}>
         <TabsList>
           <TabsTrigger value="live">📡 Live (30d)</TabsTrigger>
+          <TabsTrigger value="methods">🎯 By Endpoint</TabsTrigger>
           <TabsTrigger value="historical">📸 Historical Snapshots</TabsTrigger>
         </TabsList>
 
@@ -207,6 +254,15 @@ export function HeliusUsageBreakdown() {
             <BreakdownTable data={currentData} totalCredits={totalCredits} />
           </div>
           {dailyData.length > 0 && <DailyTrendChart data={dailyData} />}
+        </TabsContent>
+
+        <TabsContent value="methods" className="space-y-4">
+          <MethodBreakdown
+            data={methodData}
+            window={methodWindow}
+            onWindowChange={(w) => setMethodWindow(w)}
+            onRefresh={fetchMethodData}
+          />
         </TabsContent>
 
         <TabsContent value="historical" className="space-y-4">
@@ -343,3 +399,135 @@ function DailyTrendChart({ data }: { data: DailyUsage[] }) {
 }
 
 export default HeliusUsageBreakdown;
+
+// Endpoint-method color map matching Helius dashboard hues
+const METHOD_COLORS: Record<string, string> = {
+  getAddressTransactions: 'hsl(0, 75%, 58%)',     // red — biggest killer
+  parseTransactions:      'hsl(330, 70%, 58%)',   // pink
+  getTokenMetadata:       'hsl(280, 65%, 58%)',   // purple
+  getTokenAccounts:       'hsl(180, 60%, 48%)',   // teal
+  getMultipleAccounts:    'hsl(30, 80%, 55%)',    // orange
+  rpc:                    'hsl(210, 80%, 55%)',   // blue
+  GET:                    'hsl(150, 60%, 45%)',   // green
+  websocket:              'hsl(45, 90%, 55%)',    // yellow
+  unknown:                'hsl(0, 0%, 50%)',
+};
+
+function colorFor(method: string): string {
+  return METHOD_COLORS[method] ?? `hsl(${(method.length * 47) % 360}, 65%, 55%)`;
+}
+
+function MethodBreakdown({
+  data,
+  window,
+  onWindowChange,
+  onRefresh,
+}: {
+  data: UsageByMethod[];
+  window: '24h' | '7d' | '30d';
+  onWindowChange: (w: '24h' | '7d' | '30d') => void;
+  onRefresh: () => void;
+}) {
+  const totalCredits = data.reduce((s, d) => s + d.total_credits, 0);
+  const totalCalls = data.reduce((s, d) => s + d.total_calls, 0);
+
+  return (
+    <Card className="bg-card border-border">
+      <CardHeader className="flex flex-row items-center justify-between gap-2">
+        <div>
+          <CardTitle className="text-sm text-foreground">Helius Calls by Endpoint Method</CardTitle>
+          <CardDescription className="text-xs">
+            Which method types are burning credits — top row = biggest killer
+          </CardDescription>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-md border border-border overflow-hidden">
+            {(['24h', '7d', '30d'] as const).map((w) => (
+              <button
+                key={w}
+                onClick={() => onWindowChange(w)}
+                className={`px-2 py-1 text-xs ${window === w ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:bg-muted'}`}
+              >
+                {w}
+              </button>
+            ))}
+          </div>
+          <Button onClick={onRefresh} variant="outline" size="sm">
+            <RefreshCw className="h-3 w-3" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Stacked horizontal bar — visual share */}
+        <div className="w-full h-3 rounded-full overflow-hidden flex bg-muted">
+          {data.map((row) => {
+            const pct = totalCredits > 0 ? (row.total_credits / totalCredits) * 100 : 0;
+            return (
+              <div
+                key={row.method}
+                style={{ width: `${pct}%`, backgroundColor: colorFor(row.method) }}
+                title={`${row.method} — ${pct.toFixed(1)}%`}
+              />
+            );
+          })}
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 text-xs">
+          <div>
+            <div className="text-muted-foreground">Total Calls</div>
+            <div className="text-foreground font-bold text-base">{totalCalls.toLocaleString()}</div>
+          </div>
+          <div>
+            <div className="text-muted-foreground">Total Credits</div>
+            <div className="text-foreground font-bold text-base">{totalCredits.toLocaleString()}</div>
+          </div>
+          <div>
+            <div className="text-muted-foreground">Method Types</div>
+            <div className="text-foreground font-bold text-base">{data.length}</div>
+          </div>
+        </div>
+
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Method</TableHead>
+              <TableHead className="text-right">Calls</TableHead>
+              <TableHead className="text-right">Credits</TableHead>
+              <TableHead className="text-right">% of spend</TableHead>
+              <TableHead className="text-right">Avg ms</TableHead>
+              <TableHead className="text-right">Errors</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data.map((row) => {
+              const pct = totalCredits > 0 ? (row.total_credits / totalCredits) * 100 : 0;
+              const isHot = pct >= 25;
+              return (
+                <TableRow key={row.method}>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: colorFor(row.method) }} />
+                      <span className="font-mono text-xs text-foreground">{row.method}</span>
+                      {isHot && <Badge variant="destructive" className="text-[10px] px-1 py-0">HOT</Badge>}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right text-muted-foreground">{row.total_calls.toLocaleString()}</TableCell>
+                  <TableCell className="text-right">
+                    <Badge variant={isHot ? 'destructive' : 'secondary'}>{row.total_credits.toLocaleString()}</Badge>
+                  </TableCell>
+                  <TableCell className="text-right text-muted-foreground">{pct.toFixed(1)}%</TableCell>
+                  <TableCell className="text-right text-muted-foreground">{row.avg_ms}</TableCell>
+                  <TableCell className="text-right">
+                    {row.errors > 0
+                      ? <span className="text-destructive">{row.errors.toLocaleString()}</span>
+                      : <span className="text-muted-foreground">0</span>}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
