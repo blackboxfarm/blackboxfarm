@@ -466,7 +466,7 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
     let tokenName = validation.name || watchlistEntry?.token_name || null;
     // Always pull rich metadata for new tokens — symbol/name + price/mcap/liquidity/creator.
     // For tokens already in the watchlist, only refresh symbol/name if missing.
-    const richMeta = !watchlistEntry ? await fetchRichMeta(mint) : ({} as RichMeta);
+    const richMeta = !watchlistEntry ? await fetchRichMeta(mint, supabase) : ({} as RichMeta);
     if (!tokenSymbol) tokenSymbol = richMeta.symbol || null;
     if (!tokenName) tokenName = richMeta.name || null;
     if (!tokenSymbol) {
