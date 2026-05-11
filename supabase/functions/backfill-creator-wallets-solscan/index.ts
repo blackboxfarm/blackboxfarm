@@ -1,7 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { withRunLog } from '../_shared/run-logger.ts';
 import { solscanFetch } from '../_shared/solscan-rate-limiter.ts';
-import { assertUpdate, assertUpsert } from '../_shared/db-assert.ts';
+import { assertInsert, assertUpdate, assertUpsert } from '../_shared/db-assert.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -86,19 +86,61 @@ const TABLE_CAPS: Record<TargetTable, TableCaps> = {
   token_lifecycle_tracking: { updatedAt: true, lastCheckedAt: false, lastFetchedAt: false, creatorFetchedAt: false },
 };
 
+// Per-table column used for newest-first ordering. Falls back to id if select fails.
+const ORDER_COLUMN: Record<TargetTable, string> = {
+  allstar_mint_alerts: 'created_at',
+  autopsy_backlog: 'created_at',
+  autopsy_candidates: 'created_at',
+  autopsy_tx_evidence: 'created_at',
+  developer_alerts: 'created_at',
+  developer_mint_alerts: 'created_at',
+  developer_tokens: 'created_at',
+  flip_positions: 'created_at',
+  funnel_feed_discoveries: 'discovered_at',
+  holders_intel_seen_tokens: 'first_seen_at',
+  pumpfun_buy_candidates: 'created_at',
+  pumpfun_discovery_logs: 'created_at',
+  pumpfun_fantasy_positions: 'created_at',
+  pumpfun_rejected_backcheck: 'created_at',
+  pumpfun_rejection_events: 'created_at',
+  pumpfun_watchlist: 'discovered_at',
+  scraped_tokens: 'created_at',
+  telegram_insider_token_lifecycle: 'created_at',
+  token_lifecycle: 'created_at',
+  token_mint_watchdog: 'created_at',
+  token_projects: 'created_at',
+  token_search_results: 'created_at',
+  proven_dev_tokens: 'created_at',
+  token_assessments: 'created_at',
+  token_lifecycle_scorecard: 'created_at',
+  token_lifecycle_tracking: 'created_at',
+};
+
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const hasText = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
 const isLikelyAddress = (value: unknown): value is string => hasText(value) && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(value.trim());
 
-async function selectMissingRows(supabase: any, table: TargetTable, column: 'creator_wallet' | 'dev_wallet', limit: number, offset: number): Promise<TargetRow[]> {
-  const { data, error } = await supabase
+async function selectMissingRows(supabase: any, table: TargetTable, column: 'creator_wallet' | 'dev_wallet', limit: number): Promise<TargetRow[]> {
+  const orderCol = ORDER_COLUMN[table] ?? 'created_at';
+  let { data, error } = await supabase
     .from(table)
     .select('token_mint')
     .not('token_mint', 'is', null)
     .or(`${column}.is.null,${column}.eq.`)
-    .range(offset, offset + limit - 1);
+    .order(orderCol, { ascending: false, nullsFirst: false })
+    .limit(limit);
 
-  if (error) throw error;
+  // Fallback: some tables may not have the assumed order column
+  if (error) {
+    const retry = await supabase
+      .from(table)
+      .select('token_mint')
+      .not('token_mint', 'is', null)
+      .or(`${column}.is.null,${column}.eq.`)
+      .limit(limit);
+    if (retry.error) throw retry.error;
+    data = retry.data;
+  }
   return (data ?? [])
     .map((row: any) => String(row.token_mint ?? '').trim())
     .filter(isLikelyAddress)
@@ -128,42 +170,77 @@ async function buildTargets(supabase: any, explicitMints: string[], batchSize: n
     ...DEV_TABLES.map((table) => ({ table, column: 'dev_wallet' as const })),
   ];
   const perTable = Math.max(1, Math.ceil(batchSize / allSpecs.length));
-  const randomOffset = Math.floor(Math.random() * 3000);
 
   for (const spec of allSpecs) {
-    const rows = await selectMissingRows(supabase, spec.table, spec.column, perTable, randomOffset);
-    if (rows.length === 0 && randomOffset > 0) {
-      const retry = await selectMissingRows(supabase, spec.table, spec.column, perTable, 0);
-      retry.forEach(push);
-    } else {
-      rows.forEach(push);
-    }
+    const rows = await selectMissingRows(supabase, spec.table, spec.column, perTable);
+    rows.forEach(push);
     if (targets.length >= batchSize) break;
   }
 
   return targets.slice(0, batchSize);
 }
 
-async function fetchCreatorFromSolscan(mint: string, apiKey: string): Promise<{ creator: string | null; status: number; error?: string; fromCache: boolean }> {
+async function fetchCreatorFromSolscan(mint: string, apiKey: string): Promise<{ creator: string | null; status: number; error?: string; fromCache: boolean; url: string; durationMs: number; rawBody: any }> {
   const url = `https://pro-api.solscan.io/v2.0/token/meta?address=${encodeURIComponent(mint)}`;
+  const start = Date.now();
   const resp = await solscanFetch(url, {
     headers: { Accept: 'application/json', token: apiKey },
     cacheTtlMs: 300_000,
     timeoutMs: 6000,
     callerName: 'backfill-creator-wallets-solscan',
   });
+  const durationMs = Date.now() - start;
 
   const creator = resp.body?.data?.creator;
   if (resp.ok && isLikelyAddress(creator) && creator !== mint) {
-    return { creator: creator.trim(), status: resp.status, fromCache: resp.fromCache };
+    return { creator: creator.trim(), status: resp.status, fromCache: resp.fromCache, url, durationMs, rawBody: resp.body };
   }
 
   return {
     creator: null,
     status: resp.status,
     fromCache: resp.fromCache,
+    url,
+    durationMs,
+    rawBody: resp.body,
     error: resp.ok ? 'creator_missing_in_solscan_meta' : String(resp.body?.error ?? resp.body?.message ?? `http_${resp.status}`),
   };
+}
+
+function truncateForLog(body: any): any {
+  try {
+    const str = JSON.stringify(body);
+    if (str.length <= 4096) return body;
+    return { _truncated: true, preview: str.slice(0, 4096) };
+  } catch {
+    return { _unstringifiable: true };
+  }
+}
+
+async function logBackfillEvent(supabase: any, row: {
+  mint: string;
+  table_name: string;
+  column_name: string;
+  solscan_url: string;
+  http_status: number;
+  duration_ms: number;
+  from_cache: boolean;
+  resolved_creator: string | null;
+  error_message: string | null;
+  response_preview: any;
+}) {
+  try {
+    await assertInsert(
+      supabase.from('creator_backfill_events').insert({
+        ...row,
+        response_preview: truncateForLog(row.response_preview),
+      }),
+      'creator_backfill_events',
+    );
+  } catch (e) {
+    // Logging must never break the backfill loop; log to console for visibility.
+    console.warn('[backfill-creator-wallets-solscan][event-log] insert failed:', e instanceof Error ? e.message : e);
+  }
 }
 
 function updatePayload(table: TargetTable, column: 'creator_wallet' | 'dev_wallet', creator: string) {
@@ -260,6 +337,20 @@ Deno.serve(withRunLog('backfill-creator-wallets-solscan', async (req, logger) =>
           creatorCache.set(target.mint, lookup);
           if (requestDelayMs > 0) await delay(requestDelayMs);
         }
+
+        // Real-time raw event log for the super-admin viewer
+        await logBackfillEvent(supabase, {
+          mint: target.mint,
+          table_name: target.table,
+          column_name: target.column,
+          solscan_url: lookup.url,
+          http_status: lookup.status,
+          duration_ms: lookup.durationMs,
+          from_cache: lookup.fromCache,
+          resolved_creator: lookup.creator,
+          error_message: lookup.error ?? null,
+          response_preview: lookup.rawBody,
+        });
 
         if (!lookup.creator) {
           misses++;
