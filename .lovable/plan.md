@@ -1,75 +1,83 @@
-
 ## Goal
 
-Make dev-wallet → coins list resolution resilient by adding a scrape-based fallback for `pump.fun/profile/{wallet}` whenever the official `frontend-api-v3.pump.fun /coins/user-created-coins` endpoint returns empty / rate-limits / 403s. The page itself reliably renders the full coin list, so we can read it via Browserless (primary) or Apify (overflow), and feed the same downstream pipelines (mesh links, `developer_tokens`, copycat, dev monitor).
+Capture the **true first-24-hour ATH market cap** for every token as a permanent historical fingerprint, locked-in at the ~23h45m mark from GeckoTerminal hourly OHLCV — then backfill the same value for older tokens (newest → oldest) using GeckoTerminal's historical candles.
 
-## What changes
+This is distinct from the existing `ath_24h_usd` column, which (despite its name) is currently used as **lifetime ATH** across the codebase (autopsies, dev reputation, lifecycle scoring). We do not touch that column.
 
-### 1. New shared resolver: `_shared/pumpfun-creator-coins-resolver.ts`
+## What gets added
 
-A single entry point used everywhere we currently call `fetchPumpFunCreatorCoins`. Tiered chain:
+### 1. New DB column on `token_lifecycle`
+- `first_24h_ath_usd  numeric` — locked first-24h peak mcap (USD)
+- `first_24h_ath_captured_at  timestamptz` — when we sealed it
+- `first_24h_ath_source  text` — `'geckoterminal_live'` | `'geckoterminal_backfill'` | `'pumpfun'` | `'no_pool'`
+- Index on `(first_24h_ath_usd IS NULL, first_seen_at DESC)` for backfill ordering.
+
+Once `first_24h_ath_captured_at` is set, the value is **immutable** — no overwrites, ever. It becomes a permanent reputation primitive.
+
+### 2. New live-capture edge function: `first-24h-ath-sealer`
+Runs every 5 minutes (cron). Logic:
 
 ```text
-Tier 1: Pump.fun API v3  (existing fetchPumpFunCreatorCoins, paginated)
-   ↓ if 0 results / 403 / 429 / timeout
-Tier 2: Browserless /content on https://pump.fun/profile/{wallet}
-        - waitForSelector for the coins grid
-        - parse anchor hrefs matching /coin/{mint} + adjacent ticker/name/mcap text
-   ↓ if Browserless fails or wallet has >N coins (lazy-loaded list)
-Tier 3: Apify (existing pump.fun profile actor or generic-web-scraper actor)
-        - only fired when Tier 2 returns < expected and wallet looks "important"
-          (e.g. flagged by mesh-kyc / has dev_profile.kyc_verified or appears in
-          developer_profiles with >5 tokens already known)
-        - cost-gated through api-logger (apify = paid)
+SELECT token_mint, first_seen_at FROM token_lifecycle
+WHERE first_24h_ath_usd IS NULL
+  AND first_seen_at >= now() - interval '25 hours'
+  AND first_seen_at <= now() - interval '23 hours 45 minutes'
+ORDER BY first_seen_at ASC
+LIMIT 25;
 ```
 
-Returns the same shape as `fetchPumpFunCreatorCoins` so callers don't change.
+For each: fetch the top Solana pool from GeckoTerminal, pull `/ohlcv/hour?aggregate=1&limit=24` covering the token's first 24h window, take `max(high)` × supply if needed (or use the candle high as USD mcap when GT returns mcap), then UPSERT with `source='geckoterminal_live'`. The 15-minute pre-buffer guarantees the candle for hour 23 is closed and indexed by GT before we read it.
 
-### 2. Wire the resolver into existing callers (no behavior change on Tier 1 success)
+Pump.fun shortcut: if `mint.endsWith('pump')`, also call `fetchPumpFunCoin` — Pump.fun exposes a per-mint "ath_market_cap" snapshot we can corroborate with. Take the **max** of the two for accuracy.
 
-- `mesh-wallet-token-discovery` — replace direct `fetchPumpFunCreatorCoins` loop with resolver. This is the biggest beneficiary (it's the function that feeds dev_token coverage for mesh).
-- `pumpfun-dev-analyzer` — same swap.
-- `pumpfun-dev-wallet-monitor` — same swap.
-- `pumpfun-websocket-listener` — same swap.
-- `_shared/copycat-detector.ts` — same swap.
+### 3. New backfill edge function: `first-24h-ath-backfill`
+Runs every 10 minutes (cron, batch 15 — GT 30 req/min limit). Logic:
 
-`oracle-unified-lookup` keeps its dead herokuapp call removed (already noted in earlier work) and uses the resolver too.
+```text
+SELECT token_mint, first_seen_at FROM token_lifecycle
+WHERE first_24h_ath_usd IS NULL
+  AND first_seen_at < now() - interval '25 hours'
+ORDER BY first_seen_at DESC   -- newest-missing first, then loop back
+LIMIT 15;
+```
 
-### 3. Cost & rate guardrails
+Pulls hourly OHLCV restricted to `first_seen_at` → `first_seen_at + 24h` window (GT supports `before_timestamp`). Writes with `source='geckoterminal_backfill'`. If no pool exists (token died on bonding curve), writes `0` with `source='no_pool'` so we don't re-poll.
 
-- Browserless: gated by existing `BROWSERLESS_URL`/`BROWSERLESS_TOKEN`. Per-wallet cooldown (e.g. 6 h) stored in a tiny new table `pumpfun_profile_scrape_log (wallet, last_scraped_at, source, coins_found)` so the 5-min KYC cron / mesh funnel doesn't re-scrape the same wallet every cycle.
-- Apify: respects existing `apify_pause_state` + the 1-credit/run cost in `api-logger`. Hard cap: max 50 Apify runs/day across all callers, configurable.
-- All failures fall through silently — if every tier fails, return `[]` (same as today).
+### 4. Wire into existing waterfalls
+- `lifecycle-scorecard-builder`: add `first_24h_ath_usd` as a new factor input (pump-and-dump detection: `current_mcap / first_24h_ath_usd` ratio).
+- `dev-reputation-rollup`: tracked alongside `peak_mcap_lifetime` as `peak_first_24h` — measures launch-strength vs sustain.
+- `autopsy-writer`: include first-24h ATH in the death narrative ("hit $X in first 24h, died at $Y").
+- Bubble Map / Holders frontend: display as "First 24h Peak" badge when present.
 
-### 4. New diagnostic edge function: `pumpfun-profile-scrape-test`
+### 5. Cron registration
+Two new pg_cron jobs in a single migration:
+- `first-24h-ath-sealer-5m` — `*/5 * * * *`
+- `first-24h-ath-backfill-10m` — `*/10 * * * *`
 
-Manual `POST { wallet }` endpoint that runs the resolver with verbose logging and returns `{ tier_used, coins_found, elapsed_ms, errors }`. Lets you spot-check from the admin panel without touching any pipeline.
+Plus a kill-switch row in `function_toggles`.
 
-### 5. Admin panel surface (small)
+## Why 23h45m, not exactly 24h
+GeckoTerminal hourly candles close on the wall-clock hour and take 1–3 minutes to publish. Sealing at 23h45m guarantees:
+1. The hour-23 candle (covering minutes 22h00–23h00 of the token's life) is closed and indexed.
+2. We still capture 23 of the 24 first-day hours — close enough to the canonical "first day" peak for ranking purposes; cleaner than waiting until h24+ where intraday backfill drift can sneak in.
 
-In `DevKycCoveragePanel`, add a "Re-scrape coins via Browserless" button per row that calls the diagnostic function and displays the result. No new page.
+## Files
 
-### 6. Memory update
+**New**
+- `supabase/migrations/<ts>_first_24h_ath.sql` — column + indexes + cron jobs + toggle rows
+- `supabase/functions/first-24h-ath-sealer/index.ts`
+- `supabase/functions/first-24h-ath-backfill/index.ts`
 
-Append a new section to `mem/features/oracle/kyc-fast-path-and-self-expanding-dictionary.md` documenting the 3-tier resolver + the `pumpfun_profile_scrape_log` cooldown table.
+**Edited**
+- `supabase/config.toml` — register both functions (`verify_jwt = false`)
+- `supabase/functions/lifecycle-scorecard-builder/index.ts` — read new column into scoring inputs
+- `supabase/functions/dev-reputation-rollup/index.ts` — aggregate `peak_first_24h`
+- `supabase/functions/autopsy-writer/index.ts` — pull into autopsy narrative
+- `mem/features/intelligence/first-24h-ath.md` (new memory) — documents the immutability rule + 23h45m timing
+- `mem/index.md` — add reference
 
-## Files touched
+## Open questions
 
-- **Created**
-  - `supabase/functions/_shared/pumpfun-creator-coins-resolver.ts`
-  - `supabase/functions/pumpfun-profile-scrape-test/index.ts`
-  - `supabase/migrations/<ts>_pumpfun_profile_scrape_log.sql`
-- **Edited**
-  - `supabase/functions/mesh-wallet-token-discovery/index.ts`
-  - `supabase/functions/pumpfun-dev-analyzer/index.ts`
-  - `supabase/functions/pumpfun-dev-wallet-monitor/index.ts`
-  - `supabase/functions/pumpfun-websocket-listener/index.ts`
-  - `supabase/functions/_shared/copycat-detector.ts`
-  - `src/components/admin/oracle/DevKycCoveragePanel.tsx`
-  - `mem/features/oracle/kyc-fast-path-and-self-expanding-dictionary.md`
-
-## Open questions before I build
-
-1. **Apify actor:** do you already have a specific pump.fun profile actor in your Apify account you want me to use, or should Tier 3 use the generic Cheerio/Puppeteer actor (`apify/web-scraper`)? If the latter, I'll write a small page-function that targets the `/profile/{wallet}` coin grid.
-2. **Cooldown window:** is 6 h per wallet right, or do you want shorter (e.g. 1 h) for wallets that just got promoted to allstar / KYC-verified?
-3. **Tier 3 trigger threshold:** I proposed Apify only fires for "important" wallets (KYC-verified or >5 known tokens). OK, or should Apify be on-demand only (admin button), never automatic?
+1. **Display on frontend now, or ship backend-only first?** Recommend backend-only first run (1–2 days) so we have data to display before users see empty badges.
+2. **Backfill horizon** — backfill all tokens in `token_lifecycle`, or cap at last 90 days? GT only reliably serves OHLCV for actively-traded pools; very old dead tokens will mostly return `no_pool`. Recommend: no cap, but mark `no_pool` quickly to drain the queue.
+3. **Use the existing `ath-24h-backfill` function instead of a new one?** That function is misnamed (it actually writes lifetime ATH). I recommend keeping it untouched and adding the two new dedicated functions to avoid breaking 14+ callers of `ath_24h_usd`.

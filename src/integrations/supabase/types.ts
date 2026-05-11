@@ -17741,6 +17741,9 @@ export type Database = {
           dex_socials_source: string | null
           discovery_source: string | null
           fdv: number | null
+          first_24h_ath_captured_at: string | null
+          first_24h_ath_source: string | null
+          first_24h_ath_usd: number | null
           first_seen_at: string
           highest_rank: number | null
           image_url: string | null
@@ -17795,6 +17798,9 @@ export type Database = {
           dex_socials_source?: string | null
           discovery_source?: string | null
           fdv?: number | null
+          first_24h_ath_captured_at?: string | null
+          first_24h_ath_source?: string | null
+          first_24h_ath_usd?: number | null
           first_seen_at: string
           highest_rank?: number | null
           image_url?: string | null
@@ -17849,6 +17855,9 @@ export type Database = {
           dex_socials_source?: string | null
           discovery_source?: string | null
           fdv?: number | null
+          first_24h_ath_captured_at?: string | null
+          first_24h_ath_source?: string | null
+          first_24h_ath_usd?: number | null
           first_seen_at?: string
           highest_rank?: number | null
           image_url?: string | null

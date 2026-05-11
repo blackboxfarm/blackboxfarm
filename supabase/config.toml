@@ -1,5 +1,11 @@
 project_id = "apxauapuusmgwbbzjgfl"
 
+[functions.first-24h-ath-sealer]
+verify_jwt = false
+
+[functions.first-24h-ath-backfill]
+verify_jwt = false
+
 [functions.generate-gallery-images]
 verify_jwt = false
 
