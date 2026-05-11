@@ -12344,6 +12344,36 @@ export type Database = {
         }
         Relationships: []
       }
+      pumpfun_profile_scrape_log: {
+        Row: {
+          coins_found: number
+          last_error: string | null
+          last_scraped_at: string
+          source: string
+          success: boolean
+          updated_at: string
+          wallet_address: string
+        }
+        Insert: {
+          coins_found?: number
+          last_error?: string | null
+          last_scraped_at?: string
+          source: string
+          success?: boolean
+          updated_at?: string
+          wallet_address: string
+        }
+        Update: {
+          coins_found?: number
+          last_error?: string | null
+          last_scraped_at?: string
+          source?: string
+          success?: boolean
+          updated_at?: string
+          wallet_address?: string
+        }
+        Relationships: []
+      }
       pumpfun_rejected_backcheck: {
         Row: {
           ath_bonding_curve_pct: number | null

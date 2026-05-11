@@ -1,7 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { getHeliusApiKey, getHeliusRestUrl } from '../_shared/helius-client.ts';
-import { fetchPumpFunCreatorCoins } from '../_shared/pumpfun-fetch.ts';
+import { resolveCreatorCoins } from '../_shared/pumpfun-creator-coins-resolver.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -37,36 +37,26 @@ Deno.serve(withRunLog('mesh-wallet-token-discovery', async (req) => {
     };
 
     let pumpSuccess = false;
-    {
-      let offset = 0;
-      const limit = 100;
-
-      try {
-        while (offset < 2000) {
-          const data = await fetchPumpFunCreatorCoins(walletAddress, 'mesh-wallet-token-discovery', limit, offset);
-          if (!data || data.length === 0) break;
-
-          for (const t of data) {
-            allTokens.push({
-              mint: t.mint,
-              symbol: t.symbol || '???',
-              name: t.name || 'Unknown',
-              mcap: t.usd_market_cap || 0,
-              graduated: t.complete === true,
-            });
-          }
-
-          pumpSuccess = true;
-          console.log(`[TokenDiscovery] Pump.fun offset=${offset}, batch=${data.length}, total=${allTokens.length}`);
-
-          if (data.length < limit) break;
-          offset += limit;
-          // Rate limit
-          await new Promise(r => setTimeout(r, 200));
-        }
-      } catch (e) {
-        errors.push(`Pump.fun error: ${e instanceof Error ? e.message : 'unknown'}`);
+    try {
+      const resolved = await resolveCreatorCoins(walletAddress, {
+        callerName: 'mesh-wallet-token-discovery',
+        apiLimit: 2000,
+        apiOnly: false, // allow Browserless fallback when API returns []
+      });
+      for (const t of resolved.coins) {
+        allTokens.push({
+          mint: t.mint,
+          symbol: t.symbol,
+          name: t.name,
+          mcap: t.usd_market_cap,
+          graduated: t.complete,
+        });
       }
+      pumpSuccess = resolved.coins.length > 0;
+      console.log(`[TokenDiscovery] Resolver tier=${resolved.tierUsed} coins=${resolved.coins.length} elapsed=${resolved.elapsedMs}ms`);
+      if (resolved.errors.length) errors.push(...resolved.errors.map(e => `Resolver: ${e}`));
+    } catch (e) {
+      errors.push(`Resolver error: ${e instanceof Error ? e.message : 'unknown'}`);
     }
 
     // ═══ STEP 2: Helius TOKEN_MINT fallback (if pump.fun failed) ═══

@@ -1,8 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
 
 interface CoverageRow {
   total_tokens: number;
@@ -28,6 +32,36 @@ interface KycEntityBreakdown {
  * auto-skip when there's nothing left to do.
  */
 export default function DevKycCoveragePanel() {
+  const { toast } = useToast();
+  const [scrapeWallet, setScrapeWallet] = useState('');
+  const [scrapeBusy, setScrapeBusy] = useState(false);
+  const [scrapeResult, setScrapeResult] = useState<{
+    tier_used: string; coins_found: number; elapsed_ms: number; errors: string[];
+    coins?: Array<{ mint: string; symbol: string; usd_market_cap: number }>;
+  } | null>(null);
+
+  const runScrape = async (allowApify: boolean) => {
+    const w = scrapeWallet.trim();
+    if (!w) return;
+    setScrapeBusy(true);
+    setScrapeResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('pumpfun-profile-scrape-test', {
+        body: { wallet: w, allowApify, bypassCooldown: true },
+      });
+      if (error) throw error;
+      setScrapeResult(data);
+      toast({
+        title: `Tier: ${data.tier_used}`,
+        description: `${data.coins_found} coins in ${data.elapsed_ms}ms`,
+      });
+    } catch (e: any) {
+      toast({ title: 'Scrape failed', description: e.message ?? String(e), variant: 'destructive' });
+    } finally {
+      setScrapeBusy(false);
+    }
+  };
+
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['oracle-dev-kyc-coverage'],
     queryFn: async (): Promise<CoverageRow> => {
@@ -199,6 +233,63 @@ export default function DevKycCoveragePanel() {
               <code className="text-amber-400">backfill-creator-wallets-2m</code> (60/run, Birdeye → Helius) +{' '}
               <code className="text-amber-400">backfill-creator-wallets-catchup-10m</code> (200/run) +{' '}
               <code className="text-amber-400">kyc-backfill-master-2m</code> (100/run). SMS milestone alerts fire every 5 min on each new whole-percent crossing. All auto-skip when complete.
+            </div>
+
+            <div className="border-t border-border/40 pt-3 space-y-2">
+              <div className="text-xs font-semibold flex items-center gap-2">
+                🕷️ Pump.fun Profile Scrape Test
+                <Badge variant="outline" className="text-[10px]">API → Browserless → Apify</Badge>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Dev wallet address"
+                  value={scrapeWallet}
+                  onChange={(e) => setScrapeWallet(e.target.value)}
+                  className="font-mono text-xs h-8"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={scrapeBusy || !scrapeWallet.trim()}
+                  onClick={() => runScrape(false)}
+                >
+                  {scrapeBusy ? '…' : 'Scrape'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={scrapeBusy || !scrapeWallet.trim()}
+                  onClick={() => runScrape(true)}
+                  title="Force Apify Tier 3 (paid)"
+                >
+                  +Apify
+                </Button>
+              </div>
+              {scrapeResult && (
+                <div className="text-[11px] space-y-1 rounded border border-border/40 p-2 bg-muted/20">
+                  <div>
+                    <span className="text-muted-foreground">Tier:</span>{' '}
+                    <code className="text-amber-400">{scrapeResult.tier_used}</code>{' '}
+                    <span className="text-muted-foreground">·</span>{' '}
+                    <span className="font-mono">{scrapeResult.coins_found} coins</span>{' '}
+                    <span className="text-muted-foreground">in {scrapeResult.elapsed_ms}ms</span>
+                  </div>
+                  {scrapeResult.errors?.length > 0 && (
+                    <div className="text-red-400 text-[10px]">
+                      {scrapeResult.errors.join(' | ')}
+                    </div>
+                  )}
+                  {scrapeResult.coins && scrapeResult.coins.length > 0 && (
+                    <div className="font-mono text-[10px] text-muted-foreground max-h-32 overflow-auto">
+                      {scrapeResult.coins.slice(0, 10).map((c) => (
+                        <div key={c.mint}>
+                          ${c.symbol} · {c.mint.slice(0, 8)}… · ${c.usd_market_cap.toLocaleString()}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </>
         )}

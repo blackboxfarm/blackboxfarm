@@ -23,6 +23,7 @@
  */
 
 import { fetchPumpFunCreatorCoins } from './pumpfun-fetch.ts';
+import { resolveCreatorCoins } from './pumpfun-creator-coins-resolver.ts';
 
 export interface CopycatTokenSummary {
   mint: string;
@@ -112,7 +113,22 @@ export async function detectCopycatPattern(
   callerName: string,
   excludeMint?: string,
 ): Promise<CopycatVerdict> {
-  const coins = await fetchPumpFunCreatorCoins(creatorWallet, callerName, 100, 0);
+  // Try API first, fall back to Browserless if API returns []
+  let coins: any[] | null = await fetchPumpFunCreatorCoins(creatorWallet, callerName, 100, 0);
+  if (!coins || coins.length === 0) {
+    const resolved = await resolveCreatorCoins(creatorWallet, {
+      callerName,
+      apiOnly: false,
+      apiLimit: 100,
+    });
+    coins = resolved.coins.map(c => ({
+      mint: c.mint,
+      name: c.name,
+      symbol: c.symbol,
+      ath_market_cap: c.usd_market_cap,
+      created_timestamp: null,
+    }));
+  }
   const all: CopycatTokenSummary[] = (coins ?? [])
     .filter((c: any) => c?.mint && (!excludeMint || c.mint !== excludeMint))
     .map((c: any) => ({
