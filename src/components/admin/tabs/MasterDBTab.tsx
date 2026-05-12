@@ -650,25 +650,27 @@ export default function MasterDBTab() {
                       ) : "—"}
                     </TableCell>
                     <TableCell>
+                      <DevWalletCell
+                        tokenMint={r.token_mint}
+                        symbol={r.symbol}
+                        devWallet={r.creator_wallet || (r.dev_wallets && r.dev_wallets[0])}
+                      />
+                    </TableCell>
+                    <TableCell>
                       {(() => {
-                        const wallet = r.creator_wallet || (r.dev_wallets && r.dev_wallets[0]);
-                        // Defensive: only render if it looks like a real base58 Solana address.
-                        // Older bad data wrote JSON blobs into creator_wallet — guard against that.
-                        const looksValid =
-                          typeof wallet === 'string' &&
-                          wallet.length >= 32 && wallet.length <= 44 &&
-                          /^[1-9A-HJ-NP-Za-km-z]+$/.test(wallet);
-                        if (!looksValid) return <span className="text-muted-foreground text-xs">—</span>;
+                        const dw = (r.creator_wallet || (r.dev_wallets && r.dev_wallets[0])) as string | null;
+                        const info = dw ? kycRootMap?.[dw] : null;
                         return (
-                          <a href={`https://solscan.io/account/${wallet}`} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-1 font-mono text-xs text-blue-400 hover:text-blue-300">
-                            {wallet.slice(0, 6)}…{wallet.slice(-4)}
-                            <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-                          </a>
+                          <KycCell
+                            devWallet={dw}
+                            kycVerified={r.kyc_verified}
+                            kycRootWallet={info?.rootWallet}
+                            kycRootLabel={info?.rootLabel}
+                            kycSource={info?.source ?? r.kyc_source}
+                          />
                         );
                       })()}
                     </TableCell>
-                    <TableCell>{r.kyc_verified ? "✅" : "—"}</TableCell>
                     <TableCell>{r.kyc_source ?? "—"}</TableCell>
                     <TableCell>
                       {r.dev_reputation_score != null ? (
