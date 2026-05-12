@@ -44,6 +44,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatDistanceToNow } from "date-fns";
+import { DevWalletCell } from "@/components/admin/shared/DevWalletCell";
+import { KycCell } from "@/components/admin/shared/KycCell";
 
 const SOL_MINTS = new Set(["So11111111111111111111111111111111111111112"]);
 
@@ -420,6 +422,40 @@ export default function Top200Tab() {
   const page2 = useMemo(() => filteredOverflow, [filteredOverflow]);
   const displayRows = activePage === "top200" ? page1 : page2;
 
+  // Batch-fetch KYC root info for the dev wallets visible on the current page so
+  // the KYC cell can render "Binance · 8PPv…4YYx" without a per-row query.
+  const visibleDevWallets = useMemo(() => {
+    const out = new Set<string>();
+    for (const r of displayRows) {
+      const w = r.creator_wallet as string | undefined;
+      if (w && typeof w === "string" && w.length >= 32 && w.length <= 44) out.add(w);
+    }
+    return Array.from(out);
+  }, [displayRows]);
+
+  const { data: kycRootMap } = useQuery({
+    queryKey: ["top200-kyc-roots", visibleDevWallets.join(",")],
+    enabled: visibleDevWallets.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("developer_profiles")
+        .select("master_wallet_address, kyc_root_wallet, kyc_root_label, kyc_source, kyc_verified")
+        .in("master_wallet_address", visibleDevWallets);
+      if (error) throw error;
+      const map: Record<string, { rootWallet: string | null; rootLabel: string | null; source: string | null; verified: boolean | null }> = {};
+      for (const row of data || []) {
+        map[(row as any).master_wallet_address] = {
+          rootWallet: (row as any).kyc_root_wallet ?? null,
+          rootLabel: (row as any).kyc_root_label ?? null,
+          source: (row as any).kyc_source ?? null,
+          verified: (row as any).kyc_verified ?? null,
+        };
+      }
+      return map;
+    },
+    staleTime: 30_000,
+  });
+
   const stats = useMemo(() => {
     return {
       total: (allTokens?.length || 0) + (overflowTokens?.length || 0),
@@ -550,19 +586,20 @@ export default function Top200Tab() {
                   <TableHead>First Seen</TableHead>
                   <TableHead>Last Fetched</TableHead>
                   <TableHead>Dev Wallet</TableHead>
+                  <TableHead>KYC</TableHead>
                   <TableHead>Edit</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={20} className="text-center py-12">
+                    <TableCell colSpan={21} className="text-center py-12">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto" />
                     </TableCell>
                   </TableRow>
                 ) : displayRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={20} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={21} className="text-center py-8 text-muted-foreground">
                       No tokens found
                     </TableCell>
                   </TableRow>
@@ -647,17 +684,26 @@ export default function Top200Tab() {
                         {r.last_fetched_at ? formatDistanceToNow(new Date(r.last_fetched_at), { addSuffix: true }) : "—"}
                       </TableCell>
                       <TableCell>
-                        {r.creator_wallet ? (
-                          <a
-                            href={`https://solscan.io/account/${r.creator_wallet}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1 font-mono text-xs text-blue-400 hover:text-blue-300"
-                          >
-                            {r.creator_wallet.slice(0, 6)}…{r.creator_wallet.slice(-4)}
-                            <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-                          </a>
-                        ) : "—"}
+                        <DevWalletCell
+                          tokenMint={r.token_mint}
+                          symbol={r.symbol}
+                          devWallet={r.creator_wallet}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        {(() => {
+                          const dw = r.creator_wallet as string | null;
+                          const info = dw ? kycRootMap?.[dw] : null;
+                          return (
+                            <KycCell
+                              devWallet={dw}
+                              kycVerified={info?.verified ?? r.kyc_verified}
+                              kycRootWallet={info?.rootWallet}
+                              kycRootLabel={info?.rootLabel}
+                              kycSource={info?.source ?? r.kyc_source}
+                            />
+                          );
+                        })()}
                       </TableCell>
                       <TableCell>
                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openEdit(r)}>
