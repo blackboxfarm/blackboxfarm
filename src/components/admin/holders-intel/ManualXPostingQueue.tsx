@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, ExternalLink, RefreshCw, SkipForward, Check, Wand2, Skull } from "lucide-react";
+import { Copy, ExternalLink, RefreshCw, SkipForward, Check, Wand2, Skull, Sparkles, Download, RotateCw } from "lucide-react";
 
 interface QueueRow {
   id: string;
@@ -23,6 +23,9 @@ interface QueueRow {
   autopsy_slug?: string | null;
   autopsy_url?: string | null;
   autopsy_hero_image?: string | null;
+  dex_banner_url?: string | null;
+  decorated_banner_url?: string | null;
+  decoration_theme?: string | null;
 }
 
 const X_INTENT_URL = "https://x.com/intent/post";
@@ -70,19 +73,21 @@ export function ManualXPostingQueue() {
   const [composing, setComposing] = useState<Record<string, boolean>>({});
   const [autoComposed, setAutoComposed] = useState(false);
   const [autopsying, setAutopsying] = useState<Record<string, boolean>>({});
+  const [decorating, setDecorating] = useState<Record<string, boolean>>({});
+  const [regenerating, setRegenerating] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
     const [pendingRes, historyRes] = await Promise.all([
       supabase
         .from("holders_intel_post_queue")
-        .select("id, token_mint, symbol, name, market_cap, trigger_source, created_at, tweet_text, manual_status, manual_posted_at, manual_tweet_url, autopsy_slug, autopsy_url, autopsy_hero_image")
+        .select("id, token_mint, symbol, name, market_cap, trigger_source, created_at, tweet_text, manual_status, manual_posted_at, manual_tweet_url, autopsy_slug, autopsy_url, autopsy_hero_image, dex_banner_url, decorated_banner_url, decoration_theme")
         .eq("manual_status", "pending")
         .order("created_at", { ascending: false })
         .limit(50),
       supabase
         .from("holders_intel_post_queue")
-        .select("id, token_mint, symbol, name, market_cap, trigger_source, created_at, tweet_text, manual_status, manual_posted_at, manual_tweet_url, autopsy_slug, autopsy_url, autopsy_hero_image")
+        .select("id, token_mint, symbol, name, market_cap, trigger_source, created_at, tweet_text, manual_status, manual_posted_at, manual_tweet_url, autopsy_slug, autopsy_url, autopsy_hero_image, dex_banner_url, decorated_banner_url, decoration_theme")
         .in("manual_status", ["posted_manual", "skipped_manual"])
         .order("manual_posted_at", { ascending: false })
         .limit(50),
@@ -160,6 +165,46 @@ export function ManualXPostingQueue() {
       toast({ title: "Autopsy failed", description: e?.message || String(e), variant: "destructive" });
     } finally {
       setAutopsying((p) => { const c = { ...p }; delete c[id]; return c; });
+    }
+  }, [toast, load]);
+
+  const decorateBanner = useCallback(async (id: string, regenerate = false) => {
+    setDecorating((p) => ({ ...p, [id]: true }));
+    toast({ title: "🎨 Decorating banner…", description: "AI overlay — 15-30s." });
+    try {
+      const { data, error } = await supabase.functions.invoke("holders-intel-banner-decorate", {
+        body: { queue_id: id, regenerate },
+      });
+      if (error) throw error;
+      const d = data as any;
+      if (!d?.success && !d?.decorated_banner_url) throw new Error(d?.error || "decorate failed");
+      toast({
+        title: d?.skipped === "already_decorated" ? "Already decorated" : "Banner decorated",
+        description: d?.theme_label || d?.decoration_theme || "ok",
+      });
+      await load();
+    } catch (e: any) {
+      toast({ title: "Decorate failed", description: e?.message || String(e), variant: "destructive" });
+    } finally {
+      setDecorating((p) => { const c = { ...p }; delete c[id]; return c; });
+    }
+  }, [toast, load]);
+
+  const regeneratePost = useCallback(async (id: string) => {
+    setRegenerating((p) => ({ ...p, [id]: true }));
+    try {
+      const { data, error } = await supabase.functions.invoke("holders-intel-compose-preview", {
+        body: { queue_id: id, force_refresh: true },
+      });
+      if (error) throw error;
+      const r = (data as any)?.results?.[0];
+      if (!r?.ok) throw new Error(r?.error || "regenerate failed");
+      toast({ title: "Post regenerated", description: "Pulled fresh holder data." });
+      await load();
+    } catch (e: any) {
+      toast({ title: "Regenerate failed", description: e?.message || String(e), variant: "destructive" });
+    } finally {
+      setRegenerating((p) => { const c = { ...p }; delete c[id]; return c; });
     }
   }, [toast, load]);
 
@@ -312,6 +357,48 @@ export function ManualXPostingQueue() {
 
                 {composed ? (
                   <>
+                    {(row.dex_banner_url || row.decorated_banner_url) && (
+                      <div className="flex flex-wrap items-start gap-3">
+                        {row.dex_banner_url && (
+                          <div className="space-y-1">
+                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">DexScreener banner</div>
+                            <a href={row.dex_banner_url} target="_blank" rel="noopener noreferrer">
+                              <img src={row.dex_banner_url} alt="DexScreener banner" className="h-24 w-auto rounded border border-border/50 object-cover" />
+                            </a>
+                            <div className="flex gap-1">
+                              <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => copyText(row.dex_banner_url!)}>
+                                <Copy className="h-3 w-3 mr-1" /> Copy URL
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" asChild>
+                                <a href={row.dex_banner_url} download target="_blank" rel="noopener noreferrer">
+                                  <Download className="h-3 w-3 mr-1" /> Download
+                                </a>
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                        {row.decorated_banner_url && (
+                          <div className="space-y-1">
+                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                              Decorated{row.decoration_theme ? ` · ${row.decoration_theme}` : ""}
+                            </div>
+                            <a href={row.decorated_banner_url} target="_blank" rel="noopener noreferrer">
+                              <img src={row.decorated_banner_url} alt="Decorated banner" className="h-24 w-auto rounded border border-primary/40 object-cover" />
+                            </a>
+                            <div className="flex gap-1">
+                              <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => copyText(row.decorated_banner_url!)}>
+                                <Copy className="h-3 w-3 mr-1" /> Copy URL
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" asChild>
+                                <a href={row.decorated_banner_url} download target="_blank" rel="noopener noreferrer">
+                                  <Download className="h-3 w-3 mr-1" /> Download
+                                </a>
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div className={`rounded-md border bg-background/50 p-3 ${hasAutopsy ? "border-destructive/40" : "border-border/50"}`}>
                       <pre className="whitespace-pre-wrap font-mono text-sm break-words">{row.tweet_text}</pre>
                     </div>
@@ -343,6 +430,26 @@ export function ManualXPostingQueue() {
                         {charCount} chars (Premium · long-form OK)
                       </span>
                       <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => regeneratePost(row.id)}
+                          disabled={!!regenerating[row.id]}
+                          title="Re-pull fresh holder data and rebuild this tweet"
+                        >
+                          <RotateCw className={`h-4 w-4 mr-1 ${regenerating[row.id] ? "animate-spin" : ""}`} />
+                          {regenerating[row.id] ? "Regenerating…" : "♻️ Regenerate"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => decorateBanner(row.id, !!row.decorated_banner_url)}
+                          disabled={!!decorating[row.id]}
+                          title="AI-decorate the DexScreener banner with a Featured / Trending / HOT theme"
+                        >
+                          <Sparkles className={`h-4 w-4 mr-1 ${decorating[row.id] ? "animate-pulse" : ""}`} />
+                          {decorating[row.id] ? "Decorating…" : row.decorated_banner_url ? "Re-decorate" : "Decorate Banner"}
+                        </Button>
                         <Button
                           size="sm"
                           variant={hasAutopsy ? "outline" : "destructive"}

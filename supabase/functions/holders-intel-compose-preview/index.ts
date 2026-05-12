@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { obfuscateTicker } from "../_shared/ticker-obfuscator.ts";
 import { assessNetworkRisk } from "../_shared/network-risk-assessment.ts";
+import { fetchDexBanner } from "../_shared/dexscreener-banner.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -98,7 +99,7 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
-    const { queue_id, queue_ids } = await req.json().catch(() => ({}));
+    const { queue_id, queue_ids, force_refresh } = await req.json().catch(() => ({}));
     const ids: string[] = queue_ids || (queue_id ? [queue_id] : []);
     if (ids.length === 0) {
       return new Response(JSON.stringify({ error: 'queue_id or queue_ids required' }), {
@@ -115,7 +116,7 @@ Deno.serve(async (req) => {
 
     const { data: items, error: fetchErr } = await supabase
       .from('holders_intel_post_queue')
-      .select('id, token_mint, symbol, name')
+      .select('id, token_mint, symbol, name, dex_banner_url')
       .in('id', ids);
 
     if (fetchErr) throw fetchErr;
@@ -172,13 +173,26 @@ Deno.serve(async (req) => {
 
         const tweetText = processTemplate(tweetTemplate, stats);
 
+        const updatePayload: Record<string, unknown> = { tweet_text: tweetText };
+
+        // Auto-fetch DexScreener banner the first time we compose this row
+        // (or when caller explicitly asks to refresh).
+        if (!item.dex_banner_url || force_refresh === true) {
+          try {
+            const banner = await fetchDexBanner(item.token_mint);
+            if (banner.url) updatePayload.dex_banner_url = banner.url;
+          } catch (e) {
+            console.warn(`[compose-preview] banner fetch failed for ${item.token_mint}: ${(e as Error).message}`);
+          }
+        }
+
         const { error: updErr } = await supabase
           .from('holders_intel_post_queue')
-          .update({ tweet_text: tweetText })
+          .update(updatePayload)
           .eq('id', item.id);
         if (updErr) throw updErr;
 
-        results.push({ id: item.id, ok: true, length: tweetText.length });
+        results.push({ id: item.id, ok: true, length: tweetText.length, dex_banner_url: updatePayload.dex_banner_url ?? item.dex_banner_url ?? null });
       } catch (e: any) {
         results.push({ id: item.id, ok: false, error: e?.message || String(e) });
       }
