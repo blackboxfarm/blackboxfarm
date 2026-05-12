@@ -550,6 +550,75 @@ export default function MasterDBTab() {
             </Button>
           </form>
         </div>
+        {/* Sort + filter chips */}
+        <div className="flex flex-wrap items-center gap-2 pt-3 text-xs">
+          <div className="flex items-center gap-1.5">
+            <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-muted-foreground">Sort</span>
+            <Select
+              value={sortBy}
+              onValueChange={(v) => { setSortBy(v as any); setPage(0); }}
+            >
+              <SelectTrigger className="h-7 w-[180px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="created_at">Discovered</SelectItem>
+                <SelectItem value="ath_market_cap_usd">ATH market cap</SelectItem>
+                <SelectItem value="graduated_at">Graduated date</SelectItem>
+                <SelectItem value="dev_reputation_score">Dev rep score</SelectItem>
+                <SelectItem value="dev_total_launches">Dev launches</SelectItem>
+                <SelectItem value="dev_tokens_rugged">Dev rug count</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 gap-1"
+              onClick={() => { setSortDir(d => d === "desc" ? "asc" : "desc"); setPage(0); }}
+              title={sortDir === "desc" ? "Descending — click for ascending" : "Ascending — click for descending"}
+            >
+              {sortDir === "desc" ? <ArrowDown className="h-3.5 w-3.5" /> : <ArrowUp className="h-3.5 w-3.5" />}
+              {sortDir === "desc" ? "Desc" : "Asc"}
+            </Button>
+          </div>
+          <div className="h-4 w-px bg-border mx-1" />
+          <span className="text-muted-foreground">Filters</span>
+          {[
+            { label: "Graduated", on: filterGraduated, set: setFilterGraduated },
+            { label: "KYC Verified", on: filterKycVerified, set: setFilterKycVerified },
+            { label: "Blacklisted Dev", on: filterBlacklisted, set: setFilterBlacklisted },
+            { label: "Posted", on: filterPosted, set: setFilterPosted },
+            { label: "Has Dev Wallet", on: filterHasDev, set: setFilterHasDev },
+          ].map((f) => (
+            <Button
+              key={f.label}
+              size="sm"
+              variant={f.on ? "default" : "outline"}
+              className="h-7 px-2 text-xs"
+              onClick={() => { f.set((v: boolean) => !v); setPage(0); }}
+            >
+              {f.on ? "✓ " : ""}{f.label}
+            </Button>
+          ))}
+          {(filterGraduated || filterKycVerified || filterBlacklisted || filterPosted || filterHasDev) && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-xs text-muted-foreground"
+              onClick={() => {
+                setFilterGraduated(false);
+                setFilterKycVerified(false);
+                setFilterBlacklisted(false);
+                setFilterPosted(false);
+                setFilterHasDev(false);
+                setPage(0);
+              }}
+            >
+              Clear
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         {/* Top horizontal scrollbar */}
