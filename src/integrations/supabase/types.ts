@@ -5004,6 +5004,8 @@ export type Database = {
           id: string
           integrity_score: number | null
           kyc_last_checked_at: string | null
+          kyc_root_label: string | null
+          kyc_root_wallet: string | null
           kyc_source: string | null
           kyc_source_type: string | null
           kyc_trail_status: string | null
@@ -5048,6 +5050,8 @@ export type Database = {
           id?: string
           integrity_score?: number | null
           kyc_last_checked_at?: string | null
+          kyc_root_label?: string | null
+          kyc_root_wallet?: string | null
           kyc_source?: string | null
           kyc_source_type?: string | null
           kyc_trail_status?: string | null
@@ -5092,6 +5096,8 @@ export type Database = {
           id?: string
           integrity_score?: number | null
           kyc_last_checked_at?: string | null
+          kyc_root_label?: string | null
+          kyc_root_wallet?: string | null
           kyc_source?: string | null
           kyc_source_type?: string | null
           kyc_trail_status?: string | null
