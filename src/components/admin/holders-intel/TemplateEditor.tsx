@@ -103,7 +103,7 @@ function previewWithSample(text: string): string {
   };
   let out = text;
   for (const [k, v] of Object.entries(sample)) {
-    out = out.replaceAll(k, v);
+    out = out.split(k).join(v);
   }
   return out;
 }
