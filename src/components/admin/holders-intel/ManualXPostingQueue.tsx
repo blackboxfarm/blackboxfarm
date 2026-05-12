@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, ExternalLink, RefreshCw, SkipForward, Check, Wand2, Skull, Sparkles, Download, RotateCw } from "lucide-react";
+import { Copy, ExternalLink, RefreshCw, SkipForward, Check, Wand2, Skull, Sparkles, Download, RotateCw, Trash2 } from "lucide-react";
 
 interface QueueRow {
   id: string;
@@ -185,6 +185,24 @@ export function ManualXPostingQueue() {
       await load();
     } catch (e: any) {
       toast({ title: "Decorate failed", description: e?.message || String(e), variant: "destructive" });
+    } finally {
+      setDecorating((p) => { const c = { ...p }; delete c[id]; return c; });
+    }
+  }, [toast, load]);
+
+  const deleteDecoratedBanner = useCallback(async (id: string) => {
+    if (!confirm("Delete the decorated banner? You can re-decorate after.")) return;
+    setDecorating((p) => ({ ...p, [id]: true }));
+    try {
+      const { data, error } = await supabase.functions.invoke("holders-intel-banner-decorate", {
+        body: { queue_id: id, action: "delete" },
+      });
+      if (error) throw error;
+      if (!(data as any)?.success) throw new Error((data as any)?.error || "delete failed");
+      toast({ title: "Decorated banner deleted" });
+      await load();
+    } catch (e: any) {
+      toast({ title: "Delete failed", description: e?.message || String(e), variant: "destructive" });
     } finally {
       setDecorating((p) => { const c = { ...p }; delete c[id]; return c; });
     }
@@ -393,6 +411,16 @@ export function ManualXPostingQueue() {
                                 <a href={row.decorated_banner_url} download target="_blank" rel="noopener noreferrer">
                                   <Download className="h-3 w-3 mr-1" /> Download
                                 </a>
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-[10px] px-2 border-destructive/40 text-destructive hover:bg-destructive/10"
+                                onClick={() => deleteDecoratedBanner(row.id)}
+                                disabled={!!decorating[row.id]}
+                                title="Delete the decorated banner"
+                              >
+                                <Trash2 className="h-3 w-3 mr-1" /> Delete
                               </Button>
                             </div>
                           </div>
