@@ -769,6 +769,24 @@ You MUST include a clearly-titled section "## The Exit Group — Who Actually Pu
   - Adds a short "Where the plan started" paragraph that traces backwards: exit wallet → acquisition (launch sniper / airdrop / cluster transfer) → funder → KYC root if known. If multiple exiters share an upstream funder, name that funder.
   - If the exit verdict is "insufficient_data", say so explicitly. Do NOT invent wallets, signatures or amounts. Do NOT claim "no coordination found" when the verdict is insufficient_data — those are different statements.
 
+## DEV TRACK RECORD (full prior-tokens roll-up)
+${(() => {
+  const t: any = devTrackRecord;
+  if (!t) return '(no track record on file yet — this dev wallet has not been scraped against pump.fun history)';
+  const lines = [
+    `Total prior tokens analysed: ${t.total_tokens} (${t.classified_tokens} classified)`,
+    `Verdict: ${t.verdict_label} — ${t.verdict_one_liner ?? ''}`,
+    `Indices: skill=${t.skill_index ?? '?'} / intent=${t.intent_index ?? '?'} / luck=${t.luck_index ?? '?'}`,
+    `Counts: sustained_hits=${t.sustained_hits} flash_hits=${t.flash_hits} hard_rugs=${t.hard_rugs} slow_bleeds=${t.slow_bleeds} bundle_rugs=${t.bundle_rugs} community_collapses=${t.community_collapses} inexperience_fails=${t.inexperience_fails} dev_abandoneds=${t.dev_abandoneds} viral_memes=${t.viral_memes} marketed_memes=${t.marketed_memes} skill_builds=${t.skill_builds}`,
+    t.best_token_ticker ? `Best prior token: $${t.best_token_ticker} (mcap ~$${Math.round(Number(t.best_token_ath_usd) || 0).toLocaleString()})` : '',
+    t.ai_interpretation ? `AI summary: ${t.ai_interpretation}` : '',
+  ].filter(Boolean);
+  return lines.join('\n');
+})()}
+
+REPORT REQUIREMENT — Track Record paragraph:
+If a track record is on file, you MUST weave a 2-3 sentence "Dev Track Record" paragraph into the Verdict section that quotes the verdict label and at least two specific counts (e.g. "X sustained hits, Y hard rugs"). When the current death CAUSE rhymes with this dev's dominant prior cause (e.g. dev with many community_collapses → another community_collapse), explicitly say "this death matches his dominant pattern". Never fabricate counts; if the track record block above says "no track record on file yet", omit the paragraph instead of inventing one.
+
 ## X ACCOUNT STATUS (live check at autopsy time)
 Handle: ${xAccountStatus.handle ?? 'no handle on file'}
 Status: ${xAccountStatus.status} (source: ${xAccountStatus.source}${xAccountStatus.evidence ? `, evidence: ${xAccountStatus.evidence}` : ''})
