@@ -218,9 +218,9 @@ interface EnrichmentResult {
 
 async function runEnrichmentPass(
   supabase: any,
-  opts: { enrichLimit: number; socialsRecheck: boolean; socialsLimit: number },
+  opts: { enrichLimit: number; socialsRecheck: boolean; socialsLimit: number; force?: boolean },
 ): Promise<EnrichmentResult> {
-  const { enrichLimit, socialsRecheck, socialsLimit } = opts;
+  const { enrichLimit, socialsRecheck, socialsLimit, force } = opts;
   const result: EnrichmentResult = {
     candidates: 0, enriched: 0, creator_resolved: 0, creator_failed: 0,
     socials_found: 0, socials_changed: 0, genealogy_traced: 0, errors: [],
@@ -233,7 +233,7 @@ async function runEnrichmentPass(
 
   const { data: queueA } = await supabase
     .from('telegram_insider_token_lifecycle')
-    .select('id, token_mint, token_symbol, peak_multiplier, creator_wallet, enrichment_last_run_at')
+    .select('id, token_mint, token_symbol, peak_multiplier, creator_wallet, enrichment_last_run_at, genealogy_kyc_root')
     .or(`enrichment_last_run_at.is.null,enrichment_last_run_at.lt.${cutoff}`)
     .order('peak_multiplier', { ascending: false })
     .order('first_called_at', { ascending: false })
@@ -245,16 +245,25 @@ async function runEnrichmentPass(
   if (socialsRecheck) {
     const { data } = await supabase
       .from('telegram_insider_token_lifecycle')
-      .select('id, token_mint, token_symbol, peak_multiplier, creator_wallet, enrichment_last_run_at')
+      .select('id, token_mint, token_symbol, peak_multiplier, creator_wallet, enrichment_last_run_at, genealogy_kyc_root')
       .order('first_called_at', { ascending: false })
       .limit(socialsLimit);
     queueB = (data || []).filter((r: any) => !queueAIds.has(r.id));
   }
 
-  const fullQueue = [...(queueA || []), ...queueB];
+  let fullQueue = [...(queueA || []), ...queueB];
+
+  // KYC-skip guard: rows with a known KYC root don't need a full re-trace
+  // unless caller explicitly passes { force: true }.
+  let skippedKyc = 0;
+  if (!force) {
+    const before = fullQueue.length;
+    fullQueue = fullQueue.filter((r: any) => !r.genealogy_kyc_root);
+    skippedKyc = before - fullQueue.length;
+  }
   result.candidates = fullQueue.length;
 
-  console.log(`[enrich] queueA=${queueA?.length || 0} queueB=${queueB.length} total=${fullQueue.length}`);
+  console.log(`[enrich] queueA=${queueA?.length || 0} queueB=${queueB.length} skippedKyc=${skippedKyc} retraced=${fullQueue.length}${force ? ' (force=true)' : ''}`);
 
   // Process in batches of 5 for governance (Helius credits, Pump.fun 200-300/hr)
   const BATCH = 5;
@@ -640,6 +649,7 @@ serve(async (req) => {
     const doSocialsRecheck = body.socialsRecheck !== false;
     const socialsLimit    = Number(body.socialsLimit ?? 50);
     const doChainPromoter = body.chainPromoter !== false;
+    const force           = body.force === true;
 
     let enrichmentSummary: any = { skipped: true };
     if (doEnrich) {
@@ -647,6 +657,7 @@ serve(async (req) => {
         enrichLimit,
         socialsRecheck: doSocialsRecheck,
         socialsLimit,
+        force,
       });
     }
 
