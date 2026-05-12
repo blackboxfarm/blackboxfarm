@@ -17731,6 +17731,10 @@ export type Database = {
         Row: {
           active_boosts: number | null
           ath_24h_usd: number | null
+          ath_alltime_captured_at: string | null
+          ath_alltime_confidence: string | null
+          ath_alltime_source: string | null
+          ath_alltime_usd: number | null
           autopsy_at: string | null
           autopsy_notes: string | null
           community_checked_at: string | null
@@ -17788,6 +17792,10 @@ export type Database = {
         Insert: {
           active_boosts?: number | null
           ath_24h_usd?: number | null
+          ath_alltime_captured_at?: string | null
+          ath_alltime_confidence?: string | null
+          ath_alltime_source?: string | null
+          ath_alltime_usd?: number | null
           autopsy_at?: string | null
           autopsy_notes?: string | null
           community_checked_at?: string | null
@@ -17845,6 +17853,10 @@ export type Database = {
         Update: {
           active_boosts?: number | null
           ath_24h_usd?: number | null
+          ath_alltime_captured_at?: string | null
+          ath_alltime_confidence?: string | null
+          ath_alltime_source?: string | null
+          ath_alltime_usd?: number | null
           autopsy_at?: string | null
           autopsy_notes?: string | null
           community_checked_at?: string | null
