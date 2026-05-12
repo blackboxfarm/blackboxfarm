@@ -14,6 +14,7 @@ export default function BubbleMapPage() {
   const { user, loading } = useAuth();
   const { isPro } = useUserTier();
   const [initialToken, setInitialToken] = useState<string>("");
+  const [activeToken, setActiveToken] = useState<string>("");
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -58,11 +59,16 @@ export default function BubbleMapPage() {
           </div>
         </div>
 
-        {initialToken && (
-          <BadActorAlert tokenMint={initialToken} />
+        {(activeToken || initialToken) && (
+          <BadActorAlert tokenMint={activeToken || initialToken} />
         )}
 
-        <PublicBubbleMap mode="authenticated" showUpgradePrompt initialToken={initialToken} />
+        <PublicBubbleMap
+          mode="authenticated"
+          showUpgradePrompt
+          initialToken={initialToken}
+          onActiveTokenChange={setActiveToken}
+        />
 
         {!isPro && (
           <Card>
