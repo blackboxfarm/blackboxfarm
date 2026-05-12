@@ -18,12 +18,12 @@ const BUCKET = 'holders-intel-banners';
  * Theme just biases the dominant prop; supporting props are always present.
  */
 const THEMES: Array<{ id: string; label: string; hero: string }> = [
-  { id: 'report_card',     label: '📋 Report Card',     hero: 'a small cream paper "REPORT CARD" folded school report (title "REPORT CARD" only — NO grade, NO score, NO letter, NO percentage)' },
-  { id: 'magnifying_glass',label: '🔍 Magnifying Glass',hero: 'an antique brass magnifying glass laid diagonally with a small unspooled yellow measuring-tape beside it' },
-  { id: 'balance_scale',   label: '⚖️ Balance Scale',  hero: 'an antique brass balance scale with two empty pans at a slight 3D angle' },
-  { id: 'blueprint',       label: '📐 Blueprint',       hero: 'a partially unrolled architect\'s blueprint scroll (deep blue paper with faint white grid lines) tied with thin string' },
-  { id: 'paper_map',       label: '🗺️ Paper Map',      hero: 'a folded vintage paper map partially opened, creased, abstract roads and contours only (no readable place names)' },
-  { id: 'poker',           label: '🃏 Poker',           hero: 'a small fan of two face-down playing cards overlapping a stack of three gold-and-black poker chips' },
+  { id: 'report_card',     label: '📋 Report Card',     hero: 'cream paper "REPORT CARD" school report card with header lines and ruled rows (no grades, no scores, no letters)' },
+  { id: 'magnifying_glass',label: '🔍 Magnifying Glass',hero: 'antique brass magnifying glass laid diagonally over a small length of unspooled yellow measuring tape' },
+  { id: 'balance_scale',   label: '⚖️ Balance Scale',  hero: 'antique brass balance scale with two empty pans at a slight 3D angle' },
+  { id: 'blueprint',       label: '📐 Blueprint',       hero: 'partially unrolled architect blueprint scroll, deep blue paper with faint white grid lines, tied with thin string' },
+  { id: 'paper_map',       label: '🗺️ Paper Map',      hero: 'folded vintage paper map partially opened, creased, abstract roads and contours' },
+  { id: 'poker',           label: '🃏 Poker',           hero: 'fan of two face-down playing cards overlapping a stack of three gold-and-black poker chips' },
 ];
 
 function pickTheme(forced?: string | null): typeof THEMES[number] {
@@ -34,21 +34,18 @@ function pickTheme(forced?: string | null): typeof THEMES[number] {
   return THEMES[Math.floor(Math.random() * THEMES.length)];
 }
 
-function buildDecoratorPrompt(theme: typeof THEMES[number]): string {
-  return `EDIT this exact image — DO NOT redraw, replace, or generate the central artwork. Preserve the original token banner at full visibility and full clarity. Treat this as a TRANSPARENT RESEARCH OVERLAY decorating the EDGES and CORNERS only.
+function buildDecoratorPrompt(theme: typeof THEMES[number], visualDesc: string): string {
+  return `EDIT this exact image — DO NOT redraw, replace, or generate the central artwork. Preserve the original banner (${visualDesc}) at full visibility. Treat this as a TRANSPARENT RESEARCH OVERLAY decorating the EDGES and CORNERS only.
 
-ABSOLUTELY DO NOT: add any mascot/character/creature/scenery; cover, repaint, or modify the central 60% of the banner; warp, recolor, or stylise the source artwork; add a frame, border, or vignette that wraps the whole image; add ANY descriptive text — no risk labels, no "no obvious risks", no grades, no taglines, no sentences; use the words FEATURED, TRENDING, HOT, DISCOVERY, SNAPSHOT, VERIFIED, APPROVED, or any advertising phrase ANYWHERE.
+ABSOLUTELY DO NOT: add any mascot/character/creature; cover the central 60% of the banner; replace or repaint the source banner; place any large stencil over the central subject.
 
-DO ADD as semi-transparent decorative props layered ONLY around the edges and corners (60–75% opacity, the banner shows clearly through them), each rendered with a soft physical drop-shadow so they read as real 3D objects laid on top of a printed poster — like a researcher's desk artifacts scattered over the banner:
+DO ADD as semi-transparent decorative elements layered ONLY around the edges and corners (60–75% opacity, banner shows through):
+- Top-left: ${theme.hero}, tilted slightly, soft drop-shadow
+- Top-right: small complementary research prop (magnifying glass, measuring tape, blueprint corner, paper-map corner, or balance scale — NOT the same as top-left)
+- Bottom-right: second complementary prop (different again from top-left and top-right)
+- Bottom-left: a small circular glowing teal/cyan ethereal humanoid avatar badge (a soft luminous wisp-like figure on dark background, ~80px round) immediately followed to its right by the white sans-serif wordmark "@HoldersIntel" on a thin translucent dark pill, slight tilt, soft drop-shadow
 
-- Top-left corner (HERO PROP, ~18% of canvas wide): ${theme.hero}, tilted at a casual angle (~ -5° to +5°), with a clear drop-shadow.
-- Top-right corner: a small complementary research artifact from this set — pick ONE that is NOT the hero: a magnifying glass, a sliver of yellow measuring-tape, an antique brass balance scale, a small unrolled blueprint corner, a folded paper-map corner, or one face-down playing card. ~12% of canvas wide, tilted, drop-shadow.
-- Bottom-right corner: a second small complementary artifact from the same set (different from the top-right pick) — magnifying glass / measuring-tape / balance scale / blueprint / paper map / poker chip stack. ~12% wide, tilted, drop-shadow.
-- Bottom-left corner: the SECOND IMAGE you were given (the circular Signal AI avatar — orange/cream tones) placed as a perfectly round badge ~80px wide, immediately followed to its right by the wordmark "@HoldersIntel" in clean white sans-serif on a thin translucent dark pill (~50% opacity black). Slight tilt (~ +2°), soft drop-shadow. The avatar must visibly match the second input image — do NOT invent a different face.
-
-No other elements. No scattered emoji. No sparkles, embers, scanlines, lightning, or stickers. The center of the banner must remain exactly as in the source image.
-
-Final output: same dimensions as input, JPG-quality, photographic clarity preserved.`;
+Final output: same dimensions as input, photographic clarity preserved.`;
 }
 
 async function urlToDataUri(url: string): Promise<string> {
@@ -64,22 +61,21 @@ async function urlToDataUri(url: string): Promise<string> {
   return `data:${ct};base64,${btoa(bin)}`;
 }
 
-async function callImageEdit(sourceDataUri: string, avatarDataUri: string | null, prompt: string): Promise<string> {
+async function callImageEdit(sourceDataUri: string, prompt: string): Promise<string> {
   const apiKey = Deno.env.get('LOVABLE_API_KEY');
   if (!apiKey) throw new Error('LOVABLE_API_KEY not configured');
-  const content: any[] = [
-    { type: 'text', text: prompt },
-    { type: 'image_url', image_url: { url: sourceDataUri } },
-  ];
-  if (avatarDataUri) {
-    content.push({ type: 'image_url', image_url: { url: avatarDataUri } });
-  }
   const res = await fetch(LOVABLE_AI_URL, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'google/gemini-3-pro-image-preview',
-      messages: [{ role: 'user', content }],
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: sourceDataUri } },
+        ],
+      }],
       modalities: ['image', 'text'],
     }),
   });
@@ -175,21 +171,16 @@ Deno.serve(async (req) => {
     // 2. Pick a theme (rotated per call unless explicitly forced)
     const theme = pickTheme(themeId);
 
-    // 3. Build prompt + run AI edit (pass Signal avatar as 2nd image)
-    const prompt = buildDecoratorPrompt(theme);
+    // 3. Build prompt + run AI edit. We describe the Signal avatar in-prompt
+    // (a glowing teal wisp humanoid) rather than passing a 2nd image — the
+    // model handles single-image edits much more reliably than multi-image
+    // composites, which is why the autopsy version produces clean results.
+    const visualDesc = row.symbol
+      ? `the official $${row.symbol} token banner`
+      : 'the official token banner';
+    const prompt = buildDecoratorPrompt(theme, visualDesc);
     const sourceDataUri = await urlToDataUri(sourceUrl);
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-    const projectRef = supabaseUrl.match(/https?:\/\/([^.]+)\./)?.[1];
-    const siteOrigin = projectRef
-      ? `https://${projectRef}.lovable.app`
-      : 'https://blackbox.farm';
-    let avatarDataUri: string | null = null;
-    try {
-      avatarDataUri = await urlToDataUri('https://blackbox.farm/signal-avatar.png');
-    } catch (e) {
-      console.warn('[decorate] avatar fetch failed:', (e as Error).message);
-    }
-    const editedDataUri = await callImageEdit(sourceDataUri, avatarDataUri, prompt);
+    const editedDataUri = await callImageEdit(sourceDataUri, prompt);
 
     // 5. Upload
     const base64 = editedDataUri.replace(/^data:image\/\w+;base64,/, '');
