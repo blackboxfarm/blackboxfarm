@@ -259,6 +259,23 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
         devReputation = dr;
       }
 
+      // ── Dev Track-Record (full prior-tokens roll-up) ────────
+      // Read existing summary if present; if missing, fire-and-forget the
+      // build so it's ready next time. Never block the autopsy on it.
+      let devTrackRecord: any = null;
+      if (creatorWallet) {
+        const { data: tr } = await supabase
+          .from('dev_track_record_summary')
+          .select('*')
+          .eq('dev_wallet', creatorWallet)
+          .maybeSingle();
+        devTrackRecord = tr ?? null;
+        if (!tr) {
+          supabase.functions.invoke('dev-track-record-run-all', { body: { dev_wallet: creatorWallet } })
+            .catch(e => console.warn('[autopsy-writer] track-record build skipped:', (e as Error).message));
+        }
+      }
+
       // ── v2: enrichment + dev dossier + evidence blobs ───────
       const enrichment = await enrichCandidate(supabase, c.token_mint, creatorWallet);
       const dossier = await buildDevDossier(supabase, creatorWallet);
