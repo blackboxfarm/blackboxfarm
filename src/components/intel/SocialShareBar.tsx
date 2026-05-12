@@ -12,6 +12,8 @@ interface SocialShareBarProps {
   description?: string;
   /** Article slug — used to build the OG proxy URL for platforms that unfurl */
   slug?: string;
+  /** Label noun used in the header e.g. "briefing", "autopsy". Defaults to "briefing". */
+  shareLabel?: string;
 }
 
 const platforms = [
@@ -133,7 +135,7 @@ const platforms = [
   },
 ];
 
-export function SocialShareBar({ url, title, description, slug }: SocialShareBarProps) {
+export function SocialShareBar({ url, title, description, slug, shareLabel = 'briefing' }: SocialShareBarProps) {
   const [copied, setCopied] = useState(false);
   const ogProxyUrl = slug
     ? `https://share.blackbox.farm/${encodeURIComponent(slug)}`
@@ -154,7 +156,7 @@ export function SocialShareBar({ url, title, description, slug }: SocialShareBar
   return (
     <div className="flex flex-col items-center gap-2 py-4">
       <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-        Share this briefing
+        Share this {shareLabel}
       </span>
       <div className="flex items-center gap-1 flex-wrap justify-center">
         {platforms.map((p) => {

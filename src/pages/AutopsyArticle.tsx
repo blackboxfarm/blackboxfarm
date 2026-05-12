@@ -3,7 +3,7 @@ import { Link, useParams, Navigate } from 'react-router-dom';
 import { SiteLayout } from '@/components/layout/SiteLayout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Download, Skull, Calendar, FileText, Twitter } from 'lucide-react';
+import { ArrowLeft, Download, Skull, Calendar, FileText, Twitter, MessageSquare } from 'lucide-react';
 import { format } from 'date-fns';
 import { ArticleContent } from '@/components/intel/ArticleMarkdownRenderer';
 import { SocialShareBar } from '@/components/intel/SocialShareBar';
@@ -185,6 +185,11 @@ export default function AutopsyArticle() {
                 <FileText className="h-4 w-4" /> View Raw
               </Button>
             </Link>
+            <a href="#comments" onClick={(e) => { e.preventDefault(); document.getElementById('comments')?.scrollIntoView({ behavior: 'smooth' }); }}>
+              <Button size="sm" className="gap-1.5 bg-gold text-gold-foreground hover:bg-gold/90">
+                <MessageSquare className="h-4 w-4" /> Add your Comments
+              </Button>
+            </a>
             <code className="text-[10px] md:text-xs px-2 py-1 rounded bg-muted text-muted-foreground break-all">
               {autopsy.mintAddress}
             </code>
@@ -212,6 +217,7 @@ export default function AutopsyArticle() {
             title={autopsy.title}
             description={autopsy.subtitle}
             slug={autopsy.slug}
+            shareLabel="autopsy"
           />
         </div>
 
