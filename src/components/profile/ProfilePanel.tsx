@@ -17,6 +17,7 @@ import { UnlinkProvider } from '@/components/auth/UnlinkProvider';
 import { TelegramLinkCode } from '@/components/settings/TelegramLinkCode';
 import { TwoFactorSetup } from '@/components/auth/TwoFactorSetup';
 import { format } from 'date-fns';
+import { ForumIdentityPicker } from '@/components/profile/ForumIdentityPicker';
 
 interface SolSubscription {
   id: string;
@@ -161,6 +162,14 @@ export function ProfilePanel({ open, onOpenChange }: ProfilePanelProps) {
                 {/* Linked Accounts */}
                 <section>
                   <UnlinkProvider />
+                </section>
+
+                <Separator />
+
+                {/* Forum Identity */}
+                <section className="space-y-2">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Forum Identity</h4>
+                  <ForumIdentityPicker compact />
                 </section>
 
                 <Separator />
