@@ -9,6 +9,7 @@ const corsHeaders = {
 
 const LOVABLE_AI_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 const BUCKET = 'holders-intel-banners';
+const AVATAR_URL = 'https://blackboxfarm.lovable.app/brand/holdersintel-avatar.png';
 
 /**
  * HoldersIntel banner decorations — same technique as autopsy-banner-overlay
@@ -44,7 +45,7 @@ DO ADD ALL FOUR of these semi-transparent decorative elements layered around the
 - TOP-LEFT corner: ${theme.hero}, tilted slightly, partially folded/dimensional (NOT flat). Medium size — fits in the corner, leaves the center clear.
 - TOP-RIGHT corner: a SECOND distinct research prop, different from top-left. Pick ONE of: antique brass magnifying glass over yellow measuring tape / partially unrolled blue architect blueprint corner / antique brass balance scale / fan of playing cards with gold poker chips / folded vintage paper map corner. Tilted, dimensional.
 - BOTTOM-RIGHT corner: a THIRD distinct research prop, different from the top two. Same shortlist, pick a different one.
-- BOTTOM-LEFT corner: a SINGLE rounded-rectangle dark translucent pill button. Inside the LEFT end of that pill, embedded flush, a small circular avatar showing a glowing teal/cyan ethereal wisp-like humanoid figure on a dark cosmic background (the avatar is INSIDE the pill, not floating beside it). To the right of the avatar inside the same pill, the white sans-serif wordmark "@HoldersIntel". The whole thing reads as ONE unified signature button, not two separate elements.
+- BOTTOM-LEFT corner: a SINGLE rounded-rectangle dark translucent pill button. Embed the SECOND provided reference image (the glowing blue cosmic humanoid figure with bright eyes and orange energy sparks) as a small circular avatar at the LEFT end of that pill, cropped to a perfect circle, flush inside the pill. Use the reference faithfully — preserve its blue/cyan glow, cosmic starfield background, and orange energy accents. Do NOT redraw, restyle, or substitute it. To the right of the avatar, inside the same pill, the white sans-serif wordmark "@HoldersIntel". The whole thing reads as ONE unified signature button, not two separate elements.
 
 Final output: identical wide banner aspect ratio to the input, photographic clarity preserved, all four corners populated.`;
 }
@@ -62,7 +63,7 @@ async function urlToDataUri(url: string): Promise<string> {
   return `data:${ct};base64,${btoa(bin)}`;
 }
 
-async function callImageEdit(sourceDataUri: string, prompt: string): Promise<string> {
+async function callImageEdit(sourceDataUri: string, avatarDataUri: string, prompt: string): Promise<string> {
   const apiKey = Deno.env.get('LOVABLE_API_KEY');
   if (!apiKey) throw new Error('LOVABLE_API_KEY not configured');
   const res = await fetch(LOVABLE_AI_URL, {
@@ -75,6 +76,7 @@ async function callImageEdit(sourceDataUri: string, prompt: string): Promise<str
         content: [
           { type: 'text', text: prompt },
           { type: 'image_url', image_url: { url: sourceDataUri } },
+          { type: 'image_url', image_url: { url: avatarDataUri } },
         ],
       }],
       modalities: ['image', 'text'],
@@ -181,7 +183,8 @@ Deno.serve(async (req) => {
       : 'the official token banner';
     const prompt = buildDecoratorPrompt(theme, visualDesc);
     const sourceDataUri = await urlToDataUri(sourceUrl);
-    const editedDataUri = await callImageEdit(sourceDataUri, prompt);
+    const avatarDataUri = await urlToDataUri(AVATAR_URL);
+    const editedDataUri = await callImageEdit(sourceDataUri, avatarDataUri, prompt);
 
     // 5. Upload
     const base64 = editedDataUri.replace(/^data:image\/\w+;base64,/, '');
