@@ -15,27 +15,27 @@ const THEMES: Array<{ id: string; label: string; promptFragment: string }> = [
   {
     id: 'featured',
     label: '⭐ Featured',
-    promptFragment: `Top-left: a small gold "FEATURED" ribbon with subtle sparkle glints. Add a few faint gold star sparkles drifting along the edges.`,
+    promptFragment: `Top-left corner: a small rectangular gold foil "FEATURED" sticker-tag, slightly tilted (~ -6°), with a thin dark drop-shadow as if physically placed on top of the banner.`,
   },
   {
     id: 'trending',
     label: '📈 Trending',
-    promptFragment: `Top-right: a green "TRENDING" badge with a small upward chart-arrow icon and a few lightning bolt accents along the top edge.`,
+    promptFragment: `Top-right corner: a small green rubber-stamp "TRENDING" badge with a tiny upward chart-arrow, slightly rotated (~ +5°), with a faint ink-bleed edge and soft shadow so it reads as a stamp pressed onto the banner.`,
   },
   {
     id: 'hot',
     label: '🔥 HOT',
-    promptFragment: `Top-right: a red "HOT" badge with small flame curls licking up from the bottom corners. Subtle ember sparks scattered along the edges.`,
+    promptFragment: `Top-right corner: a bold red circular "HOT" stamp, slightly off-axis (~ -8°), with a faint ink-bleed edge and a subtle drop-shadow so it reads as a rubber stamp applied on top of the banner.`,
   },
   {
     id: 'discovery',
     label: '🔍 Discovery',
-    promptFragment: `Top-left: a translucent "DISCOVERY" tag with a magnifying-glass icon. Add a faint floating "?" mark in one upper corner.`,
+    promptFragment: `Top-left corner: a small rectangular paper "DISCOVERY" tag with a tiny magnifying-glass glyph, attached with a faux pin in the upper-left, tilted ~ -4°, soft drop-shadow underneath.`,
   },
   {
     id: 'snapshot',
     label: '📸 Snapshot',
-    promptFragment: `Top-left: a small clean "SNAPSHOT" badge with a magnifying-glass icon. Subtle scanline texture across the top 8% of the canvas.`,
+    promptFragment: `Top-left corner: a small clean rectangular "SNAPSHOT" sticker-tag with a tiny magnifying-glass glyph, slight tilt (~ -3°), thin dark drop-shadow underneath, no scanlines or filters across the artwork.`,
   },
 ];
 
@@ -48,23 +48,22 @@ function pickTheme(forced?: string | null): typeof THEMES[number] {
 }
 
 function buildDecoratorPrompt(theme: typeof THEMES[number], opts: { ticker?: string; risk?: string }): string {
-  const tickerLine = opts.ticker ? `Token: $${opts.ticker}.` : '';
-  const riskBadge = opts.risk
-    ? `Bottom-right: a small dark badge with the text "${opts.risk}".`
-    : `Bottom-right: a small dark badge with the text "No obvious risks detected".`;
+  return `EDIT this exact image — DO NOT redraw, replace, or generate the central artwork. Preserve the original token banner at full visibility and full clarity.
 
-  return `EDIT this exact image — DO NOT redraw, replace, or generate the central artwork. Preserve the original token banner at full visibility. Treat this as a TRANSPARENT DECORATIVE OVERLAY around the EDGES and CORNERS only.
+The decorations are an OVERLAY APPLIED ON TOP of the finished banner — like physical stickers, paper tags, or rubber stamps slapped onto a printed poster. They MUST read as a third-party re-packaging of the original artwork, NEVER as part of the original design or as an integrated frame/border.
 
-ABSOLUTELY DO NOT: cover the central 65% of the banner; replace or repaint the source artwork; add new mascots / characters / creatures; warp or stretch the source.
+ABSOLUTELY DO NOT:
+- cover, repaint, or modify the central 70% of the banner
+- add or alter any mascots, characters, creatures, or scenery
+- warp, stretch, recolor, or stylise the source artwork
+- add scattered emoji, sparkles, embers, lightning, scanlines, vignettes, or any decorative border that wraps the whole image
+- add ANY descriptive text such as risk labels, status phrases, taglines, or sentences — sticker text is limited to the short labels below
 
-${tickerLine}
-
-ADD as semi-transparent decorative elements layered ONLY around the edges and corners (60–80% opacity, banner shows through):
+ADD only the following overlay elements, each rendered with a clear physical drop-shadow underneath so they read as 3D objects sitting on top of the banner (not as part of it):
 - ${theme.promptFragment}
-- Bottom-left: a small "HoldersIntel" wordmark with a tiny chat-bubble avatar icon to its left.
-- A scattered border of small varied memecoin-style emoji (rocket, fire, eyes, magnifier, money-bag) along the very edges only — never in the central area.
-- ${riskBadge}
-- A faint subtle vignette so the corners are slightly darker than the centre.
+- Bottom-left corner: a small rectangular black "HoldersIntel" wordmark sticker (white text), slightly tilted (~ +3°), with a thin drop-shadow.
+
+No other elements. No emoji. No risk text. No edge sparkles. The corners outside the stickers must remain exactly as in the source image.
 
 Final output: same dimensions as input, JPG-quality, photographic clarity preserved.`;
 }
