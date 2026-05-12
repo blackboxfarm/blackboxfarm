@@ -35,9 +35,10 @@ interface PublicBubbleMapProps {
   showUpgradePrompt?: boolean;
   mode: 'promo' | 'authenticated';
   initialToken?: string;
+  onActiveTokenChange?: (tokenMint: string) => void;
 }
 
-const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken }: PublicBubbleMapProps) => {
+const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken, onActiveTokenChange }: PublicBubbleMapProps) => {
   const navigate = useNavigate();
   const graphRef = useRef<any>();
   const schematicRef = useRef<SchematicHandle | null>(null);
