@@ -30,14 +30,27 @@ Deno.serve(withRunLog('creator-wallet-resolver', async (req) => {
   let body: any = {};
   try { body = await req.json(); } catch (_) {}
   const batchSize: number = Math.min(Math.max(body.batchSize ?? BATCH_DEFAULT, 1), 200);
+  const singleTargetMint: string | null = typeof body.tokenMint === 'string' && body.tokenMint.length > 30
+    ? body.tokenMint.trim()
+    : null;
 
-  // Pull newest tokens missing creator_wallet from the matview.
-  const { data: targets, error: tErr } = await supabase
-    .from('master_token_directory')
-    .select('token_mint, created_at')
-    .is('creator_wallet', null)
-    .order('created_at', { ascending: false })
-    .limit(batchSize);
+  // Single-target mode: admin button click for one specific mint. Bypass the
+  // newest-first backfill queue and just run the canonical chain for this mint.
+  let targets: Array<{ token_mint: string; created_at?: string }> | null = null;
+  let tErr: any = null;
+  if (singleTargetMint) {
+    targets = [{ token_mint: singleTargetMint }];
+  } else {
+    // Pull newest tokens missing creator_wallet from the matview.
+    const res = await supabase
+      .from('master_token_directory')
+      .select('token_mint, created_at')
+      .is('creator_wallet', null)
+      .order('created_at', { ascending: false })
+      .limit(batchSize);
+    targets = res.data as any;
+    tErr = res.error;
+  }
 
   if (tErr) {
     return new Response(JSON.stringify({ error: tErr.message }), {
