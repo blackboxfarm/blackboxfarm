@@ -4510,6 +4510,102 @@ export type Database = {
         }
         Relationships: []
       }
+      dev_family_track_record_summary: {
+        Row: {
+          ai_interpretation: string | null
+          best_token_ath_usd: number | null
+          best_token_mint: string | null
+          best_token_ticker: string | null
+          bundle_rugs: number
+          by_cause: Json
+          by_outcome: Json
+          community_collapses: number
+          dev_abandoneds: number
+          dev_wallet: string
+          family_size: number
+          family_wallets: Json
+          flash_hits: number
+          hard_rugs: number
+          inexperience_fails: number
+          intent_index: number | null
+          kyc_root_label: string | null
+          kyc_root_wallet: string | null
+          last_recomputed_at: string
+          luck_index: number | null
+          marketed_memes: number
+          skill_builds: number
+          skill_index: number | null
+          slow_bleeds: number
+          sustained_hits: number
+          total_tokens: number
+          verdict_label: string | null
+          verdict_one_liner: string | null
+          viral_memes: number
+        }
+        Insert: {
+          ai_interpretation?: string | null
+          best_token_ath_usd?: number | null
+          best_token_mint?: string | null
+          best_token_ticker?: string | null
+          bundle_rugs?: number
+          by_cause?: Json
+          by_outcome?: Json
+          community_collapses?: number
+          dev_abandoneds?: number
+          dev_wallet: string
+          family_size?: number
+          family_wallets?: Json
+          flash_hits?: number
+          hard_rugs?: number
+          inexperience_fails?: number
+          intent_index?: number | null
+          kyc_root_label?: string | null
+          kyc_root_wallet?: string | null
+          last_recomputed_at?: string
+          luck_index?: number | null
+          marketed_memes?: number
+          skill_builds?: number
+          skill_index?: number | null
+          slow_bleeds?: number
+          sustained_hits?: number
+          total_tokens?: number
+          verdict_label?: string | null
+          verdict_one_liner?: string | null
+          viral_memes?: number
+        }
+        Update: {
+          ai_interpretation?: string | null
+          best_token_ath_usd?: number | null
+          best_token_mint?: string | null
+          best_token_ticker?: string | null
+          bundle_rugs?: number
+          by_cause?: Json
+          by_outcome?: Json
+          community_collapses?: number
+          dev_abandoneds?: number
+          dev_wallet?: string
+          family_size?: number
+          family_wallets?: Json
+          flash_hits?: number
+          hard_rugs?: number
+          inexperience_fails?: number
+          intent_index?: number | null
+          kyc_root_label?: string | null
+          kyc_root_wallet?: string | null
+          last_recomputed_at?: string
+          luck_index?: number | null
+          marketed_memes?: number
+          skill_builds?: number
+          skill_index?: number | null
+          slow_bleeds?: number
+          sustained_hits?: number
+          total_tokens?: number
+          verdict_label?: string | null
+          verdict_one_liner?: string | null
+          viral_memes?: number
+        }
+        Relationships: []
+      }
       dev_handle_links: {
         Row: {
           community_id: string | null
