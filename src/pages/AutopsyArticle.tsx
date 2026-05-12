@@ -14,6 +14,7 @@ import { useUserRoles } from '@/hooks/useUserRoles';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AutopsyTweetComposer } from '@/components/admin/autopsies/AutopsyTweetComposer';
 import { AutopsyComments } from '@/components/autopsy/AutopsyComments';
+import { DevTrackRecordCard } from '@/components/autopsy/DevTrackRecordCard';
 
 export default function AutopsyArticle() {
   const { slug } = useParams<{ slug: string }>();
@@ -215,6 +216,8 @@ export default function AutopsyArticle() {
         </div>
 
         <AutopsyComments slug={autopsy.slug} />
+
+        {autopsy.mintAddress && <DevTrackRecordCard tokenMint={autopsy.mintAddress} />}
 
         <p className="text-xs text-muted-foreground/70 text-center mt-10 max-w-2xl mx-auto">
           © 2026 BlackBox Farm / HoldersIntel · Licensed under CC BY-NC-ND 4.0 · Forensic analysis based on public Solana ledger data.

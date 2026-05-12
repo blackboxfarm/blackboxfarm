@@ -4696,6 +4696,171 @@ export type Database = {
         }
         Relationships: []
       }
+      dev_token_history: {
+        Row: {
+          ai_used: boolean | null
+          cause_class: string | null
+          cause_confidence: number | null
+          cause_evidence: Json | null
+          classified_at: string | null
+          created_at: string
+          created_at_chain: string | null
+          dev_wallet: string
+          id: string
+          image_url: string | null
+          last_trade_at: string | null
+          launchpad: string | null
+          name: string | null
+          outcome_class: string | null
+          pumpfun_complete: boolean | null
+          pumpfun_market_cap_usd: number | null
+          scraped_at: string
+          ticker: string | null
+          token_mint: string
+          updated_at: string
+        }
+        Insert: {
+          ai_used?: boolean | null
+          cause_class?: string | null
+          cause_confidence?: number | null
+          cause_evidence?: Json | null
+          classified_at?: string | null
+          created_at?: string
+          created_at_chain?: string | null
+          dev_wallet: string
+          id?: string
+          image_url?: string | null
+          last_trade_at?: string | null
+          launchpad?: string | null
+          name?: string | null
+          outcome_class?: string | null
+          pumpfun_complete?: boolean | null
+          pumpfun_market_cap_usd?: number | null
+          scraped_at?: string
+          ticker?: string | null
+          token_mint: string
+          updated_at?: string
+        }
+        Update: {
+          ai_used?: boolean | null
+          cause_class?: string | null
+          cause_confidence?: number | null
+          cause_evidence?: Json | null
+          classified_at?: string | null
+          created_at?: string
+          created_at_chain?: string | null
+          dev_wallet?: string
+          id?: string
+          image_url?: string | null
+          last_trade_at?: string | null
+          launchpad?: string | null
+          name?: string | null
+          outcome_class?: string | null
+          pumpfun_complete?: boolean | null
+          pumpfun_market_cap_usd?: number | null
+          scraped_at?: string
+          ticker?: string | null
+          token_mint?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      dev_track_record_summary: {
+        Row: {
+          ai_interpretation: string | null
+          best_token_ath_usd: number | null
+          best_token_mint: string | null
+          best_token_ticker: string | null
+          bundle_rugs: number
+          by_cause: Json
+          by_outcome: Json
+          classified_tokens: number
+          community_collapses: number
+          created_at: string
+          dev_abandoneds: number
+          dev_wallet: string
+          flash_hits: number
+          hard_rugs: number
+          inexperience_fails: number
+          intent_index: number | null
+          last_classified_at: string | null
+          last_full_scrape_at: string | null
+          last_recomputed_at: string
+          luck_index: number | null
+          marketed_memes: number
+          skill_builds: number
+          skill_index: number | null
+          slow_bleeds: number
+          sustained_hits: number
+          total_tokens: number
+          verdict_label: string | null
+          verdict_one_liner: string | null
+          viral_memes: number
+        }
+        Insert: {
+          ai_interpretation?: string | null
+          best_token_ath_usd?: number | null
+          best_token_mint?: string | null
+          best_token_ticker?: string | null
+          bundle_rugs?: number
+          by_cause?: Json
+          by_outcome?: Json
+          classified_tokens?: number
+          community_collapses?: number
+          created_at?: string
+          dev_abandoneds?: number
+          dev_wallet: string
+          flash_hits?: number
+          hard_rugs?: number
+          inexperience_fails?: number
+          intent_index?: number | null
+          last_classified_at?: string | null
+          last_full_scrape_at?: string | null
+          last_recomputed_at?: string
+          luck_index?: number | null
+          marketed_memes?: number
+          skill_builds?: number
+          skill_index?: number | null
+          slow_bleeds?: number
+          sustained_hits?: number
+          total_tokens?: number
+          verdict_label?: string | null
+          verdict_one_liner?: string | null
+          viral_memes?: number
+        }
+        Update: {
+          ai_interpretation?: string | null
+          best_token_ath_usd?: number | null
+          best_token_mint?: string | null
+          best_token_ticker?: string | null
+          bundle_rugs?: number
+          by_cause?: Json
+          by_outcome?: Json
+          classified_tokens?: number
+          community_collapses?: number
+          created_at?: string
+          dev_abandoneds?: number
+          dev_wallet?: string
+          flash_hits?: number
+          hard_rugs?: number
+          inexperience_fails?: number
+          intent_index?: number | null
+          last_classified_at?: string | null
+          last_full_scrape_at?: string | null
+          last_recomputed_at?: string
+          luck_index?: number | null
+          marketed_memes?: number
+          skill_builds?: number
+          skill_index?: number | null
+          slow_bleeds?: number
+          sustained_hits?: number
+          total_tokens?: number
+          verdict_label?: string | null
+          verdict_one_liner?: string | null
+          viral_memes?: number
+        }
+        Relationships: []
+      }
       dev_wallet_reputation: {
         Row: {
           auto_blacklisted: boolean | null
