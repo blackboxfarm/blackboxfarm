@@ -10,32 +10,42 @@ const corsHeaders = {
 const LOVABLE_AI_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 const BUCKET = 'holders-intel-banners';
 
-/** Themepack — rotates per call so the queue doesn't all look the same. */
+/**
+ * Themepack — rotates per call so the queue doesn't all look the same.
+ * Each theme is a physical "artifact object" (no advertising/grade text)
+ * that is dropped onto the corner of the original banner like a stamp,
+ * sticker, or stage prop.
+ */
 const THEMES: Array<{ id: string; label: string; promptFragment: string }> = [
   {
-    id: 'featured',
-    label: '⭐ Featured',
-    promptFragment: `Top-left corner: a small rectangular gold foil "FEATURED" sticker-tag, slightly tilted (~ -6°), with a thin dark drop-shadow as if physically placed on top of the banner.`,
+    id: 'report_card',
+    label: '📋 Report Card',
+    promptFragment: `Top-left corner: a small old-school cream paper "REPORT CARD" — a folded school report card prop, slightly worn at the edges, tilted ~ -5°. Show the title "REPORT CARD" only — DO NOT print any grade, score, letter, percentage, ranking, or evaluative text on it. Cast a soft physical drop-shadow underneath so it reads as a paper artifact resting on top of the banner.`,
   },
   {
-    id: 'trending',
-    label: '📈 Trending',
-    promptFragment: `Top-right corner: a small green rubber-stamp "TRENDING" badge with a tiny upward chart-arrow, slightly rotated (~ +5°), with a faint ink-bleed edge and soft shadow so it reads as a stamp pressed onto the banner.`,
+    id: 'magnifying_glass',
+    label: '🔍 Magnifying Glass',
+    promptFragment: `Top-left corner: a small antique brass magnifying glass laid diagonally (~ -25°) with a sliver of yellow measuring-tape unspooling beside it. Both objects cast realistic drop-shadows on the banner. No text labels of any kind on either object.`,
   },
   {
-    id: 'hot',
-    label: '🔥 HOT',
-    promptFragment: `Top-right corner: a bold red circular "HOT" stamp, slightly off-axis (~ -8°), with a faint ink-bleed edge and a subtle drop-shadow so it reads as a rubber stamp applied on top of the banner.`,
+    id: 'balance_scale',
+    label: '⚖️ Balance Scale',
+    promptFragment: `Top-left corner: a small antique brass balance scale prop with two empty pans, sitting upright at a slight 3D angle, casting a soft drop-shadow on the banner. No text, no labels — just the object as a physical decoration on top of the artwork.`,
   },
   {
-    id: 'discovery',
-    label: '🔍 Discovery',
-    promptFragment: `Top-left corner: a small rectangular paper "DISCOVERY" tag with a tiny magnifying-glass glyph, attached with a faux pin in the upper-left, tilted ~ -4°, soft drop-shadow underneath.`,
+    id: 'blueprint',
+    label: '📐 Blueprint',
+    promptFragment: `Top-left corner: a small partially unrolled architect's blueprint scroll (deep blue paper with faint white grid lines) tied with a thin string, tilted ~ -4°, with a clean drop-shadow underneath. No legible text on the blueprint, just suggestion of grid lines and faint sketches.`,
   },
   {
-    id: 'snapshot',
-    label: '📸 Snapshot',
-    promptFragment: `Top-left corner: a small clean rectangular "SNAPSHOT" sticker-tag with a tiny magnifying-glass glyph, slight tilt (~ -3°), thin dark drop-shadow underneath, no scanlines or filters across the artwork.`,
+    id: 'paper_map',
+    label: '🗺️ Paper Map',
+    promptFragment: `Top-left corner: a small folded paper map partially opened, slightly creased, in muted vintage tones, tilted ~ +4°, with a clean drop-shadow. Map shows abstract roads/contours only — DO NOT print any town names, place names, or readable text.`,
+  },
+  {
+    id: 'poker',
+    label: '🃏 Poker',
+    promptFragment: `Top-left corner: a small fan of two playing cards (face down or generic backs) overlapping a stack of two or three gold-and-black poker chips, casting a clear drop-shadow on the banner. No suit faces with text, no chip denomination text — purely decorative casino objects.`,
   },
 ];
 
@@ -47,23 +57,24 @@ function pickTheme(forced?: string | null): typeof THEMES[number] {
   return THEMES[Math.floor(Math.random() * THEMES.length)];
 }
 
-function buildDecoratorPrompt(theme: typeof THEMES[number], opts: { ticker?: string; risk?: string }): string {
+function buildDecoratorPrompt(theme: typeof THEMES[number]): string {
   return `EDIT this exact image — DO NOT redraw, replace, or generate the central artwork. Preserve the original token banner at full visibility and full clarity.
 
-The decorations are an OVERLAY APPLIED ON TOP of the finished banner — like physical stickers, paper tags, or rubber stamps slapped onto a printed poster. They MUST read as a third-party re-packaging of the original artwork, NEVER as part of the original design or as an integrated frame/border.
+The decorations are PHYSICAL ARTIFACT OBJECTS placed ON TOP of the finished banner — like real props laid onto a printed poster. They MUST read as a third-party re-packaging of the original artwork, NEVER as part of the original design or as an integrated frame/border.
 
 ABSOLUTELY DO NOT:
 - cover, repaint, or modify the central 70% of the banner
 - add or alter any mascots, characters, creatures, or scenery
 - warp, stretch, recolor, or stylise the source artwork
 - add scattered emoji, sparkles, embers, lightning, scanlines, vignettes, or any decorative border that wraps the whole image
-- add ANY descriptive text such as risk labels, status phrases, taglines, or sentences — sticker text is limited to the short labels below
+- add ANY descriptive text — no risk labels, no "no obvious risks", no status phrases, no grades, no taglines, no sentences
+- use the words "FEATURED", "TRENDING", "HOT", "DISCOVERY", "SNAPSHOT", "VERIFIED", "APPROVED", or any advertising phrase ANYWHERE on the image
 
 ADD only the following overlay elements, each rendered with a clear physical drop-shadow underneath so they read as 3D objects sitting on top of the banner (not as part of it):
 - ${theme.promptFragment}
-- Bottom-left corner: a small rectangular black "HoldersIntel" wordmark sticker (white text), slightly tilted (~ +3°), with a thin drop-shadow.
+- Bottom-left corner: the second image you were given (a small circular AI avatar) placed as a small round badge ~64–96px wide, immediately followed to its right by the wordmark "@HoldersIntel" in clean white sans-serif text on a thin translucent dark pill, slightly tilted (~ +2°), with a soft drop-shadow.
 
-No other elements. No emoji. No risk text. No edge sparkles. The corners outside the stickers must remain exactly as in the source image.
+No other elements. No emoji decorations. No risk text. No edge sparkles. The corners outside these placed objects must remain exactly as in the source image.
 
 Final output: same dimensions as input, JPG-quality, photographic clarity preserved.`;
 }
@@ -81,21 +92,22 @@ async function urlToDataUri(url: string): Promise<string> {
   return `data:${ct};base64,${btoa(bin)}`;
 }
 
-async function callImageEdit(sourceDataUri: string, prompt: string): Promise<string> {
+async function callImageEdit(sourceDataUri: string, avatarDataUri: string | null, prompt: string): Promise<string> {
   const apiKey = Deno.env.get('LOVABLE_API_KEY');
   if (!apiKey) throw new Error('LOVABLE_API_KEY not configured');
+  const content: any[] = [
+    { type: 'text', text: prompt },
+    { type: 'image_url', image_url: { url: sourceDataUri } },
+  ];
+  if (avatarDataUri) {
+    content.push({ type: 'image_url', image_url: { url: avatarDataUri } });
+  }
   const res = await fetch(LOVABLE_AI_URL, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'google/gemini-2.5-flash-image',
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'text', text: prompt },
-          { type: 'image_url', image_url: { url: sourceDataUri } },
-        ],
-      }],
+      messages: [{ role: 'user', content }],
       modalities: ['image', 'text'],
     }),
   });
@@ -122,6 +134,7 @@ Deno.serve(async (req) => {
     const queueId: string = body.queue_id;
     const themeId: string | undefined = body.theme;
     const regenerate = body.regenerate === true;
+    const action: string | undefined = body.action;
     if (!queueId) {
       return new Response(JSON.stringify({ error: 'queue_id required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -140,6 +153,29 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (rowErr) throw rowErr;
     if (!row) throw new Error('queue row not found');
+
+    // Delete action: clear decoration + remove storage object
+    if (action === 'delete') {
+      if (row.decorated_banner_url) {
+        try {
+          const m = row.decorated_banner_url.match(/\/holders-intel-banners\/(.+)$/);
+          const path = m?.[1];
+          if (path) await supabase.storage.from(BUCKET).remove([path]);
+        } catch (e) {
+          console.warn('[decorate:delete] storage remove failed', (e as Error).message);
+        }
+      }
+      await assertUpdate(
+        supabase
+          .from('holders_intel_post_queue')
+          .update({ decorated_banner_url: null, decoration_theme: null })
+          .eq('id', queueId),
+        'holders_intel_post_queue',
+      );
+      return new Response(JSON.stringify({ success: true, deleted: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     if (row.decorated_banner_url && !regenerate) {
       return new Response(JSON.stringify({
@@ -167,16 +203,21 @@ Deno.serve(async (req) => {
     // 2. Pick a theme (rotated per call unless explicitly forced)
     const theme = pickTheme(themeId);
 
-    // 3. Mine a short risk hint out of tweet_text if present
-    let risk: string | undefined;
-    const t = row.tweet_text || '';
-    const riskMatch = t.match(/Risk[s]?:?\s*([^\n]+)/i);
-    if (riskMatch) risk = riskMatch[1].trim().slice(0, 60);
-
-    // 4. Build prompt + run AI edit
-    const prompt = buildDecoratorPrompt(theme, { ticker: row.symbol || undefined, risk });
+    // 3. Build prompt + run AI edit (pass Signal avatar as 2nd image)
+    const prompt = buildDecoratorPrompt(theme);
     const sourceDataUri = await urlToDataUri(sourceUrl);
-    const editedDataUri = await callImageEdit(sourceDataUri, prompt);
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+    const projectRef = supabaseUrl.match(/https?:\/\/([^.]+)\./)?.[1];
+    const siteOrigin = projectRef
+      ? `https://${projectRef}.lovable.app`
+      : 'https://blackbox.farm';
+    let avatarDataUri: string | null = null;
+    try {
+      avatarDataUri = await urlToDataUri('https://blackbox.farm/signal-avatar.png');
+    } catch (e) {
+      console.warn('[decorate] avatar fetch failed:', (e as Error).message);
+    }
+    const editedDataUri = await callImageEdit(sourceDataUri, avatarDataUri, prompt);
 
     // 5. Upload
     const base64 = editedDataUri.replace(/^data:image\/\w+;base64,/, '');
