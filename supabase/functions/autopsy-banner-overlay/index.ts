@@ -188,6 +188,12 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
             hero_image_path: heroImageUrl,
           }).eq('id', report_id);
         }
+        try {
+          await supabase
+            .from('holders_intel_post_queue')
+            .update({ autopsy_hero_image: heroImageUrl })
+            .eq('autopsy_slug', slug);
+        } catch (_) { /* best-effort */ }
         console.log(`[autopsy-banner-overlay] reusing existing banner: ${heroImageUrl}`);
         return new Response(JSON.stringify({
           success: true, skipped: 'already_exists', slug, hero_image_url: heroImageUrl,
