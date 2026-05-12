@@ -30,14 +30,27 @@ Deno.serve(withRunLog('creator-wallet-resolver', async (req) => {
   let body: any = {};
   try { body = await req.json(); } catch (_) {}
   const batchSize: number = Math.min(Math.max(body.batchSize ?? BATCH_DEFAULT, 1), 200);
+  const singleTargetMint: string | null = typeof body.tokenMint === 'string' && body.tokenMint.length > 30
+    ? body.tokenMint.trim()
+    : null;
 
-  // Pull newest tokens missing creator_wallet from the matview.
-  const { data: targets, error: tErr } = await supabase
-    .from('master_token_directory')
-    .select('token_mint, created_at')
-    .is('creator_wallet', null)
-    .order('created_at', { ascending: false })
-    .limit(batchSize);
+  // Single-target mode: admin button click for one specific mint. Bypass the
+  // newest-first backfill queue and just run the canonical chain for this mint.
+  let targets: Array<{ token_mint: string; created_at?: string }> | null = null;
+  let tErr: any = null;
+  if (singleTargetMint) {
+    targets = [{ token_mint: singleTargetMint }];
+  } else {
+    // Pull newest tokens missing creator_wallet from the matview.
+    const res = await supabase
+      .from('master_token_directory')
+      .select('token_mint, created_at')
+      .is('creator_wallet', null)
+      .order('created_at', { ascending: false })
+      .limit(batchSize);
+    targets = res.data as any;
+    tErr = res.error;
+  }
 
   if (tErr) {
     return new Response(JSON.stringify({ error: tErr.message }), {
@@ -114,10 +127,14 @@ Deno.serve(withRunLog('creator-wallet-resolver', async (req) => {
 
       // Inline mesh-funnel hook: kick off KYC trace immediately for newly
       // discovered dev wallets so they don't have to wait for the 5-min
-      // bulk runner cron. Fire-and-forget — failures are non-fatal.
-      supabase.functions.invoke('mesh-kyc-deep-search', {
-        body: { walletAddress: res.creatorWallet, maxDepth: 6, discoverBundle: false },
-      }).catch(() => { /* swallow — bulk runner will retry */ });
+      // bulk runner cron. Skipped in singleTarget mode — the admin UI fires
+      // mesh-kyc-deep-search itself as a second explicit step so it can
+      // surface a separate toast.
+      if (!singleTargetMint) {
+        supabase.functions.invoke('mesh-kyc-deep-search', {
+          body: { walletAddress: res.creatorWallet, maxDepth: 6, discoverBundle: false },
+        }).catch(() => { /* swallow — bulk runner will retry */ });
+      }
 
       resolved++;
       results.push({ mint, ok: true, creator: res.creatorWallet, source: res.source });
