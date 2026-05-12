@@ -1673,6 +1673,88 @@ export type Database = {
         }
         Relationships: []
       }
+      autopsy_comment_votes: {
+        Row: {
+          comment_id: string
+          created_at: string
+          user_id: string
+          value: number
+        }
+        Insert: {
+          comment_id: string
+          created_at?: string
+          user_id: string
+          value?: number
+        }
+        Update: {
+          comment_id?: string
+          created_at?: string
+          user_id?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "autopsy_comment_votes_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "autopsy_comments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      autopsy_comments: {
+        Row: {
+          autopsy_slug: string
+          body: string
+          body_clean: string
+          created_at: string
+          edited_at: string | null
+          id: string
+          is_hidden: boolean
+          is_pinned: boolean
+          parent_id: string | null
+          updated_at: string
+          upvote_count: number
+          user_id: string
+        }
+        Insert: {
+          autopsy_slug: string
+          body: string
+          body_clean: string
+          created_at?: string
+          edited_at?: string | null
+          id?: string
+          is_hidden?: boolean
+          is_pinned?: boolean
+          parent_id?: string | null
+          updated_at?: string
+          upvote_count?: number
+          user_id: string
+        }
+        Update: {
+          autopsy_slug?: string
+          body?: string
+          body_clean?: string
+          created_at?: string
+          edited_at?: string | null
+          id?: string
+          is_hidden?: boolean
+          is_pinned?: boolean
+          parent_id?: string | null
+          updated_at?: string
+          upvote_count?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "autopsy_comments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "autopsy_comments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       autopsy_evidence_blobs: {
         Row: {
           candidate_id: string | null
@@ -10485,10 +10567,13 @@ export type Database = {
       }
       profiles: {
         Row: {
+          avatar_scan_reason: string | null
+          avatar_scan_status: string | null
           avatar_url: string | null
           cached_subscription_active: boolean | null
           cached_subscription_expires_at: string | null
           cached_tier_key: string | null
+          comment_karma: number
           created_at: string
           display_name: string | null
           email_verified: boolean | null
@@ -10498,6 +10583,7 @@ export type Database = {
           last_login_at: string | null
           login_count: number | null
           member_since: string | null
+          nickname: string | null
           oauth_full_name: string | null
           oauth_provider: string | null
           oauth_provider_id: string | null
@@ -10507,6 +10593,7 @@ export type Database = {
           phone_number: string | null
           phone_verified: boolean | null
           preferred_currency: string | null
+          rank_slug: string
           referral_source: string | null
           secondary_email: string | null
           secondary_email_verified: boolean
@@ -10517,10 +10604,13 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          avatar_scan_reason?: string | null
+          avatar_scan_status?: string | null
           avatar_url?: string | null
           cached_subscription_active?: boolean | null
           cached_subscription_expires_at?: string | null
           cached_tier_key?: string | null
+          comment_karma?: number
           created_at?: string
           display_name?: string | null
           email_verified?: boolean | null
@@ -10530,6 +10620,7 @@ export type Database = {
           last_login_at?: string | null
           login_count?: number | null
           member_since?: string | null
+          nickname?: string | null
           oauth_full_name?: string | null
           oauth_provider?: string | null
           oauth_provider_id?: string | null
@@ -10539,6 +10630,7 @@ export type Database = {
           phone_number?: string | null
           phone_verified?: boolean | null
           preferred_currency?: string | null
+          rank_slug?: string
           referral_source?: string | null
           secondary_email?: string | null
           secondary_email_verified?: boolean
@@ -10549,10 +10641,13 @@ export type Database = {
           user_id: string
         }
         Update: {
+          avatar_scan_reason?: string | null
+          avatar_scan_status?: string | null
           avatar_url?: string | null
           cached_subscription_active?: boolean | null
           cached_subscription_expires_at?: string | null
           cached_tier_key?: string | null
+          comment_karma?: number
           created_at?: string
           display_name?: string | null
           email_verified?: boolean | null
@@ -10562,6 +10657,7 @@ export type Database = {
           last_login_at?: string | null
           login_count?: number | null
           member_since?: string | null
+          nickname?: string | null
           oauth_full_name?: string | null
           oauth_provider?: string | null
           oauth_provider_id?: string | null
@@ -10571,6 +10667,7 @@ export type Database = {
           phone_number?: string | null
           phone_verified?: boolean | null
           preferred_currency?: string | null
+          rank_slug?: string
           referral_source?: string | null
           secondary_email?: string | null
           secondary_email_verified?: boolean
@@ -19734,6 +19831,33 @@ export type Database = {
           survey_frequency_days?: number | null
           updated_at?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      user_ranks: {
+        Row: {
+          icon_emoji: string
+          is_awardable_only: boolean
+          label: string
+          min_karma: number
+          slug: string
+          sort_order: number
+        }
+        Insert: {
+          icon_emoji: string
+          is_awardable_only?: boolean
+          label: string
+          min_karma?: number
+          slug: string
+          sort_order?: number
+        }
+        Update: {
+          icon_emoji?: string
+          is_awardable_only?: boolean
+          label?: string
+          min_karma?: number
+          slug?: string
+          sort_order?: number
         }
         Relationships: []
       }
