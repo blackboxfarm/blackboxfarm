@@ -27,7 +27,17 @@ import {
   Pill,
   History,
   AlertTriangle,
+  ArrowUpDown,
+  ArrowDown,
+  ArrowUp,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
   Tooltip,
@@ -327,6 +337,15 @@ export default function MasterDBTab() {
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [filterPump, setFilterPump] = useState(false);
+  const [sortBy, setSortBy] = useState<
+    "created_at" | "ath_market_cap_usd" | "graduated_at" | "dev_reputation_score" | "dev_total_launches" | "dev_tokens_rugged"
+  >("created_at");
+  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
+  const [filterGraduated, setFilterGraduated] = useState(false);
+  const [filterKycVerified, setFilterKycVerified] = useState(false);
+  const [filterBlacklisted, setFilterBlacklisted] = useState(false);
+  const [filterPosted, setFilterPosted] = useState(false);
+  const [filterHasDev, setFilterHasDev] = useState(false);
   const [activeView, setActiveView] = useState<"directory" | "history">("directory");
   const { toast } = useToast();
   void toast;
@@ -337,22 +356,54 @@ export default function MasterDBTab() {
   }, [searchInput]);
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ["master-db", page, search, filterPump],
+    queryKey: [
+      "master-db", page, search, filterPump,
+      sortBy, sortDir,
+      filterGraduated, filterKycVerified, filterBlacklisted, filterPosted, filterHasDev,
+    ],
     queryFn: async () => {
       let query = supabase
         .from("master_token_directory" as any)
         .select("*", { count: "exact" })
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
-        .order("created_at", { ascending: false, nullsFirst: false });
+        .order(sortBy, { ascending: sortDir === "asc", nullsFirst: false });
 
       if (filterPump) {
         query = query.neq("discovery_source", "pump_monitor");
       }
+      if (filterGraduated) query = query.eq("is_graduated", true);
+      if (filterKycVerified) query = query.eq("kyc_verified", true);
+      if (filterBlacklisted) query = query.eq("dev_auto_blacklisted", true);
+      if (filterPosted) query = query.eq("was_posted", true);
+      if (filterHasDev) query = query.not("creator_wallet", "is", null);
 
       if (search) {
-        query = query.or(
-          `symbol.ilike.%${search}%,name.ilike.%${search}%,token_mint.ilike.%${search}%,creator_wallet.ilike.%${search}%`
-        );
+        // X handle detection: optional @, alphanum/underscore, 1-15 chars.
+        const stripped = search.replace(/^@/, "").trim();
+        const isHandle = /^[A-Za-z0-9_]{1,15}$/.test(stripped);
+        const orParts = [
+          `symbol.ilike.%${search}%`,
+          `name.ilike.%${search}%`,
+          `token_mint.ilike.%${search}%`,
+          `creator_wallet.ilike.%${search}%`,
+        ];
+        if (isHandle) {
+          const lc = stripped.toLowerCase();
+          // PostgREST array `contains` — works for exact-match handle lookups.
+          orParts.push(
+            `mesh_x_handles.cs.{${lc}}`,
+            `community_admin_handles.cs.{${lc}}`,
+            `community_mod_handles.cs.{${lc}}`,
+          );
+          if (lc !== stripped) {
+            orParts.push(
+              `mesh_x_handles.cs.{${stripped}}`,
+              `community_admin_handles.cs.{${stripped}}`,
+              `community_mod_handles.cs.{${stripped}}`,
+            );
+          }
+        }
+        query = query.or(orParts.join(","));
       }
 
       const { data: rows, count, error } = await query;
@@ -498,6 +549,75 @@ export default function MasterDBTab() {
               {filterPump ? "Pump Monitor Hidden" : "Hide Pump Monitor"}
             </Button>
           </form>
+        </div>
+        {/* Sort + filter chips */}
+        <div className="flex flex-wrap items-center gap-2 pt-3 text-xs">
+          <div className="flex items-center gap-1.5">
+            <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-muted-foreground">Sort</span>
+            <Select
+              value={sortBy}
+              onValueChange={(v) => { setSortBy(v as any); setPage(0); }}
+            >
+              <SelectTrigger className="h-7 w-[180px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="created_at">Discovered</SelectItem>
+                <SelectItem value="ath_market_cap_usd">ATH market cap</SelectItem>
+                <SelectItem value="graduated_at">Graduated date</SelectItem>
+                <SelectItem value="dev_reputation_score">Dev rep score</SelectItem>
+                <SelectItem value="dev_total_launches">Dev launches</SelectItem>
+                <SelectItem value="dev_tokens_rugged">Dev rug count</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 gap-1"
+              onClick={() => { setSortDir(d => d === "desc" ? "asc" : "desc"); setPage(0); }}
+              title={sortDir === "desc" ? "Descending — click for ascending" : "Ascending — click for descending"}
+            >
+              {sortDir === "desc" ? <ArrowDown className="h-3.5 w-3.5" /> : <ArrowUp className="h-3.5 w-3.5" />}
+              {sortDir === "desc" ? "Desc" : "Asc"}
+            </Button>
+          </div>
+          <div className="h-4 w-px bg-border mx-1" />
+          <span className="text-muted-foreground">Filters</span>
+          {[
+            { label: "Graduated", on: filterGraduated, set: setFilterGraduated },
+            { label: "KYC Verified", on: filterKycVerified, set: setFilterKycVerified },
+            { label: "Blacklisted Dev", on: filterBlacklisted, set: setFilterBlacklisted },
+            { label: "Posted", on: filterPosted, set: setFilterPosted },
+            { label: "Has Dev Wallet", on: filterHasDev, set: setFilterHasDev },
+          ].map((f) => (
+            <Button
+              key={f.label}
+              size="sm"
+              variant={f.on ? "default" : "outline"}
+              className="h-7 px-2 text-xs"
+              onClick={() => { f.set((v: boolean) => !v); setPage(0); }}
+            >
+              {f.on ? "✓ " : ""}{f.label}
+            </Button>
+          ))}
+          {(filterGraduated || filterKycVerified || filterBlacklisted || filterPosted || filterHasDev) && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-xs text-muted-foreground"
+              onClick={() => {
+                setFilterGraduated(false);
+                setFilterKycVerified(false);
+                setFilterBlacklisted(false);
+                setFilterPosted(false);
+                setFilterHasDev(false);
+                setPage(0);
+              }}
+            >
+              Clear
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent className="p-0">
