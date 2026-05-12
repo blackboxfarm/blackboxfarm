@@ -68,6 +68,7 @@ export function buildDeadTokensPost(input: DeadTokenPostInput): string {
   const url = `https://blackbox.farm/autopsy/${input.slug}`;
   const tags = HASHTAGS_BY_INTENT[intentBucket(input.deathCause)]
     .concat([`#${ticker}`])
+    .concat(['@blackbox_farm'])
     .join(' ');
 
   return [
@@ -76,6 +77,7 @@ export function buildDeadTokensPost(input: DeadTokenPostInput): string {
     input.mintAddress,
     handleLine.trim(),
     ``,
+    `🪦 Death Archives 🪦 Did this Burn you?`,
     harmLine,
     `See the Players & Profits 💰, the Rug Mechanics, Timeline & Ruggers Wallet 💰 — all linked wallets.`,
     ``,
