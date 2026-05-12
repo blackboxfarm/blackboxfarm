@@ -237,6 +237,17 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
       }).eq('id', report_id);
     }
 
+    // 4b. Backfill any holders_intel_post_queue rows that triggered this autopsy
+    // (parent function may have timed out before reading hero_image_path).
+    try {
+      await supabase
+        .from('holders_intel_post_queue')
+        .update({ autopsy_hero_image: heroImageUrl })
+        .eq('autopsy_slug', slug);
+    } catch (e) {
+      console.warn('[autopsy-banner-overlay] queue backfill failed:', (e as any)?.message);
+    }
+
     return new Response(JSON.stringify({
       success: true,
       slug,
