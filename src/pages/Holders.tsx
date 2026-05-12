@@ -11,6 +11,7 @@ export default function Holders() {
   const [tokenFromUrl, setTokenFromUrl] = useState<string>("");
   const [versionParam, setVersionParam] = useState<string>("");
   const [activeTab, setActiveTab] = useState<string>("report");
+  const [activeMint, setActiveMint] = useState<string>("");
 
   const { trackReportGenerated } = useHoldersPageTracking({
     tokenPreloaded: tokenFromUrl,
@@ -25,13 +26,20 @@ export default function Holders() {
     if (vParam) setVersionParam(vParam);
   }, []);
 
+  const handleReportGenerated = (mint: string) => {
+    if (mint && mint.trim()) setActiveMint(mint.trim());
+    trackReportGenerated(mint);
+  };
+
+  const alertMint = activeMint || tokenFromUrl;
+
   return (
     <SiteLayout>
       <TelegramWebViewBanner />
 
       <div className="mx-auto py-6 space-y-4 px-2 md:px-4 max-w-6xl" data-oracle-hint="Paste a token address — I'll walk you through the results" data-oracle-zone="holders-input">
-        {tokenFromUrl && (
-          <BadActorAlert tokenMint={tokenFromUrl} />
+        {alertMint && (
+          <BadActorAlert tokenMint={alertMint} />
         )}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="mb-4">
@@ -41,7 +49,7 @@ export default function Holders() {
 
           <TabsContent value="report" className="mt-0">
             <div className="w-full">
-              <BaglessHoldersReport initialToken={tokenFromUrl} onReportGenerated={trackReportGenerated} />
+              <BaglessHoldersReport initialToken={tokenFromUrl} onReportGenerated={handleReportGenerated} />
             </div>
           </TabsContent>
 
