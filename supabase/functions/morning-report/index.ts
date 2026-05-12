@@ -416,9 +416,10 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         const totalEstMb = bigTables.reduce((s, t) => s + t.est_size_mb, 0);
         const totalRows = bigTables.reduce((s, t) => s + t.rows, 0);
 
-        // Plan limit is configurable via env. Default = Supabase Pro (8 GB).
-        // Set DB_PLAN_LIMIT_MB to override (e.g. 500 for Free, 8192 for Pro, 16384 for upgraded).
-        const planLimitMb = Number(Deno.env.get('DB_PLAN_LIMIT_MB') ?? '8192');
+        // Plan limit is configurable via env. Default = current provisioned disk (12 GB).
+        // Bump DB_PLAN_LIMIT_MB whenever you resize the Supabase disk
+        // (e.g. 8192 for Pro default, 12288 for 12 GB, 16384 for 16 GB).
+        const planLimitMb = Number(Deno.env.get('DB_PLAN_LIMIT_MB') ?? '12288');
         const warnPctRaw = Number(Deno.env.get('DB_WARN_PCT') ?? '50');
         const critPctRaw = Number(Deno.env.get('DB_CRIT_PCT') ?? '80');
         const warnPct = isFinite(warnPctRaw) ? warnPctRaw : 50;
