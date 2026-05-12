@@ -1,53 +1,66 @@
-## What the mismatch means
+## Quick feedback on your asks
 
-The two screenshots are counting different things:
+All five are sensible and additive. The template editor and "Regenerate Post" button in particular are overdue — templates already live in the `holders_intel_templates` DB table (`small`, `large`, `tg_posted`, `tg_public_post`, `x_advert_*`, `tg_advert_*`, etc.), but there is no UI to edit them. The poster reads them at runtime, so an editor immediately takes effect — no redeploy. The DexScreener banner + decorated variant fits cleanly alongside the existing autopsy-banner flow (we already do something very similar for DeadTokens autopsies via `imagegen` + transparent overlays).
 
-- **Birdeye API Usage** is counting API/log activity in `birdeye_api_usage` over the last 24h.
-  - Current DB check: **4,166 Birdeye calls**, **3,384 resolved-owner log rows**, **3,277 unique token mints**, but only **95 unique creator wallets**.
-  - One wallet dominates: `TSLvdd...` accounts for about **3,126 unique mints**, so this is not 3,300 distinct dev wallets.
+One thing worth confirming before I build: for the decorator, I'll create **one new edge function** `holders-intel-banner-decorate` that mirrors the autopsy decorator pattern but with a rotating "Featured / Trending / HOT" themepack (flames, magnifier, "?", floating chat avatar, varied memecoin emoji). It reuses Lovable AI Gateway image-edit (Nano Banana) so cost is the same as autopsy banners.
 
-- **Dev Wallet + KYC Coverage** is counting the canonical master directory: `master_token_directory.creator_wallet IS NOT NULL`.
-  - Current DB check: **86,561 / 123,939 tokens** have a creator wallet, around **69.84%**.
-  - That is why SMS did not fire again: the notifier only sends on each new whole-percent crossing. Last sent was **69%**; next is **70%**, roughly ~200 more net covered tokens away depending on total-token growth.
+---
 
-- Not every Birdeye “resolved owner” moves coverage:
-  - Some rows are duplicate retries/calls for the same token.
-  - Some tokens were already counted in the master directory.
-  - About **1,044 Birdeye-resolved mints from the last 24h are excluded from `master_token_directory` because their `pumpfun_watchlist.status` is `dead` or `rejected`**.
-  - The master view refresh is also timing out in recent logs: `directory refresh failed: canceling statement due to statement timeout`, so even successful base-table writes can lag in the Dev/KYC panel.
+## Plan
 
-So the reconciliation is: **Birdeye is successfully finding owners, but the widget currently reports raw API/log throughput, not net master-database coverage gain.** The Dev/KYC panel is closer to canonical coverage, but it is vulnerable to materialized-view refresh lag and does not show Birdeye-specific impact.
+### 1. KYC-skip guard for Insiders Lifecycle "full retrace"
+- File: `supabase/functions/insiders-lifecycle-builder/index.ts` (and orchestrator pass-through if needed).
+- Add the one-line guard when iterating creators: `if (creator && row.kyc_root_wallet) continue;` so rows with a known KYC root are skipped on full retrace.
+- Add an opt-out flag `force=true` so admins can still force a full re-walk from the UI when they want to.
+- Log a one-line summary: `[lifecycle] skipped N rows with existing KYC, retraced M`.
 
-## Implementation plan
+### 2. New admin tab — "Tweet Templates"
+- New file: `src/components/admin/holders-intel/TemplateEditor.tsx`.
+- Wire into the Holders Intel super-admin tab strip next to "Manual X Posting".
+- Lists all rows from `holders_intel_templates` (small, large, shares, subscription, tg_posted, tg_public_post, tg_search, tg_advert_1/2/3, x_advert_1/2/3/4) — plus an "Add new" button.
+- Per row: name, monospace `<Textarea>`, char counter (with the same URL-as-23-chars rule used in the queue), Save / Reset / Preview-with-sample-data buttons.
+- **Variable legend panel** (collapsible) listing every `{var}` the poster supports — `{TICKER}`, `{name}`, `{mint}`, `{health_grade}`, `{health_score}`, `{real_holders}`, `{total_wallets}`, `{whales}`, `{serious}`, `{retail}`, `{dust}`, `{dust_pct}`, `{lp_pct}`, `{snapshot_time}`, `{trending_rank}`, `{ai_summary}`, `{risk}`, `{holders_url}`, `{telegram_url}`, `{hashtags}`, etc. Pulled from `processTemplate()` in `holders-intel-poster/index.ts` so the legend stays accurate.
+- Preview button calls `holders-intel-compose-preview` with `{ template_override: '<text>', queue_id: <latest pending> }` (small additive param) so admin can see the rendered tweet before saving.
+- Save writes back to `holders_intel_templates` via supabase client (RLS gated to super-admin).
 
-1. **Fix the dashboard language and counts**
-   - Rename Birdeye’s “resolved owner” label to make clear it means **resolved API lookups**, not “new covered master tokens.”
-   - Add split stats:
-     - Birdeye calls
-     - unique mints resolved
-     - unique creator wallets
-     - resolved mints already counted in `master_token_directory`
-     - resolved mints excluded as dead/rejected
-     - resolved mints still pending master coverage
+### 3. DexScreener banner thumbnail in the Manual X Posting Queue
+- New shared helper: `supabase/functions/_shared/dexscreener-banner.ts` — given a mint, hits DexScreener token API and returns the banner/header image URL if present (`info.header` / `info.imageUrl` — fallback to `info.openGraph`).
+- New small edge function `holders-intel-fetch-banner` that resolves + caches the URL onto `holders_intel_post_queue.dex_banner_url` (new nullable column).
+- Migration: `ALTER TABLE holders_intel_post_queue ADD COLUMN dex_banner_url text, ADD COLUMN decorated_banner_url text;`
+- UI: render `dex_banner_url` as a 96px thumbnail in each queue row with **Copy URL** + **Download** buttons (mirrors the autopsy composer pattern in `AutopsyTweetComposer.tsx`).
+- Compose-preview edge function auto-fetches banner the first time a row is composed if missing.
 
-2. **Make Dev/KYC coverage read fresh canonical impact**
-   - Add a small database read function/view for live coverage that computes current creator coverage from the base source tables plus mesh dev links, instead of relying only on the potentially stale materialized view.
-   - Use that for the Dev/KYC panel and SMS notifier so the displayed percentage reflects new Birdeye writes faster.
+### 4. "Decorate Banner" button — Featured/Trending/HOT theme
+- New edge function `holders-intel-banner-decorate` (parallels `autopsy-banner-generator`).
+- Pulls `dex_banner_url`, calls AI Gateway image-edit (`google/gemini-2.5-flash-image`) with a rotated prompt from a small themepack:
+  - `Featured` (gold ribbon + sparkles), `Trending` (chart-up + lightning), `HOT` (flames), `🔥 Discovery`, `Snapshot 🔍`.
+  - Always overlays: HoldersIntel chat-avatar (top-left), magnifier 🔍 icon, subtle "?" mark, varied memecoin emoji border, "HoldersIntel Snapshot" wordmark.
+  - Includes a small **Risks** badge with text — `No obvious risks detected` OR `N risks on file — click to view all` — driven by the network-risk score we already compute in the poster (`risk` variable).
+- Saves output to Supabase Storage bucket `holders-intel-banners`, writes URL to `decorated_banner_url`.
+- UI shows decorated thumbnail next to the raw one with Copy URL / Download / Regenerate.
 
-3. **Persist Birdeye resolutions into the graph path too**
-   - When Birdeye resolves a creator, write the token→creator relationship into `reputation_mesh` as a `created_token`/`dev_wallet` relationship, using `assertDbWrite`/`assertUpsert`.
-   - This helps mesh-only tokens become countable by `master_token_directory` without depending only on seeding `scraped_tokens`.
-   - Backfill recent `birdeye_api_usage.resolved_creator` rows into this graph path once.
+### 5. Regenerate Post button (uses fresh data)
+- Already have `holders-intel-compose-preview` — extend it to accept `{ queue_id, force_refresh: true }` so it re-pulls the latest holder snapshot, mcap, trending rank, and AI summary instead of reusing cached `tweet_text`.
+- Add **"♻️ Regenerate"** button in `ManualXPostingQueue.tsx` per row (sits next to "Generate now" / "Autopsy Now"). Disabled while running, with a small "as of HH:MM" stamp showing last compose time.
 
-4. **Remove silent write failures in the creator backfill**
-   - Replace the current best-effort/silent persistence paths in `backfill-creator-wallets` with asserted writes, per the project’s zero-tolerance DB-write rule.
-   - Return/write explicit counts for: API resolved, base-table updated, graph linked, skipped dead/rejected, already-covered.
+### 6. /holders deep-link format
+- Use the canonical `?token={mint}` URL parameter (already enforced sitewide per memory) anywhere a "View on Holders" link is built — template legend will document this and the default `small` / `large` templates will be re-saved using `{holders_url}` which already resolves to `https://blackbox.farm/holders?token={mint}`.
 
-5. **Fix refresh/SMS observability**
-   - Stop the per-run materialized-view refresh from silently timing out as the main progress signal.
-   - Add “next SMS at X% / N tokens remaining” to the Dev/KYC panel and SMS log panel.
-   - Keep SMS cadence as whole-percent milestones unless you want a different cadence later.
+---
 
-6. **Leave first-24h ATH wiring for later**
-   - Keep the ATH sealer/backfill accumulating data first.
-   - In a follow-up, wire `first_24h_ath_usd` into scoring/autopsy/UI once there is enough sealed history to make the signal useful.
+## Technical notes (for reference)
+
+- Templates table schema (already exists): `holders_intel_templates(template_name PK, template_text, updated_at)` — no schema change needed for editor.
+- New columns on `holders_intel_post_queue`: `dex_banner_url text`, `decorated_banner_url text`, `decoration_theme text`.
+- New storage bucket `holders-intel-banners` (public read).
+- Reuses existing patterns: `imagegen` via Lovable AI Gateway, `assertDbWrite` for every DB write (per zero-tolerance memory rule), super-admin RLS on template edits.
+- No client-side service-role usage.
+
+---
+
+## Out of scope (flag if you want it)
+- Auto-rotating decoration theme on a schedule (currently one-shot per row).
+- Bulk-decorate-all button (easy add later).
+- Per-template A/B analytics (open question — useful but a separate build).
+
+Shall I proceed with this plan, or do you want to adjust the decorator themepack / variable list before I build?
