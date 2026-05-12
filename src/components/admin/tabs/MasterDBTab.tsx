@@ -50,6 +50,7 @@ import { isNonTokenHost, hostFromUrl } from "@/lib/non-token-domains";
 import { RecycledCommunityBadge, type RecycledCommunityScore } from "@/components/admin/RecycledCommunityBadge";
 import { DevWalletCell } from "@/components/admin/shared/DevWalletCell";
 import { KycCell } from "@/components/admin/shared/KycCell";
+import { AthCell } from "@/components/admin/shared/AthCell";
 
 const MasterDBHistory = lazy(() => import("@/components/admin/MasterDBHistory"));
 
