@@ -35,17 +35,18 @@ function pickTheme(forced?: string | null): typeof THEMES[number] {
 }
 
 function buildDecoratorPrompt(theme: typeof THEMES[number], visualDesc: string): string {
-  return `EDIT this exact image — DO NOT redraw, replace, or generate the central artwork. Preserve the original banner (${visualDesc}) at full visibility. Treat this as a TRANSPARENT RESEARCH OVERLAY decorating the EDGES and CORNERS only.
+  return `EDIT this exact image — DO NOT redraw, replace, or generate the central artwork. Preserve the original banner (${visualDesc}) at full visibility. CRITICAL: keep the EXACT same wide 3:1 banner aspect ratio as the input image — do NOT crop to a square, do NOT pad, do NOT change dimensions. Output must be a wide horizontal banner identical in shape to the input.
 
-ABSOLUTELY DO NOT: add any mascot/character/creature; cover the central 60% of the banner; replace or repaint the source banner; place any large stencil over the central subject.
+Treat this as a TRANSPARENT RESEARCH OVERLAY decorating the EDGES and CORNERS only. ABSOLUTELY DO NOT: add any mascot/character/creature; cover the central 60% of the banner; replace or repaint the source banner; change the canvas shape.
 
-DO ADD as semi-transparent decorative elements layered ONLY around the edges and corners (60–75% opacity, banner shows through):
-- Top-left: ${theme.hero}, tilted slightly, soft drop-shadow
-- Top-right: small complementary research prop (magnifying glass, measuring tape, blueprint corner, paper-map corner, or balance scale — NOT the same as top-left)
-- Bottom-right: second complementary prop (different again from top-left and top-right)
-- Bottom-left: a small circular glowing teal/cyan ethereal humanoid avatar badge (a soft luminous wisp-like figure on dark background, ~80px round) immediately followed to its right by the white sans-serif wordmark "@HoldersIntel" on a thin translucent dark pill, slight tilt, soft drop-shadow
+DO ADD ALL FOUR of these semi-transparent decorative elements layered around the edges and corners (60–75% opacity, banner shows through, soft drop-shadows). Every corner must have something — do not leave corners empty:
 
-Final output: same dimensions as input, photographic clarity preserved.`;
+- TOP-LEFT corner: ${theme.hero}, tilted slightly, partially folded/dimensional (NOT flat). Medium size — fits in the corner, leaves the center clear.
+- TOP-RIGHT corner: a SECOND distinct research prop, different from top-left. Pick ONE of: antique brass magnifying glass over yellow measuring tape / partially unrolled blue architect blueprint corner / antique brass balance scale / fan of playing cards with gold poker chips / folded vintage paper map corner. Tilted, dimensional.
+- BOTTOM-RIGHT corner: a THIRD distinct research prop, different from the top two. Same shortlist, pick a different one.
+- BOTTOM-LEFT corner: a SINGLE rounded-rectangle dark translucent pill button. Inside the LEFT end of that pill, embedded flush, a small circular avatar showing a glowing teal/cyan ethereal wisp-like humanoid figure on a dark cosmic background (the avatar is INSIDE the pill, not floating beside it). To the right of the avatar inside the same pill, the white sans-serif wordmark "@HoldersIntel". The whole thing reads as ONE unified signature button, not two separate elements.
+
+Final output: identical wide banner aspect ratio to the input, photographic clarity preserved, all four corners populated.`;
 }
 
 async function urlToDataUri(url: string): Promise<string> {
