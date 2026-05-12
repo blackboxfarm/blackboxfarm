@@ -401,6 +401,39 @@ export default function MasterDBTab() {
     staleTime: 60_000,
   });
 
+  // Batch-fetch KYC root info for the dev wallets on this page so the KYC cell
+  // can show "Binance · 8PPv…4YYx" without a per-row query.
+  const visibleDevWallets = React.useMemo(() => {
+    const out = new Set<string>();
+    for (const r of rows) {
+      const w = (r.creator_wallet || (r.dev_wallets && r.dev_wallets[0])) as string | undefined;
+      if (w && typeof w === "string" && w.length >= 32 && w.length <= 44) out.add(w);
+    }
+    return Array.from(out);
+  }, [rows]);
+
+  const { data: kycRootMap } = useQuery({
+    queryKey: ["master-db-kyc-roots", visibleDevWallets.join(",")],
+    enabled: visibleDevWallets.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("developer_profiles")
+        .select("master_wallet_address, kyc_root_wallet, kyc_root_label, kyc_source")
+        .in("master_wallet_address", visibleDevWallets);
+      if (error) throw error;
+      const map: Record<string, { rootWallet: string | null; rootLabel: string | null; source: string | null }> = {};
+      for (const row of data || []) {
+        map[(row as any).master_wallet_address] = {
+          rootWallet: (row as any).kyc_root_wallet ?? null,
+          rootLabel: (row as any).kyc_root_label ?? null,
+          source: (row as any).kyc_source ?? null,
+        };
+      }
+      return map;
+    },
+    staleTime: 30_000,
+  });
+
   return (
     <div className="space-y-6">
     
