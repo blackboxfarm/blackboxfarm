@@ -726,40 +726,7 @@ export default function MasterDBTab() {
                       />
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {(() => {
-                        const ath = r.ath_market_cap_usd != null ? Number(r.ath_market_cap_usd) : null;
-                        const ath24 = r.ath_24h_usd != null ? Number(r.ath_24h_usd) : null;
-                        if (ath != null) {
-                          const fmt = ath >= 1000 ? `$${(ath / 1000).toFixed(1)}k` : `$${ath.toFixed(2)}`;
-                          return (
-                            <TooltipProvider delayDuration={150}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span>{fmt}</span>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="text-xs">
-                                  ATH market cap (all-time){r.ath_market_cap_at ? ` · ${new Date(r.ath_market_cap_at).toLocaleString()}` : ''}
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          );
-                        }
-                        if (ath24 != null) {
-                          return (
-                            <TooltipProvider delayDuration={150}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="opacity-70">${ath24.toFixed(6)} <span className="text-[9px]">(24h)</span></span>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="text-xs max-w-[220px]">
-                                  Only 24h ATH price recorded; all-time market cap not yet captured.
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          );
-                        }
-                        return "—";
-                      })()}
+                      <AthCell row={r} />
                     </TableCell>
                     <TableCell>{r.is_graduated ? "✅" : "—"}</TableCell>
                     <TableCell className="text-muted-foreground">
