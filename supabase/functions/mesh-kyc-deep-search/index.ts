@@ -562,6 +562,8 @@ Deno.serve(withRunLog('mesh-kyc-deep-search', async (req) => {
       profilePayload.kyc_source_type = finalEntityType;
       profilePayload.kyc_trail_status = 'verified';
       profilePayload.kyc_verification_date = new Date().toISOString();
+      profilePayload.kyc_root_wallet = kycRoot;
+      profilePayload.kyc_root_label = finalKycLabel;
     } else {
       // No KYC root found within depth budget. Tag the trail outcome so the
       // UI can distinguish "we couldn't trace" from "self-custody origin".
