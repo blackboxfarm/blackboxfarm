@@ -34,8 +34,18 @@ Deno.serve(withRunLog('dev-track-record-run-all', async (req) => {
   const { data: rollup, error: e3 } = await supabase.functions.invoke('dev-track-record-rollup', { body: { dev_wallet } });
   if (e3) throw e3;
 
+  // Chain family rollup (mesh-aggregated). Non-fatal if it fails.
+  let family: any = null;
+  try {
+    const { data: famData, error: famErr } = await supabase.functions.invoke('dev-family-track-record-rollup', { body: { dev_wallet } });
+    if (famErr) console.warn('[run-all] family rollup error:', famErr);
+    family = famData ?? null;
+  } catch (e) {
+    console.warn('[run-all] family rollup threw:', e);
+  }
+
   return new Response(
-    JSON.stringify({ ok: true, scrape, classify, rollup }),
+    JSON.stringify({ ok: true, scrape, classify, rollup, family }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
   );
 }));
