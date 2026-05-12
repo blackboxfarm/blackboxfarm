@@ -7474,6 +7474,9 @@ export type Database = {
           autopsy_triggered_by: string | null
           autopsy_url: string | null
           created_at: string
+          decorated_banner_url: string | null
+          decoration_theme: string | null
+          dex_banner_url: string | null
           error_message: string | null
           id: string
           manual_posted_at: string | null
@@ -7502,6 +7505,9 @@ export type Database = {
           autopsy_triggered_by?: string | null
           autopsy_url?: string | null
           created_at?: string
+          decorated_banner_url?: string | null
+          decoration_theme?: string | null
+          dex_banner_url?: string | null
           error_message?: string | null
           id?: string
           manual_posted_at?: string | null
@@ -7530,6 +7536,9 @@ export type Database = {
           autopsy_triggered_by?: string | null
           autopsy_url?: string | null
           created_at?: string
+          decorated_banner_url?: string | null
+          decoration_theme?: string | null
+          dex_banner_url?: string | null
           error_message?: string | null
           id?: string
           manual_posted_at?: string | null
