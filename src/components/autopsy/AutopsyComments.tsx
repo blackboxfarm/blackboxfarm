@@ -251,10 +251,10 @@ export function AutopsyComments({ slug }: { slug: string }) {
     <section id="comments" className="mt-12 max-w-3xl mx-auto scroll-mt-24">
       <div className="flex items-end justify-between mb-4">
         <div>
-          <h2 className="text-2xl font-bold flex items-center gap-2">
+          <h2 className="text-2xl font-bold flex items-center gap-2 text-gold">
             <MessageSquare className="h-5 w-5 text-gold" /> WTF Happened?
           </h2>
-          <p className="text-sm text-muted-foreground">Front-row holders, weigh in. Opinions aren't facts — but they make for a good story.</p>
+          <p className="text-sm text-gold/70">Front-row holders, weigh in. Opinions aren't facts — but they make for a good story.</p>
         </div>
         <div className="flex gap-1">
           <Button size="sm" className={sort === 'new' ? 'bg-gold text-gold-foreground hover:bg-gold/90' : ''} variant={sort === 'new' ? 'default' : 'ghost'} onClick={() => setSort('new')}>New</Button>
