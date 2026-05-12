@@ -402,14 +402,18 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken, onActi
       queueTokenFromFrontend(rawInput, 'bubblemap_input', {
         comment: `Bubblemap ${mode} lookup`,
       });
+      onActiveTokenChange?.(rawInput);
     }
-  }, [searchInput, focusOnEntity, resetView, canSearch, recordSearch, remaining, limit, isSubscriber, mode, recordInteraction]);
+  }, [searchInput, focusOnEntity, resetView, canSearch, recordSearch, remaining, limit, isSubscriber, mode, recordInteraction, onActiveTokenChange]);
 
   // Auto-load from URL ?token= parameter
   useEffect(() => {
     if (initialToken && !initialTokenLoaded && canSearch) {
       setSearchInput(initialToken);
       setInitialTokenLoaded(true);
+      if (initialToken.length >= 30 && !initialToken.startsWith('@')) {
+        onActiveTokenChange?.(initialToken);
+      }
       // Trigger search after state update
       setTimeout(() => {
         recordSearch(initialToken);
@@ -417,7 +421,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken, onActi
         queueTokenFromFrontend(initialToken, 'bubblemap_input', { comment: 'Bubblemap URL preload' });
       }, 100);
     }
-  }, [initialToken, initialTokenLoaded, canSearch, recordSearch, focusOnEntity]);
+  }, [initialToken, initialTokenLoaded, canSearch, recordSearch, focusOnEntity, onActiveTokenChange]);
 
 
   const spiderHasError = !!spiderStatus.error;
