@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useUserTier } from '@/hooks/useUserTier';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ChevronDown, Lock } from 'lucide-react';
+import { ChevronDown, Lock, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface Props {
@@ -38,6 +38,25 @@ interface Summary {
   last_recomputed_at: string;
 }
 
+interface FamilySummary {
+  dev_wallet: string;
+  family_size: number;
+  family_wallets: string[];
+  kyc_root_label: string | null;
+  total_tokens: number;
+  sustained_hits: number;
+  viral_memes: number;
+  hard_rugs: number;
+  skill_index: number | null;
+  intent_index: number | null;
+  luck_index: number | null;
+  verdict_label: string | null;
+  verdict_one_liner: string | null;
+  ai_interpretation: string | null;
+  best_token_ticker: string | null;
+  best_token_ath_usd: number | null;
+}
+
 const CAUSE_LABELS: Record<string, string> = {
   skill_build: 'Skill builds',
   marketed_memes: 'Marketed memes',
@@ -56,6 +75,8 @@ export function DevTrackRecordCard({ tokenMint }: Props) {
   const { user } = useAuth();
   const { tierInfo } = useUserTier();
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [family, setFamily] = useState<FamilySummary | null>(null);
+  const [showFamilyWallets, setShowFamilyWallets] = useState(false);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(false);
 
@@ -73,22 +94,24 @@ export function DevTrackRecordCard({ tokenMint }: Props) {
         .maybeSingle();
       const dev = lc?.creator_wallet;
       if (!dev) { if (!cancelled) { setSummary(null); setLoading(false); } return; }
-      const { data } = await supabase
-        .from('dev_track_record_summary')
-        .select('*')
-        .eq('dev_wallet', dev)
-        .maybeSingle();
+      const [{ data }, { data: famData }] = await Promise.all([
+        supabase.from('dev_track_record_summary').select('*').eq('dev_wallet', dev).maybeSingle(),
+        supabase.from('dev_family_track_record_summary').select('*').eq('dev_wallet', dev).maybeSingle(),
+      ]);
       if (!cancelled) {
         setSummary(data as Summary | null);
+        setFamily(famData as FamilySummary | null);
         setLoading(false);
       }
     })();
     return () => { cancelled = true; };
   }, [tokenMint]);
 
-  if (loading || !summary) return null;
+  if (loading || (!summary && !family)) return null;
 
   return (
+    <>
+    {summary && (
     <Card className="mt-8 p-5 bg-slate-900/40 border-slate-700">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
@@ -182,6 +205,76 @@ export function DevTrackRecordCard({ tokenMint }: Props) {
         </div>
       )}
     </Card>
+    )}
+
+    {family && family.total_tokens > 0 && (
+      <Card className="mt-4 p-5 bg-purple-950/20 border-purple-800/50">
+        <div className="flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <div className="text-xs uppercase tracking-wider text-purple-300 flex items-center gap-1.5">
+              <Users className="h-3 w-3" /> Extended Dev-Family Track Record
+            </div>
+            <div className="text-lg font-semibold mt-1 text-foreground">
+              {family.verdict_label ?? 'Operator cluster'}{' '}
+              <span className="text-sm font-normal text-muted-foreground">
+                · {family.family_size} wallets · {family.total_tokens} prior tokens
+              </span>
+            </div>
+            {family.verdict_one_liner && (
+              <div className="text-sm text-muted-foreground mt-0.5">{family.verdict_one_liner}</div>
+            )}
+            {family.kyc_root_label && (
+              <div className="text-xs text-muted-foreground mt-1">
+                KYC root: <span className="text-purple-300">{family.kyc_root_label}</span>
+              </div>
+            )}
+          </div>
+          {isPaid && family.best_token_ticker && (
+            <Badge variant="outline" className="text-xs border-purple-500/50 text-purple-200">
+              Family best: ${family.best_token_ticker} (~${Math.round(Number(family.best_token_ath_usd) || 0).toLocaleString()})
+            </Badge>
+          )}
+        </div>
+
+        {user && (
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            <IndexChip label="Skill" value={family.skill_index} hue="emerald" />
+            <IndexChip label="Intent" value={family.intent_index} hue="amber" signed />
+            <IndexChip label="Luck" value={family.luck_index} hue="sky" />
+          </div>
+        )}
+
+        {isPaid && family.ai_interpretation && (
+          <div className="mt-5 border-t border-purple-800/40 pt-4">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">AI interpretation (family lens)</div>
+            <p className="text-sm text-foreground/90 leading-relaxed">{family.ai_interpretation}</p>
+          </div>
+        )}
+
+        {family.family_wallets?.length > 1 && (
+          <div className="mt-3">
+            <Button variant="ghost" size="sm" className="text-xs gap-1" onClick={() => setShowFamilyWallets(s => !s)}>
+              <ChevronDown className={`h-3 w-3 transition-transform ${showFamilyWallets ? 'rotate-180' : ''}`} />
+              {showFamilyWallets ? 'Hide' : 'Show'} {family.family_wallets.length} family wallets
+            </Button>
+            {showFamilyWallets && (
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs font-mono">
+                {family.family_wallets.map(w => (
+                  <a
+                    key={w}
+                    href={`/bubblemap?wallet=${w}`}
+                    className="bg-purple-900/30 hover:bg-purple-900/60 rounded px-2 py-1 text-purple-200 truncate"
+                  >
+                    {w === family.dev_wallet ? '★ ' : ''}{w}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+    )}
+    </>
   );
 }
 
