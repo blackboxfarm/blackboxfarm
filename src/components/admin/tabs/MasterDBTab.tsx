@@ -337,6 +337,15 @@ export default function MasterDBTab() {
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [filterPump, setFilterPump] = useState(false);
+  const [sortBy, setSortBy] = useState<
+    "created_at" | "ath_market_cap_usd" | "graduated_at" | "dev_reputation_score" | "dev_total_launches" | "dev_tokens_rugged"
+  >("created_at");
+  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
+  const [filterGraduated, setFilterGraduated] = useState(false);
+  const [filterKycVerified, setFilterKycVerified] = useState(false);
+  const [filterBlacklisted, setFilterBlacklisted] = useState(false);
+  const [filterPosted, setFilterPosted] = useState(false);
+  const [filterHasDev, setFilterHasDev] = useState(false);
   const [activeView, setActiveView] = useState<"directory" | "history">("directory");
   const { toast } = useToast();
   void toast;
@@ -347,22 +356,54 @@ export default function MasterDBTab() {
   }, [searchInput]);
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ["master-db", page, search, filterPump],
+    queryKey: [
+      "master-db", page, search, filterPump,
+      sortBy, sortDir,
+      filterGraduated, filterKycVerified, filterBlacklisted, filterPosted, filterHasDev,
+    ],
     queryFn: async () => {
       let query = supabase
         .from("master_token_directory" as any)
         .select("*", { count: "exact" })
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
-        .order("created_at", { ascending: false, nullsFirst: false });
+        .order(sortBy, { ascending: sortDir === "asc", nullsFirst: false });
 
       if (filterPump) {
         query = query.neq("discovery_source", "pump_monitor");
       }
+      if (filterGraduated) query = query.eq("is_graduated", true);
+      if (filterKycVerified) query = query.eq("kyc_verified", true);
+      if (filterBlacklisted) query = query.eq("dev_auto_blacklisted", true);
+      if (filterPosted) query = query.eq("was_posted", true);
+      if (filterHasDev) query = query.not("creator_wallet", "is", null);
 
       if (search) {
-        query = query.or(
-          `symbol.ilike.%${search}%,name.ilike.%${search}%,token_mint.ilike.%${search}%,creator_wallet.ilike.%${search}%`
-        );
+        // X handle detection: optional @, alphanum/underscore, 1-15 chars.
+        const stripped = search.replace(/^@/, "").trim();
+        const isHandle = /^[A-Za-z0-9_]{1,15}$/.test(stripped);
+        const orParts = [
+          `symbol.ilike.%${search}%`,
+          `name.ilike.%${search}%`,
+          `token_mint.ilike.%${search}%`,
+          `creator_wallet.ilike.%${search}%`,
+        ];
+        if (isHandle) {
+          const lc = stripped.toLowerCase();
+          // PostgREST array `contains` — works for exact-match handle lookups.
+          orParts.push(
+            `mesh_x_handles.cs.{${lc}}`,
+            `community_admin_handles.cs.{${lc}}`,
+            `community_mod_handles.cs.{${lc}}`,
+          );
+          if (lc !== stripped) {
+            orParts.push(
+              `mesh_x_handles.cs.{${stripped}}`,
+              `community_admin_handles.cs.{${stripped}}`,
+              `community_mod_handles.cs.{${stripped}}`,
+            );
+          }
+        }
+        query = query.or(orParts.join(","));
       }
 
       const { data: rows, count, error } = await query;
