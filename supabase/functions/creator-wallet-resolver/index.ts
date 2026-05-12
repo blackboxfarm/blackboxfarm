@@ -127,10 +127,14 @@ Deno.serve(withRunLog('creator-wallet-resolver', async (req) => {
 
       // Inline mesh-funnel hook: kick off KYC trace immediately for newly
       // discovered dev wallets so they don't have to wait for the 5-min
-      // bulk runner cron. Fire-and-forget — failures are non-fatal.
-      supabase.functions.invoke('mesh-kyc-deep-search', {
-        body: { walletAddress: res.creatorWallet, maxDepth: 6, discoverBundle: false },
-      }).catch(() => { /* swallow — bulk runner will retry */ });
+      // bulk runner cron. Skipped in singleTarget mode — the admin UI fires
+      // mesh-kyc-deep-search itself as a second explicit step so it can
+      // surface a separate toast.
+      if (!singleTargetMint) {
+        supabase.functions.invoke('mesh-kyc-deep-search', {
+          body: { walletAddress: res.creatorWallet, maxDepth: 6, discoverBundle: false },
+        }).catch(() => { /* swallow — bulk runner will retry */ });
+      }
 
       resolved++;
       results.push({ mint, ok: true, creator: res.creatorWallet, source: res.source });
