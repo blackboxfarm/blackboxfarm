@@ -1,121 +1,91 @@
-# Autopsy Comments Mini-Forum + User Avatars/Ranks
+# Forum Identity Choice + Per-Autopsy Social Share
 
-A public-read, login-to-post comment thread on every `/autopsy/:slug` page, with avatar uploads, rank badges, upvotes, Cloudflare Turnstile gating, deep sanitization, and AI image safety scanning.
-
----
-
-## 1. Database (new tables)
-
-```text
-autopsy_comments
-  id, autopsy_slug (FK→autopsy_reports.slug), user_id (FK→auth.users),
-  parent_id (self-FK, nullable, for 1-level replies),
-  body (text, max 1000), body_clean (sanitized cache),
-  upvote_count (int), is_hidden (bool), is_pinned (bool),
-  created_at, updated_at, edited_at
-
-autopsy_comment_votes
-  comment_id, user_id, value (1 only — upvote system),
-  UNIQUE(comment_id, user_id)
-
-profiles  (extend existing)
-  + avatar_url (text)            -- public URL in user-avatars bucket
-  + nickname (text, unique CI)   -- 3-20 chars [a-z0-9_-]
-  + rank_slug (text)             -- 'newbie' | 'degen' | 'chad' | 'veteran' | 'oracle'
-  + comment_karma (int default 0)
-  + avatar_scan_status (text)    -- pending | clean | rejected
-  + avatar_scan_reason (text)
-
-user_ranks (lookup)
-  slug, label, icon_emoji, min_karma, is_awardable_only (bool)
-  Seed: newbie(0), degen(25), chad(100), veteran(500), oracle(awarded)
-```
-
-**RLS**
-- `autopsy_comments`: SELECT public (where `is_hidden = false`); INSERT auth + Turnstile-verified edge function only; UPDATE/DELETE own row OR super_admin.
-- `autopsy_comment_votes`: SELECT public; INSERT/DELETE own.
-- `profiles.avatar_url / nickname`: public-readable (already are); writes self-only.
-- Trigger maintains `upvote_count` and bumps `profiles.comment_karma` (auto-promotes rank when threshold crossed, except `is_awardable_only`).
-
-## 2. Storage
-
-Bucket **`user-avatars`** (public read). Path: `{user_id}/avatar.{ext}`.
-- RLS: insert/update only own folder.
-- Only `.jpg`/`.jpeg`/`.gif` accepted (validated server-side, not just MIME — magic-byte sniff).
-- Max 2 MB, max 1024×1024 after crop.
-
-## 3. Edge Functions
-
-| Function | Purpose |
-|---|---|
-| `autopsy-comment-post` | Verify Turnstile token → sanitize body (DOMPurify + zod + telegram-input-sanitizer pattern) → insert |
-| `autopsy-comment-vote` | Toggle upvote, recompute count |
-| `avatar-upload-scan` | Receive base64 image → magic-byte check → strip EXIF → re-encode (sharp/imagescript) → send to Lovable AI Gateway (`gemini-2.5-flash-image` vision) for: (a) NSFW/violence check, (b) hidden-text/prompt-injection check, (c) file-format integrity → write to bucket, set `avatar_scan_status` |
-| `autopsy-comment-moderate` | Super-admin: hide/pin/delete |
-
-All POST endpoints require: valid JWT + Turnstile token + per-user rate limit (5 comments/min, 1 avatar/hour) tracked in existing rate-limit table.
-
-## 4. Sanitization Layers (defense in depth)
-
-1. **Client**: zod schema (length, charset), strip control chars before submit.
-2. **Edge function**: re-validate with zod, run through `_shared/telegram-input-sanitizer.ts` patterns, then DOMPurify (server build) to strip any HTML/script.
-3. **DB**: store raw `body` + pre-sanitized `body_clean`; render only `body_clean`.
-4. **Render**: React text node only (never `dangerouslySetInnerHTML`); auto-linkify via safe regex with `rel="nofollow ugc noopener"`.
-5. **Turnstile**: server-side `siteverify` on every write.
-6. **Rate limit + karma gating**: new accounts (<24h, 0 karma) get 1 comment/10min.
-
-## 5. Avatar Pipeline
-
-```text
-Browser  → react-easy-crop (square, output JPEG ≤1024² ≤2MB)
-        → POST base64 to avatar-upload-scan
-Edge fn  → magic-byte check (FFD8FF / GIF87a / GIF89a only)
-        → strip EXIF + re-encode (kills embedded payloads)
-        → AI Gateway vision scan: NSFW + injection text + integrity
-        → if clean: upload to user-avatars/{uid}/avatar.jpg
-        → update profiles.avatar_url + scan_status
-        → if rejected: keep old avatar, return reason
-```
-
-Rejected reasons surfaced inline ("Image contained hidden text — please upload a clean photo").
-
-## 6. Ranks
-
-Auto-awarded by karma (newbie→degen→chad→veteran). `oracle` is admin-awarded only. Icon shown next to nickname in every comment. Admin UI (in HoldersIntel/Autopsies tab) to award `oracle` and to revoke ranks.
-
-## 7. UI
-
-**`src/components/autopsy/AutopsyComments.tsx`** mounted at bottom of `/autopsy/:slug`:
-- Header: "WTF Happened? — Front-row holders, weigh in."
-- Logged-out: read-only list + "Sign in to comment" CTA.
-- Logged-in: composer with Turnstile widget, char counter (1000), post button.
-- Each comment: avatar, nickname, rank icon, timestamp, body, ▲ upvote, reply (1 level), super-admin moderation kebab.
-- Sort: Top / New toggle.
-
-**`src/components/profile/AvatarUploader.tsx`** (in ProfilePanel):
-- Drop/select → react-easy-crop modal → upload → live scan-status indicator.
-
-**X-Post P.S. line** appended in `src/lib/deadTokensPost.ts`:
-> "Is our Autopsy on target or did we miss something? Got an insider tip or a front-row view? WTF happened? Comment on the latest @DeadTokens83517 report 👉 https://blackbox.farm/autopsy/{slug}#comments"
-
-(Only added when length budget allows; trimmed gracefully.)
-
-## 8. Secrets needed
-
-- `TURNSTILE_SECRET_KEY` (server) — already configured per memory ✅ verify presence
-- `TURNSTILE_SITE_KEY` is publishable — fine in code
-- `LOVABLE_API_KEY` for avatar vision scan ✅ already present
-
-## 9. Order of build
-
-1. Migration: tables, ranks seed, storage bucket, RLS, karma trigger.
-2. Edge functions: `autopsy-comment-post`, `autopsy-comment-vote`, `avatar-upload-scan`, `autopsy-comment-moderate`.
-3. Profile extension: nickname + avatar uploader + rank display.
-4. `AutopsyComments` component + mount on autopsy article page.
-5. Update `deadTokensPost.ts` with WTF P.S. line.
-6. Admin moderation panel tab.
-7. QA: post/upvote/reply/moderate flow; upload clean + dirty image; Turnstile fail path; rate-limit trip.
+Two additions on top of the mini-forum already shipped.
 
 ---
 
-Reply **"Plan Approved"** (any order is fine, or tell me which slice to ship first) and I'll build it.
+## 1. Identity Source — "How do you want to appear?"
+
+When a logged-in user opens the comment composer for the first time (or visits Profile → Forum Identity), they pick **once** how they appear in autopsy comments. They can change it anytime.
+
+### The choice (clearly worded)
+
+```text
+How should other holders see you in the WTF Forum?
+
+( ) Use my @X handle and X profile picture
+    "Linked: @yourhandle — your X avatar will show next to comments."
+    [shown only if X is linked]
+
+( ) Use my Google name and Google profile picture
+    "Linked: you@gmail.com — your Google avatar will show."
+    [shown only if Google is linked]
+
+(•) Use a custom forum identity  ← default if no socials linked
+    Nickname: [__________]   (3–20 chars, letters/numbers/_-)
+    Avatar:   [ Upload .jpg or .gif ]  (scanned for safety)
+
+Note: choosing a social option only shares your public handle and profile
+picture with this forum. We never post on your behalf.
+```
+
+### Storage
+
+Add to `profiles` (already extended last build):
+- `forum_identity_source` text — `'x' | 'google' | 'custom'` (default `'custom'`)
+- `forum_display_name_cached` text — snapshot of @handle / Google name at pick time
+- `forum_avatar_url_cached` text — snapshot of OAuth avatar URL at pick time
+
+When a comment renders, we resolve in this order:
+1. If `forum_identity_source = 'x'|'google'` → use cached values (refreshed on login).
+2. Else → use `nickname` + `avatar_url` (custom, scanned).
+
+OAuth avatars are **proxied** through a tiny edge function `forum-avatar-proxy` so we don't leak the user's IP to Google/X CDNs and so we can cache + content-type-validate the bytes (still JPG/GIF/PNG only, ≤2 MB, magic-byte sniffed). No AI scan needed for OAuth avatars — the provider already vetted them.
+
+### UI
+
+- New `ForumIdentityPicker.tsx` inside `ProfilePanel` ("Forum Identity" section).
+- First-time prompt rendered above the comment composer if `forum_identity_source IS NULL`.
+- Live preview chip: "You'll appear as [avatar] **@handle** [rank badge]".
+- "Switch identity" link always visible under the composer.
+
+---
+
+## 2. Per-Autopsy Social Share
+
+A share row at the top of every `/autopsy/:slug` page **and** at the bottom of each comment thread, mirroring the existing `ShareToXButton` pattern.
+
+### Component: `AutopsyShareBar.tsx`
+
+Buttons: **Share on X · Telegram · Copy for Discord · Copy link**
+
+Pre-filled text (pulled from autopsy meta):
+```text
+🪦 Autopsy: $TICKER — {death_cause_short}
+ATH: ${ath} → Died at: ${died_at_mcap}
+Verdict: {verdict_one_liner}
+
+Read the full forensic report 👉 https://blackbox.farm/autopsy/{slug}
+```
+
+Each comment gets a small "Share" icon that copies a deep link to that comment (`#c-{commentId}`).
+
+### Tracking
+
+Re-use `feature_usage_analytics` with `feature_name = 'autopsy_share_x' | '_tg' | '_discord' | '_link' | '_comment'` and `token_mint = autopsy.token_mint`.
+
+---
+
+## 3. Build order
+
+1. Migration: add `forum_identity_source`, `forum_display_name_cached`, `forum_avatar_url_cached` to `profiles`.
+2. Edge fn `forum-avatar-proxy` (validates + caches OAuth avatar bytes).
+3. `ForumIdentityPicker.tsx` + integrate into `ProfilePanel` and as a first-time gate above the composer in `AutopsyComments.tsx`.
+4. Update `AutopsyComments.tsx` to read the resolved identity (cached fields when source is `x`/`google`).
+5. `AutopsyShareBar.tsx` + mount on `AutopsyArticle.tsx` (top) and `AutopsyComments.tsx` (footer).
+6. Per-comment share-deep-link icon.
+7. QA: linked X user → shows X avatar/handle; switch to custom → upload + AI scan path; logged-out share works without identity.
+
+---
+
+Reply **"Plan Approved — BUILD"** and I'll ship it in that order. If you want different wording in the identity picker, paste your preferred copy and I'll use it verbatim.

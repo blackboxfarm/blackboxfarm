@@ -10578,6 +10578,9 @@ export type Database = {
           display_name: string | null
           email_verified: boolean | null
           feature_usage: Json | null
+          forum_avatar_url_cached: string | null
+          forum_display_name_cached: string | null
+          forum_identity_source: string | null
           id: string
           last_active_at: string | null
           last_login_at: string | null
@@ -10615,6 +10618,9 @@ export type Database = {
           display_name?: string | null
           email_verified?: boolean | null
           feature_usage?: Json | null
+          forum_avatar_url_cached?: string | null
+          forum_display_name_cached?: string | null
+          forum_identity_source?: string | null
           id?: string
           last_active_at?: string | null
           last_login_at?: string | null
@@ -10652,6 +10658,9 @@ export type Database = {
           display_name?: string | null
           email_verified?: boolean | null
           feature_usage?: Json | null
+          forum_avatar_url_cached?: string | null
+          forum_display_name_cached?: string | null
+          forum_identity_source?: string | null
           id?: string
           last_active_at?: string | null
           last_login_at?: string | null

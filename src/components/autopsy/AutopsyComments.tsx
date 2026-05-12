@@ -6,16 +6,26 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowUp, MessageSquare, Loader2, MoreVertical, Pin, EyeOff, Eye, Trash2, LogIn } from 'lucide-react';
+import { ArrowUp, MessageSquare, Loader2, MoreVertical, Pin, EyeOff, Eye, Trash2, LogIn, Link2 } from 'lucide-react';
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
+import { ForumIdentityPicker } from '@/components/profile/ForumIdentityPicker';
 
 type Rank = { slug: string; label: string; icon_emoji: string };
-type Profile = { user_id: string; nickname: string | null; display_name: string | null; avatar_url: string | null; rank_slug: string | null };
+type Profile = {
+  user_id: string;
+  nickname: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  rank_slug: string | null;
+  forum_identity_source: 'x' | 'google' | 'custom' | null;
+  forum_display_name_cached: string | null;
+  forum_avatar_url_cached: string | null;
+};
 type Comment = {
   id: string; autopsy_slug: string; user_id: string; parent_id: string | null;
   body_clean: string; upvote_count: number; is_hidden: boolean; is_pinned: boolean;
@@ -61,6 +71,8 @@ export function AutopsyComments({ slug }: { slug: string }) {
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [tsToken, setTsToken] = useState<string | null>(null);
   const tsRef = useRef<TurnstileInstance>(null);
+  const [myIdentitySource, setMyIdentitySource] = useState<string | null | undefined>(undefined);
+  const [showIdentityPicker, setShowIdentityPicker] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -77,7 +89,7 @@ export function AutopsyComments({ slug }: { slug: string }) {
     if (ids.length) {
       const { data: pr } = await supabase
         .from('profiles')
-        .select('user_id, nickname, display_name, avatar_url, rank_slug')
+        .select('user_id, nickname, display_name, avatar_url, rank_slug, forum_identity_source, forum_display_name_cached, forum_avatar_url_cached')
         .in('user_id', ids);
       const pMap: Record<string, Profile> = {};
       (pr || []).forEach((p: any) => { pMap[p.user_id] = p; });
@@ -89,6 +101,12 @@ export function AutopsyComments({ slug }: { slug: string }) {
         .select('comment_id')
         .eq('user_id', user.id);
       setVoted(new Set((vs || []).map((v: any) => v.comment_id)));
+      const { data: me } = await supabase
+        .from('profiles')
+        .select('forum_identity_source')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      setMyIdentitySource(me?.forum_identity_source ?? null);
     } else {
       setVoted(new Set());
     }
@@ -148,14 +166,38 @@ export function AutopsyComments({ slug }: { slug: string }) {
     if (error) toast.error(error.message); else { toast.success('Done'); load(); }
   };
 
+  const shareComment = async (c: Comment) => {
+    const url = `${window.location.origin}/autopsy/${slug}#c-${c.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success('Comment link copied');
+    } catch {
+      toast.error('Copy failed');
+    }
+  };
+
+  const resolveIdentity = (p?: Profile) => {
+    if (!p) return { name: 'anon', avatar: null as string | null };
+    if (p.forum_identity_source === 'x' || p.forum_identity_source === 'google') {
+      return {
+        name: p.forum_display_name_cached || p.nickname || p.display_name || 'anon',
+        avatar: p.forum_avatar_url_cached || p.avatar_url,
+      };
+    }
+    return {
+      name: p.nickname || p.display_name || 'anon',
+      avatar: p.avatar_url,
+    };
+  };
+
   const renderOne = (c: Comment, isReply = false) => {
     const p = profiles[c.user_id];
     const rank = p?.rank_slug ? ranks[p.rank_slug] : ranks['newbie'];
-    const name = p?.nickname || p?.display_name || 'anon';
+    const { name, avatar } = resolveIdentity(p);
     return (
-      <div key={c.id} className={`flex gap-3 ${isReply ? 'ml-10' : ''} ${c.is_hidden ? 'opacity-50' : ''}`}>
+      <div key={c.id} id={`c-${c.id}`} className={`flex gap-3 scroll-mt-24 ${isReply ? 'ml-10' : ''} ${c.is_hidden ? 'opacity-50' : ''}`}>
         <div className="h-9 w-9 rounded-full bg-muted overflow-hidden flex-shrink-0 border border-border">
-          {p?.avatar_url ? <img src={p.avatar_url} alt={name} className="h-full w-full object-cover" /> : <div className="h-full w-full grid place-items-center text-xs">{name[0]?.toUpperCase()}</div>}
+          {avatar ? <img src={avatar} alt={name} referrerPolicy="no-referrer" className="h-full w-full object-cover" /> : <div className="h-full w-full grid place-items-center text-xs">{name[0]?.toUpperCase()}</div>}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -175,6 +217,9 @@ export function AutopsyComments({ slug }: { slug: string }) {
                 Reply
               </button>
             )}
+            <button onClick={() => shareComment(c)} className="hover:text-foreground inline-flex items-center gap-1" title="Copy link to this comment">
+              <Link2 className="h-3.5 w-3.5" /> Share
+            </button>
             {isSuperAdmin && (
               <DropdownMenu>
                 <DropdownMenuTrigger className="ml-auto"><MoreVertical className="h-3.5 w-3.5" /></DropdownMenuTrigger>
@@ -219,7 +264,23 @@ export function AutopsyComments({ slug }: { slug: string }) {
 
       <Card className="p-4 mb-4">
         {user ? (
-          replyTo ? null : (
+          myIdentitySource === null && !showIdentityPicker ? (
+            <div className="space-y-3">
+              <p className="text-sm">
+                Before your first comment, choose how you want to appear in the WTF Forum.
+              </p>
+              <Button size="sm" onClick={() => setShowIdentityPicker(true)}>Choose forum identity</Button>
+            </div>
+          ) : showIdentityPicker ? (
+            <div className="space-y-3">
+              <ForumIdentityPicker compact />
+              <Button size="sm" variant="ghost" onClick={async () => {
+                const { data } = await supabase.from('profiles').select('forum_identity_source').eq('user_id', user.id).maybeSingle();
+                setMyIdentitySource(data?.forum_identity_source ?? null);
+                if (data?.forum_identity_source) setShowIdentityPicker(false);
+              }}>Done</Button>
+            </div>
+          ) : replyTo ? null : (
             <div className="space-y-2">
               <Textarea value={body} onChange={(e) => setBody(e.target.value.slice(0, MAX))} placeholder="Share what you saw, heard, or held…" rows={4} />
               <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -230,6 +291,10 @@ export function AutopsyComments({ slug }: { slug: string }) {
                     {posting ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Posting…</> : 'Post'}
                   </Button>
                 </div>
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                Posting as <strong>{myIdentitySource ?? 'custom'}</strong> identity ·{' '}
+                <button className="underline hover:text-foreground" onClick={() => setShowIdentityPicker(true)}>switch identity</button>
               </div>
             </div>
           )
