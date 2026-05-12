@@ -87,6 +87,8 @@ export function buildDeadTokensPost(input: DeadTokenPostInput): string {
     ``,
     `🌐 ${url}`,
     ``,
+    `💬 On target or did we miss something? Got an insider tip or front-row view? WTF Happened? Comment 👉 ${url}#comments`,
+    ``,
     tags,
   ].filter((l, i, arr) => !(l === '' && arr[i - 1] === '')).join('\n');
 }
