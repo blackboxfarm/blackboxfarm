@@ -4,12 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ExternalLink, RefreshCw, Newspaper, Twitter } from 'lucide-react';
+import { ExternalLink, RefreshCw, Newspaper, Twitter, History, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AutopsyTweetComposer } from './AutopsyTweetComposer';
+import { AUTOPSIES } from '@/data/autopsies';
 
 type Report = {
   id: string;
@@ -31,6 +32,32 @@ type Report = {
 export default function PublishedAutopsies() {
   const { toast } = useToast();
   const [rows, setRows] = useState<Report[] | null>(null);
+  const [backfillBusy, setBackfillBusy] = useState<'idle' | 'dry' | 'run'>('idle');
+
+  async function backfillTrackRecords(dryRun: boolean) {
+    setBackfillBusy(dryRun ? 'dry' : 'run');
+    try {
+      const extraMints = AUTOPSIES.map((a) => a.mintAddress).filter(Boolean);
+      const { data, error } = await supabase.functions.invoke(
+        'dev-track-record-backfill-all-autopsies',
+        { body: { dryRun, staleDays: 7, extraMints } },
+      );
+      if (error) throw error;
+      const d = data as any;
+      toast({
+        title: dryRun ? 'Dry-run complete' : 'Backfill started',
+        description:
+          `${d.total_mints} mints · ${d.mints_with_dev} resolved · ` +
+          `${d.unique_devs} unique devs · ${d.already_fresh} fresh · ` +
+          `${d.to_run} ${dryRun ? 'would run' : 'queued (5s stagger)'}` +
+          (d.unresolved_mints?.length ? ` · ${d.unresolved_mints.length} mints missing creator_wallet` : ''),
+      });
+    } catch (e) {
+      toast({ title: 'Backfill failed', description: (e as Error).message, variant: 'destructive' });
+    } finally {
+      setBackfillBusy('idle');
+    }
+  }
 
   async function load() {
     const { data, error } = await supabase
@@ -59,9 +86,29 @@ export default function PublishedAutopsies() {
 
   return (
     <div className="space-y-2">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-2">
         <p className="text-xs text-muted-foreground">{rows.length} reports</p>
-        <Button variant="outline" size="sm" onClick={load}><RefreshCw className="h-3 w-3 mr-1" /> Reload</Button>
+        <div className="flex gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={backfillBusy !== 'idle'}
+            onClick={() => backfillTrackRecords(true)}
+          >
+            {backfillBusy === 'dry' ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <History className="h-3 w-3 mr-1" />}
+            Dry-run dev backfill
+          </Button>
+          <Button
+            size="sm"
+            disabled={backfillBusy !== 'idle'}
+            className="bg-gold text-gold-foreground hover:bg-gold/90"
+            onClick={() => backfillTrackRecords(false)}
+          >
+            {backfillBusy === 'run' ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <History className="h-3 w-3 mr-1" />}
+            Backfill all dev track records
+          </Button>
+          <Button variant="outline" size="sm" onClick={load}><RefreshCw className="h-3 w-3 mr-1" /> Reload</Button>
+        </div>
       </div>
       {rows.map(r => (
         <Card key={r.id} className="p-3">
