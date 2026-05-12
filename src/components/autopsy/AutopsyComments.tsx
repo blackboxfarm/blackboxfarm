@@ -248,28 +248,28 @@ export function AutopsyComments({ slug }: { slug: string }) {
   };
 
   return (
-    <section id="comments" className="mt-12 max-w-3xl mx-auto">
+    <section id="comments" className="mt-12 max-w-3xl mx-auto scroll-mt-24">
       <div className="flex items-end justify-between mb-4">
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2">
-            <MessageSquare className="h-5 w-5 text-primary" /> WTF Happened?
+            <MessageSquare className="h-5 w-5 text-gold" /> WTF Happened?
           </h2>
           <p className="text-sm text-muted-foreground">Front-row holders, weigh in. Opinions aren't facts — but they make for a good story.</p>
         </div>
         <div className="flex gap-1">
-          <Button size="sm" variant={sort === 'new' ? 'default' : 'ghost'} onClick={() => setSort('new')}>New</Button>
-          <Button size="sm" variant={sort === 'top' ? 'default' : 'ghost'} onClick={() => setSort('top')}>Top</Button>
+          <Button size="sm" className={sort === 'new' ? 'bg-gold text-gold-foreground hover:bg-gold/90' : ''} variant={sort === 'new' ? 'default' : 'ghost'} onClick={() => setSort('new')}>New</Button>
+          <Button size="sm" className={sort === 'top' ? 'bg-gold text-gold-foreground hover:bg-gold/90' : ''} variant={sort === 'top' ? 'default' : 'ghost'} onClick={() => setSort('top')}>Top</Button>
         </div>
       </div>
 
-      <Card className="p-4 mb-4">
+      <Card className="p-4 mb-4 border-gold/40 bg-gold/5">
         {user ? (
           myIdentitySource === null && !showIdentityPicker ? (
             <div className="space-y-3">
               <p className="text-sm">
                 Before your first comment, choose how you want to appear in the WTF Forum.
               </p>
-              <Button size="sm" onClick={() => setShowIdentityPicker(true)}>Choose forum identity</Button>
+              <Button size="sm" className="bg-gold text-gold-foreground hover:bg-gold/90" onClick={() => setShowIdentityPicker(true)}>Choose forum identity</Button>
             </div>
           ) : showIdentityPicker ? (
             <div className="space-y-3">
@@ -287,7 +287,7 @@ export function AutopsyComments({ slug }: { slug: string }) {
                 <Turnstile ref={tsRef} siteKey={TURNSTILE_KEY} onSuccess={setTsToken} options={{ size: 'compact' }} />
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-muted-foreground">{body.length}/{MAX}</span>
-                  <Button size="sm" onClick={post} disabled={posting || !body.trim() || !tsToken}>
+                  <Button size="sm" className="bg-gold text-gold-foreground hover:bg-gold/90" onClick={post} disabled={posting || !body.trim() || !tsToken}>
                     {posting ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Posting…</> : 'Post'}
                   </Button>
                 </div>
@@ -301,7 +301,7 @@ export function AutopsyComments({ slug }: { slug: string }) {
         ) : (
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">Sign in to share what really happened.</p>
-            <Button size="sm" asChild><Link to="/auth"><LogIn className="h-3.5 w-3.5 mr-1.5" />Sign in</Link></Button>
+            <Button size="sm" className="bg-gold text-gold-foreground hover:bg-gold/90" asChild><Link to="/auth"><LogIn className="h-3.5 w-3.5 mr-1.5" />Sign in</Link></Button>
           </div>
         )}
       </Card>
