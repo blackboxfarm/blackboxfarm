@@ -11,42 +11,19 @@ const LOVABLE_AI_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 const BUCKET = 'holders-intel-banners';
 
 /**
- * Themepack — rotates per call so the queue doesn't all look the same.
- * Each theme is a physical "artifact object" (no advertising/grade text)
- * that is dropped onto the corner of the original banner like a stamp,
- * sticker, or stage prop.
+ * HoldersIntel banner decorations — same technique as autopsy-banner-overlay
+ * (forensic transparent overlay): preserve the central artwork untouched and
+ * scatter SEVERAL semi-transparent "research artifact" props across all four
+ * corners so the result reads as a third-party re-packaging of the original.
+ * Theme just biases the dominant prop; supporting props are always present.
  */
-const THEMES: Array<{ id: string; label: string; promptFragment: string }> = [
-  {
-    id: 'report_card',
-    label: '📋 Report Card',
-    promptFragment: `Top-left corner: a small old-school cream paper "REPORT CARD" — a folded school report card prop, slightly worn at the edges, tilted ~ -5°. Show the title "REPORT CARD" only — DO NOT print any grade, score, letter, percentage, ranking, or evaluative text on it. Cast a soft physical drop-shadow underneath so it reads as a paper artifact resting on top of the banner.`,
-  },
-  {
-    id: 'magnifying_glass',
-    label: '🔍 Magnifying Glass',
-    promptFragment: `Top-left corner: a small antique brass magnifying glass laid diagonally (~ -25°) with a sliver of yellow measuring-tape unspooling beside it. Both objects cast realistic drop-shadows on the banner. No text labels of any kind on either object.`,
-  },
-  {
-    id: 'balance_scale',
-    label: '⚖️ Balance Scale',
-    promptFragment: `Top-left corner: a small antique brass balance scale prop with two empty pans, sitting upright at a slight 3D angle, casting a soft drop-shadow on the banner. No text, no labels — just the object as a physical decoration on top of the artwork.`,
-  },
-  {
-    id: 'blueprint',
-    label: '📐 Blueprint',
-    promptFragment: `Top-left corner: a small partially unrolled architect's blueprint scroll (deep blue paper with faint white grid lines) tied with a thin string, tilted ~ -4°, with a clean drop-shadow underneath. No legible text on the blueprint, just suggestion of grid lines and faint sketches.`,
-  },
-  {
-    id: 'paper_map',
-    label: '🗺️ Paper Map',
-    promptFragment: `Top-left corner: a small folded paper map partially opened, slightly creased, in muted vintage tones, tilted ~ +4°, with a clean drop-shadow. Map shows abstract roads/contours only — DO NOT print any town names, place names, or readable text.`,
-  },
-  {
-    id: 'poker',
-    label: '🃏 Poker',
-    promptFragment: `Top-left corner: a small fan of two playing cards (face down or generic backs) overlapping a stack of two or three gold-and-black poker chips, casting a clear drop-shadow on the banner. No suit faces with text, no chip denomination text — purely decorative casino objects.`,
-  },
+const THEMES: Array<{ id: string; label: string; hero: string }> = [
+  { id: 'report_card',     label: '📋 Report Card',     hero: 'a small cream paper "REPORT CARD" folded school report (title "REPORT CARD" only — NO grade, NO score, NO letter, NO percentage)' },
+  { id: 'magnifying_glass',label: '🔍 Magnifying Glass',hero: 'an antique brass magnifying glass laid diagonally with a small unspooled yellow measuring-tape beside it' },
+  { id: 'balance_scale',   label: '⚖️ Balance Scale',  hero: 'an antique brass balance scale with two empty pans at a slight 3D angle' },
+  { id: 'blueprint',       label: '📐 Blueprint',       hero: 'a partially unrolled architect\'s blueprint scroll (deep blue paper with faint white grid lines) tied with thin string' },
+  { id: 'paper_map',       label: '🗺️ Paper Map',      hero: 'a folded vintage paper map partially opened, creased, abstract roads and contours only (no readable place names)' },
+  { id: 'poker',           label: '🃏 Poker',           hero: 'a small fan of two face-down playing cards overlapping a stack of three gold-and-black poker chips' },
 ];
 
 function pickTheme(forced?: string | null): typeof THEMES[number] {
@@ -58,23 +35,18 @@ function pickTheme(forced?: string | null): typeof THEMES[number] {
 }
 
 function buildDecoratorPrompt(theme: typeof THEMES[number]): string {
-  return `EDIT this exact image — DO NOT redraw, replace, or generate the central artwork. Preserve the original token banner at full visibility and full clarity.
+  return `EDIT this exact image — DO NOT redraw, replace, or generate the central artwork. Preserve the original token banner at full visibility and full clarity. Treat this as a TRANSPARENT RESEARCH OVERLAY decorating the EDGES and CORNERS only.
 
-The decorations are PHYSICAL ARTIFACT OBJECTS placed ON TOP of the finished banner — like real props laid onto a printed poster. They MUST read as a third-party re-packaging of the original artwork, NEVER as part of the original design or as an integrated frame/border.
+ABSOLUTELY DO NOT: add any mascot/character/creature/scenery; cover, repaint, or modify the central 60% of the banner; warp, recolor, or stylise the source artwork; add a frame, border, or vignette that wraps the whole image; add ANY descriptive text — no risk labels, no "no obvious risks", no grades, no taglines, no sentences; use the words FEATURED, TRENDING, HOT, DISCOVERY, SNAPSHOT, VERIFIED, APPROVED, or any advertising phrase ANYWHERE.
 
-ABSOLUTELY DO NOT:
-- cover, repaint, or modify the central 70% of the banner
-- add or alter any mascots, characters, creatures, or scenery
-- warp, stretch, recolor, or stylise the source artwork
-- add scattered emoji, sparkles, embers, lightning, scanlines, vignettes, or any decorative border that wraps the whole image
-- add ANY descriptive text — no risk labels, no "no obvious risks", no status phrases, no grades, no taglines, no sentences
-- use the words "FEATURED", "TRENDING", "HOT", "DISCOVERY", "SNAPSHOT", "VERIFIED", "APPROVED", or any advertising phrase ANYWHERE on the image
+DO ADD as semi-transparent decorative props layered ONLY around the edges and corners (60–75% opacity, the banner shows clearly through them), each rendered with a soft physical drop-shadow so they read as real 3D objects laid on top of a printed poster — like a researcher's desk artifacts scattered over the banner:
 
-ADD only the following overlay elements, each rendered with a clear physical drop-shadow underneath so they read as 3D objects sitting on top of the banner (not as part of it):
-- ${theme.promptFragment}
-- Bottom-left corner: the second image you were given (a small circular AI avatar) placed as a small round badge ~64–96px wide, immediately followed to its right by the wordmark "@HoldersIntel" in clean white sans-serif text on a thin translucent dark pill, slightly tilted (~ +2°), with a soft drop-shadow.
+- Top-left corner (HERO PROP, ~18% of canvas wide): ${theme.hero}, tilted at a casual angle (~ -5° to +5°), with a clear drop-shadow.
+- Top-right corner: a small complementary research artifact from this set — pick ONE that is NOT the hero: a magnifying glass, a sliver of yellow measuring-tape, an antique brass balance scale, a small unrolled blueprint corner, a folded paper-map corner, or one face-down playing card. ~12% of canvas wide, tilted, drop-shadow.
+- Bottom-right corner: a second small complementary artifact from the same set (different from the top-right pick) — magnifying glass / measuring-tape / balance scale / blueprint / paper map / poker chip stack. ~12% wide, tilted, drop-shadow.
+- Bottom-left corner: the SECOND IMAGE you were given (the circular Signal AI avatar — orange/cream tones) placed as a perfectly round badge ~80px wide, immediately followed to its right by the wordmark "@HoldersIntel" in clean white sans-serif on a thin translucent dark pill (~50% opacity black). Slight tilt (~ +2°), soft drop-shadow. The avatar must visibly match the second input image — do NOT invent a different face.
 
-No other elements. No emoji decorations. No risk text. No edge sparkles. The corners outside these placed objects must remain exactly as in the source image.
+No other elements. No scattered emoji. No sparkles, embers, scanlines, lightning, or stickers. The center of the banner must remain exactly as in the source image.
 
 Final output: same dimensions as input, JPG-quality, photographic clarity preserved.`;
 }
@@ -106,7 +78,7 @@ async function callImageEdit(sourceDataUri: string, avatarDataUri: string | null
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'google/gemini-2.5-flash-image',
+      model: 'google/gemini-3-pro-image-preview',
       messages: [{ role: 'user', content }],
       modalities: ['image', 'text'],
     }),
