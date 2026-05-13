@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { assessNetworkRisk } from "../_shared/network-risk-assessment.ts";
 import { fetchDexBanner } from "../_shared/dexscreener-banner.ts";
+import { sanitizeForTwitter, sanitizeTickerForTwitter } from "../_shared/twitter-template-sanitizer.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
