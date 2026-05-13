@@ -237,8 +237,9 @@ export function ManualXPostingQueue() {
   }, [loading, rows, autoComposed, composeMissing]);
 
   const copyText = async (text: string) => {
+    const clean = sanitizeForTwitter(text);
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(clean);
       toast({ title: "Copied", description: "Tweet text copied to clipboard." });
     } catch (e: any) {
       toast({ title: "Copy failed", description: e?.message || "Clipboard blocked", variant: "destructive" });
