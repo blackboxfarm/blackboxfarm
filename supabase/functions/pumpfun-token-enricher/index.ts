@@ -1362,7 +1362,7 @@ serve(withRunLog('pumpfun-token-enricher', async (req) => {
         .from('pumpfun_watchlist')
         .select('id, token_mint, token_symbol, token_name, creator_wallet, status, holder_count, bundle_score, bonding_curve_pct, market_cap_sol, has_image, socials_count, image_url, twitter_url, telegram_url, website_url, mint_authority_revoked, freeze_authority_revoked, authority_checked_at, bundled_buy_count, bundle_checked_at, metadata')
         .eq('status', 'pending_triage')
-        .order('created_at', { ascending: true })
+        .order('created_at', { ascending: false })
         .limit(BATCH_SIZE);
         
       if (error) {
