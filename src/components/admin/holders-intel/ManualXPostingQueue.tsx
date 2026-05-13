@@ -244,6 +244,26 @@ export function ManualXPostingQueue() {
     }
   };
 
+  // Cross-origin <a download> is ignored by browsers — fetch as blob and force download.
+  const downloadFile = async (url: string, filename: string) => {
+    try {
+      const res = await fetch(url, { mode: "cors" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
+    } catch (e: any) {
+      toast({ title: "Download failed", description: e?.message || "Could not fetch image", variant: "destructive" });
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  };
+
   const markPosted = async (row: QueueRow) => {
     const url = (pastedUrl[row.id] || "").trim();
     const { data: userRes } = await supabase.auth.getUser();
