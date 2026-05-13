@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ExternalLink, RefreshCw, Newspaper, Twitter, History, Loader2 } from 'lucide-react';
+import { ExternalLink, RefreshCw, Newspaper, Twitter, History, Loader2, Stamp } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
@@ -33,6 +33,26 @@ export default function PublishedAutopsies() {
   const { toast } = useToast();
   const [rows, setRows] = useState<Report[] | null>(null);
   const [backfillBusy, setBackfillBusy] = useState<'idle' | 'dry' | 'run'>('idle');
+  const [pillBusy, setPillBusy] = useState<string | 'all' | null>(null);
+
+  async function stampPill(slug: string | 'all') {
+    setPillBusy(slug);
+    try {
+      const body = slug === 'all' ? { all_missing: true } : { slug };
+      const { data, error } = await supabase.functions.invoke('autopsy-banner-stamp-pill', { body });
+      if (error) throw error;
+      const d = data as any;
+      toast({
+        title: 'Pill stamped',
+        description: `${d.stamped}/${d.total} banner(s) updated with @Dead_Tokens pill.`,
+      });
+      await load();
+    } catch (e) {
+      toast({ title: 'Stamp failed', description: (e as Error).message, variant: 'destructive' });
+    } finally {
+      setPillBusy(null);
+    }
+  }
 
   async function backfillTrackRecords(dryRun: boolean) {
     setBackfillBusy(dryRun ? 'dry' : 'run');
@@ -108,6 +128,15 @@ export default function PublishedAutopsies() {
             Backfill all dev track records
           </Button>
           <Button variant="outline" size="sm" onClick={load}><RefreshCw className="h-3 w-3 mr-1" /> Reload</Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={pillBusy !== null}
+            onClick={() => stampPill('all')}
+          >
+            {pillBusy === 'all' ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Stamp className="h-3 w-3 mr-1" />}
+            Stamp all missing pills
+          </Button>
         </div>
       </div>
       {rows.map(r => (
@@ -130,6 +159,16 @@ export default function PublishedAutopsies() {
             <div className="flex gap-2 flex-wrap">
               <Button size="sm" variant="outline" asChild>
                 <Link to={`/autopsy/${r.slug}`} target="_blank"><ExternalLink className="h-3 w-3 mr-1" /> View</Link>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={pillBusy !== null}
+                onClick={() => stampPill(r.slug)}
+                title="Stamp @Dead_Tokens pill onto the existing banner"
+              >
+                {pillBusy === r.slug ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Stamp className="h-3 w-3 mr-1" />}
+                Stamp pill
               </Button>
               <Dialog>
                 <DialogTrigger asChild>

@@ -27,7 +27,6 @@ const corsHeaders = {
 
 const LOVABLE_AI_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 const BUCKET = 'autopsy-banners';
-const AVATAR_URL = 'https://blackbox.farm/brand/deadtokens-avatar.png';
 
 function buildOverlayPrompt(visualDesc: string, opts: { squareSource?: boolean } = {}): string {
   const desc = visualDesc?.trim() || 'the original token banner artwork';
@@ -47,7 +46,6 @@ DO ADD as semi-transparent decorative elements layered ONLY around the edges and
 - One diagonal strip of yellow POLICE LINE / DO NOT CROSS tape across ONE bottom corner only
 - A few red blood-spatter flecks around the edges
 - Bold red military stencil "BLACKBOX AUTOPSY" rotated -45°, placed in the BOTTOM-RIGHT QUADRANT only, sprayed/distressed edges
-- Bottom-center (or tucked just above the bottom edge, NOT covering center subject): a single rounded BLACK PILL button (~95% opacity, subtle red blood-drip outline). At the LEFT end of the pill, embed the SECOND provided reference image (the cracked gold/red Solana coin with "DEAD TOKENS" text in a graveyard) cropped to a clean circle, preserving its original colors and texture — do NOT redraw or restyle it, use the reference faithfully. To the right of the avatar, white bold sans-serif wordmark "@Dead_Tokens" inside the same pill. One unified pill, avatar and handle visually fused.
 
 Final output 1536×512.`;
 }
@@ -124,22 +122,21 @@ async function urlToDataUri(url: string): Promise<string> {
   return `data:${ct};base64,${b64}`;
 }
 
-async function callImageEdit(sourceDataUri: string, prompt: string, avatarDataUri?: string): Promise<string> {
+async function callImageEdit(sourceDataUri: string, prompt: string): Promise<string> {
   const apiKey = Deno.env.get('LOVABLE_API_KEY');
   if (!apiKey) throw new Error('LOVABLE_API_KEY not configured');
-  const content: any[] = [
-    { type: 'text', text: prompt },
-    { type: 'image_url', image_url: { url: sourceDataUri } },
-  ];
-  if (avatarDataUri) {
-    content.push({ type: 'image_url', image_url: { url: avatarDataUri } });
-  }
   const res = await fetch(LOVABLE_AI_URL, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'google/gemini-3-pro-image-preview',
-      messages: [{ role: 'user', content }],
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: sourceDataUri } },
+        ],
+      }],
       modalities: ['image', 'text'],
     }),
   });
@@ -226,13 +223,7 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
     // 2. Build prompt + edit
     const prompt = buildOverlayPrompt(token_visual_description || visualDesc, { squareSource: useMintImage });
     const sourceDataUri = await urlToDataUri(sourceBannerUrl);
-    let avatarDataUri: string | undefined;
-    try {
-      avatarDataUri = await urlToDataUri(AVATAR_URL);
-    } catch (e) {
-      console.warn('[autopsy-banner-overlay] avatar fetch failed, proceeding without:', (e as any)?.message);
-    }
-    const editedDataUri = await callImageEdit(sourceDataUri, prompt, avatarDataUri);
+    const editedDataUri = await callImageEdit(sourceDataUri, prompt);
 
     // 3. Upload to bucket
     const base64 = editedDataUri.replace(/^data:image\/\w+;base64,/, '');
@@ -242,7 +233,19 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
     });
     if (upErr) throw new Error(`storage upload: ${upErr.message}`);
     const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
-    const heroImageUrl = pub.publicUrl;
+    let heroImageUrl = pub.publicUrl;
+
+    // 3b. Stamp the @Dead_Tokens pill as a deterministic post-process layer.
+    // Best-effort: if the stamp fails, we keep the un-stamped banner.
+    try {
+      const { data: stampRes } = await supabase.functions.invoke('autopsy-banner-stamp-pill', {
+        body: { slug },
+      });
+      const stampedUrl = stampRes?.results?.[slug]?.url;
+      if (stampedUrl) heroImageUrl = stampedUrl;
+    } catch (e) {
+      console.warn('[autopsy-banner-overlay] stamp-pill chain failed:', (e as any)?.message);
+    }
 
     // 4. Persist to DB rows if requested
     if (report_id) {
