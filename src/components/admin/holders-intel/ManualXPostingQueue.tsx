@@ -407,10 +407,13 @@ export function ManualXPostingQueue() {
                               <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => copyText(row.dex_banner_url!)}>
                                 <Copy className="h-3 w-3 mr-1" /> Copy URL
                               </Button>
-                              <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" asChild>
-                                <a href={row.dex_banner_url} download target="_blank" rel="noopener noreferrer">
-                                  <Download className="h-3 w-3 mr-1" /> Download
-                                </a>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-[10px] px-2"
+                                onClick={() => downloadFile(row.dex_banner_url!, `${(row.symbol || 'token').toLowerCase()}-dex-banner.jpg`)}
+                              >
+                                <Download className="h-3 w-3 mr-1" /> Download
                               </Button>
                             </div>
                           </div>
@@ -427,10 +430,13 @@ export function ManualXPostingQueue() {
                               <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => copyText(row.decorated_banner_url!)}>
                                 <Copy className="h-3 w-3 mr-1" /> Copy URL
                               </Button>
-                              <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" asChild>
-                                <a href={row.decorated_banner_url} download target="_blank" rel="noopener noreferrer">
-                                  <Download className="h-3 w-3 mr-1" /> Download
-                                </a>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-[10px] px-2"
+                                onClick={() => downloadFile(row.decorated_banner_url!, `${(row.symbol || 'token').toLowerCase()}-decorated-banner.jpg`)}
+                              >
+                                <Download className="h-3 w-3 mr-1" /> Download
                               </Button>
                               <Button
                                 size="sm"
