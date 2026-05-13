@@ -8,7 +8,7 @@ const corsHeaders = {
 const PUBLIC_BASE = "https://blackbox.farm";
 
 function buildAddendum(slug: string): string {
-  return `\n\n⚰️ This coin is dead IMHO.\nFull forensic autopsy → ${PUBLIC_BASE}/autopsies/${slug}`;
+  return `\n\n⚰️ This coin is dead IMHO.\nFull forensic autopsy → ${PUBLIC_BASE}/autopsy/${slug}`;
 }
 
 Deno.serve(async (req) => {
