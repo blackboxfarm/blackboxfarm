@@ -191,11 +191,11 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
   }
 
   try {
-    const { slug, token_mint, ticker, token_visual_description, report_id, source_feed, force } =
+    let { slug, token_mint, ticker, token_visual_description, report_id, source_feed, force } =
       await req.json();
 
-    if (!slug || !token_mint) {
-      return new Response(JSON.stringify({ error: 'slug and token_mint required' }), {
+    if (!slug) {
+      return new Response(JSON.stringify({ error: 'slug required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -204,6 +204,27 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
+
+    // Backfill token_mint / source_feed / report_id from autopsy_reports if
+    // caller only supplied { slug, force: true } (e.g. holders-intel-autopsy-now).
+    if (!token_mint) {
+      const { data: rep } = await supabase
+        .from('autopsy_reports')
+        .select('id, token_mint, source_feed, ticker')
+        .eq('slug', slug)
+        .maybeSingle();
+      if (rep) {
+        token_mint = token_mint || rep.token_mint;
+        report_id = report_id || rep.id;
+        source_feed = source_feed || rep.source_feed;
+        ticker = ticker || rep.ticker;
+      }
+    }
+    if (!token_mint) {
+      return new Response(JSON.stringify({ error: 'token_mint not resolvable for slug', slug }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // ── Skip if banner already exists in storage ──
     // The treatment is deterministic per slug — never regenerate.
