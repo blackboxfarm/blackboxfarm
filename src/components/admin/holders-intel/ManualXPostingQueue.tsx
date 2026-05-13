@@ -459,7 +459,7 @@ export function ManualXPostingQueue() {
                     {hasAutopsy && (
                       <div className="flex items-center gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-2">
                         {row.autopsy_hero_image && (
-                          <a href={row.autopsy_url || `/autopsies/${row.autopsy_slug}`} target="_blank" rel="noopener noreferrer">
+                          <a href={row.autopsy_url || `/autopsy/${row.autopsy_slug}`} target="_blank" rel="noopener noreferrer">
                             <img
                               src={row.autopsy_hero_image}
                               alt="Autopsy banner"
@@ -470,11 +470,11 @@ export function ManualXPostingQueue() {
                         <div className="flex-1 min-w-0 text-xs">
                           <div className="font-medium text-destructive">Forensic autopsy</div>
                           <a
-                            href={row.autopsy_url || `/autopsies/${row.autopsy_slug}`}
+                            href={row.autopsy_url || `/autopsy/${row.autopsy_slug}`}
                             target="_blank" rel="noopener noreferrer"
                             className="underline text-primary break-all"
                           >
-                            {row.autopsy_url || `/autopsies/${row.autopsy_slug}`} ↗
+                            {row.autopsy_url || `/autopsy/${row.autopsy_slug}`} ↗
                           </a>
                         </div>
                       </div>
