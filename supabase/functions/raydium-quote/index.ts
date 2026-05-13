@@ -177,9 +177,17 @@ serve(withRunLog('raydium-quote', async (req) => {
     // Server-side price proxy (avoids CORS/network issues in browser)
     const priceMint = url.searchParams.get("priceMint");
     if (priceMint) {
-      const result = await getPriceUSD(priceMint);
-      if (result == null) return bad("Price fetch failed (all sources)", 502);
-      return ok({ priceUSD: result.price, source: result.source });
+      try {
+        const result = await getPriceUSD(priceMint);
+        if (result == null) {
+          // Return 200 with fallback signal so callers don't blank-screen on 502
+          return ok({ error: "PRICE_FETCH_FAILED", fallback: true }, 200);
+        }
+        return ok({ priceUSD: result.price, source: result.source });
+      } catch (e) {
+        console.error("[raydium-quote] price fetch threw:", e);
+        return ok({ error: "PRICE_FETCH_FAILED", fallback: true }, 200);
+      }
     }
 
     const body = (await getJson<any>(req)) ?? {};
