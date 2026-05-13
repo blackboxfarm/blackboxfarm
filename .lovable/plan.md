@@ -1,74 +1,42 @@
-## Problem
+## Goal
 
-The Dev Track Record card on the Autopsy page shows "New dev · 0 prior tokens" because it only counts tokens where `creator_wallet = 12ysZt…fbTs`. That is literally true (this wallet launched only $1SHOT), but the Mesh Bubble Map has *already* identified 4+ sibling wallets sharing the same Binance KYC root and funder cluster — and those siblings have collectively launched $MONKE, $100, $GRIMACE, $bumer, $Rudy, $CHUTTI, $uncel, $ASTROID, $PSILO, $DJT, $SHELDON, etc.
+Stop the browser from getting killed. Two suspects identified, both addressable in one pass:
 
-The autopsy never aggregates the family. Result: a dev with a clearly-traced multi-wallet history reads as a "New dev."
+1. **Duplicate Supabase auth listeners** — three independent `onAuthStateChange` subscribers (`AuthContext`, `useSecureAuth`, `useUserSecrets`) all churn on every token refresh / tab focus, plus three independent `getSession()` initializers fighting the same lock. This is exactly the kind of fan-out that wedges Chrome's IndexedDB lock and freezes the tab.
+2. **Price-fetch error paths still throwing in callers** — last turn fixed `raydium-quote` to return `200 + {fallback:true}`, but `helius-fast-price` and the FlipIt preflight chain still throw on failure inside React effects, which can blow up the page when Solana RPC hiccups.
 
-## Fix — Family-Aware Dev Track Record
+---
 
-Add a second, broader rollup that the autopsy and reputation panels can show alongside (not replacing) the direct-wallet card.
+## Part A — Auth listener consolidation (the real browser killer)
 
-### 1. New rollup: `dev-family-track-record-rollup` edge function
+**Single source of truth = `AuthContext`.**
 
-Inputs: `dev_wallet`.
+1. `src/hooks/useSecureAuth.ts` — remove its own `onAuthStateChange` + `getSession()`. Re-export `useAuth()` data and layer the "secure" behaviors (rate-limit / activity tracking) on top of context state. No second subscription.
+2. `src/hooks/useUserSecrets.ts` — drop the `onAuthStateChange` block; instead `const { user } = useAuth()` and key the effect off `user?.id`. One listener total.
+3. `src/hooks/usePasswordAuth.ts` — replace the inline `getSession()` call with `useAuth().session` (avoids competing with the AuthContext init for the storage lock on first paint).
+4. Audit pass: any other `onAuthStateChange` added later flagged in a code comment at top of `AuthContext.tsx` ("Single auth listener — do not add more").
 
-Steps:
-1. Resolve the family:
-   - Read `reputation_mesh` (or `cluster_member_wallets` / `shared_funders` view we already populate) for siblings with relationship in (`shared_funder`, `same_kyc_root`, `likely_dev_family`, `tight_cluster`).
-   - Confidence floor 60. Cap at ~25 sibling wallets to keep cost bounded.
-   - Always include the original wallet itself.
-2. Aggregate launches across the family from `developer_tokens` + `token_lifecycle_scorecard` + `dev_token_history` (whichever rows exist per wallet).
-3. Re-run the same scoring math used by `dev-track-record-rollup` (skill / intent / luck / outcome breakdown), but weighted by per-sibling confidence so a high-confidence sibling counts fully and a confidence-60 sibling counts ~0.6.
-4. Persist into a new table `dev_family_track_record_summary` (`dev_wallet` PK, family_size, family_wallets jsonb, total_tokens, by_outcome, by_cause, indices, verdict_label, ai_interpretation, best_token, last_recomputed_at).
-5. Generate AI interpretation paragraph the same way as the per-wallet rollup, but the prompt explicitly names the family lens ("This dev operates a cluster of N wallets sharing Binance KYC root…").
+Expected effect: removes the duplicate IndexedDB/localStorage lock contention on tab focus and token refresh, which is the #1 known cause of the "browser dies" symptom in this project.
 
-### 2. Backfill missing direct data first
+## Part B — Harden remaining edge-function fallbacks
 
-Before family rollup runs, make sure each sibling has its own data populated. Add a cheap pre-step that for each sibling wallet missing from `dev_token_history`/`developer_tokens`:
-- calls existing `dev-profile-full-scrape` (Helius DAS + Pump.fun) to populate `developer_tokens`
-- then `dev-token-outcome-classifier` to populate `dev_token_history`
-- 24h cooldown column to avoid re-scraping same sibling repeatedly.
+Mirror the `raydium-quote` pattern (return 200 + `{ error, fallback: true }`) on the two functions whose 5xx responses currently bubble up into FlipIt and blank the screen:
 
-### 3. Orchestrator wiring
+1. `supabase/functions/helius-fast-price/index.ts` — wrap the upstream Helius / pump.fun curve calls; on any thrown error or null result, return `200 { error: 'PRICE_FETCH_FAILED', fallback: true }` instead of 500.
+2. `supabase/functions/token-metadata/index.ts` — same treatment for the metadata lookup so the background fetch in `FlipItDashboard.tsx` (line ~1289) can never throw a 5xx into the React tree.
 
-Extend `dev-track-record-run-all` to chain a 4th step:
-```
-dev-profile-full-scrape → dev-token-outcome-classifier → dev-track-record-rollup → dev-family-track-record-rollup
-```
-Trigger the family step from the SuperAdmin "Build Dev Track Record" button and from the existing 3-hourly `insiders-pipeline-orchestrator` cron.
+Client side: add a single guard in `FlipItDashboard.tsx` `fetchInputTokenData` so any `priceData?.fallback === true` path silently moves to the next source instead of toasting.
 
-### 4. UI — `DevTrackRecordCard.tsx`
+## Part C — Verify
 
-When `dev_family_track_record_summary` exists for the wallet, render a second stacked panel directly below the existing direct-wallet card:
+1. Browser test: load `/admin` → FlipIt, paste a known-good mint, switch tabs for 30s, return. Confirm no freeze, no duplicate `/auth/v1/user` storm in network tab (currently firing ~12x per refresh based on auth logs).
+2. Force a price-source failure (bad mint) and confirm UI degrades gracefully with no blank screen.
 
-```text
-DEV TRACK RECORD                  ← existing (this wallet only)
-New dev · 0 prior tokens
+## Technical notes
 
-EXTENDED DEV-FAMILY TRACK RECORD  ← new (mesh-aggregated)
-Likely operator of 5 wallets · 23 prior tokens
-Skill 42 · Intent -18 · Luck 67
-Verdict: Meme-spammer with one hit ($1SHOT)
-AI: "This operator runs a cluster of 5 wallets all funded from the same
-Binance hot wallet. Across the cluster: 23 launches, 1 sustained hit,
-3 viral memes, 8 inexperience-fails, 0 hard rugs."
-[Show family wallets ▾]   [Show all 23 tokens ▾]
-```
+- Files touched (Part A): `src/hooks/useSecureAuth.ts`, `src/hooks/useUserSecrets.ts`, `src/hooks/usePasswordAuth.ts`, `src/contexts/AuthContext.tsx` (comment only).
+- Files touched (Part B): `supabase/functions/helius-fast-price/index.ts`, `supabase/functions/token-metadata/index.ts`, `src/components/admin/FlipItDashboard.tsx`.
+- Zero schema / RLS / DB changes.
+- No behavior change to login/logout flows — only the *number of subscribers* changes.
 
-Family wallets list uses the same sibling rendering already on the bubble map (clickable, opens that wallet's autopsy).
-
-### 5. Hook update
-
-`useDevTrackRecord` (or equivalent) fetches both summaries in one query and exposes `{ direct, family }`. Card hides the family panel cleanly when `family.total_tokens === 0` so true new devs still read as "New dev."
-
-## What this fixes
-
-- $1SHOT autopsy will read as "Operator of a 5-wallet cluster sharing Binance KYC, 23 prior launches, mostly low-effort memes, 1 sustained hit" instead of "New dev."
-- Every future autopsy where the mesh has already found a dev-family will automatically inherit a real reputation instead of a blank one.
-- No regression for genuinely-new wallets — family panel just doesn't render.
-
-## Out of scope
-
-- Changing the Mesh Bubble Map itself.
-- Re-defining what counts as "family" (we use the existing `reputation_mesh` confidence + relationship labels already produced by the Surveillance Engine).
-- Touching the banner-decorator function.
+Awaiting **Plan Approved** before touching code.
