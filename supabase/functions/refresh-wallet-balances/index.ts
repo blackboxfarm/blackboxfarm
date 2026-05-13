@@ -351,16 +351,12 @@ serve(withRunLog('refresh-wallet-balances', async (req) => {
 
         // Optionally update database if wallet_id is provided
         if (body.wallet_id && body.table) {
-          const { error: updateError } = await supabaseServiceClient
+          await assertDbWrite(supabaseServiceClient
             .from(body.table)
             .update({ sol_balance: solBalance })
-            .eq("id", body.wallet_id);
+            .eq("id", body.wallet_id), body.table, 'UPDATE wallet balance');
 
-          if (updateError) {
-            logStep("Database update failed", { error: updateError.message });
-          } else {
-            logStep("Database updated", { table: body.table });
-          }
+          logStep("Database updated", { table: body.table });
         }
 
         return new Response(JSON.stringify({ 
@@ -441,9 +437,11 @@ serve(withRunLog('refresh-wallet-balances', async (req) => {
       
       const batchPromises = batch.map(async (pubkey) => {
         try {
-          const publicKey = new PublicKey(pubkey);
-          const balance = await connection.getBalance(publicKey);
-          const solBalance = balance / 1_000_000_000; // Convert lamports to SOL
+          if (!SOLANA_ADDRESS_REGEX.test(pubkey)) {
+            throw new Error('Invalid wallet address');
+          }
+
+          const solBalance = await fetchSolBalance(rpcEndpoints, pubkey);
           
           balanceUpdates.push({
             pubkey,
@@ -473,32 +471,24 @@ serve(withRunLog('refresh-wallet-balances', async (req) => {
     for (const update of balanceUpdates) {
       try {
         // Update wallet pools
-        const { error: poolUpdateError } = await supabaseServiceClient
+        await assertDbWrite(supabaseServiceClient
           .from("wallet_pools")
           .update({ 
             sol_balance: update.balance,
             last_balance_check: update.lastUpdate 
           })
-          .eq("pubkey", update.pubkey);
+          .eq("pubkey", update.pubkey), 'wallet_pools', 'UPDATE wallet balance');
 
         // Update blackbox wallets
-        const { error: blackboxUpdateError } = await supabaseServiceClient
+        await assertDbWrite(supabaseServiceClient
           .from("blackbox_wallets")
           .update({ 
             sol_balance: update.balance,
             updated_at: update.lastUpdate 
           })
-          .eq("pubkey", update.pubkey);
+          .eq("pubkey", update.pubkey), 'blackbox_wallets', 'UPDATE wallet balance');
 
-        if (!poolUpdateError && !blackboxUpdateError) {
-          updatedCount++;
-        } else {
-          logStep("Database update failed", { 
-            pubkey: update.pubkey.slice(0, 8) + "...", 
-            poolUpdateError, 
-            blackboxUpdateError 
-          });
-        }
+        updatedCount++;
       } catch (error) {
         logStep("Database update error", { 
           pubkey: update.pubkey.slice(0, 8) + "...", 
