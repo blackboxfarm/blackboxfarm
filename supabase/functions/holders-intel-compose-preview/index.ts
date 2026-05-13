@@ -1,5 +1,4 @@
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
-import { obfuscateTicker } from "../_shared/ticker-obfuscator.ts";
 import { assessNetworkRisk } from "../_shared/network-risk-assessment.ts";
 import { fetchDexBanner } from "../_shared/dexscreener-banner.ts";
 
@@ -39,7 +38,10 @@ function formatTimestamp(): string {
 }
 
 function processTemplate(template: string, data: any): string {
-  const tickerSafe = obfuscateTicker((data.symbol || 'TOKEN').toUpperCase());
+  // X/Twitter post path: do NOT obfuscate. Twitter needs the raw ticker so
+  // $TICKER renders as a clickable cashtag and #TICKER hashtags work.
+  // (Telegram poster has its own obfuscation in holders-intel-poster.)
+  const tickerSafe = (data.symbol || 'TOKEN').toUpperCase().replace(/^\$+/, '');
   const tokenName = sanitizeUrlLikeName(data.name || data.tokenName || 'Unknown');
   const comment1 = data.timesPosted <= 1 ? ' 🆕 First call out!' : ' 💪 Steady & Strong';
   const timestamp = formatTimestamp();
