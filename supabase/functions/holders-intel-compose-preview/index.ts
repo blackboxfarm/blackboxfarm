@@ -42,12 +42,12 @@ function processTemplate(template: string, data: any): string {
   // X/Twitter post path: do NOT obfuscate. Twitter needs the raw ticker so
   // $TICKER renders as a clickable cashtag and #TICKER hashtags work.
   // (Telegram poster has its own obfuscation in holders-intel-poster.)
-  const tickerSafe = (data.symbol || 'TOKEN').toUpperCase().replace(/^\$+/, '');
+  const tickerSafe = sanitizeTickerForTwitter(data.symbol);
   const tokenName = sanitizeUrlLikeName(data.name || data.tokenName || 'Unknown');
   const comment1 = data.timesPosted <= 1 ? ' 🆕 First call out!' : ' 💪 Steady & Strong';
   const timestamp = formatTimestamp();
 
-  return template
+  const raw = template
     .replace(/\{TICKER\}/g, tickerSafe).replace(/\{ticker\}/g, tickerSafe)
     .replace(/\{NAME\}/g, tokenName).replace(/\{name\}/g, tokenName)
     .replace(/\{comment1\}/g, comment1).replace(/\{COMMENT1\}/g, comment1)
@@ -86,6 +86,10 @@ function processTemplate(template: string, data: any): string {
     .replace(/\{momentumGrade\}/g, '').replace(/\{MOMENTUM_GRADE\}/g, '')
     .replace(/\{structuralScore\}/g, '').replace(/\{STRUCTURAL_SCORE\}/g, '')
     .replace(/\{activityScore\}/g, '').replace(/\{ACTIVITY_SCORE\}/g, '');
+
+  // Final pass: strip any zero-width / invisible chars that may have been
+  // present in the original template text itself (e.g. copied from Telegram).
+  return sanitizeForTwitter(raw);
 }
 
 async function fetchActiveTemplate(supabase: any): Promise<string> {
