@@ -92,7 +92,7 @@ export function AdminNotificationsBadge() {
   const { toast } = useToast();
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [tabTotals, setTabTotals] = useState<Record<TabCategory, number>>({ signups: 0, transactions: 0, audit: 0, tickets: 0 });
+  const [tabTotals, setTabTotals] = useState<Record<TabCategory, number>>({ signups: 0, transactions: 0, audit: 0, tickets: 0, comments: 0 });
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabCategory>('signups');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -125,7 +125,7 @@ export function AdminNotificationsBadge() {
 
     // Server-side accurate totals per tab (independent of fetch limit)
     try {
-      const counts: Record<TabCategory, number> = { signups: 0, transactions: 0, audit: 0, tickets: 0 };
+      const counts: Record<TabCategory, number> = { signups: 0, transactions: 0, audit: 0, tickets: 0, comments: 0 };
       const queries: Array<Promise<any>> = [
         (supabase.from('admin_notifications' as any).select('*', { count: 'exact', head: true }).eq('is_archived', false).in('notification_type', SIGNUP_TYPES) as any),
         (supabase.from('admin_notifications' as any).select('*', { count: 'exact', head: true }).eq('is_archived', false).in('notification_type', TRANSACTION_TYPES) as any),
