@@ -1,7 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { PublicKey } from 'npm:@solana/web3.js@1.95.3';
+import { PublicKey } from 'npm:@solana/web3.js@1.87.6';
 import { resolvePrice, PriceResult } from '../_shared/price-resolver.ts';
 import { getHeliusRpcUrl, getHeliusApiKey } from '../_shared/helius-client.ts';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
