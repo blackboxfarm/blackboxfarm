@@ -31,6 +31,12 @@ const MAX_ATTEMPTS = 5;
 const BLOCK_DURATION = 15 * 60 * 1000; // 15 minutes
 const ATTEMPT_WINDOW = 5 * 60 * 1000; // 5 minutes
 
+// Module-level guard: only fire security-logger + anomaly-detector ONCE per
+// user per page load. Without this, every component mount that uses
+// useSecureAuth (and there are many) invokes two edge functions, which
+// serialized behind the storage lock made every tab take >1 minute to load.
+const _loggedSignInForUser = new Set<string>();
+
 export const useSecureAuth = () => {
   // Single source of truth: AuthContext owns the only onAuthStateChange listener.
   // Do NOT subscribe again here — duplicate listeners wedge the Supabase
@@ -74,6 +80,8 @@ export const useSecureAuth = () => {
   // to live inside our own onAuthStateChange now react to AuthContext's user.
   useEffect(() => {
     if (!user?.id) return;
+    if (_loggedSignInForUser.has(user.id)) return;
+    _loggedSignInForUser.add(user.id);
     logSecurityEvent('SIGNED_IN', {
       userId: user.id,
       timestamp: new Date().toISOString(),
