@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Star, ExternalLink, RefreshCw, Search, Copy, Zap, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 // Higher tier number = better developer (matches proven_dev_tokens scale)
 const TIER_LABELS: Record<number, { label: string; color: string }> = {
@@ -25,18 +26,23 @@ const TIER_LABELS: Record<number, { label: string; color: string }> = {
 export function AllstarRegistry() {
   const [search, setSearch] = useState('');
   const [backfilling, setBackfilling] = useState(false);
+  const [wideBackfilling, setWideBackfilling] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const backfillFromTop200 = async () => {
-    setBackfilling(true);
+  const runBackfill = async (wide: boolean) => {
+    const setter = wide ? setWideBackfilling : setBackfilling;
+    setter(true);
     try {
       const { data, error } = await supabase.functions.invoke('backfill-allstars', {
-        body: { max_resolve: 30 },
+        body: { max_resolve: 30, wide },
       });
       if (error) throw error;
       if (data?.success) {
+        const extra = wide
+          ? ` (proven: +${data.wide_proven_added || 0}, rep: +${data.wide_reputation_added || 0})`
+          : '';
         toast.success(
-          `Backfill complete: ${data.creators_resolved} creators resolved, ${data.newly_promoted} promoted, ${data.upgraded} upgraded`,
+          `Backfill complete: ${data.newly_promoted} promoted, ${data.upgraded} upgraded${extra}`,
           { duration: 8000 }
         );
         refetch();
@@ -46,7 +52,7 @@ export function AllstarRegistry() {
     } catch (err: any) {
       toast.error(`Backfill error: ${err.message}`);
     } finally {
-      setBackfilling(false);
+      setter(false);
     }
   };
 
@@ -96,16 +102,42 @@ export function AllstarRegistry() {
             Tracked Developers ({filtered.length})
           </CardTitle>
           <div className="flex items-center gap-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={backfillFromTop200} 
-              disabled={backfilling}
-              className="gap-1 border-primary/50 text-primary hover:bg-primary/10"
-            >
-              {backfilling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-              Backfill from Top 200
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => runBackfill(false)}
+                    disabled={backfilling || wideBackfilling}
+                    className="gap-1 border-primary/50 text-primary hover:bg-primary/10"
+                  >
+                    {backfilling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                    Backfill from Top 200
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  Scans token_lifecycle for tokens with current market_cap or fdv ≥ $100k and promotes their creators. Narrow universe (~200 tokens).
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => runBackfill(true)}
+                    disabled={backfilling || wideBackfilling}
+                    className="gap-1 border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/10"
+                  >
+                    {wideBackfilling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                    Wide Backfill
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  Wide universe: also pulls every dev from proven_dev_tokens (732 rows) and qualifying devs from dev_wallet_reputation (tokens_successful ≥ 1, graduated, or legitimate_builder). Expect ~480+ new promotions.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <Button 
               variant="outline" 
               size="sm" 

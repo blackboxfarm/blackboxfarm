@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
 
   const { data: targets, error } = await supabase
     .from('token_lifecycle')
-    .select('token_mint, first_seen_at, market_cap_usd')
+    .select('token_mint, first_seen_at, market_cap')
     .is('ath_alltime_usd', null)
     .order('first_seen_at', { ascending: false, nullsFirst: false })
     .limit(batchSize);
@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
     try {
       const res = await resolveAthAlltime(supabase, t.token_mint as string, {
         firstSeenAt: (t as any).first_seen_at ?? null,
-        currentMcap: (t as any).market_cap_usd ?? null,
+        currentMcap: (t as any).market_cap ?? null,
       });
       if (res.athUsd) {
         resolved++;
