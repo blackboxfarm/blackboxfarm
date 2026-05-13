@@ -1,7 +1,9 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import bs58 from 'https://esm.sh/bs58@5.0.0';
+// Note: Removed `@solana/web3.js` import — its transitive dep `rpc-websockets@9.3.9`
+// crashes the Supabase edge runtime at boot. The Metaplex PDA fallback below was
+// the only consumer; it's now disabled (Helius/Solscan/PumpFun cover all real cases).
 import { resolvePrice, PriceResult } from '../_shared/price-resolver.ts';
 import { getHeliusRpcUrl, getHeliusApiKey } from '../_shared/helius-client.ts';
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
@@ -9,7 +11,7 @@ import { fetchSolscanFreeTokenMeta } from '../_shared/solscan-free.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 enableHeliusTracking('token-metadata');
 
-const METAPLEX_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
+const METAPLEX_PROGRAM_ID_STR = 'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s';
 
 // Detect launchpad from mint address
 function detectLaunchpadFromMint(mintAddress: string): 'pump.fun' | 'bags.fm' | 'bonk.fun' | null {
@@ -184,37 +186,20 @@ async function fetchHeliusMetadata(mintAddress: string, heliusApiKey: string) {
 
 // Metaplex PDA fallback
 async function fetchMetaplexMetadata(mintAddress: string, rpcUrl: string) {
+  // Disabled: Metaplex PDA derivation required `@solana/web3.js`, whose transitive
+  // `rpc-websockets@9.3.9` dependency crashes the Supabase edge runtime at boot.
+  // Helius DAS / Solscan / Pump.fun fallbacks cover all real cases.
+  void mintAddress; void rpcUrl; void METAPLEX_PROGRAM_ID_STR;
+  return null;
+  // eslint-disable-next-line no-unreachable
   try {
-    const mintPubkey = new PublicKey(mintAddress);
-    const [metadataPDA] = await PublicKey.findProgramAddress(
-      [new TextEncoder().encode('metadata'), METAPLEX_PROGRAM_ID.toBuffer(), mintPubkey.toBuffer()],
-      METAPLEX_PROGRAM_ID
-    );
-    
-    const response = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getAccountInfo',
-        params: [metadataPDA.toBase58(), { encoding: 'base64' }]
-      })
-    });
-    
-    const data = await response.json();
-    if (!data.result?.value?.data?.[0]) return null;
-    
-    // Decode URI from account data (simplified - proper Metaplex decoding would be more complex)
+    const data: any = null;
+    if (!data?.result?.value?.data?.[0]) return null;
     const b64: string = data.result.value.data[0];
     const dataStr = atob(b64);
     const uriMatch = dataStr.match(/https?:\/\/[^\x00]+/);
-    
     if (uriMatch) {
       const uri = uriMatch[0].replace(/\x00/g, '').trim();
-      console.log('Metaplex URI found:', uri);
-      
-      // Fetch off-chain JSON
       const jsonResponse = await fetch(uri, { signal: AbortSignal.timeout(5000) });
       if (jsonResponse.ok) {
         const json = await jsonResponse.json();
