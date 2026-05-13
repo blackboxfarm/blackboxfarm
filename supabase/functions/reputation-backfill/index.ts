@@ -79,7 +79,7 @@ Deno.serve(withRunLog('reputation-backfill', async (req) => {
     const { data: wallets, error: fetchError } = await supabase
       .from('dev_wallet_reputation')
       .select('*')
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .range(offset, offset + BATCH_SIZE - 1);
 
     if (fetchError) throw fetchError;
