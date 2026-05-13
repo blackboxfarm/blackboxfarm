@@ -1,9 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 
 // Use sessionStorage instead of localStorage — clears on tab close, 
 // and validate against Supabase auth session to prevent trivial bypass
 export const usePasswordAuth = () => {
+  // Reuse AuthContext session — avoids a second getSession() racing the
+  // Supabase storage lock during initial render.
+  const { session } = useAuth();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
@@ -16,8 +20,6 @@ export const usePasswordAuth = () => {
       return;
     }
 
-    // Verify the user still has a valid Supabase session
-    const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       // No active session — clear the password auth
       sessionStorage.removeItem('passwordAuthToken');
@@ -35,7 +37,7 @@ export const usePasswordAuth = () => {
       setIsAuthenticated(false);
     }
     setIsLoading(false);
-  }, []);
+  }, [session?.user?.id]);
 
   useEffect(() => {
     validateSession();
@@ -43,7 +45,6 @@ export const usePasswordAuth = () => {
 
   const authenticate = async (password: string): Promise<boolean> => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         console.error('No active session — cannot authenticate password');
         return false;
