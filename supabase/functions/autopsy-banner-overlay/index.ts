@@ -191,7 +191,7 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
   }
 
   try {
-    const { slug, token_mint, ticker, token_visual_description, report_id, source_feed } =
+    const { slug, token_mint, ticker, token_visual_description, report_id, source_feed, force } =
       await req.json();
 
     if (!slug || !token_mint) {
@@ -208,7 +208,16 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
     // ── Skip if banner already exists in storage ──
     // The treatment is deterministic per slug — never regenerate.
     const path = `${slug}-autopsy-v2.jpg`;
+    if (force) {
+      try {
+        await supabase.storage.from(BUCKET).remove([path]);
+        console.log(`[autopsy-banner-overlay] force=true, removed existing ${path}`);
+      } catch (e) {
+        console.warn('[autopsy-banner-overlay] force remove failed:', (e as any)?.message);
+      }
+    }
     try {
+      if (force) throw new Error('skip-existence-check');
       const { data: existing } = await supabase.storage.from(BUCKET).list('', {
         search: path, limit: 1,
       });
