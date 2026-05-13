@@ -210,14 +210,21 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
     if (!token_mint) {
       const { data: rep } = await supabase
         .from('autopsy_reports')
-        .select('id, token_mint, source_feed, ticker')
+        .select('id, token_mint, ticker, candidate_id')
         .eq('slug', slug)
         .maybeSingle();
       if (rep) {
         token_mint = token_mint || rep.token_mint;
         report_id = report_id || rep.id;
-        source_feed = source_feed || rep.source_feed;
         ticker = ticker || rep.ticker;
+        if (!source_feed && rep.candidate_id) {
+          const { data: cand } = await supabase
+            .from('autopsy_candidates')
+            .select('source_feed')
+            .eq('id', rep.candidate_id)
+            .maybeSingle();
+          if (cand?.source_feed) source_feed = cand.source_feed;
+        }
       }
     }
     if (!token_mint) {
