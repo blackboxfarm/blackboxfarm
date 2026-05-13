@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 
 // Get device fingerprint if available
 const getDeviceFingerprint = async (): Promise<string | undefined> => {
@@ -32,9 +32,10 @@ const BLOCK_DURATION = 15 * 60 * 1000; // 15 minutes
 const ATTEMPT_WINDOW = 5 * 60 * 1000; // 5 minutes
 
 export const useSecureAuth = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Single source of truth: AuthContext owns the only onAuthStateChange listener.
+  // Do NOT subscribe again here — duplicate listeners wedge the Supabase
+  // storage lock on tab focus / token refresh and freeze the browser.
+  const { user, session, loading } = useAuth();
   const [rateLimitState, setRateLimitState] = useState<RateLimitState>({
     attempts: 0,
     lastAttempt: 0,
@@ -69,64 +70,21 @@ export const useSecureAuth = () => {
     }
   }, []);
 
-  // Enhanced auth state management
+  // Side-effects (security log + anomaly detection + rate-limit reset) that used
+  // to live inside our own onAuthStateChange now react to AuthContext's user.
   useEffect(() => {
-    let mounted = true;
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (!mounted) return;
-
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
-
-        // Log authentication events for audit
-        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
-          try {
-            await logSecurityEvent(event, {
-              userId: session?.user?.id,
-              timestamp: new Date().toISOString(),
-              userAgent: navigator.userAgent
-            });
-
-            // Run anomaly detection on sign-in
-            if (event === 'SIGNED_IN' && session?.user?.id) {
-              runAnomalyDetection(session.user.id).catch(err =>
-                console.error('Anomaly detection failed:', err)
-              );
-            }
-          } catch (error) {
-            console.error('Failed to log security event:', error);
-          }
-        }
-
-        // Reset rate limiting on successful sign in
-        if (event === 'SIGNED_IN') {
-          setRateLimitState({
-            attempts: 0,
-            lastAttempt: 0,
-            isBlocked: false,
-            blockUntil: 0
-          });
-          localStorage.removeItem('auth_rate_limit');
-        }
-      }
+    if (!user?.id) return;
+    logSecurityEvent('SIGNED_IN', {
+      userId: user.id,
+      timestamp: new Date().toISOString(),
+      userAgent: navigator.userAgent,
+    }).catch((err) => console.error('Failed to log security event:', err));
+    runAnomalyDetection(user.id).catch((err) =>
+      console.error('Anomaly detection failed:', err)
     );
-
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!mounted) return;
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
+    setRateLimitState({ attempts: 0, lastAttempt: 0, isBlocked: false, blockUntil: 0 });
+    localStorage.removeItem('auth_rate_limit');
+  }, [user?.id]);
 
   const updateRateLimit = useCallback((success: boolean) => {
     const now = Date.now();
