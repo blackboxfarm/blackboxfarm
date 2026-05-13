@@ -19,6 +19,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { isFunctionEnabled } from '../_shared/function-toggle.ts';
+import { Image } from 'https://deno.land/x/imagescript@1.2.17/mod.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -31,9 +32,9 @@ const BUCKET = 'autopsy-banners';
 function buildOverlayPrompt(visualDesc: string, opts: { squareSource?: boolean } = {}): string {
   const desc = visualDesc?.trim() || 'the original token banner artwork';
   const squarePreamble = opts.squareSource
-    ? `The source image is SQUARE pump.fun mint artwork. Place it CENTERED on a 1536×512 black canvas at native aspect ratio (do not stretch, do not crop, do not "extend" or invent new artwork on the sides — fill the empty side panels with solid black, then layer the autopsy props described below over those black panels). Do NOT generate any new characters, mascots, or scenes anywhere on the canvas. The mint artwork in the center MUST remain pixel-faithful to the source.\n\n`
+    ? `The source image is ALREADY a wide 1536×512 banner with the pump.fun mint artwork letterboxed centered on a black background. PRESERVE the central mint artwork pixel-faithfully (do not redraw it, do not stretch it, do not move it). Decorate the BLACK SIDE PANELS only with the autopsy props described below. Do NOT generate any new characters, mascots, or scenes over the central mint artwork.\n\n`
     : '';
-  return `${squarePreamble}EDIT this exact image — DO NOT redraw, replace, or generate the central artwork. Preserve the original banner (${desc}) at full visibility. Treat this as a TRANSPARENT FORENSIC OVERLAY decorating the EDGES and CORNERS only.
+  return `${squarePreamble}EDIT this exact image — DO NOT redraw, replace, or generate the central artwork. Preserve the original banner (${desc}) at full visibility. CRITICAL: keep the EXACT same wide 3:1 banner aspect ratio (1536×512) as the input image — do NOT crop to a square, do NOT pad, do NOT change dimensions. Output must be a wide horizontal banner identical in shape to the input. Treat this as a TRANSPARENT FORENSIC OVERLAY decorating the EDGES and CORNERS only.
 
 ABSOLUTELY DO NOT: add any blob/mascot/character/creature; cover the central 60% of the banner; replace or repaint the source banner; place the AUTOPSY stencil over the central subject.
 
@@ -47,7 +48,7 @@ DO ADD as semi-transparent decorative elements layered ONLY around the edges and
 - A few red blood-spatter flecks around the edges
 - Bold red military stencil "BLACKBOX AUTOPSY" rotated -45°, placed in the BOTTOM-RIGHT QUADRANT only, sprayed/distressed edges
 
-Final output 1536×512.`;
+Final output: identical wide 1536×512 (3:1) banner shape as the input. Never square.`;
 }
 
 async function fetchSourceBanner(
@@ -120,6 +121,37 @@ async function urlToDataUri(url: string): Promise<string> {
   }
   const b64 = btoa(bin);
   return `data:${ct};base64,${b64}`;
+}
+
+/**
+ * Pre-letterbox a square (or any) source image onto a 1536×512 black canvas.
+ * Gemini reliably preserves the INPUT aspect ratio, so giving it a 3:1 input
+ * is the only dependable way to force a 3:1 output. Without this, square
+ * pump.fun mint art = square AI output every time.
+ */
+async function letterboxTo3x1DataUri(srcUrl: string): Promise<string> {
+  const r = await fetch(srcUrl);
+  if (!r.ok) throw new Error(`fetch source banner ${r.status}`);
+  const buf = new Uint8Array(await r.arrayBuffer());
+  const src = await Image.decode(buf);
+  const TARGET_W = 1536;
+  const TARGET_H = 512;
+  // Fit source by HEIGHT (square art becomes 512×512), keep aspect.
+  const scale = TARGET_H / src.height;
+  const newW = Math.round(src.width * scale);
+  const resized = src.resize(newW, TARGET_H);
+  const canvas = new Image(TARGET_W, TARGET_H);
+  // Fill black (RGBA). 0x000000ff
+  canvas.fill(0x000000ff);
+  const offsetX = Math.round((TARGET_W - newW) / 2);
+  canvas.composite(resized, offsetX, 0);
+  const out = await canvas.encodeJPEG(92);
+  let bin = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < out.length; i += chunk) {
+    bin += String.fromCharCode(...out.subarray(i, i + chunk));
+  }
+  return `data:image/jpeg;base64,${btoa(bin)}`;
 }
 
 async function callImageEdit(sourceDataUri: string, prompt: string): Promise<string> {
@@ -222,7 +254,12 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
 
     // 2. Build prompt + edit
     const prompt = buildOverlayPrompt(token_visual_description || visualDesc, { squareSource: useMintImage });
-    const sourceDataUri = await urlToDataUri(sourceBannerUrl);
+    // For square pump.fun mint art, pre-letterbox to 1536×512 so Gemini
+    // preserves the 3:1 input ratio. For DexScreener banners (already wide),
+    // pass through unchanged.
+    const sourceDataUri = useMintImage
+      ? await letterboxTo3x1DataUri(sourceBannerUrl)
+      : await urlToDataUri(sourceBannerUrl);
     const editedDataUri = await callImageEdit(sourceDataUri, prompt);
 
     // 3. Upload to bucket
