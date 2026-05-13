@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
     const heroImage = (finalRep?.hero_image_path as string | null) ?? null;
 
-    const autopsyUrl = `${PUBLIC_BASE}/autopsies/${slug}`;
+    const autopsyUrl = `${PUBLIC_BASE}/autopsy/${slug}`;
 
     // 6. Append addendum to tweet_text (idempotent)
     const existing = (row.tweet_text as string | null) || "";
