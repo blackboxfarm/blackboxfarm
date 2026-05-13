@@ -21973,6 +21973,37 @@ export type Database = {
         }
         Relationships: []
       }
+      mv_live_death_watch: {
+        Row: {
+          ath_at: string | null
+          ath_usd: number | null
+          collapse_pct: number | null
+          creator_wallet: string | null
+          current_mcap_usd: number | null
+          current_price_usd: number | null
+          current_status: string | null
+          death_at: string | null
+          death_cause: string | null
+          death_confidence: number | null
+          dollar_wipeout: number | null
+          dust_percentage: number | null
+          first_seen_at: string | null
+          health_grade: string | null
+          health_score: number | null
+          holder_count: number | null
+          is_recent: boolean | null
+          last_seen_at: string | null
+          latest_at: string | null
+          launchpad: string | null
+          liquidity_usd: number | null
+          name: string | null
+          risk_label: string | null
+          symbol: string | null
+          token_mint: string | null
+          volume_24h: number | null
+        }
+        Relationships: []
+      }
       security_summary: {
         Row: {
           encrypted_keys: number | null
@@ -22642,6 +22673,7 @@ export type Database = {
         Returns: undefined
       }
       refresh_buyer_intent_signals: { Args: never; Returns: undefined }
+      refresh_live_death_watch: { Args: never; Returns: undefined }
       refresh_master_token_directory: { Args: never; Returns: undefined }
       refresh_mesh_summary: { Args: never; Returns: undefined }
       reset_daily_auto_buy_counts: { Args: never; Returns: undefined }
