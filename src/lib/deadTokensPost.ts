@@ -1,4 +1,4 @@
-export interface DeadTokenPostInput {
+import { sanitizeForTwitter, sanitizeTickerForTwitter } from './twitterSanitizer';
   ticker: string;
   title: string;
   mintAddress: string;
