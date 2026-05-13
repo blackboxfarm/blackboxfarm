@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 export type Secrets = {
   rpcUrl: string;
@@ -9,6 +10,8 @@ export type Secrets = {
 };
 
 export function useUserSecrets() {
+  // Consume the single AuthContext listener instead of subscribing again.
+  const { user } = useAuth();
   const [secrets, setSecrets] = useState<Secrets | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [ready, setReady] = useState(false);
@@ -16,8 +19,6 @@ export function useUserSecrets() {
   // Load secrets from Supabase with secure decryption
   const loadSecrets = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
       if (!user) {
         setSecrets(null);
         setReady(false);
@@ -53,7 +54,7 @@ export function useUserSecrets() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [user?.id]);
 
   // Save secrets with automatic encryption
   const update = useCallback(async (newSecrets: Secrets) => {
@@ -110,26 +111,16 @@ export function useUserSecrets() {
     }
   }, []);
 
-  // Load secrets on mount and auth change
+  // Reload secrets whenever the AuthContext user identity changes.
   useEffect(() => {
-    // Set up auth state listener to reload secrets when auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          loadSecrets();
-        } else if (event === 'SIGNED_OUT') {
-          setSecrets(null);
-          setReady(false);
-          setIsLoading(false);
-        }
-      }
-    );
-
-    // Load secrets initially
+    if (!user) {
+      setSecrets(null);
+      setReady(false);
+      setIsLoading(false);
+      return;
+    }
     loadSecrets();
-
-    return () => subscription.unsubscribe();
-  }, [loadSecrets]);
+  }, [user?.id, loadSecrets]);
 
   return { secrets, ready, update, reset, isLoading } as const;
 }

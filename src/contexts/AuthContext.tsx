@@ -1,3 +1,7 @@
+// SINGLE AUTH LISTENER — do not add another `supabase.auth.onAuthStateChange`
+// elsewhere in the app. Duplicate listeners contend for the Supabase storage
+// lock on tab focus / token refresh and freeze the browser. Other hooks must
+// consume `useAuth()` (or `useAuthContext()`) instead of subscribing again.
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';

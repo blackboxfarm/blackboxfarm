@@ -431,10 +431,12 @@ serve(withRunLog('helius-fast-price', async (req) => {
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: redactHeliusSecrets((err as Error).message || 'Internal server error'),
+        error: 'PRICE_FETCH_FAILED',
+        message: redactHeliusSecrets((err as Error).message || 'Internal server error'),
+        fallback: true,
         latencyMs: Date.now() - startTime
       }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 }));
