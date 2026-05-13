@@ -43,7 +43,7 @@ Deno.serve(withRunLog('social-links-backfill', async (req) => {
       .select('source_type, source_id, linked_id, relationship, confidence, evidence')
       .eq('linked_type', 'token')
       .in('source_type', ['x_account', 'telegram', 'x_community', 'website', 'discord'])
-      .order('discovered_at', { ascending: true })
+      .order('discovered_at', { ascending: false })
       .range(offset, offset + batchSize - 1);
 
     if (fetchError) throw fetchError;
