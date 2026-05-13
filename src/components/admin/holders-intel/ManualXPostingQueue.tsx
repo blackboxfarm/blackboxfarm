@@ -244,6 +244,26 @@ export function ManualXPostingQueue() {
     }
   };
 
+  // Cross-origin <a download> is ignored by browsers — fetch as blob and force download.
+  const downloadFile = async (url: string, filename: string) => {
+    try {
+      const res = await fetch(url, { mode: "cors" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
+    } catch (e: any) {
+      toast({ title: "Download failed", description: e?.message || "Could not fetch image", variant: "destructive" });
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  };
+
   const markPosted = async (row: QueueRow) => {
     const url = (pastedUrl[row.id] || "").trim();
     const { data: userRes } = await supabase.auth.getUser();
@@ -387,10 +407,13 @@ export function ManualXPostingQueue() {
                               <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => copyText(row.dex_banner_url!)}>
                                 <Copy className="h-3 w-3 mr-1" /> Copy URL
                               </Button>
-                              <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" asChild>
-                                <a href={row.dex_banner_url} download target="_blank" rel="noopener noreferrer">
-                                  <Download className="h-3 w-3 mr-1" /> Download
-                                </a>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-[10px] px-2"
+                                onClick={() => downloadFile(row.dex_banner_url!, `${(row.symbol || 'token').toLowerCase()}-dex-banner.jpg`)}
+                              >
+                                <Download className="h-3 w-3 mr-1" /> Download
                               </Button>
                             </div>
                           </div>
@@ -407,10 +430,13 @@ export function ManualXPostingQueue() {
                               <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => copyText(row.decorated_banner_url!)}>
                                 <Copy className="h-3 w-3 mr-1" /> Copy URL
                               </Button>
-                              <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" asChild>
-                                <a href={row.decorated_banner_url} download target="_blank" rel="noopener noreferrer">
-                                  <Download className="h-3 w-3 mr-1" /> Download
-                                </a>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-[10px] px-2"
+                                onClick={() => downloadFile(row.decorated_banner_url!, `${(row.symbol || 'token').toLowerCase()}-decorated-banner.jpg`)}
+                              >
+                                <Download className="h-3 w-3 mr-1" /> Download
                               </Button>
                               <Button
                                 size="sm"
