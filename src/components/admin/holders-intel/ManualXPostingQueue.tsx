@@ -456,7 +456,7 @@ export function ManualXPostingQueue() {
                       </div>
                     )}
                     <div className={`rounded-md border bg-background/50 p-3 ${hasAutopsy ? "border-destructive/40" : "border-border/50"}`}>
-                      <pre className="whitespace-pre-wrap font-mono text-sm break-words">{row.tweet_text}</pre>
+                      <pre className="whitespace-pre-wrap font-mono text-sm break-words">{sanitizeForTwitter(row.tweet_text || "")}</pre>
                     </div>
                     {hasAutopsy && (
                       <div className="flex items-center gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-2">
