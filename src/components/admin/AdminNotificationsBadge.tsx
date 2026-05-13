@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Bell, X, Check, CheckCheck, UserPlus, ArrowRightLeft, AlertTriangle, HelpCircle, ClipboardCheck, Ticket, Archive, Search } from 'lucide-react';
+import { Bell, X, Check, CheckCheck, UserPlus, ArrowRightLeft, AlertTriangle, HelpCircle, ClipboardCheck, Ticket, Archive, Search, MessageSquare } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,7 +23,21 @@ interface AdminNotification {
   created_at: string;
 }
 
-type TabCategory = 'signups' | 'transactions' | 'audit' | 'tickets';
+type TabCategory = 'signups' | 'transactions' | 'audit' | 'tickets' | 'comments';
+
+type CommentSource = 'autopsy';
+interface CommentNotif {
+  id: string;
+  source: CommentSource;
+  slug: string;          // route key (e.g. autopsy slug)
+  context_label: string; // e.g. "Autopsy"
+  body: string;
+  author: string;
+  created_at: string;
+  href: string;
+}
+
+const COMMENTS_SEEN_KEY = 'admin_comments_last_seen_at';
 
 const SIGNUP_TYPES = ['new_signup', 'user_registered', 'account_created'];
 const TRANSACTION_TYPES = ['banner_purchase', 'payment_confirmed', 'transaction', 'fantasy_buy', 'fantasy_sell', 'swap'];
@@ -82,6 +96,11 @@ export function AdminNotificationsBadge() {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabCategory>('signups');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [comments, setComments] = useState<CommentNotif[]>([]);
+  const [commentsLastSeen, setCommentsLastSeen] = useState<string>(() => {
+    try { return localStorage.getItem(COMMENTS_SEEN_KEY) || '1970-01-01T00:00:00Z'; }
+    catch { return '1970-01-01T00:00:00Z'; }
+  });
 
   const copyAuditPrompt = useCallback((notification: AdminNotification) => {
     const meta = notification.metadata ? JSON.stringify(notification.metadata, null, 2) : 'none';
@@ -124,6 +143,43 @@ export function AdminNotificationsBadge() {
     }
   }, []);
 
+  const fetchComments = useCallback(async () => {
+    try {
+      const { data, error } = await (supabase
+        .from('autopsy_comments' as any)
+        .select('id, autopsy_slug, user_id, body_clean, body, created_at, is_hidden')
+        .eq('is_hidden', false)
+        .order('created_at', { ascending: false })
+        .limit(100) as any);
+      if (error || !data) return;
+      const rows = data as Array<any>;
+      const userIds = Array.from(new Set(rows.map(r => r.user_id).filter(Boolean)));
+      let nameMap = new Map<string, string>();
+      if (userIds.length) {
+        const { data: profs } = await (supabase
+          .from('profiles' as any)
+          .select('id, display_name, username, email')
+          .in('id', userIds) as any);
+        (profs || []).forEach((p: any) => {
+          nameMap.set(p.id, p.display_name || p.username || p.email || 'User');
+        });
+      }
+      const mapped: CommentNotif[] = rows.map((r) => ({
+        id: r.id,
+        source: 'autopsy',
+        slug: r.autopsy_slug,
+        context_label: 'Autopsy',
+        body: (r.body_clean || r.body || '').slice(0, 240),
+        author: nameMap.get(r.user_id) || 'User',
+        created_at: r.created_at,
+        href: `/autopsy/${r.autopsy_slug}#comment-${r.id}`,
+      }));
+      setComments(mapped);
+    } catch (e) {
+      console.warn('[admin-notifs] fetchComments failed', e);
+    }
+  }, []);
+
   const debouncedFetch = useCallback(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(fetchNotifications, 2000);
@@ -132,6 +188,7 @@ export function AdminNotificationsBadge() {
   useEffect(() => {
     requestNotificationPermission();
     fetchNotifications();
+    fetchComments();
 
     const channel = supabase
       .channel('admin_notifications_changes')
@@ -141,13 +198,14 @@ export function AdminNotificationsBadge() {
         debouncedFetch();
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'admin_notifications' }, () => debouncedFetch())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'autopsy_comments' }, () => fetchComments())
       .subscribe();
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       supabase.removeChannel(channel);
     };
-  }, [fetchNotifications, debouncedFetch]);
+  }, [fetchNotifications, debouncedFetch, fetchComments]);
 
   const markAsRead = async (id: string) => {
     await (supabase.from('admin_notifications' as any).update({ is_read: true, read_at: new Date().toISOString() }).eq('id', id) as any);
@@ -232,8 +290,63 @@ export function AdminNotificationsBadge() {
       case 'transactions': return transactionNotifs;
       case 'tickets': return ticketNotifs;
       case 'audit': return auditNotifs;
+      case 'comments': return [];
     }
   };
+
+  const commentsUnread = comments.filter(c => c.created_at > commentsLastSeen).length;
+
+  // Mark comments as seen when user opens the tab
+  useEffect(() => {
+    if (isOpen && activeTab === 'comments' && comments.length > 0) {
+      const newest = comments[0].created_at;
+      if (newest > commentsLastSeen) {
+        try { localStorage.setItem(COMMENTS_SEEN_KEY, newest); } catch {}
+        setCommentsLastSeen(newest);
+      }
+    }
+  }, [isOpen, activeTab, comments, commentsLastSeen]);
+
+  const renderCommentsList = () => (
+    <ScrollArea className="h-[350px]">
+      {comments.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+          <MessageSquare className="h-10 w-10 mb-2 opacity-50" />
+          <p className="text-sm">No comments yet</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-border">
+          {comments.map((c) => {
+            const isUnread = c.created_at > commentsLastSeen;
+            return (
+              <a
+                key={c.id}
+                href={c.href}
+                onClick={() => setIsOpen(false)}
+                className={`block p-3 hover:bg-muted/50 transition-colors ${isUnread ? 'bg-primary/5' : ''}`}
+              >
+                <div className="flex items-start gap-2">
+                  <MessageSquare className="h-4 w-4 mt-0.5 shrink-0 text-fuchsia-400" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                      <span className="font-medium text-sm text-foreground truncate">{c.author}</span>
+                      <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                        {c.context_label} · {c.slug}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground line-clamp-2 break-words">{c.body}</p>
+                    <p className="text-xs text-muted-foreground/70 mt-1">
+                      {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
+                    </p>
+                  </div>
+                </div>
+              </a>
+            );
+          })}
+        </div>
+      )}
+    </ScrollArea>
+  );
 
   const renderNotificationList = (items: AdminNotification[], category?: TabCategory) => (
     <ScrollArea className="h-[350px]">
@@ -425,6 +538,18 @@ export function AdminNotificationsBadge() {
                 </Badge>
               )}
             </TabsTrigger>
+            <TabsTrigger
+              value="comments"
+              className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-fuchsia-500 data-[state=active]:bg-transparent py-2.5 gap-1.5"
+            >
+              <MessageSquare className="h-4 w-4 text-fuchsia-400" />
+              <span className="text-xs">Comments</span>
+              {commentsUnread > 0 && (
+                <Badge variant="secondary" className="h-5 px-1.5 text-xs bg-fuchsia-500/20 text-fuchsia-400 border-0">
+                  {commentsUnread}
+                </Badge>
+              )}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="signups" className="mt-0">
@@ -438,6 +563,9 @@ export function AdminNotificationsBadge() {
           </TabsContent>
           <TabsContent value="audit" className="mt-0">
             {renderNotificationList(auditNotifs, 'audit')}
+          </TabsContent>
+          <TabsContent value="comments" className="mt-0">
+            {renderCommentsList()}
           </TabsContent>
         </Tabs>
       </PopoverContent>
