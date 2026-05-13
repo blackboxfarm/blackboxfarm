@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Copy, ExternalLink, RefreshCw, SkipForward, Check, Wand2, Skull, Sparkles, Download, RotateCw, Trash2 } from "lucide-react";
+import { sanitizeForTwitter } from "@/lib/twitterSanitizer";
 
 interface QueueRow {
   id: string;
