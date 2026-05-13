@@ -1558,11 +1558,24 @@ serve(withRunLog('flipit-execute', async (req) => {
         const errMsg = buyErr?.message || String(buyErr);
         execLog.logFailure(errMsg);
 
-        // Delete the pending position
+        // Mark the pending position as failed so the frontend can surface the
+        // error to the user (the realtime subscription will pick it up). The
+        // row is kept for visibility; UI/cleanup handles removal.
         try {
-          await supabase.from("flip_positions").delete().eq("id", position.id);
+          const { error: updErr } = await supabase
+            .from("flip_positions")
+            .update({
+              status: "failed",
+              error_message: errMsg.slice(0, 500),
+            })
+            .eq("id", position.id);
+          if (updErr) {
+            execLog.log('MARK_FAILED_UPDATE_ERROR', { error: updErr.message });
+            // Last-resort: delete so we don't leave a stuck pending_buy row
+            await supabase.from("flip_positions").delete().eq("id", position.id);
+          }
         } catch (delErr) {
-          execLog.log('DELETE_FAILED_POSITION_ERROR', { error: String(delErr) });
+          execLog.log('MARK_FAILED_POSITION_ERROR', { error: String(delErr) });
         }
 
         return ok({ success: false, error: `Buy failed: ${errMsg}`, executionLog: execLog.getLogString() });
