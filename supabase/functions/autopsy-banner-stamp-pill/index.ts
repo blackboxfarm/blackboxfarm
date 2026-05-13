@@ -18,7 +18,7 @@ const corsHeaders = {
 };
 
 const BUCKET = 'autopsy-banners';
-const FONT_URL = 'https://cdn.jsdelivr.net/gh/google/fonts@main/apache/robotoslab/RobotoSlab%5Bwght%5D.ttf';
+const FONT_URL = 'https://github.com/googlefonts/RobotoSlab/raw/main/fonts/ttf/RobotoSlab-Bold.ttf';
 
 let cachedAvatar: Uint8Array | null = null;
 let cachedFont: Uint8Array | null = null;
