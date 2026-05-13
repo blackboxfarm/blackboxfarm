@@ -10,6 +10,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { Image, decode } from 'https://deno.land/x/imagescript@1.2.17/mod.ts';
+import { DEADTOKENS_AVATAR_B64 } from './avatar-b64.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -17,7 +18,6 @@ const corsHeaders = {
 };
 
 const BUCKET = 'autopsy-banners';
-const AVATAR_URL = 'https://blackbox.farm/brand/deadtokens-avatar.png';
 const FONT_URL = 'https://cdn.jsdelivr.net/gh/google/fonts@main/apache/robotoslab/RobotoSlab%5Bwght%5D.ttf';
 
 let cachedAvatar: Uint8Array | null = null;
@@ -25,9 +25,8 @@ let cachedFont: Uint8Array | null = null;
 
 async function getAvatar(): Promise<Uint8Array> {
   if (cachedAvatar) return cachedAvatar;
-  const r = await fetch(AVATAR_URL);
-  if (!r.ok) throw new Error(`avatar fetch ${r.status}`);
-  cachedAvatar = new Uint8Array(await r.arrayBuffer());
+  // Embedded 128x128 PNG — no network dependency, deterministic.
+  cachedAvatar = Uint8Array.from(atob(DEADTOKENS_AVATAR_B64), (c) => c.charCodeAt(0));
   return cachedAvatar;
 }
 async function getFont(): Promise<Uint8Array> {
