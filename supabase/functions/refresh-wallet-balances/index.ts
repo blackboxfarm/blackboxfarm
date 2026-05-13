@@ -1,19 +1,15 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
-import { Connection, PublicKey } from "npm:@solana/web3.js@1.95.3";
-import { TOKEN_PROGRAM_ID } from "npm:@solana/spl-token@0.4.6";
+import { createClient } from "npm:@supabase/supabase-js@2";
+import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
+import { z } from "npm:zod@3.23.8";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusRpcUrl, getHeliusApiKey } from '../_shared/helius-client.ts';
+import { assertDbWrite } from '../_shared/db-assert.ts';
 enableHeliusTracking('refresh-wallet-balances');
 
 // KILL SWITCH - Set to true to disable function
 const FUNCTION_DISABLED = false;
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
 
 interface WalletBalance {
   pubkey: string;
@@ -34,9 +30,66 @@ const logStep = (step: string, details?: any) => {
   console.log(`[WALLET-BALANCES] ${step}${detailsStr}`);
 };
 
+const SOLANA_ADDRESS_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+const BodySchema = z.object({
+  pubkey: z.string().regex(SOLANA_ADDRESS_REGEX, 'Invalid wallet address').optional(),
+  wallet_id: z.string().uuid('Invalid wallet id').optional(),
+  table: z.enum(['wallet_pools', 'blackbox_wallets']).optional(),
+}).passthrough();
+
+async function rpcFetch(rpcUrl: string, method: string, params: unknown[], timeoutMs = 8000): Promise<any> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`RPC HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (data.error) {
+      throw new Error(data.error.message || JSON.stringify(data.error));
+    }
+
+    return data;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchSolBalance(rpcEndpoints: string[], pubkey: string): Promise<number> {
+  let lastError = 'No RPC endpoints configured';
+
+  for (const rpc of rpcEndpoints) {
+    try {
+      logStep('Fetching SOL balance', { endpoint: rpc.includes('helius') ? 'helius' : rpc.slice(0, 30) });
+      const balanceData = await rpcFetch(rpc, 'getBalance', [pubkey], 8000);
+      if (balanceData.result?.value !== undefined) {
+        const solBalance = balanceData.result.value / 1_000_000_000;
+        logStep('SOL balance fetched', { solBalance });
+        return solBalance;
+      }
+      lastError = 'RPC response missing balance value';
+    } catch (rpcError) {
+      lastError = rpcError instanceof Error ? rpcError.message : String(rpcError);
+      logStep('RPC balance error', { error: lastError });
+    }
+  }
+
+  throw new Error(`All RPC balance endpoints failed: ${lastError}`);
+}
+
 serve(withRunLog('refresh-wallet-balances', async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders });
   }
 
   // KILL SWITCH - Early exit to reduce database load
@@ -56,11 +109,13 @@ serve(withRunLog('refresh-wallet-balances', async (req) => {
 
     // Use Helius if available, otherwise fallback to public RPC
     const heliusKey = getHeliusApiKey();
-    const rpcUrl = heliusKey 
-      ? getHeliusRpcUrl(heliusKey)
-      : (Deno.env.get("SOLANA_RPC_URL") || "https://api.mainnet-beta.solana.com");
-    const connection = new Connection(rpcUrl, { commitment: "confirmed" });
-    logStep("Connected to Solana RPC", { hasHelius: !!heliusKey });
+    const rpcEndpoints = heliusKey 
+      ? [getHeliusRpcUrl(heliusKey)]
+      : [
+          Deno.env.get("SOLANA_RPC_URL") || "https://api.mainnet-beta.solana.com",
+          "https://solana-mainnet.g.alchemy.com/v2/demo",
+        ];
+    logStep("Configured Solana RPC", { hasHelius: !!heliusKey, endpoints: rpcEndpoints.length });
 
     // Check if this is a single wallet refresh request
     let body: any = {};
@@ -70,6 +125,15 @@ serve(withRunLog('refresh-wallet-balances', async (req) => {
       // No body provided, proceed with bulk refresh
     }
 
+    const parsedBody = BodySchema.safeParse(body);
+    if (!parsedBody.success) {
+      return new Response(JSON.stringify({ error: parsedBody.error.flatten().fieldErrors }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    body = parsedBody.data;
+
     // Single wallet refresh mode - works with just pubkey
     if (body.pubkey) {
       logStep("Single wallet refresh", { pubkey: body.pubkey.slice(0, 8) + "..." });
@@ -78,41 +142,7 @@ serve(withRunLog('refresh-wallet-balances', async (req) => {
         let solBalance = 0;
         let tokens: TokenBalance[] = [];
 
-        // Use Helius RPC if available for better reliability
-        const rpcEndpoints = heliusKey 
-          ? [getHeliusRpcUrl(heliusKey)]
-          : [
-              "https://solana-mainnet.g.alchemy.com/v2/demo",
-              "https://api.mainnet-beta.solana.com",
-            ];
-
-        // Get SOL balance
-        for (const rpc of rpcEndpoints) {
-          try {
-            logStep("Fetching SOL balance", { endpoint: rpc.includes('helius') ? 'helius' : rpc.slice(0, 30) });
-            const balanceResponse = await fetch(rpc, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jsonrpc: '2.0',
-                id: 1,
-                method: 'getBalance',
-                params: [body.pubkey]
-              })
-            });
-            
-            if (balanceResponse.ok) {
-              const balanceData = await balanceResponse.json();
-              if (balanceData.result?.value !== undefined) {
-                solBalance = balanceData.result.value / 1_000_000_000;
-                logStep("SOL balance fetched", { solBalance });
-                break;
-              }
-            }
-          } catch (rpcError) {
-            logStep("RPC balance error", { error: String(rpcError) });
-          }
-        }
+        solBalance = await fetchSolBalance(rpcEndpoints, body.pubkey);
 
         // PRIORITY: Use Helius DAS API for most reliable token fetching
         if (heliusKey) {
@@ -321,16 +351,12 @@ serve(withRunLog('refresh-wallet-balances', async (req) => {
 
         // Optionally update database if wallet_id is provided
         if (body.wallet_id && body.table) {
-          const { error: updateError } = await supabaseServiceClient
+          await assertDbWrite(supabaseServiceClient
             .from(body.table)
             .update({ sol_balance: solBalance })
-            .eq("id", body.wallet_id);
+            .eq("id", body.wallet_id), body.table, 'UPDATE wallet balance');
 
-          if (updateError) {
-            logStep("Database update failed", { error: updateError.message });
-          } else {
-            logStep("Database updated", { table: body.table });
-          }
+          logStep("Database updated", { table: body.table });
         }
 
         return new Response(JSON.stringify({ 
@@ -411,9 +437,11 @@ serve(withRunLog('refresh-wallet-balances', async (req) => {
       
       const batchPromises = batch.map(async (pubkey) => {
         try {
-          const publicKey = new PublicKey(pubkey);
-          const balance = await connection.getBalance(publicKey);
-          const solBalance = balance / 1_000_000_000; // Convert lamports to SOL
+          if (!SOLANA_ADDRESS_REGEX.test(pubkey)) {
+            throw new Error('Invalid wallet address');
+          }
+
+          const solBalance = await fetchSolBalance(rpcEndpoints, pubkey);
           
           balanceUpdates.push({
             pubkey,
@@ -443,32 +471,24 @@ serve(withRunLog('refresh-wallet-balances', async (req) => {
     for (const update of balanceUpdates) {
       try {
         // Update wallet pools
-        const { error: poolUpdateError } = await supabaseServiceClient
+        await assertDbWrite(supabaseServiceClient
           .from("wallet_pools")
           .update({ 
             sol_balance: update.balance,
             last_balance_check: update.lastUpdate 
           })
-          .eq("pubkey", update.pubkey);
+          .eq("pubkey", update.pubkey), 'wallet_pools', 'UPDATE wallet balance');
 
         // Update blackbox wallets
-        const { error: blackboxUpdateError } = await supabaseServiceClient
+        await assertDbWrite(supabaseServiceClient
           .from("blackbox_wallets")
           .update({ 
             sol_balance: update.balance,
             updated_at: update.lastUpdate 
           })
-          .eq("pubkey", update.pubkey);
+          .eq("pubkey", update.pubkey), 'blackbox_wallets', 'UPDATE wallet balance');
 
-        if (!poolUpdateError && !blackboxUpdateError) {
-          updatedCount++;
-        } else {
-          logStep("Database update failed", { 
-            pubkey: update.pubkey.slice(0, 8) + "...", 
-            poolUpdateError, 
-            blackboxUpdateError 
-          });
-        }
+        updatedCount++;
       } catch (error) {
         logStep("Database update error", { 
           pubkey: update.pubkey.slice(0, 8) + "...", 
