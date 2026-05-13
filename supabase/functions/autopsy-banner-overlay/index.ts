@@ -19,6 +19,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { isFunctionEnabled } from '../_shared/function-toggle.ts';
+import { Image } from 'https://deno.land/x/imagescript@1.2.17/mod.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -31,9 +32,9 @@ const BUCKET = 'autopsy-banners';
 function buildOverlayPrompt(visualDesc: string, opts: { squareSource?: boolean } = {}): string {
   const desc = visualDesc?.trim() || 'the original token banner artwork';
   const squarePreamble = opts.squareSource
-    ? `The source image is SQUARE pump.fun mint artwork. Place it CENTERED on a 1536×512 black canvas at native aspect ratio (do not stretch, do not crop, do not "extend" or invent new artwork on the sides — fill the empty side panels with solid black, then layer the autopsy props described below over those black panels). Do NOT generate any new characters, mascots, or scenes anywhere on the canvas. The mint artwork in the center MUST remain pixel-faithful to the source.\n\n`
+    ? `The source image is ALREADY a wide 1536×512 banner with the pump.fun mint artwork letterboxed centered on a black background. PRESERVE the central mint artwork pixel-faithfully (do not redraw it, do not stretch it, do not move it). Decorate the BLACK SIDE PANELS only with the autopsy props described below. Do NOT generate any new characters, mascots, or scenes over the central mint artwork.\n\n`
     : '';
-  return `${squarePreamble}EDIT this exact image — DO NOT redraw, replace, or generate the central artwork. Preserve the original banner (${desc}) at full visibility. Treat this as a TRANSPARENT FORENSIC OVERLAY decorating the EDGES and CORNERS only.
+  return `${squarePreamble}EDIT this exact image — DO NOT redraw, replace, or generate the central artwork. Preserve the original banner (${desc}) at full visibility. CRITICAL: keep the EXACT same wide 3:1 banner aspect ratio (1536×512) as the input image — do NOT crop to a square, do NOT pad, do NOT change dimensions. Output must be a wide horizontal banner identical in shape to the input. Treat this as a TRANSPARENT FORENSIC OVERLAY decorating the EDGES and CORNERS only.
 
 ABSOLUTELY DO NOT: add any blob/mascot/character/creature; cover the central 60% of the banner; replace or repaint the source banner; place the AUTOPSY stencil over the central subject.
 
@@ -47,7 +48,7 @@ DO ADD as semi-transparent decorative elements layered ONLY around the edges and
 - A few red blood-spatter flecks around the edges
 - Bold red military stencil "BLACKBOX AUTOPSY" rotated -45°, placed in the BOTTOM-RIGHT QUADRANT only, sprayed/distressed edges
 
-Final output 1536×512.`;
+Final output: identical wide 1536×512 (3:1) banner shape as the input. Never square.`;
 }
 
 async function fetchSourceBanner(
@@ -122,6 +123,47 @@ async function urlToDataUri(url: string): Promise<string> {
   return `data:${ct};base64,${b64}`;
 }
 
+/**
+ * Pre-letterbox the source onto a 1536×512 black canvas IF it isn't already
+ * a wide banner (>= 2.4:1). Gemini reliably preserves the INPUT aspect ratio,
+ * so giving it a 3:1 input is the only dependable way to force a 3:1 output.
+ * Without this, square mint art = square AI output every time.
+ * Returns { dataUri, wasLetterboxed }.
+ */
+async function loadAndMaybeLetterbox(srcUrl: string): Promise<{ dataUri: string; wasLetterboxed: boolean }> {
+  const r = await fetch(srcUrl);
+  if (!r.ok) throw new Error(`fetch source banner ${r.status}`);
+  const buf = new Uint8Array(await r.arrayBuffer());
+  const src = await Image.decode(buf);
+  const aspect = src.width / src.height;
+  // Already a wide banner? Pass through original bytes (preserves quality).
+  if (aspect >= 2.4) {
+    const ct = r.headers.get('content-type') || 'image/jpeg';
+    let bin = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < buf.length; i += chunk) {
+      bin += String.fromCharCode(...buf.subarray(i, i + chunk));
+    }
+    return { dataUri: `data:${ct};base64,${btoa(bin)}`, wasLetterboxed: false };
+  }
+  const TARGET_W = 1536;
+  const TARGET_H = 512;
+  const scale = TARGET_H / src.height;
+  const newW = Math.round(src.width * scale);
+  const resized = src.resize(newW, TARGET_H);
+  const canvas = new Image(TARGET_W, TARGET_H);
+  canvas.fill(0x000000ff);
+  const offsetX = Math.round((TARGET_W - newW) / 2);
+  canvas.composite(resized, offsetX, 0);
+  const out = await canvas.encodeJPEG(92);
+  let bin = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < out.length; i += chunk) {
+    bin += String.fromCharCode(...out.subarray(i, i + chunk));
+  }
+  return { dataUri: `data:image/jpeg;base64,${btoa(bin)}`, wasLetterboxed: true };
+}
+
 async function callImageEdit(sourceDataUri: string, prompt: string): Promise<string> {
   const apiKey = Deno.env.get('LOVABLE_API_KEY');
   if (!apiKey) throw new Error('LOVABLE_API_KEY not configured');
@@ -159,11 +201,11 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
   }
 
   try {
-    const { slug, token_mint, ticker, token_visual_description, report_id, source_feed } =
+    let { slug, token_mint, ticker, token_visual_description, report_id, source_feed, force } =
       await req.json();
 
-    if (!slug || !token_mint) {
-      return new Response(JSON.stringify({ error: 'slug and token_mint required' }), {
+    if (!slug) {
+      return new Response(JSON.stringify({ error: 'slug required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -173,10 +215,47 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
+    // Backfill token_mint / source_feed / report_id from autopsy_reports if
+    // caller only supplied { slug, force: true } (e.g. holders-intel-autopsy-now).
+    if (!token_mint) {
+      const { data: rep } = await supabase
+        .from('autopsy_reports')
+        .select('id, token_mint, ticker, candidate_id')
+        .eq('slug', slug)
+        .maybeSingle();
+      if (rep) {
+        token_mint = token_mint || rep.token_mint;
+        report_id = report_id || rep.id;
+        ticker = ticker || rep.ticker;
+        if (!source_feed && rep.candidate_id) {
+          const { data: cand } = await supabase
+            .from('autopsy_candidates')
+            .select('source_feed')
+            .eq('id', rep.candidate_id)
+            .maybeSingle();
+          if (cand?.source_feed) source_feed = cand.source_feed;
+        }
+      }
+    }
+    if (!token_mint) {
+      return new Response(JSON.stringify({ error: 'token_mint not resolvable for slug', slug }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // ── Skip if banner already exists in storage ──
     // The treatment is deterministic per slug — never regenerate.
     const path = `${slug}-autopsy-v2.jpg`;
+    if (force) {
+      try {
+        await supabase.storage.from(BUCKET).remove([path]);
+        console.log(`[autopsy-banner-overlay] force=true, removed existing ${path}`);
+      } catch (e) {
+        console.warn('[autopsy-banner-overlay] force remove failed:', (e as any)?.message);
+      }
+    }
     try {
+      if (force) throw new Error('skip-existence-check');
       const { data: existing } = await supabase.storage.from(BUCKET).list('', {
         search: path, limit: 1,
       });
@@ -220,9 +299,13 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
     }
     console.log(`[autopsy-banner-overlay] source banner for ${ticker || token_mint}: ${sourceBannerUrl}`);
 
-    // 2. Build prompt + edit
-    const prompt = buildOverlayPrompt(token_visual_description || visualDesc, { squareSource: useMintImage });
-    const sourceDataUri = await urlToDataUri(sourceBannerUrl);
+    // 2. Always inspect source aspect ratio. If it's not already wide (>=2.4:1)
+    // we pre-letterbox onto 1536×512 black canvas so Gemini preserves the 3:1
+    // shape. DexScreener sometimes returns square crops (e.g. SP token), so
+    // checking source_feed alone isn't enough.
+    const { dataUri: sourceDataUri, wasLetterboxed } = await loadAndMaybeLetterbox(sourceBannerUrl);
+    console.log(`[autopsy-banner-overlay] source letterboxed=${wasLetterboxed}`);
+    const prompt = buildOverlayPrompt(token_visual_description || visualDesc, { squareSource: wasLetterboxed });
     const editedDataUri = await callImageEdit(sourceDataUri, prompt);
 
     // 3. Upload to bucket
