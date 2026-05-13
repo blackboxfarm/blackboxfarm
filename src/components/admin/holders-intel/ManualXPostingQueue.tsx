@@ -484,6 +484,15 @@ export function ManualXPostingQueue() {
                         {charCount} chars (Premium · long-form OK)
                       </span>
                       <div className="flex gap-2">
+                        <Button size="sm" variant="outline" asChild title="Open DexScreener page in new tab to verify life status">
+                          <a
+                            href={`https://dexscreener.com/solana/${row.token_mint}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <ExternalLink className="h-4 w-4 mr-1" /> DexScreener
+                          </a>
+                        </Button>
                         <Button
                           size="sm"
                           variant="outline"
