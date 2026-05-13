@@ -138,4 +138,92 @@ function rebrandJpeg(src: Uint8Array, fields: ExifFields, copyrightLines: string
 
 const PNG_SIG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
-let CRC_
+let CRC_TABLE: Uint32Array | null = null;
+function crc32(bytes: Uint8Array): number {
+  if (!CRC_TABLE) {
+    CRC_TABLE = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      CRC_TABLE[n] = c >>> 0;
+    }
+  }
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) {
+    crc = (CRC_TABLE[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8)) >>> 0;
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function buildTextChunk(keyword: string, text: string): Uint8Array {
+  const enc = new TextEncoder();
+  const kw = enc.encode(keyword);
+  const txt = enc.encode(text);
+  const data = new Uint8Array(kw.length + 1 + txt.length);
+  data.set(kw, 0); data[kw.length] = 0; data.set(txt, kw.length + 1);
+  const type = enc.encode("tEXt");
+  const chunk = new Uint8Array(4 + 4 + data.length + 4);
+  const len = data.length;
+  chunk[0] = (len >>> 24) & 0xff; chunk[1] = (len >>> 16) & 0xff;
+  chunk[2] = (len >>> 8) & 0xff; chunk[3] = len & 0xff;
+  chunk.set(type, 4); chunk.set(data, 8);
+  const crcInput = new Uint8Array(type.length + data.length);
+  crcInput.set(type, 0); crcInput.set(data, type.length);
+  const crc = crc32(crcInput);
+  const off = 8 + data.length;
+  chunk[off] = (crc >>> 24) & 0xff; chunk[off+1] = (crc >>> 16) & 0xff;
+  chunk[off+2] = (crc >>> 8) & 0xff; chunk[off+3] = crc & 0xff;
+  return chunk;
+}
+
+function rebrandPng(src: Uint8Array, fields: ExifFields, copyrightLines: string[]): Uint8Array {
+  for (let i = 0; i < 8; i++) if (src[i] !== PNG_SIG[i]) return src;
+  const out: number[] = [];
+  for (let i = 0; i < 8; i++) out.push(src[i]);
+  let pos = 8;
+  let injected = false;
+  while (pos + 8 <= src.length) {
+    const len = (src[pos]<<24)|(src[pos+1]<<16)|(src[pos+2]<<8)|src[pos+3];
+    const type = String.fromCharCode(src[pos+4],src[pos+5],src[pos+6],src[pos+7]);
+    const total = 12 + len;
+    const strip = type === "tEXt" || type === "iTXt" || type === "zTXt" || type === "eXIf";
+    if (!strip) {
+      for (let j = pos; j < pos + total && j < src.length; j++) out.push(src[j]);
+    }
+    if (!injected && type === "IHDR") {
+      const entries: Array<[string, string]> = [
+        ["Title", fields.xpTitle || "BlackBox Farm Intelligence"],
+        ["Author", fields.artist || "BlackBox Farm"],
+        ["Copyright", fields.copyright || `Copyright (c) ${new Date().getFullYear()} BlackBox Farm. All rights reserved.`],
+        ["Source", "https://blackbox.farm"],
+        ["Software", fields.software || "BlackBox Farm Intelligence Platform"],
+        ["Comment", copyrightLines.join(" | ")],
+      ];
+      if (fields.xpKeywords) entries.push(["Keywords", fields.xpKeywords]);
+      if (fields.xpSubject) entries.push(["Description", fields.xpSubject]);
+      for (const [k, v] of entries) {
+        const c = buildTextChunk(k, v);
+        for (let j = 0; j < c.length; j++) out.push(c[j]);
+      }
+      injected = true;
+    }
+    pos += total;
+  }
+  return new Uint8Array(out);
+}
+
+/**
+ * Strip metadata + inject branded EXIF/text fields. Returns rebranded bytes
+ * and resolved MIME. Falls back to original bytes for unsupported formats.
+ */
+export function rebrandImage(
+  bytes: Uint8Array,
+  mime: string,
+  opts: RebrandOptions,
+): { bytes: Uint8Array; mime: string } {
+  const isJpg = mime.includes("jpeg") || mime.includes("jpg") || (bytes[0] === 0xff && bytes[1] === 0xd8);
+  const isPng = mime.includes("png") || (bytes[0] === 0x89 && bytes[1] === 0x50);
+  if (isJpg) return { bytes: rebrandJpeg(bytes, opts.fields, opts.copyrightLines), mime: "image/jpeg" };
+  if (isPng) return { bytes: rebrandPng(bytes, opts.fields, opts.copyrightLines), mime: "image/png" };
+  return { bytes, mime: mime || "application/octet-stream" };
+}
