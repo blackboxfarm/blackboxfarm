@@ -89,7 +89,7 @@ async function fetchSolBalance(rpcEndpoints: string[], pubkey: string): Promise<
 
 serve(withRunLog('refresh-wallet-balances', async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders });
   }
 
   // KILL SWITCH - Early exit to reduce database load
@@ -109,11 +109,13 @@ serve(withRunLog('refresh-wallet-balances', async (req) => {
 
     // Use Helius if available, otherwise fallback to public RPC
     const heliusKey = getHeliusApiKey();
-    const rpcUrl = heliusKey 
-      ? getHeliusRpcUrl(heliusKey)
-      : (Deno.env.get("SOLANA_RPC_URL") || "https://api.mainnet-beta.solana.com");
-    const connection = new Connection(rpcUrl, { commitment: "confirmed" });
-    logStep("Connected to Solana RPC", { hasHelius: !!heliusKey });
+    const rpcEndpoints = heliusKey 
+      ? [getHeliusRpcUrl(heliusKey)]
+      : [
+          Deno.env.get("SOLANA_RPC_URL") || "https://api.mainnet-beta.solana.com",
+          "https://solana-mainnet.g.alchemy.com/v2/demo",
+        ];
+    logStep("Configured Solana RPC", { hasHelius: !!heliusKey, endpoints: rpcEndpoints.length });
 
     // Check if this is a single wallet refresh request
     let body: any = {};
@@ -123,6 +125,15 @@ serve(withRunLog('refresh-wallet-balances', async (req) => {
       // No body provided, proceed with bulk refresh
     }
 
+    const parsedBody = BodySchema.safeParse(body);
+    if (!parsedBody.success) {
+      return new Response(JSON.stringify({ error: parsedBody.error.flatten().fieldErrors }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    body = parsedBody.data;
+
     // Single wallet refresh mode - works with just pubkey
     if (body.pubkey) {
       logStep("Single wallet refresh", { pubkey: body.pubkey.slice(0, 8) + "..." });
@@ -131,41 +142,7 @@ serve(withRunLog('refresh-wallet-balances', async (req) => {
         let solBalance = 0;
         let tokens: TokenBalance[] = [];
 
-        // Use Helius RPC if available for better reliability
-        const rpcEndpoints = heliusKey 
-          ? [getHeliusRpcUrl(heliusKey)]
-          : [
-              "https://solana-mainnet.g.alchemy.com/v2/demo",
-              "https://api.mainnet-beta.solana.com",
-            ];
-
-        // Get SOL balance
-        for (const rpc of rpcEndpoints) {
-          try {
-            logStep("Fetching SOL balance", { endpoint: rpc.includes('helius') ? 'helius' : rpc.slice(0, 30) });
-            const balanceResponse = await fetch(rpc, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jsonrpc: '2.0',
-                id: 1,
-                method: 'getBalance',
-                params: [body.pubkey]
-              })
-            });
-            
-            if (balanceResponse.ok) {
-              const balanceData = await balanceResponse.json();
-              if (balanceData.result?.value !== undefined) {
-                solBalance = balanceData.result.value / 1_000_000_000;
-                logStep("SOL balance fetched", { solBalance });
-                break;
-              }
-            }
-          } catch (rpcError) {
-            logStep("RPC balance error", { error: String(rpcError) });
-          }
-        }
+        solBalance = await fetchSolBalance(rpcEndpoints, body.pubkey);
 
         // PRIORITY: Use Helius DAS API for most reliable token fetching
         if (heliusKey) {
