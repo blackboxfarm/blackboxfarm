@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Copy, ExternalLink, RefreshCw, SkipForward, Check, Wand2, Skull, Sparkles, Download, RotateCw, Trash2 } from "lucide-react";
+import { sanitizeForTwitter } from "@/lib/twitterSanitizer";
 
 interface QueueRow {
   id: string;
@@ -236,8 +237,9 @@ export function ManualXPostingQueue() {
   }, [loading, rows, autoComposed, composeMissing]);
 
   const copyText = async (text: string) => {
+    const clean = sanitizeForTwitter(text);
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(clean);
       toast({ title: "Copied", description: "Tweet text copied to clipboard." });
     } catch (e: any) {
       toast({ title: "Copy failed", description: e?.message || "Clipboard blocked", variant: "destructive" });
@@ -454,7 +456,7 @@ export function ManualXPostingQueue() {
                       </div>
                     )}
                     <div className={`rounded-md border bg-background/50 p-3 ${hasAutopsy ? "border-destructive/40" : "border-border/50"}`}>
-                      <pre className="whitespace-pre-wrap font-mono text-sm break-words">{row.tweet_text}</pre>
+                      <pre className="whitespace-pre-wrap font-mono text-sm break-words">{sanitizeForTwitter(row.tweet_text || "")}</pre>
                     </div>
                     {hasAutopsy && (
                       <div className="flex items-center gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-2">

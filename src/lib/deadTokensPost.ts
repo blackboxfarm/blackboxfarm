@@ -1,3 +1,5 @@
+import { sanitizeForTwitter, sanitizeTickerForTwitter } from './twitterSanitizer';
+
 export interface DeadTokenPostInput {
   ticker: string;
   title: string;
@@ -26,7 +28,7 @@ const VERDICT_BY_CAUSE: Record<string, string> = {
   failed_launch: 'FAILED LAUNCH',
   hype_decay: 'HYPE DIED — ORGANIC FLATLINE',
   community_burnout: 'COMMUNITY BURNOUT',
-  organic_death: 'RAN ITS CYCLE — ORGANIC DEATH',
+  organic_death: "RAN ITS CYCLE — ORGANIC DEATH",
 };
 
 const HASHTAGS_BY_INTENT: Record<string, string[]> = {
@@ -56,7 +58,7 @@ function extractTitleTag(title: string, ticker: string): string {
 }
 
 export function buildDeadTokensPost(input: DeadTokenPostInput): string {
-  const ticker = (input.ticker || 'TOKEN').replace(/^\$/, '').toUpperCase();
+  const ticker = sanitizeTickerForTwitter(input.ticker);
   const titleTag = extractTitleTag(input.title, ticker);
   const verdictLine =
     (input.deathCause && VERDICT_BY_CAUSE[input.deathCause]) ||
@@ -71,7 +73,7 @@ export function buildDeadTokensPost(input: DeadTokenPostInput): string {
     .concat(['@blackbox_farm'])
     .join(' ');
 
-  return [
+  const raw = [
     `☠️ DEADTOKEN : BlackBox Autopsy 🪦`,
     `🩸 $${ticker} '${titleTag}'`,
     input.mintAddress,
@@ -91,6 +93,8 @@ export function buildDeadTokensPost(input: DeadTokenPostInput): string {
     ``,
     tags,
   ].filter((l, i, arr) => !(l === '' && arr[i - 1] === '')).join('\n');
+
+  return sanitizeForTwitter(raw);
 }
 
 export const DEAD_TOKENS_HANDLE = '@DeadTokens83517';
