@@ -462,7 +462,33 @@ export function FlipItDashboard() {
         { event: '*', schema: 'public', table: 'flip_positions' },
         (payload) => {
           console.log('[FlipIt] Position changed (realtime):', payload.eventType);
-          
+
+          // Surface background buy failures (fastReturn path marks the row
+          // status='failed' with an error_message instead of returning sync).
+          try {
+            if (payload.eventType === 'UPDATE') {
+              const newRow: any = (payload as any).new;
+              const oldRow: any = (payload as any).old;
+              if (
+                newRow?.status === 'failed' &&
+                oldRow?.status !== 'failed'
+              ) {
+                const reason = newRow.error_message || 'Unknown error';
+                toast.error(`Buy failed: ${reason}`, { duration: 10000 });
+                // Clean the failed row out of view shortly after
+                setTimeout(() => {
+                  supabase
+                    .from('flip_positions')
+                    .delete()
+                    .eq('id', newRow.id)
+                    .then(() => loadPositions({ silent: true }));
+                }, 2000);
+              }
+            }
+          } catch (e) {
+            console.error('[FlipIt] failed-row toast handler error', e);
+          }
+
           // Debounce: wait 2 seconds before reloading to batch multiple rapid changes
           if (realtimeDebounceRef.current) {
             clearTimeout(realtimeDebounceRef.current);
