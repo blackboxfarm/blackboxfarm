@@ -124,24 +124,34 @@ async function urlToDataUri(url: string): Promise<string> {
 }
 
 /**
- * Pre-letterbox a square (or any) source image onto a 1536×512 black canvas.
- * Gemini reliably preserves the INPUT aspect ratio, so giving it a 3:1 input
- * is the only dependable way to force a 3:1 output. Without this, square
- * pump.fun mint art = square AI output every time.
+ * Pre-letterbox the source onto a 1536×512 black canvas IF it isn't already
+ * a wide banner (>= 2.4:1). Gemini reliably preserves the INPUT aspect ratio,
+ * so giving it a 3:1 input is the only dependable way to force a 3:1 output.
+ * Without this, square mint art = square AI output every time.
+ * Returns { dataUri, wasLetterboxed }.
  */
-async function letterboxTo3x1DataUri(srcUrl: string): Promise<string> {
+async function loadAndMaybeLetterbox(srcUrl: string): Promise<{ dataUri: string; wasLetterboxed: boolean }> {
   const r = await fetch(srcUrl);
   if (!r.ok) throw new Error(`fetch source banner ${r.status}`);
   const buf = new Uint8Array(await r.arrayBuffer());
   const src = await Image.decode(buf);
+  const aspect = src.width / src.height;
+  // Already a wide banner? Pass through original bytes (preserves quality).
+  if (aspect >= 2.4) {
+    const ct = r.headers.get('content-type') || 'image/jpeg';
+    let bin = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < buf.length; i += chunk) {
+      bin += String.fromCharCode(...buf.subarray(i, i + chunk));
+    }
+    return { dataUri: `data:${ct};base64,${btoa(bin)}`, wasLetterboxed: false };
+  }
   const TARGET_W = 1536;
   const TARGET_H = 512;
-  // Fit source by HEIGHT (square art becomes 512×512), keep aspect.
   const scale = TARGET_H / src.height;
   const newW = Math.round(src.width * scale);
   const resized = src.resize(newW, TARGET_H);
   const canvas = new Image(TARGET_W, TARGET_H);
-  // Fill black (RGBA). 0x000000ff
   canvas.fill(0x000000ff);
   const offsetX = Math.round((TARGET_W - newW) / 2);
   canvas.composite(resized, offsetX, 0);
@@ -151,7 +161,7 @@ async function letterboxTo3x1DataUri(srcUrl: string): Promise<string> {
   for (let i = 0; i < out.length; i += chunk) {
     bin += String.fromCharCode(...out.subarray(i, i + chunk));
   }
-  return `data:image/jpeg;base64,${btoa(bin)}`;
+  return { dataUri: `data:image/jpeg;base64,${btoa(bin)}`, wasLetterboxed: true };
 }
 
 async function callImageEdit(sourceDataUri: string, prompt: string): Promise<string> {
@@ -289,14 +299,13 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
     }
     console.log(`[autopsy-banner-overlay] source banner for ${ticker || token_mint}: ${sourceBannerUrl}`);
 
-    // 2. Build prompt + edit
-    const prompt = buildOverlayPrompt(token_visual_description || visualDesc, { squareSource: useMintImage });
-    // For square pump.fun mint art, pre-letterbox to 1536×512 so Gemini
-    // preserves the 3:1 input ratio. For DexScreener banners (already wide),
-    // pass through unchanged.
-    const sourceDataUri = useMintImage
-      ? await letterboxTo3x1DataUri(sourceBannerUrl)
-      : await urlToDataUri(sourceBannerUrl);
+    // 2. Always inspect source aspect ratio. If it's not already wide (>=2.4:1)
+    // we pre-letterbox onto 1536×512 black canvas so Gemini preserves the 3:1
+    // shape. DexScreener sometimes returns square crops (e.g. SP token), so
+    // checking source_feed alone isn't enough.
+    const { dataUri: sourceDataUri, wasLetterboxed } = await loadAndMaybeLetterbox(sourceBannerUrl);
+    console.log(`[autopsy-banner-overlay] source letterboxed=${wasLetterboxed}`);
+    const prompt = buildOverlayPrompt(token_visual_description || visualDesc, { squareSource: wasLetterboxed });
     const editedDataUri = await callImageEdit(sourceDataUri, prompt);
 
     // 3. Upload to bucket
