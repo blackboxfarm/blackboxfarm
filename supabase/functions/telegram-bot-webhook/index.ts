@@ -3,6 +3,8 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { Keypair } from 'npm:@solana/web3.js@1.95.3';
 import * as bs58 from 'https://esm.sh/bs58@5.0.0';
 import { sanitizeTelegramInput, isInputSafeToProcess } from '../_shared/telegram-input-sanitizer.ts';
+import { xHandleReverseLookup, formatXLookupForTelegram } from '../_shared/x-handle-reverse-lookup.ts';
+import { obfuscateTicker } from '../_shared/ticker-obfuscator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,7 +13,7 @@ const corsHeaders = {
 
 interface TelegramUpdate {
   message?: {
-    chat: { id: number };
+    chat: { id: number; type?: string };
     from?: { id: number; username?: string; first_name?: string };
     text?: string;
   };
