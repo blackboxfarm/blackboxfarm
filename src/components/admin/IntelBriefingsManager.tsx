@@ -253,6 +253,9 @@ function IntelBriefingsArticlesManager() {
   const [showCrop, setShowCrop] = useState(false);
   const [showImageManager, setShowImageManager] = useState(false);
   const [rebrandingId, setRebrandingId] = useState<string | null>(null);
+  const [regeneratingSocialId, setRegeneratingSocialId] = useState<string | null>(null);
+  // Remember the hero URL the editor opened with, so we can detect a change on save
+  const originalHeroRef = useRef<string>('');
 
   const rebrandImages = async (b: Briefing) => {
     setRebrandingId(b.id);
@@ -268,6 +271,42 @@ function IntelBriefingsArticlesManager() {
       toast({ title: 'Rebrand failed', description: e.message, variant: 'destructive' });
     } finally {
       setRebrandingId(null);
+    }
+  };
+
+  // Regenerate the 1.91:1 social-share card from the current hero image
+  const regenerateSocialCard = async (
+    target: { slug?: string; slugs?: string[]; all?: boolean; id?: string },
+    opts: { silent?: boolean; force?: boolean } = { force: true }
+  ) => {
+    if (target.id) setRegeneratingSocialId(target.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-intel-social-card', {
+        body: {
+          slug: target.slug,
+          slugs: target.slugs,
+          all: target.all,
+          force: opts.force ?? true,
+        },
+      });
+      if (error) throw error;
+      const ok = (data?.results || []).filter((r: any) => r.status === 'ok').length;
+      const total = data?.processed ?? 0;
+      if (!opts.silent) {
+        toast({
+          title: 'Social card regenerated',
+          description: `${ok}/${total} card${total === 1 ? '' : 's'} updated for Twitter / Facebook / LinkedIn previews.`,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ['admin-intel-briefings'] });
+      return data;
+    } catch (e: any) {
+      if (!opts.silent) {
+        toast({ title: 'Social card regen failed', description: e.message, variant: 'destructive' });
+      }
+      console.error('[social-card] regen failed:', e);
+    } finally {
+      if (target.id) setRegeneratingSocialId(null);
     }
   };
 
