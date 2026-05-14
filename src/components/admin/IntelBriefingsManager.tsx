@@ -1215,11 +1215,11 @@ function IntelBriefingsArticlesManager() {
                 <TabsTrigger value="preview">👁️ Preview</TabsTrigger>
                 {editingId && (
                   <>
-                    <TabsTrigger value="vtldr" className="text-emerald-400 data-[state=active]:text-emerald-400">📝 TL;DR{wtldr > 0 ? ` (${fmt(wtldr)})` : ''}</TabsTrigger>
                     <TabsTrigger value="v75" className="text-blue-400 data-[state=active]:text-blue-400">75%{w75 > 0 ? ` (${fmt(w75)})` : ''}</TabsTrigger>
                     <TabsTrigger value="v50" className="text-amber-400 data-[state=active]:text-amber-400">50%{w50 > 0 ? ` (${fmt(w50)})` : ''}</TabsTrigger>
                     <TabsTrigger value="v25" className="text-red-400 data-[state=active]:text-red-400">25%{w25 > 0 ? ` (${fmt(w25)})` : ''}</TabsTrigger>
                     <TabsTrigger value="vbc" className="text-violet-400 data-[state=active]:text-violet-400">🔗 Breadcrumb{wbc > 0 ? ` (${fmt(wbc)})` : ''}</TabsTrigger>
+                    <TabsTrigger value="vtldr" className="text-emerald-400 data-[state=active]:text-emerald-400">📝 TL;DR{wtldr > 0 ? ` (${fmt(wtldr)})` : ''}</TabsTrigger>
                   </>
                 )}
               </TabsList>
