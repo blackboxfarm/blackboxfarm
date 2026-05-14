@@ -548,7 +548,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken, onActi
               .map(n => (n.fullId || n.id).replace(/^x_community:/, ''))
               .filter(Boolean);
             if (handles.length > 0) {
-              const { data: hRows } = await supabase
+              const { data: hRows } = await (supabase as any)
                 .from('token_social_links')
                 .select('token_mint, x_handle, previous_handles')
                 .in('x_handle', handles);
@@ -579,7 +579,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken, onActi
               }
             }
             if (communityIds.length > 0) {
-              const { data: cRows } = await supabase
+              const { data: cRows } = await (supabase as any)
                 .from('token_social_links')
                 .select('token_mint, x_community_id')
                 .in('x_community_id', communityIds);
