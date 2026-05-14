@@ -1,0 +1,2 @@
+ALTER TABLE public.intel_briefing_variants DROP CONSTRAINT IF EXISTS intel_briefing_variants_depth_check;
+ALTER TABLE public.intel_briefing_variants ADD CONSTRAINT intel_briefing_variants_depth_check CHECK (depth IN (0, 1, 25, 50, 75));
