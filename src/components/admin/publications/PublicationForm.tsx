@@ -16,6 +16,8 @@ const PLATFORMS = ALL_PLATFORMS;
 
 interface PublicationFormProps {
   briefings: { id: string; title: string; slug: string }[];
+  /** Existing publications, used to show per-platform post counts in the dropdown. */
+  publications?: { briefing_id: string; platform: string }[];
   onSubmit: (data: {
     briefing_id: string;
     platform: string;
@@ -37,7 +39,7 @@ interface PublicationFormProps {
   };
 }
 
-export const PublicationForm = ({ briefings, onSubmit, isSubmitting, initial }: PublicationFormProps) => {
+export const PublicationForm = ({ briefings, onSubmit, isSubmitting, initial, publications = [] }: PublicationFormProps) => {
   const [briefingId, setBriefingId] = useState(initial?.briefing_id || '');
   const [platform, setPlatform] = useState(initial?.platform || '');
   const [customPlatform, setCustomPlatform] = useState('');
@@ -108,9 +110,21 @@ export const PublicationForm = ({ briefings, onSubmit, isSubmitting, initial }: 
               <Select value={platform} onValueChange={setPlatform}>
                 <SelectTrigger><SelectValue placeholder="Select platform..." /></SelectTrigger>
                 <SelectContent className="max-h-[420px]">
-                  {PLATFORMS.map(p => (
-                    <SelectItem key={p} value={p}>{p}</SelectItem>
-                  ))}
+                  {PLATFORMS.map(p => {
+                    const count = briefingId
+                      ? publications.filter(pub => pub.briefing_id === briefingId && pub.platform === p).length
+                      : 0;
+                    return (
+                      <SelectItem key={p} value={p}>
+                        <span className="flex items-center gap-2">
+                          <span>{p}</span>
+                          {count > 0 && (
+                            <span className="text-xs text-primary font-mono">({count})</span>
+                          )}
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
               <Button type="button" variant="outline" size="icon" onClick={() => setShowCustom(true)}>
