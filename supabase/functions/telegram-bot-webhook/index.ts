@@ -625,6 +625,9 @@ function getHelpMessage(tier: UserTier): string {
   msg += "/subscribe <email> - Email alerts\n";
   msg += "/unsubscribe - Disable email\n";
 
+  msg += "\n🔍 *Mesh Lookup:*\n";
+  msg += "Send any X handle (e.g. `@elonmusk`) — I'll trace it through the mesh DB and show linked dev wallets, tokens, communities, and reputation.\n";
+
   const proTiers: UserTier[] = ['pro', 'dev', 'enterprise'];
   if (proTiers.includes(tier)) {
     msg += "\n🔐 *Wallet (Pro+):*\n";
