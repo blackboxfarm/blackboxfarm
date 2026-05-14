@@ -17178,6 +17178,30 @@ export type Database = {
           },
         ]
       }
+      telegram_xlookup_usage: {
+        Row: {
+          count: number
+          id: string
+          telegram_user_id: string
+          updated_at: string
+          used_on: string
+        }
+        Insert: {
+          count?: number
+          id?: string
+          telegram_user_id: string
+          updated_at?: string
+          used_on?: string
+        }
+        Update: {
+          count?: number
+          id?: string
+          telegram_user_id?: string
+          updated_at?: string
+          used_on?: string
+        }
+        Relationships: []
+      }
       tester_feedback: {
         Row: {
           created_at: string

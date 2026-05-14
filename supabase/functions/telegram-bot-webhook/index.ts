@@ -3,6 +3,8 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { Keypair } from 'npm:@solana/web3.js@1.95.3';
 import * as bs58 from 'https://esm.sh/bs58@5.0.0';
 import { sanitizeTelegramInput, isInputSafeToProcess } from '../_shared/telegram-input-sanitizer.ts';
+import { xHandleReverseLookup, formatXLookupForTelegram } from '../_shared/x-handle-reverse-lookup.ts';
+import { obfuscateTicker } from '../_shared/ticker-obfuscator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,7 +13,7 @@ const corsHeaders = {
 
 interface TelegramUpdate {
   message?: {
-    chat: { id: number };
+    chat: { id: number; type?: string };
     from?: { id: number; username?: string; first_name?: string };
     text?: string;
   };
@@ -401,6 +403,52 @@ Deno.serve(withRunLog('telegram-bot-webhook', async (req) => {
     }
 
     // === Unknown command - show help ===
+    // === X-handle reverse lookup (DM only) ===
+    // Trigger when the message looks like a bare X handle and isn't a slash-command.
+    const isDm = (message.chat.type ?? 'private') === 'private';
+    const handleMatch = isDm && !command.startsWith('/')
+      ? text.trim().match(/^@?([A-Za-z0-9_]{2,15})$/)
+      : null;
+    if (handleMatch) {
+      const proTiers: UserTier[] = ['pro', 'dev', 'enterprise'];
+      const isPro = proTiers.includes(tier);
+      const FREE_DAILY_LIMIT = 3;
+
+      if (!isPro) {
+        const today = new Date().toISOString().slice(0, 10);
+        const { data: usage } = await supabase
+          .from('telegram_xlookup_usage')
+          .select('count')
+          .eq('telegram_user_id', telegramUserId)
+          .eq('used_on', today)
+          .maybeSingle();
+        const used = usage?.count ?? 0;
+        if (used >= FREE_DAILY_LIMIT) {
+          await sendTelegramMessage(telegramBotToken!, chatId,
+            `🔒 Daily limit reached (${FREE_DAILY_LIMIT} X-handle lookups/day on Free).\n\n` +
+            `Upgrade to Pro for unlimited mesh queries → blackboxfarm.lovable.app/pricing`);
+          return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
+        }
+        await supabase.from('telegram_xlookup_usage').upsert({
+          telegram_user_id: telegramUserId,
+          used_on: today,
+          count: used + 1,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'telegram_user_id,used_on' });
+      }
+
+      try {
+        const result = await xHandleReverseLookup(supabase, handleMatch[1]);
+        const reply = formatXLookupForTelegram(result, obfuscateTicker);
+        await sendTelegramMessage(telegramBotToken!, chatId, reply);
+      } catch (e) {
+        console.error('[TELEGRAM-BOT] X-handle lookup failed:', e);
+        await sendTelegramMessage(telegramBotToken!, chatId,
+          `⚠️ Lookup failed for @${handleMatch[1]}. Try again in a moment.`);
+      }
+      return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
+    }
+
     await sendTelegramMessage(telegramBotToken!, chatId, getHelpMessage(tier));
     return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
 
@@ -576,6 +624,9 @@ function getHelpMessage(tier: UserTier): string {
   msg += "📧 *Notifications:*\n";
   msg += "/subscribe <email> - Email alerts\n";
   msg += "/unsubscribe - Disable email\n";
+
+  msg += "\n🔍 *Mesh Lookup:*\n";
+  msg += "Send any X handle (e.g. `@elonmusk`) — I'll trace it through the mesh DB and show linked dev wallets, tokens, communities, and reputation.\n";
 
   const proTiers: UserTier[] = ['pro', 'dev', 'enterprise'];
   if (proTiers.includes(tier)) {
