@@ -80,6 +80,9 @@ export const IntelPublicationsManager = () => {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
+      if (id.startsWith('synthetic-')) {
+        throw new Error('Auto-generated original Website post — edit the article\'s published date instead.');
+      }
       const { error } = await supabase.from('intel_publications').delete().eq('id', id);
       if (error) throw error;
     },
