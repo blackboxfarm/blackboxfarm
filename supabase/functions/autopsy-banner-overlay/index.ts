@@ -87,12 +87,20 @@ async function fetchSourceBanner(
 
   // Default path (post-graduation tokens): DexScreener → pump.fun.
   try {
-    const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+    const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (BlackBoxFarm/Autopsy)' },
+    });
+    console.log(`[fetchSourceBanner] DexScreener status=${r.status} for ${mint}`);
     if (r.ok) {
       const j = await r.json();
-      const header = j?.pairs?.[0]?.info?.header;
-      const name = j?.pairs?.[0]?.baseToken?.name;
+      const pair = j?.pairs?.[0];
+      const header = pair?.info?.header || pair?.info?.openGraph;
+      const name = pair?.baseToken?.name;
+      console.log(`[fetchSourceBanner] DexScreener pairs=${j?.pairs?.length || 0} header=${header || 'none'}`);
       if (header) return { url: header, visualDesc: name ? `the official banner for ${name}` : 'the official token banner' };
+    } else {
+      const t = await r.text().catch(() => '');
+      console.log(`[fetchSourceBanner] DexScreener body=${t.slice(0, 200)}`);
     }
   } catch (_) { /* fallthrough */ }
 
