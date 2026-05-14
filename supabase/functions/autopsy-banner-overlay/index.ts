@@ -282,12 +282,12 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
       console.warn('[autopsy-banner-overlay] existence check failed, continuing:', (e as any)?.message);
     }
 
-    // 1. Source banner — curve deaths AND admin-manual additions both go straight
-    // to the pump.fun mint image (square art) so we never let the AI fabricate a
-    // banner from a missing/empty DexScreener header. We pass squareSource=true
-    // to the prompt so the AI letterboxes the square art on a black canvas
-    // instead of inventing side artwork.
-    const useMintImage = source_feed === 'pumpfun_curve_death' || source_feed === 'admin_manual';
+    // 1. Source banner — only pre-graduation curve deaths skip DexScreener,
+    // because they don't have a DexScreener page. Admin-manual triggers should
+    // try the DexScreener header FIRST (real banner art) and only fall back to
+    // the pump.fun mint image when no header exists. fetchSourceBanner already
+    // implements that fallback chain when curveDeath=false.
+    const useMintImage = source_feed === 'pumpfun_curve_death';
     const { url: sourceBannerUrl, visualDesc } = await fetchSourceBanner(token_mint, {
       curveDeath: useMintImage,
       supabase,
