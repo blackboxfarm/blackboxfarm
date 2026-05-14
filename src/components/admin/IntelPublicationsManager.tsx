@@ -19,7 +19,7 @@ export const IntelPublicationsManager = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('intel_briefings')
-        .select('id, title, slug')
+        .select('id, title, slug, published_at')
         .eq('is_published', true)
         .order('published_at', { ascending: false });
       if (error) throw error;
@@ -37,10 +37,27 @@ export const IntelPublicationsManager = () => {
         .order('published_at', { ascending: false });
       if (error) throw error;
       // Enrich with briefing titles
-      return (data || []).map((p: any) => ({
+      const real = (data || []).map((p: any) => ({
         ...p,
         briefing_title: briefings.find(b => b.id === p.briefing_id)?.title || 'Unknown',
       }));
+      // Synthesize the original Website publication for every published briefing
+      // using the article's own published_at. These are virtual rows (id prefix
+      // `synthetic-`) so they show in calendar/article/platform views and count
+      // toward the dropdown badge without requiring a manual log.
+      const synthetic = briefings.map((b: any) => ({
+        id: `synthetic-website-${b.id}`,
+        briefing_id: b.id,
+        platform: 'Website',
+        content_depth: 100,
+        is_breadcrumb: false,
+        published_url: `https://blackbox.farm/intel/briefing/${b.slug}`,
+        notes: 'original (auto)',
+        published_at: b.published_at,
+        briefing_title: b.title,
+        synthetic: true,
+      }));
+      return [...synthetic, ...real];
     },
     enabled: briefings.length > 0,
   });
