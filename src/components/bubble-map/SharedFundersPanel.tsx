@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Loader2, Users, ChevronDown, ChevronRight, ExternalLink, AlertTriangle } from 'lucide-react';
 
@@ -43,17 +42,30 @@ const labelMeta: Record<SharedFunder['cluster_label'], { color: string; text: st
   infra_router: { color: 'bg-destructive/20 text-destructive border-destructive/40', text: 'Public Router (ignore)' },
 };
 
+interface PopcornPop {
+  id: number;
+  value: number;
+  x: number; // px offset
+}
+
 export function SharedFundersPanel({ creatorWallet }: { creatorWallet: string | null }) {
   const [data, setData] = useState<Response | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(true);
+  const [displayCount, setDisplayCount] = useState(0);
+  const [pops, setPops] = useState<PopcornPop[]>([]);
+  const popIdRef = useRef(0);
 
   useEffect(() => {
-    if (!creatorWallet) { setData(null); return; }
+    if (!creatorWallet) { setData(null); setDisplayCount(0); return; }
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setData(null);
+    setDisplayCount(0);
+    setPops([]);
+    setOpen(true);
     supabase.functions.invoke('mesh-shared-funders', { body: { wallet: creatorWallet } })
       .then(({ data, error }) => {
         if (cancelled) return;
@@ -65,68 +77,115 @@ export function SharedFundersPanel({ creatorWallet }: { creatorWallet: string | 
     return () => { cancelled = true; };
   }, [creatorWallet]);
 
+  // Popcorn animation: ramp displayCount 0 → total, popping numbers along the way
+  useEffect(() => {
+    if (!data?.shared_funders) return;
+    const total = data.shared_funders.length;
+    if (total === 0) { setDisplayCount(0); return; }
+
+    let current = 0;
+    const stepMs = Math.max(80, Math.min(220, 1800 / total));
+    const timer = setInterval(() => {
+      // Random pop size 1-3 to feel like popcorn
+      const pop = Math.min(total - current, 1 + Math.floor(Math.random() * 3));
+      current += pop;
+      setDisplayCount(current);
+      const id = ++popIdRef.current;
+      const x = (Math.random() - 0.5) * 60;
+      setPops((p) => [...p, { id, value: pop, x }]);
+      setTimeout(() => setPops((p) => p.filter((q) => q.id !== id)), 900);
+      if (current >= total) {
+        clearInterval(timer);
+        // Auto-collapse 1.2s after settling so it doesn't push the bubblemap
+        setTimeout(() => setOpen(false), 1200);
+      }
+    }, stepMs);
+    return () => clearInterval(timer);
+  }, [data]);
+
   if (!creatorWallet) return null;
+
+  const total = data?.shared_funders?.length ?? 0;
 
   return (
     <Card className="border-primary/20 bg-card/80 backdrop-blur">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
-          <Users className="h-4 w-4 text-primary" />
-          Shared Funders / Dev-Family Lens
-          {data?.shared_funders && data.shared_funders.length > 0 && (
-            <Badge variant="secondary" className="ml-auto text-[10px]">
-              {data.shared_funders.length} cluster{data.shared_funders.length === 1 ? '' : 's'}
-            </Badge>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {loading && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" /> Walking funding chain...
-          </div>
-        )}
-        {error && (
-          <div className="text-xs text-destructive flex items-center gap-1">
-            <AlertTriangle className="h-3 w-3" /> {error}
-          </div>
-        )}
-        {data?.kyc_terminus && (
-          <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 flex items-center gap-2">
-            <span className="text-base">🏦</span>
-            <div className="flex flex-col">
-              <span className="text-[10px] uppercase tracking-wide text-emerald-300/80">KYC Root</span>
-              <span className="text-sm font-semibold text-emerald-200">
-                {data.kyc_terminus.cex_name}
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger asChild>
+          <CardHeader className="pb-2 cursor-pointer hover:bg-muted/30 transition-colors rounded-t-lg">
+            <CardTitle className="text-sm flex items-center gap-2">
+              {open ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+              <Users className="h-4 w-4 text-primary" />
+              Shared Funders / Dev-Family Lens
+              {/* Settled count badge with popcorn overlay */}
+              <span className="relative ml-1 inline-flex items-center">
+                <Badge variant="secondary" className="text-[11px] tabular-nums">
+                  ({displayCount})
+                </Badge>
+                {pops.map((p) => (
+                  <span
+                    key={p.id}
+                    aria-hidden
+                    className="pointer-events-none absolute -top-1 text-[11px] font-bold text-amber-400 animate-popcorn"
+                    style={{ left: `calc(50% + ${p.x}px)` }}
+                  >
+                    +{p.value}
+                  </span>
+                ))}
               </span>
-            </div>
-            <span className="ml-auto text-[10px] text-emerald-300/70">
-              hop {data.kyc_terminus.depth} · <code className="font-mono">{data.kyc_terminus.wallet.slice(0, 6)}…{data.kyc_terminus.wallet.slice(-4)}</code>
-            </span>
-          </div>
-        )}
-        {data && !data.kyc_terminus && data.shared_funders.length > 0 && (
-          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
-            ⚠ Trail did not reach a known exchange yet — collaboration clusters below may still be valuable.
-          </div>
-        )}
-        {data && data.shared_funders.length === 0 && (
-          <div className="text-xs text-muted-foreground">
-            {data.message || 'No collaboration clusters detected for this creator.'}
-          </div>
-        )}
-        {data && data.shared_funders.length > 0 && (
-          <>
-            <p className="text-[11px] text-muted-foreground leading-snug">
-              Wallets in this creator's funding chain that <strong>also</strong> bankrolled other token creators.
-              The same hand often = same operator running multiple mints.
-            </p>
-            {data.shared_funders.map((f) => (
-              <FunderCard key={f.funder} funder={f} />
-            ))}
-          </>
-        )}
-      </CardContent>
+              {loading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground ml-1" />}
+              {data && (
+                <Badge variant="outline" className="ml-auto text-[10px]">
+                  {total} cluster{total === 1 ? '' : 's'}
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="space-y-2 max-h-[55vh] overflow-y-auto">
+            {error && (
+              <div className="text-xs text-destructive flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" /> {error}
+              </div>
+            )}
+            {data?.kyc_terminus && (
+              <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 flex items-center gap-2">
+                <span className="text-base">🏦</span>
+                <div className="flex flex-col">
+                  <span className="text-[10px] uppercase tracking-wide text-emerald-300/80">KYC Root</span>
+                  <span className="text-sm font-semibold text-emerald-200">
+                    {data.kyc_terminus.cex_name}
+                  </span>
+                </div>
+                <span className="ml-auto text-[10px] text-emerald-300/70">
+                  hop {data.kyc_terminus.depth} · <code className="font-mono">{data.kyc_terminus.wallet.slice(0, 6)}…{data.kyc_terminus.wallet.slice(-4)}</code>
+                </span>
+              </div>
+            )}
+            {data && !data.kyc_terminus && data.shared_funders.length > 0 && (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+                ⚠ Trail did not reach a known exchange yet — collaboration clusters below may still be valuable.
+              </div>
+            )}
+            {data && data.shared_funders.length === 0 && (
+              <div className="text-xs text-muted-foreground">
+                {data.message || 'No collaboration clusters detected for this creator.'}
+              </div>
+            )}
+            {data && data.shared_funders.length > 0 && (
+              <>
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Wallets in this creator's funding chain that <strong>also</strong> bankrolled other token creators.
+                  The same hand often = same operator running multiple mints.
+                </p>
+                {data.shared_funders.map((f) => (
+                  <FunderCard key={f.funder} funder={f} />
+                ))}
+              </>
+            )}
+          </CardContent>
+        </CollapsibleContent>
+      </Collapsible>
     </Card>
   );
 }

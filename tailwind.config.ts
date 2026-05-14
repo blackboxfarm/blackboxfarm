@@ -105,12 +105,18 @@ export default {
 					'50%': {
 						boxShadow: 'var(--glow-cyan)'
 					}
+				},
+				'popcorn': {
+					'0%': { opacity: '0', transform: 'translate(-50%, 0) scale(0.6)' },
+					'30%': { opacity: '1', transform: 'translate(-50%, -10px) scale(1.2)' },
+					'100%': { opacity: '0', transform: 'translate(-50%, -28px) scale(1)' }
 				}
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
 				'accordion-up': 'accordion-up 0.2s ease-out',
-				'pulse-glow': 'pulse-glow 2s ease-in-out infinite'
+				'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
+				'popcorn': 'popcorn 0.9s ease-out forwards'
 			}
 		}
 	},
