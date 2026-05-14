@@ -131,6 +131,35 @@ async function writeMeshCache(walletAddress: string, result: FundingResult): Pro
 }
 
 /**
+ * Negative-cache sentinel: marks a wallet as having NO upstream funder
+ * (Helius returned 404). Prevents repeated queries for known dead-ends.
+ */
+async function writeNegativeCache(walletAddress: string): Promise<void> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseKey) return;
+
+    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2.54.0');
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    await supabase.from('reputation_mesh').upsert({
+      source_type: 'wallet',
+      source_id: walletAddress,
+      linked_type: 'wallet',
+      linked_id: walletAddress, // self-link sentinel
+      relationship: 'funded_by',
+      confidence: 0,
+      discovered_via: 'funding-resolver-negative',
+      discovered_at: new Date().toISOString(),
+      metadata: { no_funder: true, reason: 'helius_404' },
+    }, { onConflict: 'source_type,source_id,linked_type,linked_id,relationship' });
+  } catch (e) {
+    console.warn(`[FundingResolver] Negative cache write failed:`, e);
+  }
+}
+
+/**
  * Discover who funded a wallet.
  * Checks mesh cache first, then falls back to Helius API.
  */
