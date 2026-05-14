@@ -836,7 +836,7 @@ function IntelBriefingsArticlesManager() {
                                   {breadcrumbCount > 0 && <span className="text-[10px] font-mono">({breadcrumbCount})</span>}
                                 </span>
                               </TooltipTrigger>
-                              <TooltipContent side="top"><p className="text-xs">{breadcrumbCount > 0 ? `${breadcrumbCount}/4 variants (75/50/25/breadcrumb)` : 'No condensed variants yet'}</p></TooltipContent>
+                              <TooltipContent side="top"><p className="text-xs">{breadcrumbCount > 0 ? `${breadcrumbCount}/5 variants (TL;DR/75/50/25/breadcrumb)` : 'No condensed variants yet'}</p></TooltipContent>
                             </Tooltip>
                           </div>
                         </TooltipProvider>
@@ -1208,12 +1208,14 @@ function IntelBriefingsArticlesManager() {
             const w50 = variantWc(50);
             const w25 = variantWc(25);
             const wbc = variantWc(0);
+            const wtldr = variantWc(1);
             return (
               <TabsList>
                 <TabsTrigger value="edit">✏️ Edit{masterWc > 0 ? ` (${fmt(masterWc)})` : ''}</TabsTrigger>
                 <TabsTrigger value="preview">👁️ Preview</TabsTrigger>
                 {editingId && (
                   <>
+                    <TabsTrigger value="vtldr" className="text-emerald-400 data-[state=active]:text-emerald-400">📝 TL;DR{wtldr > 0 ? ` (${fmt(wtldr)})` : ''}</TabsTrigger>
                     <TabsTrigger value="v75" className="text-blue-400 data-[state=active]:text-blue-400">75%{w75 > 0 ? ` (${fmt(w75)})` : ''}</TabsTrigger>
                     <TabsTrigger value="v50" className="text-amber-400 data-[state=active]:text-amber-400">50%{w50 > 0 ? ` (${fmt(w50)})` : ''}</TabsTrigger>
                     <TabsTrigger value="v25" className="text-red-400 data-[state=active]:text-red-400">25%{w25 > 0 ? ` (${fmt(w25)})` : ''}</TabsTrigger>
@@ -1301,6 +1303,17 @@ function IntelBriefingsArticlesManager() {
 
         {editingId && (
           <>
+            <TabsContent value="vtldr" className="mt-2">
+              <VariantEditorTab
+                briefingId={editingId}
+                briefingSlug={form.slug}
+                masterContent={form.content_md}
+                depth={1}
+                label="TL;DR"
+                platform="2-3 sentence snippet (no link, no preamble)"
+                badgeColor="bg-emerald-500/20 text-emerald-400"
+              />
+            </TabsContent>
             <TabsContent value="v75" className="mt-2">
               <VariantEditorTab
                 briefingId={editingId}

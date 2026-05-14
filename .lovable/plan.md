@@ -1,42 +1,41 @@
 ## Goal
+Add a new **TL;DR** variant alongside the existing 75% / 50% / 25% / Breadcrumb tabs. Each article gets a 2–3 sentence TL;DR snippet stored in `intel_briefing_variants`. Provide a one-click backfill for the existing catalog.
 
-Stop the browser from getting killed. Two suspects identified, both addressable in one pass:
+## Storage decision
+Reuse the existing `intel_briefing_variants` table — just add `depth = 1` as the TL;DR sentinel (kept distinct from `0` = Breadcrumb teaser-with-link).
 
-1. **Duplicate Supabase auth listeners** — three independent `onAuthStateChange` subscribers (`AuthContext`, `useSecureAuth`, `useUserSecrets`) all churn on every token refresh / tab focus, plus three independent `getSession()` initializers fighting the same lock. This is exactly the kind of fan-out that wedges Chrome's IndexedDB lock and freezes the tab.
-2. **Price-fetch error paths still throwing in callers** — last turn fixed `raydium-quote` to return `200 + {fallback:true}`, but `helius-fast-price` and the FlipIt preflight chain still throw on failure inside React effects, which can blow up the page when Solana RPC hiccups.
+```text
+depth =  75 → 75% Substantial
+depth =  50 → 50% Condensed
+depth =  25 → 25% Teaser
+depth =   1 → TL;DR snippet  ← NEW (no backlink, 2–3 sentences, ~300 chars)
+depth =   0 → Breadcrumb (X/TG teaser w/ link)
+```
 
----
+## Changes
 
-## Part A — Auth listener consolidation (the real browser killer)
+### 1. DB migration
+- Drop + recreate `intel_briefing_variants_depth_check` to allow `depth IN (0, 1, 25, 50, 75)`.
 
-**Single source of truth = `AuthContext`.**
+### 2. `VariantEditorTab.tsx`
+- Extend `buildInstruction()` with a `depth === 1` branch:
+  > "Write a 2–3 sentence TL;DR (~300 chars max) summarizing the article's core thesis. No hashtags, no link, no preamble. Plain prose. Output only the snippet."
 
-1. `src/hooks/useSecureAuth.ts` — remove its own `onAuthStateChange` + `getSession()`. Re-export `useAuth()` data and layer the "secure" behaviors (rate-limit / activity tracking) on top of context state. No second subscription.
-2. `src/hooks/useUserSecrets.ts` — drop the `onAuthStateChange` block; instead `const { user } = useAuth()` and key the effect off `user?.id`. One listener total.
-3. `src/hooks/usePasswordAuth.ts` — replace the inline `getSession()` call with `useAuth().session` (avoids competing with the AuthContext init for the storage lock on first paint).
-4. Audit pass: any other `onAuthStateChange` added later flagged in a code comment at top of `AuthContext.tsx` ("Single auth listener — do not add more").
+### 3. `IntelBriefingsManager.tsx`
+- Add `TabsTrigger value="vtldr"` ("📝 TL;DR (n)") + matching `TabsContent` rendering `<VariantEditorTab depth={1} label="TL;DR" platform="Snippet / summary" badgeColor="bg-emerald-500/20 text-emerald-400" />`.
+- Add `wtldr = variantWc(1)` for the count badge.
+- Bump the variant-completeness column to `n/5` (TL;DR + 75/50/25/breadcrumb).
 
-Expected effect: removes the duplicate IndexedDB/localStorage lock contention on tab focus and token refresh, which is the #1 known cause of the "browser dies" symptom in this project.
+### 4. `ContentCondenser.tsx`
+- Add `{ depth: 1, label: 'TL;DR', platform: 'Snippet / summary', color: 'bg-emerald-500/20 text-emerald-400' }` to `DEPTH_CONFIG`.
+- Add the `depth === 1` branch in `handleGenerate()` with the same TL;DR instruction.
+- Add a **"Backfill TL;DR (N missing)"** button at the top: scans all published briefings without a `depth = 1` variant and calls `condense-article` sequentially with a small delay between calls, writing each result back via the existing save mutation. Shows progress toast (`x / N done`).
 
-## Part B — Harden remaining edge-function fallbacks
+### 5. No public-article display change
+TL;DR is generated and stored only — public rendering on `IntelBriefingArticle` is left untouched (out of scope unless you want it shown above the article body).
 
-Mirror the `raydium-quote` pattern (return 200 + `{ error, fallback: true }`) on the two functions whose 5xx responses currently bubble up into FlipIt and blank the screen:
+## Out of scope
+- Auto-generation on article publish (going-forward path is just "the tab is there to click Generate"). If you want truly automatic on publish, say the word and I'll add a trigger/hook.
+- Showing TL;DR on the public article page.
 
-1. `supabase/functions/helius-fast-price/index.ts` — wrap the upstream Helius / pump.fun curve calls; on any thrown error or null result, return `200 { error: 'PRICE_FETCH_FAILED', fallback: true }` instead of 500.
-2. `supabase/functions/token-metadata/index.ts` — same treatment for the metadata lookup so the background fetch in `FlipItDashboard.tsx` (line ~1289) can never throw a 5xx into the React tree.
-
-Client side: add a single guard in `FlipItDashboard.tsx` `fetchInputTokenData` so any `priceData?.fallback === true` path silently moves to the next source instead of toasting.
-
-## Part C — Verify
-
-1. Browser test: load `/admin` → FlipIt, paste a known-good mint, switch tabs for 30s, return. Confirm no freeze, no duplicate `/auth/v1/user` storm in network tab (currently firing ~12x per refresh based on auth logs).
-2. Force a price-source failure (bad mint) and confirm UI degrades gracefully with no blank screen.
-
-## Technical notes
-
-- Files touched (Part A): `src/hooks/useSecureAuth.ts`, `src/hooks/useUserSecrets.ts`, `src/hooks/usePasswordAuth.ts`, `src/contexts/AuthContext.tsx` (comment only).
-- Files touched (Part B): `supabase/functions/helius-fast-price/index.ts`, `supabase/functions/token-metadata/index.ts`, `src/components/admin/FlipItDashboard.tsx`.
-- Zero schema / RLS / DB changes.
-- No behavior change to login/logout flows — only the *number of subscribers* changes.
-
-Awaiting **Plan Approved** before touching code.
+Awaiting **Plan Approved**.

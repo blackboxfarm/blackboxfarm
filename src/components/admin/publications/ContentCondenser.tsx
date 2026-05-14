@@ -8,9 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { toast } from '@/hooks/use-toast';
-import { Copy, Save, Sparkles, Check, Loader2 } from 'lucide-react';
+import { Copy, Save, Sparkles, Check, Loader2, Wand2 } from 'lucide-react';
 
 const DEPTH_CONFIG = [
+  { depth: 1,  label: 'TL;DR',      platform: 'Snippet / summary (no link)', color: 'bg-emerald-500/20 text-emerald-400' },
   { depth: 75, label: '75%', platform: 'Medium / Long-form', color: 'bg-blue-500/20 text-blue-400' },
   { depth: 50, label: '50%', platform: 'Twitter Articles / Fiverr', color: 'bg-amber-500/20 text-amber-400' },
   { depth: 25, label: '25%', platform: 'Reddit / Short-form', color: 'bg-red-500/20 text-red-400' },
@@ -107,6 +108,8 @@ export function ContentCondenser() {
       instruction = `Condense the following article to approximately 50% of its original length. Keep the core thesis, key statistics, and the 2-3 strongest points. Use a slightly more conversational tone suitable for social media articles. Do NOT add new information. End with this exact backlink:\n${backlink}`;
     } else if (depth === 25) {
       instruction = `Create a punchy summary of the following article at approximately 25% of its original length. Lead with the hook, include 1-2 key insights and the most impactful statistic. Make it compelling for Reddit/short-form platforms. Do NOT add new information. End with this exact backlink:\n${backlink}`;
+    } else if (depth === 1) {
+      instruction = `Write a TL;DR summary of the following article in 2-3 sentences (max ~300 characters total). Capture the core thesis and the single most important takeaway. Plain prose only — no hashtags, no link, no "TL;DR:" prefix, no preamble. Output ONLY the summary text.`;
     } else {
       // breadcrumb (depth = 0)
       instruction = `Compose a 2-3 sentence teaser/breadcrumb post (max ~280 characters total) suitable for Twitter/X or Telegram. Lead with the most provocative hook from the article. End with this exact link back: https://blackbox.farm/intel/briefing/${briefing.slug}. No hashtags unless they appear in the original article. Output ONLY the teaser text — no preamble.`;
@@ -147,6 +150,44 @@ export function ContentCondenser() {
     setEditBuffers(prev => ({ ...prev, [`${briefingId}-${depth}`]: value }));
   };
 
+  // ---- Backfill TL;DR for every published article missing one ----
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillProgress, setBackfillProgress] = useState<{ done: number; total: number } | null>(null);
+
+  const tldrMissing = briefings.filter(b => {
+    const v = variantMap.get(`${b.id}-1`);
+    return !v || !(v.content_md || '').trim();
+  });
+
+  const handleBackfillTldr = async () => {
+    if (tldrMissing.length === 0) {
+      toast({ title: 'Nothing to backfill', description: 'Every published article already has a TL;DR.' });
+      return;
+    }
+    setBackfilling(true);
+    setBackfillProgress({ done: 0, total: tldrMissing.length });
+    let okCount = 0;
+    let failCount = 0;
+    for (let i = 0; i < tldrMissing.length; i++) {
+      const b = tldrMissing[i];
+      try {
+        await handleGenerate(b, 1);
+        okCount++;
+      } catch {
+        failCount++;
+      }
+      setBackfillProgress({ done: i + 1, total: tldrMissing.length });
+      // light throttle to be polite to the gateway
+      await new Promise(r => setTimeout(r, 800));
+    }
+    setBackfilling(false);
+    setBackfillProgress(null);
+    toast({
+      title: 'TL;DR backfill complete',
+      description: `${okCount} generated${failCount > 0 ? `, ${failCount} failed` : ''}.`,
+    });
+  };
+
   return (
     <div className="space-y-4">
       {/* Progress */}
@@ -157,6 +198,23 @@ export function ContentCondenser() {
             <span className="text-xs text-muted-foreground">{filledSlots}/{totalSlots} variants ({progressPct}%)</span>
           </div>
           <Progress value={progressPct} className="h-2" />
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/40">
+            <span className="text-xs text-muted-foreground">
+              TL;DR snippets: <span className="font-mono text-foreground">{briefings.length - tldrMissing.length}/{briefings.length}</span>
+              {tldrMissing.length > 0 && <> · <span className="text-amber-400">{tldrMissing.length} missing</span></>}
+              {backfillProgress && <> · <span className="text-primary">{backfillProgress.done}/{backfillProgress.total}…</span></>}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleBackfillTldr}
+              disabled={backfilling || tldrMissing.length === 0}
+              className="h-7 text-xs"
+            >
+              {backfilling ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Wand2 className="h-3 w-3 mr-1" />}
+              {backfilling ? 'Backfilling…' : `Backfill TL;DR (${tldrMissing.length})`}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
