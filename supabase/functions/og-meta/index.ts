@@ -246,6 +246,6 @@ function normalizeImageUrl(imageUrl?: string | null): string | null {
   return `${SITE_URL}/${imageUrl.replace(/^\/+/, "")}`;
 }
 
-function resolveOgImage(featuredImageUrl?: string | null): string {
-  return normalizeImageUrl(featuredImageUrl) || DEFAULT_OG_IMAGE;
+function resolveOgImage(featuredImageUrl?: string | null): string | undefined {
+  return normalizeImageUrl(featuredImageUrl) || undefined;
 }
