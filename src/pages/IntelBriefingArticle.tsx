@@ -51,7 +51,7 @@ export default function IntelBriefingArticle() {
       if (!article?.related_slugs || article.related_slugs.length === 0) return [];
       const { data } = await supabase
         .from('intel_briefings')
-        .select('slug, title, subtitle, category, featured_image_url, published_at, tags')
+        .select('slug, title, subtitle, category, featured_image_url, social_image_url, published_at, tags')
         .in('slug', article.related_slugs)
         .eq('is_published', true);
       return data || [];
@@ -149,6 +149,7 @@ export default function IntelBriefingArticle() {
         datePublished={article.published_at || article.created_at}
         author={article.author || undefined}
         imageUrl={article.featured_image_url || undefined}
+        socialImageUrl={article.social_image_url || undefined}
         slug={article.slug}
         category={article.category || undefined}
         tags={article.tags || undefined}
