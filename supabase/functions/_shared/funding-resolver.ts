@@ -41,7 +41,7 @@ function isKnownCex(name: string | null, type: string | null): boolean {
  * Check reputation_mesh for cached funding data.
  * Returns cached result if found and fresh enough.
  */
-async function checkMeshCache(walletAddress: string): Promise<FundingResult | null> {
+async function checkMeshCache(walletAddress: string): Promise<FundingResult | 'no_funder' | null> {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -67,6 +67,13 @@ async function checkMeshCache(walletAddress: string): Promise<FundingResult | nu
     if (Date.now() - discoveredAt > CACHE_TTL_MS) {
       console.log(`[FundingResolver] Cache expired for ${walletAddress.slice(0, 8)}... (${Math.round((Date.now() - discoveredAt) / 86400000)}d old)`);
       return null;
+    }
+
+    // Negative-cache sentinel: linked_id == self + metadata.no_funder = true
+    const meta0 = (data.metadata || {}) as Record<string, any>;
+    if (data.linked_id === walletAddress && meta0.no_funder === true) {
+      console.log(`[FundingResolver] ✅ NEG-CACHE HIT for ${walletAddress.slice(0, 8)}... (no funder, skipping Helius)`);
+      return 'no_funder';
     }
 
     const meta = (data.metadata || {}) as Record<string, any>;
@@ -139,6 +146,7 @@ export async function discoverFunding(
 
   // ── Check cache first ──
   const cached = await checkMeshCache(walletAddress);
+  if (cached === 'no_funder') return null;
   if (cached) return cached;
 
   // ── Helius API call ──
@@ -164,7 +172,11 @@ export async function discoverFunding(
     });
 
     if (resp.status === 404) {
-      await logger.complete(404, 'No funding transaction found');
+      // 404 = wallet has no upstream funder (genesis / fresh / program-funded).
+      // This is a valid data outcome, NOT an API failure — log as success and
+      // write a negative-cache sentinel so we don't re-query this dead-end.
+      await logger.complete(200);
+      writeNegativeCache(walletAddress).catch(() => {});
       return null;
     }
 
