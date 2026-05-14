@@ -18,6 +18,13 @@ const MIN_SIBLINGS = 2;          // funder must have funded ≥2 OTHER creators
 const NOISE_FANOUT_CAP = 40;     // funders with >40 distinct creators are public routers/CEX/bots, not real dev families
 const MAX_FUNDERS_RETURNED = 12; // cap output for UI
 const MAX_SIBLING_TOKENS = 8;    // per funder
+const IN_CHUNK = 100;            // PostgREST URL length safety — chunk .in() filters
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
 
 function clusterLabel(siblings: number): 'tight_cluster' | 'likely_dev_family' | 'wide_funder' | 'infra_router' {
   if (siblings <= 4) return 'tight_cluster';
@@ -49,17 +56,21 @@ Deno.serve(async (req) => {
     let kycTerminus: { wallet: string; cex_name: string; depth: number } | null = null;
 
     for (let depth = 1; depth <= 20 && frontier.length > 0; depth++) {
-      const { data: edges, error } = await supabase
-        .from('reputation_mesh')
-        .select('source_id')
-        .eq('source_type', 'wallet')
-        .eq('linked_type', 'wallet')
-        .in('relationship', ['directly_funded', 'indirectly_funded'])
-        .in('linked_id', frontier);
-      if (error) throw error;
+      const edges: { source_id: string }[] = [];
+      for (const slice of chunk(frontier, IN_CHUNK)) {
+        const { data, error } = await supabase
+          .from('reputation_mesh')
+          .select('source_id')
+          .eq('source_type', 'wallet')
+          .eq('linked_type', 'wallet')
+          .in('relationship', ['directly_funded', 'indirectly_funded'])
+          .in('linked_id', slice);
+        if (error) throw error;
+        if (data) edges.push(...(data as { source_id: string }[]));
+      }
 
       const next: string[] = [];
-      for (const e of edges || []) {
+      for (const e of edges) {
         const f = e.source_id as string;
         if (visited.has(f)) continue;
         visited.add(f);
@@ -93,18 +104,22 @@ Deno.serve(async (req) => {
     // Exclude both CEX and infra/router wallets — they're not real funders.
     const ancestorIds = [...ancestors.keys()].filter((a) => !isTerminusWallet(a));
 
-    const { data: siblingEdges, error: sibErr } = await supabase
-      .from('reputation_mesh')
-      .select('source_id, linked_id, relationship, evidence')
-      .eq('source_type', 'wallet')
-      .eq('linked_type', 'wallet')
-      .in('relationship', ['directly_funded', 'indirectly_funded'])
-      .in('source_id', ancestorIds);
-    if (sibErr) throw sibErr;
+    const siblingEdges: { source_id: string; linked_id: string; relationship: string; evidence: unknown }[] = [];
+    for (const slice of chunk(ancestorIds, IN_CHUNK)) {
+      const { data, error: sibErr } = await supabase
+        .from('reputation_mesh')
+        .select('source_id, linked_id, relationship, evidence')
+        .eq('source_type', 'wallet')
+        .eq('linked_type', 'wallet')
+        .in('relationship', ['directly_funded', 'indirectly_funded'])
+        .in('source_id', slice);
+      if (sibErr) throw sibErr;
+      if (data) siblingEdges.push(...(data as any));
+    }
 
     // Group: funder -> Set<sibling creator wallet>
     const funderSiblings = new Map<string, Set<string>>();
-    for (const edge of siblingEdges || []) {
+    for (const edge of siblingEdges) {
       const f = edge.source_id as string;
       const child = edge.linked_id as string;
       if (child === wallet) continue; // exclude self
@@ -129,18 +144,20 @@ Deno.serve(async (req) => {
     let lifecycleTokens: TokenRow[] = [];
     let pumpfunTokens: TokenRow[] = [];
     if (allSiblingCreators.length > 0) {
-      const [{ data: lc }, { data: pf }] = await Promise.all([
-        supabase
-          .from('telegram_insider_token_lifecycle')
-          .select('token_mint, token_symbol, creator_wallet, peak_multiplier')
-          .in('creator_wallet', allSiblingCreators),
-        supabase
-          .from('pumpfun_watchlist')
-          .select('token_mint, token_symbol, creator_wallet')
-          .in('creator_wallet', allSiblingCreators),
-      ]);
-      lifecycleTokens = (lc || []) as TokenRow[];
-      pumpfunTokens = (pf || []) as TokenRow[];
+      for (const slice of chunk(allSiblingCreators, IN_CHUNK)) {
+        const [{ data: lc }, { data: pf }] = await Promise.all([
+          supabase
+            .from('telegram_insider_token_lifecycle')
+            .select('token_mint, token_symbol, creator_wallet, peak_multiplier')
+            .in('creator_wallet', slice),
+          supabase
+            .from('pumpfun_watchlist')
+            .select('token_mint, token_symbol, creator_wallet')
+            .in('creator_wallet', slice),
+        ]);
+        if (lc) lifecycleTokens.push(...(lc as TokenRow[]));
+        if (pf) pumpfunTokens.push(...(pf as TokenRow[]));
+      }
     }
 
     const tokensByCreator = new Map<string, TokenRow[]>();
