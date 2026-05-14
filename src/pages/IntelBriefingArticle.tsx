@@ -11,6 +11,7 @@ import { ArrowLeft, Calendar, User } from 'lucide-react';
 import { format } from 'date-fns';
 import { ArticleContent } from '@/components/intel/ArticleMarkdownRenderer';
 import { CrossPostStrip } from '@/components/intel/CrossPostStrip';
+import { TLDRButton } from '@/components/intel/TLDRButton';
 
 export default function IntelBriefingArticle() {
   const { slug } = useParams<{ slug: string }>();
@@ -189,6 +190,7 @@ export default function IntelBriefingArticle() {
                 <Calendar className="h-3.5 w-3.5" />
                 {format(new Date(article.published_at || article.created_at), 'MMMM d, yyyy')}
               </span>
+              <TLDRButton briefingId={article.id} title={article.title} />
             </div>
 
             {/* Published by line + TOP share bar */}
