@@ -12,7 +12,7 @@ interface VariantEditorTabProps {
   briefingId: string;
   briefingSlug: string;
   masterContent: string;
-  depth: number; // 75 | 50 | 25 | 0 (breadcrumb)
+  depth: number; // 75 | 50 | 25 | 1 (TL;DR) | 0 (breadcrumb)
   label: string;
   platform: string;
   badgeColor: string;
@@ -28,6 +28,10 @@ function buildInstruction(depth: number, slug: string): string {
   }
   if (depth === 25) {
     return `Create a punchy summary of the following article at approximately 25% of its original length. Lead with the hook, include 1-2 key insights and the most impactful statistic. Make it compelling for Reddit/short-form platforms. Do NOT add new information. End with this exact backlink:\n${backlink}`;
+  }
+  if (depth === 1) {
+    // TL;DR snippet — plain prose summary, no link, no preamble.
+    return `Write a TL;DR summary of the following article in 2-3 sentences (max ~300 characters total). Capture the core thesis and the single most important takeaway. Plain prose only — no hashtags, no link, no "TL;DR:" prefix, no preamble. Output ONLY the summary text.`;
   }
   // breadcrumb (depth = 0)
   return `Compose a 2-3 sentence teaser/breadcrumb post (max ~280 characters total) suitable for Twitter/X or Telegram. Lead with the most provocative hook from the article. End with this exact link back: https://blackbox.farm/intel/briefing/${slug}. No hashtags unless they appear in the original article. Output ONLY the teaser text — no preamble.`;
