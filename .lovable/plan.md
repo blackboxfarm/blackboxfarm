@@ -1,41 +1,38 @@
-## Goal
-Add a new **TL;DR** variant alongside the existing 75% / 50% / 25% / Breadcrumb tabs. Each article gets a 2–3 sentence TL;DR snippet stored in `intel_briefing_variants`. Provide a one-click backfill for the existing catalog.
+# Dedupe `useUserTier` — eliminate duplicate `check-subscription` calls
 
-## Storage decision
-Reuse the existing `intel_briefing_variants` table — just add `depth = 1` as the TL;DR sentinel (kept distinct from `0` = Breadcrumb teaser-with-link).
+## Problem
 
-```text
-depth =  75 → 75% Substantial
-depth =  50 → 50% Condensed
-depth =  25 → 25% Teaser
-depth =   1 → TL;DR snippet  ← NEW (no backlink, 2–3 sentences, ~300 chars)
-depth =   0 → Breadcrumb (X/TG teaser w/ link)
-```
+Every component that calls `useUserTier()` independently:
+1. Fetches `web_user_subscriptions` from DB
+2. Invokes `check-subscription` edge function
+3. Sets its own 60s polling interval
 
-## Changes
+With 3–4 consumers mounted per page (TierGate, badges, paywall checks, header), the same user gets 3–4 parallel calls to each, visible in edge function logs.
 
-### 1. DB migration
-- Drop + recreate `intel_briefing_variants_depth_check` to allow `depth IN (0, 1, 25, 50, 75)`.
+## Fix — module-level shared state
 
-### 2. `VariantEditorTab.tsx`
-- Extend `buildInstruction()` with a `depth === 1` branch:
-  > "Write a 2–3 sentence TL;DR (~300 chars max) summarizing the article's core thesis. No hashtags, no link, no preamble. Plain prose. Output only the snippet."
+Convert `useUserTier` from per-hook fetching to a singleton store, similar to how `useAuth` works.
 
-### 3. `IntelBriefingsManager.tsx`
-- Add `TabsTrigger value="vtldr"` ("📝 TL;DR (n)") + matching `TabsContent` rendering `<VariantEditorTab depth={1} label="TL;DR" platform="Snippet / summary" badgeColor="bg-emerald-500/20 text-emerald-400" />`.
-- Add `wtldr = variantWc(1)` for the count badge.
-- Bump the variant-completeness column to `n/5` (TL;DR + 75/50/25/breadcrumb).
+### Mechanics
 
-### 4. `ContentCondenser.tsx`
-- Add `{ depth: 1, label: 'TL;DR', platform: 'Snippet / summary', color: 'bg-emerald-500/20 text-emerald-400' }` to `DEPTH_CONFIG`.
-- Add the `depth === 1` branch in `handleGenerate()` with the same TL;DR instruction.
-- Add a **"Backfill TL;DR (N missing)"** button at the top: scans all published briefings without a `depth = 1` variant and calls `condense-article` sequentially with a small delay between calls, writing each result back via the existing save mutation. Shows progress toast (`x / N done`).
+1. Lift `tierInfo` and `isLoading` into module-level state outside the hook
+2. Add `let fetchPromise: Promise<void> | null` so concurrent callers await the same in-flight fetch
+3. Add `let lastFetchAt = 0` and skip re-fetching within a 30s window
+4. Replace the per-hook 60s `setInterval` with a single module-level interval that fires only when at least one consumer is mounted (refcount)
+5. Hooks subscribe via a tiny pub/sub (`Set<listener>`) and rerender on store updates
+6. Public API stays identical (`tierInfo`, `isLoading`, `meetsMinimumTier`, `hasFeature`, `isAnonymous`, `isPro`, `checkSubscription`) so no consumer changes needed
+7. Reset cache when `user.id` changes (login/logout/account switch)
 
-### 5. No public-article display change
-TL;DR is generated and stored only — public rendering on `IntelBriefingArticle` is left untouched (out of scope unless you want it shown above the article body).
+### File touched
 
-## Out of scope
-- Auto-generation on article publish (going-forward path is just "the tab is there to click Generate"). If you want truly automatic on publish, say the word and I'll add a trigger/hook.
-- Showing TL;DR on the public article page.
+- `src/hooks/useUserTier.ts` — rewrite internals, keep exports identical
 
-Awaiting **Plan Approved**.
+### Expected outcome
+
+- 1 `check-subscription` call per user per page load instead of 3–4
+- 1 timer firing every 60s globally instead of N timers
+- No behavior change for consumers — same shape, same values
+
+## Verification
+
+After deploy, reload an article page and check edge function logs for `check-subscription`. Should see one call per user per minute, not four.
