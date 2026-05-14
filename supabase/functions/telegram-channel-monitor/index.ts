@@ -2698,12 +2698,27 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                       }
                     }
                   } else {
-                    // ============== LIVE MODE: REAL SCALP BUY ==============
+                  // ============== LIVE MODE: REAL SCALP BUY ==============
                     console.log(`[telegram-channel-monitor] SCALP LIVE MODE: Triggering buy for ${currentTokenData?.symbol || tokenMint}${launchpadInfo}${curveInfo} - $${scalpBuyAmount}`);
 
                     // flipit-execute requires buyAmountSol (USD-only is rejected). Convert here.
                     const scalpSolPrice = await fetchSolPriceForConversion();
                     const scalpBuyAmountSol = scalpSolPrice > 0 ? (scalpBuyAmount / scalpSolPrice) : 0;
+
+                    // PRE-FLIGHT GUARD: bail out before invoking flipit-execute when
+                    // upstream price/SOL conversion produced a 0 amount. No point hitting
+                    // the trader with a guaranteed-rejected request.
+                    if (!scalpBuyAmountSol || scalpBuyAmountSol <= 0 || !currentPrice || currentPrice <= 0) {
+                      console.warn(`[telegram-channel-monitor] Scalp: SKIP — price/SOL conversion unavailable (price=${currentPrice}, scalpBuyAmountSol=${scalpBuyAmountSol}, solPrice=${scalpSolPrice})`);
+                      if (callId) {
+                        await supabase
+                          .from('telegram_channel_calls')
+                          .update({ status: 'skipped', skip_reason: `Scalp skipped: upstream price unavailable (token price=${currentPrice}, sol=${scalpSolPrice})` })
+                          .eq('id', callId);
+                      }
+                      totalSkipped++;
+                      continue;
+                    }
 
                     const buyRequest = {
                       walletId,
@@ -2902,6 +2917,38 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                   // No launchpad allowlist, no liquidity lock check, no mcap floor, no regex.
                   // First-time-seen (Layer 1a + 1b above) is the ONLY rule. Just buy.
                   {
+                    // ============== GLOBAL FIRST-CALL GUARD ==============
+                    // Honor `isFirstCall` (cross-channel global check) on this branch too.
+                    // Layer 1a/1b above only check this channel's history; if the same mint
+                    // was already called in ANY other channel we should not buy here.
+                    if (!isFirstCall) {
+                      console.log(`[telegram-channel-monitor] FlipIt: SKIPPING ${currentTokenData?.symbol || tokenMint} - NOT FIRST CALL (token was already mentioned in another channel/message)`);
+                      if (callId) {
+                        await supabase
+                          .from('telegram_channel_calls')
+                          .update({ status: 'skipped', skip_reason: 'FlipIt skipped: not first call (mentioned previously in another channel)' })
+                          .eq('id', callId);
+                      }
+                      totalSkipped++;
+                      continue;
+                    }
+
+                    // ============== PRE-FLIGHT PRICE GUARD ==============
+                    // Bail out before invoking flipit-execute when upstream price-fetch failed.
+                    // Without a valid price the trader will reject anyway — skip the round trip.
+                    const _flipitPrice = currentTokenData?.price;
+                    if (!_flipitPrice || _flipitPrice <= 0) {
+                      console.warn(`[telegram-channel-monitor] FlipIt: SKIP — token price unavailable (price=${_flipitPrice}) for ${tokenMint}`);
+                      if (callId) {
+                        await supabase
+                          .from('telegram_channel_calls')
+                          .update({ status: 'skipped', skip_reason: `FlipIt skipped: upstream price unavailable (price=${_flipitPrice})` })
+                          .eq('id', callId);
+                      }
+                      totalSkipped++;
+                      continue;
+                    }
+
                     // Use configured wallet if set; otherwise fall back to the single active FlipIt wallet.
                     let walletId = config.flipit_wallet_id as string | null;
 
@@ -3174,6 +3221,17 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                       const legacyUsd = currentRuleResult.buyAmount;
                       const legacySolPrice = await fetchSolPriceForConversion();
                       const legacyBuyAmountSol = legacySolPrice > 0 ? (legacyUsd / legacySolPrice) : 0;
+                      // PRE-FLIGHT GUARD: skip if price/SOL conversion produced 0 — flipit-execute
+                      // would just reject with "buyAmountSol required". No point invoking it.
+                      if (!legacyBuyAmountSol || legacyBuyAmountSol <= 0 || !currentTokenData?.price || currentTokenData.price <= 0) {
+                        console.warn(`[telegram-channel-monitor] Legacy FlipIt: SKIP — upstream price unavailable (price=${currentTokenData?.price}, sol=${legacySolPrice}, buyAmountSol=${legacyBuyAmountSol})`);
+                        if (callId) {
+                          await supabase
+                            .from('telegram_channel_calls')
+                            .update({ status: 'skipped', skip_reason: `Legacy FlipIt skipped: upstream price unavailable` })
+                            .eq('id', callId);
+                        }
+                      } else {
                       await supabase.functions.invoke('flipit-execute', {
                         body: {
                           walletId: config.flipit_wallet_id,
@@ -3186,6 +3244,7 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                         }
                       });
                       totalBuys++;
+                      }
                     } catch (buyError) {
                       console.error('[telegram-channel-monitor] FlipIt buy error:', buyError);
                     }
