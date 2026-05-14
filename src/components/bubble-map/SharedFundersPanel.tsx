@@ -125,8 +125,8 @@ export function SharedFundersPanel({ creatorWallet }: { creatorWallet: string | 
                   <span
                     key={p.id}
                     aria-hidden
-                    className="pointer-events-none absolute -top-1 left-1/2 text-[11px] font-bold text-amber-400 animate-popcorn"
-                    style={{ transform: `translateX(${p.x}px)` }}
+                    className="pointer-events-none absolute -top-1 text-[11px] font-bold text-amber-400 animate-popcorn"
+                    style={{ left: `calc(50% + ${p.x}px)` }}
                   >
                     +{p.value}
                   </span>
