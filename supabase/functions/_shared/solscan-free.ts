@@ -47,6 +47,18 @@ export async function fetchSolscanFreeTokenMeta(
     console.warn('[Solscan Meta] SOLSCAN_API_KEY missing — skipping');
     return null;
   }
+
+  // Guard: validate Solana pubkey shape before calling Solscan.
+  // A real pubkey is 32 bytes → 43–44 base58 chars. Truncated mints
+  // (e.g. a chopped "…pump" suffix at 32 chars) trip Solscan's
+  // validator with a 400 and keep retrying, so reject locally.
+  const SOLANA_PUBKEY_REGEX = /^[1-9A-HJ-NP-Za-km-z]{43,44}$/;
+  if (!tokenMint || !SOLANA_PUBKEY_REGEX.test(tokenMint)) {
+    console.warn(
+      `[Solscan Meta] Skipping malformed mint (len=${tokenMint?.length ?? 0}): ${tokenMint?.slice(0, 12)}…`
+    );
+    return null;
+  }
   
   const logger = createApiLogger({
     serviceName: 'solscan',
