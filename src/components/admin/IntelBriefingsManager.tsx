@@ -836,7 +836,7 @@ function IntelBriefingsArticlesManager() {
                                   {breadcrumbCount > 0 && <span className="text-[10px] font-mono">({breadcrumbCount})</span>}
                                 </span>
                               </TooltipTrigger>
-                              <TooltipContent side="top"><p className="text-xs">{breadcrumbCount > 0 ? `${breadcrumbCount}/4 variants (75/50/25/breadcrumb)` : 'No condensed variants yet'}</p></TooltipContent>
+                              <TooltipContent side="top"><p className="text-xs">{breadcrumbCount > 0 ? `${breadcrumbCount}/5 variants (TL;DR/75/50/25/breadcrumb)` : 'No condensed variants yet'}</p></TooltipContent>
                             </Tooltip>
                           </div>
                         </TooltipProvider>
