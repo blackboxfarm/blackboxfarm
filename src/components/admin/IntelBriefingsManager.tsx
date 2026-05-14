@@ -1208,6 +1208,42 @@ function IntelBriefingsArticlesManager() {
             </Button>
           </div>
         )}
+
+        {/* Social-share card (1.91:1 — used by Twitter/Facebook/LinkedIn previews) */}
+        {editingId && form.featured_image_url && (() => {
+          const current = briefings.find(b => b.id === editingId);
+          const socialUrl = current?.social_image_url;
+          const genAt = current?.social_image_generated_at;
+          const isRegen = regeneratingSocialId === editingId;
+          return (
+            <div className="mt-2 p-3 border border-border/50 rounded-md bg-muted/20 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs">
+                  <div className="font-medium">Social-share card (1.91:1, 1200×628)</div>
+                  <div className="text-muted-foreground">
+                    Used by Twitter / Facebook / LinkedIn previews. Auto-regenerated when you change the hero.
+                    {genAt && <> Last generated {new Date(genAt).toLocaleString()}.</>}
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isRegen}
+                  onClick={() => regenerateSocialCard({ slug: form.slug, id: editingId }, { force: true })}
+                >
+                  {isRegen ? 'Regenerating…' : 'Regenerate Social Card'}
+                </Button>
+              </div>
+              {socialUrl ? (
+                <img src={socialUrl} alt="Social card" className="h-16 w-auto rounded border border-border/40" />
+              ) : (
+                <div className="text-xs text-muted-foreground italic">
+                  No social card yet — sharing will fall back to the hero image (which Twitter crops).
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* SEO collapsible */}
