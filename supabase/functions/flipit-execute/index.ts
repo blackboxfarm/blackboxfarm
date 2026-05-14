@@ -656,8 +656,17 @@ serve(withRunLog('flipit-execute', async (req) => {
       execLog.logPhaseStart('BALANCE_CHECK');
       
       if (!explicitBuyAmountSol || explicitBuyAmountSol <= 0) {
-        execLog.logFailure('buyAmountSol required', { explicitBuyAmountSol });
-        return bad("buyAmountSol is required and must be positive (frontend must convert USD→SOL)");
+        // Demoted from ERROR → WARN: this is a protective rejection (caller passed
+        // null/0 because upstream price-fetch failed), not a true outage. Return
+        // 200 with `skipped: true` so withRunLog records this as success and the
+        // failure-rate monitor stops counting it as an outage.
+        console.warn('[flipit-execute] buyAmountSol missing/zero — caller upstream price-fetch likely failed. Skipping buy.', { explicitBuyAmountSol, source, sourceChannelId, tokenMint: tokenMint?.slice(0, 12) });
+        execLog.log('SKIP_BUY_AMOUNT_REQUIRED', { explicitBuyAmountSol, source });
+        return new Response(JSON.stringify({
+          skipped: true,
+          reason: 'buyAmountSol required (upstream price unavailable)',
+          source: source || 'manual',
+        }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
       const buyAmountSol = explicitBuyAmountSol;
 
