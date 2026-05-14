@@ -49,6 +49,8 @@ interface Briefing {
   tags: string[] | null;
   author: string;
   featured_image_url: string | null;
+  social_image_url: string | null;
+  social_image_generated_at: string | null;
   seo_title: string | null;
   seo_description: string | null;
   is_published: boolean;
