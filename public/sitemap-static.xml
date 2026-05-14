@@ -9,6 +9,9 @@
   <url><loc>https://blackbox.farm/pricing</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://blackbox.farm/tgbot</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://blackbox.farm/feed</loc><changefreq>daily</changefreq><priority>0.7</priority></url>
+  <url><loc>https://blackbox.farm/autopsy</loc><changefreq>daily</changefreq><priority>0.7</priority></url>
+  <url><loc>https://blackbox.farm/blackbox</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://blackbox.farm/competitive-analysis</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
 
   <!-- Product / Promo Pages -->
   <url><loc>https://blackbox.farm/bubblepromo</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
