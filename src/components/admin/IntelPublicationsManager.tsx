@@ -81,6 +81,7 @@ export const IntelPublicationsManager = () => {
     <div className="space-y-6">
       <PublicationForm
         briefings={briefings}
+        publications={publications}
         onSubmit={data => addMutation.mutate(data)}
         isSubmitting={addMutation.isPending}
       />
