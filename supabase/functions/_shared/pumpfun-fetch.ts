@@ -19,6 +19,30 @@ const THROTTLE_MS = 5000;
 const JITTER_MS = 3000;
 let lastRequestTime = 0;
 
+// ── Per-mint negative cache for 403 responses ──
+// When pump.fun returns 403 for a specific mint (usually because it has
+// graduated off the bonding curve and the /coins/{mint} endpoint refuses to
+// serve it, OR because our IP is briefly blocked), we cache that decision so
+// repeated cron cycles don't keep hammering the same dead mint and re-firing
+// the BLOCKED admin alert. Cache is in-memory per edge-function isolate.
+const NEG_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const negative403Cache = new Map<string, number>(); // mint -> expiresAt
+
+function isMintNegativeCached(mint: string): boolean {
+  const exp = negative403Cache.get(mint);
+  if (!exp) return false;
+  if (Date.now() > exp) {
+    negative403Cache.delete(mint);
+    return false;
+  }
+  return true;
+}
+
+function markMintNegative(mint: string) {
+  if (!mint || mint === 'unknown' || mint === 'listing') return;
+  negative403Cache.set(mint, Date.now() + NEG_CACHE_TTL_MS);
+}
+
 // Track 429s across the entire run to trigger admin alerts
 let runRateLimitCount = 0;
 let runTotalCalls = 0;
@@ -65,6 +89,18 @@ export async function pumpfunFetch(
   
   runTotalCalls++;
 
+  // Short-circuit: if this mint recently 403'd, skip pump.fun and go straight
+  // to fallback (DexScreener) so we don't retrip the BLOCKED alert.
+  if (isMintNegativeCached(tokenMint)) {
+    console.log(`[${callerName}] ⏭ Skipping pump.fun for ${tokenMint} (403 negative-cached)`);
+    const fallbackResult = await tryFallbackFetch(endpoint, options);
+    if (fallbackResult) {
+      runSuccessCalls++;
+      return { data: fallbackResult, rateLimited: false, status: 200 };
+    }
+    return { data: null, rateLimited: false, status: 403, error: 'Negative-cached 403 (graduated/blocked)' };
+  }
+
   // Global throttle — wait if too soon after last request
   await throttle();
 
@@ -101,6 +137,7 @@ export async function pumpfunFetch(
 
       if (response.status === 403) {
         runFailedCalls++;
+        markMintNegative(tokenMint);
         console.error(`[${callerName}] 🔒 403 FORBIDDEN on ${tokenMint} — trying fallback mirror`);
         
         // Try fallback API mirror before giving up
@@ -110,7 +147,11 @@ export async function pumpfunFetch(
           return { data: fallbackResult, rateLimited: false, status: 200 };
         }
         
-        if (!alertSent) {
+        // Only alert when we see 403s on MULTIPLE distinct mints in a single
+        // run — a single mint 403 is almost always "graduated off curve",
+        // not an IP-level block. This stops the daily false-positive alert
+        // for tokens like EwrGp4tDun3pVvHpidcoWbtSaU5gDpUJwuF7gEpump.
+        if (!alertSent && negative403Cache.size >= 5) {
           await sendBlockedAlert(callerName, tokenMint);
           alertSent = true;
         }
