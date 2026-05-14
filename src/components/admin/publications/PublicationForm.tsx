@@ -107,7 +107,7 @@ export const PublicationForm = ({ briefings, onSubmit, isSubmitting, initial }: 
             <div className="flex gap-2">
               <Select value={platform} onValueChange={setPlatform}>
                 <SelectTrigger><SelectValue placeholder="Select platform..." /></SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-[420px]">
                   {PLATFORMS.map(p => (
                     <SelectItem key={p} value={p}>{p}</SelectItem>
                   ))}
