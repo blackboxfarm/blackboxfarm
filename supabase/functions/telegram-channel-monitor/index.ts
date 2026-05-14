@@ -3221,6 +3221,17 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                       const legacyUsd = currentRuleResult.buyAmount;
                       const legacySolPrice = await fetchSolPriceForConversion();
                       const legacyBuyAmountSol = legacySolPrice > 0 ? (legacyUsd / legacySolPrice) : 0;
+                      // PRE-FLIGHT GUARD: skip if price/SOL conversion produced 0 — flipit-execute
+                      // would just reject with "buyAmountSol required". No point invoking it.
+                      if (!legacyBuyAmountSol || legacyBuyAmountSol <= 0 || !currentTokenData?.price || currentTokenData.price <= 0) {
+                        console.warn(`[telegram-channel-monitor] Legacy FlipIt: SKIP — upstream price unavailable (price=${currentTokenData?.price}, sol=${legacySolPrice}, buyAmountSol=${legacyBuyAmountSol})`);
+                        if (callId) {
+                          await supabase
+                            .from('telegram_channel_calls')
+                            .update({ status: 'skipped', skip_reason: `Legacy FlipIt skipped: upstream price unavailable` })
+                            .eq('id', callId);
+                        }
+                      } else {
                       await supabase.functions.invoke('flipit-execute', {
                         body: {
                           walletId: config.flipit_wallet_id,
@@ -3233,6 +3244,7 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                         }
                       });
                       totalBuys++;
+                      }
                     } catch (buyError) {
                       console.error('[telegram-channel-monitor] FlipIt buy error:', buyError);
                     }
