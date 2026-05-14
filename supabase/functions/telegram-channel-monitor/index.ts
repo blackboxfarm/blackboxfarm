@@ -2917,6 +2917,38 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                   // No launchpad allowlist, no liquidity lock check, no mcap floor, no regex.
                   // First-time-seen (Layer 1a + 1b above) is the ONLY rule. Just buy.
                   {
+                    // ============== GLOBAL FIRST-CALL GUARD ==============
+                    // Honor `isFirstCall` (cross-channel global check) on this branch too.
+                    // Layer 1a/1b above only check this channel's history; if the same mint
+                    // was already called in ANY other channel we should not buy here.
+                    if (!isFirstCall) {
+                      console.log(`[telegram-channel-monitor] FlipIt: SKIPPING ${currentTokenData?.symbol || tokenMint} - NOT FIRST CALL (token was already mentioned in another channel/message)`);
+                      if (callId) {
+                        await supabase
+                          .from('telegram_channel_calls')
+                          .update({ status: 'skipped', skip_reason: 'FlipIt skipped: not first call (mentioned previously in another channel)' })
+                          .eq('id', callId);
+                      }
+                      totalSkipped++;
+                      continue;
+                    }
+
+                    // ============== PRE-FLIGHT PRICE GUARD ==============
+                    // Bail out before invoking flipit-execute when upstream price-fetch failed.
+                    // Without a valid price the trader will reject anyway — skip the round trip.
+                    const _flipitPrice = currentTokenData?.price;
+                    if (!_flipitPrice || _flipitPrice <= 0) {
+                      console.warn(`[telegram-channel-monitor] FlipIt: SKIP — token price unavailable (price=${_flipitPrice}) for ${tokenMint}`);
+                      if (callId) {
+                        await supabase
+                          .from('telegram_channel_calls')
+                          .update({ status: 'skipped', skip_reason: `FlipIt skipped: upstream price unavailable (price=${_flipitPrice})` })
+                          .eq('id', callId);
+                      }
+                      totalSkipped++;
+                      continue;
+                    }
+
                     // Use configured wallet if set; otherwise fall back to the single active FlipIt wallet.
                     let walletId = config.flipit_wallet_id as string | null;
 
