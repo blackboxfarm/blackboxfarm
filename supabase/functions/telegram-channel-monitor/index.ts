@@ -2698,12 +2698,27 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                       }
                     }
                   } else {
-                    // ============== LIVE MODE: REAL SCALP BUY ==============
+                  // ============== LIVE MODE: REAL SCALP BUY ==============
                     console.log(`[telegram-channel-monitor] SCALP LIVE MODE: Triggering buy for ${currentTokenData?.symbol || tokenMint}${launchpadInfo}${curveInfo} - $${scalpBuyAmount}`);
 
                     // flipit-execute requires buyAmountSol (USD-only is rejected). Convert here.
                     const scalpSolPrice = await fetchSolPriceForConversion();
                     const scalpBuyAmountSol = scalpSolPrice > 0 ? (scalpBuyAmount / scalpSolPrice) : 0;
+
+                    // PRE-FLIGHT GUARD: bail out before invoking flipit-execute when
+                    // upstream price/SOL conversion produced a 0 amount. No point hitting
+                    // the trader with a guaranteed-rejected request.
+                    if (!scalpBuyAmountSol || scalpBuyAmountSol <= 0 || !currentPrice || currentPrice <= 0) {
+                      console.warn(`[telegram-channel-monitor] Scalp: SKIP — price/SOL conversion unavailable (price=${currentPrice}, scalpBuyAmountSol=${scalpBuyAmountSol}, solPrice=${scalpSolPrice})`);
+                      if (callId) {
+                        await supabase
+                          .from('telegram_channel_calls')
+                          .update({ status: 'skipped', skip_reason: `Scalp skipped: upstream price unavailable (token price=${currentPrice}, sol=${scalpSolPrice})` })
+                          .eq('id', callId);
+                      }
+                      totalSkipped++;
+                      continue;
+                    }
 
                     const buyRequest = {
                       walletId,
