@@ -16,6 +16,8 @@ const PLATFORMS = ALL_PLATFORMS;
 
 interface PublicationFormProps {
   briefings: { id: string; title: string; slug: string }[];
+  /** Existing publications, used to show per-platform post counts in the dropdown. */
+  publications?: { briefing_id: string; platform: string }[];
   onSubmit: (data: {
     briefing_id: string;
     platform: string;
@@ -38,6 +40,11 @@ interface PublicationFormProps {
 }
 
 export const PublicationForm = ({ briefings, onSubmit, isSubmitting, initial }: PublicationFormProps) => {
+  // accept publications prop without breaking older callers
+  return <PublicationFormInner briefings={briefings} onSubmit={onSubmit} isSubmitting={isSubmitting} initial={initial} publications={(arguments[0] as PublicationFormProps).publications || []} />;
+};
+
+const PublicationFormInner = ({ briefings, onSubmit, isSubmitting, initial, publications = [] }: PublicationFormProps) => {
   const [briefingId, setBriefingId] = useState(initial?.briefing_id || '');
   const [platform, setPlatform] = useState(initial?.platform || '');
   const [customPlatform, setCustomPlatform] = useState('');
