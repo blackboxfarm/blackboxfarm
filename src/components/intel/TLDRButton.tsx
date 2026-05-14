@@ -57,7 +57,7 @@ export function TLDRButton({ briefingId, title }: TLDRButtonProps) {
           </DialogTitle>
         </DialogHeader>
         <div className="text-xs uppercase tracking-wider text-[#c9a84c]/80 mb-1">{title}</div>
-        <div className="tldr-gold-content text-[#f0d78c] leading-relaxed">
+        <div className="leading-relaxed [&_*]:!text-[#f0d78c] [&_a]:!text-[#c9a84c] [&_a:hover]:!underline [&_strong]:!text-[#f0d78c] [&_h1]:!text-[#f0d78c] [&_h2]:!text-[#f0d78c] [&_h3]:!text-[#f0d78c]">
           <ArticleContent content={variant.content_md} />
         </div>
       </DialogContent>
