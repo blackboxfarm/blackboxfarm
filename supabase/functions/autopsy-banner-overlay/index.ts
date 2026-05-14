@@ -209,7 +209,7 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
   }
 
   try {
-    let { slug, token_mint, ticker, token_visual_description, report_id, source_feed, force } =
+    let { slug, token_mint, ticker, token_visual_description, report_id, source_feed, force, source_banner_override } =
       await req.json();
 
     if (!slug) {
@@ -295,11 +295,18 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
     // try the DexScreener header FIRST (real banner art) and only fall back to
     // the pump.fun mint image when no header exists. fetchSourceBanner already
     // implements that fallback chain when curveDeath=false.
-    const useMintImage = source_feed === 'pumpfun_curve_death';
-    const { url: sourceBannerUrl, visualDesc } = await fetchSourceBanner(token_mint, {
-      curveDeath: useMintImage,
-      supabase,
-    });
+    let sourceBannerUrl: string | null = null;
+    let visualDesc = 'the original token banner artwork';
+    if (source_banner_override) {
+      sourceBannerUrl = source_banner_override;
+      visualDesc = `the official ${ticker || 'token'} banner`;
+      console.log(`[autopsy-banner-overlay] using source_banner_override: ${sourceBannerUrl}`);
+    } else {
+      const useMintImage = source_feed === 'pumpfun_curve_death';
+      const fetched = await fetchSourceBanner(token_mint, { curveDeath: useMintImage, supabase });
+      sourceBannerUrl = fetched.url;
+      visualDesc = fetched.visualDesc;
+    }
     if (!sourceBannerUrl) {
       return new Response(JSON.stringify({ error: 'No source banner available for token', token_mint }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
