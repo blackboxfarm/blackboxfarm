@@ -39,12 +39,7 @@ interface PublicationFormProps {
   };
 }
 
-export const PublicationForm = ({ briefings, onSubmit, isSubmitting, initial }: PublicationFormProps) => {
-  // accept publications prop without breaking older callers
-  return <PublicationFormInner briefings={briefings} onSubmit={onSubmit} isSubmitting={isSubmitting} initial={initial} publications={(arguments[0] as PublicationFormProps).publications || []} />;
-};
-
-const PublicationFormInner = ({ briefings, onSubmit, isSubmitting, initial, publications = [] }: PublicationFormProps) => {
+export const PublicationForm = ({ briefings, onSubmit, isSubmitting, initial, publications = [] }: PublicationFormProps) => {
   const [briefingId, setBriefingId] = useState(initial?.briefing_id || '');
   const [platform, setPlatform] = useState(initial?.platform || '');
   const [customPlatform, setCustomPlatform] = useState('');
@@ -115,9 +110,21 @@ const PublicationFormInner = ({ briefings, onSubmit, isSubmitting, initial, publ
               <Select value={platform} onValueChange={setPlatform}>
                 <SelectTrigger><SelectValue placeholder="Select platform..." /></SelectTrigger>
                 <SelectContent className="max-h-[420px]">
-                  {PLATFORMS.map(p => (
-                    <SelectItem key={p} value={p}>{p}</SelectItem>
-                  ))}
+                  {PLATFORMS.map(p => {
+                    const count = briefingId
+                      ? publications.filter(pub => pub.briefing_id === briefingId && pub.platform === p).length
+                      : 0;
+                    return (
+                      <SelectItem key={p} value={p}>
+                        <span className="flex items-center gap-2">
+                          <span>{p}</span>
+                          {count > 0 && (
+                            <span className="text-xs text-primary font-mono">({count})</span>
+                          )}
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
               <Button type="button" variant="outline" size="icon" onClick={() => setShowCustom(true)}>
