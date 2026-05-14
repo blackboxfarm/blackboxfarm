@@ -417,7 +417,12 @@ serve(withRunLog('token-metadata', async (req) => {
       const tokens: Array<{ mint: string; symbol: string; name: string }> = [];
       
       for (const mint of tokenMints.slice(0, 20)) { // Limit to 20 tokens
-        if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) continue;
+        // Real Solana mints are 43–44 chars. 32-char fragments are
+        // scraper truncations (see solscan-free upstream-trace logs).
+        if (!/^[1-9A-HJ-NP-Za-km-z]{43,44}$/.test(mint)) {
+          console.warn(`[token-metadata] Rejecting malformed mint (len=${mint?.length ?? 0}): ${mint}`);
+          continue;
+        }
         
         try {
           // Try DexScreener first (fast)
@@ -477,8 +482,9 @@ serve(withRunLog('token-metadata', async (req) => {
 
     console.log(`Fetching metadata for token: ${tokenMint}`);
     
-    // Basic validation
-    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(tokenMint)) {
+    // Basic validation — real Solana mints are 43–44 base58 chars.
+    if (!/^[1-9A-HJ-NP-Za-km-z]{43,44}$/.test(tokenMint)) {
+      console.warn(`[token-metadata] Rejecting malformed mint (len=${tokenMint?.length ?? 0}): ${tokenMint}`);
       throw new Error('Invalid mint address format');
     }
 

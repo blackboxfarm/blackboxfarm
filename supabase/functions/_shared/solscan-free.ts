@@ -50,12 +50,19 @@ export async function fetchSolscanFreeTokenMeta(
 
   // Guard: validate Solana pubkey shape before calling Solscan.
   // A real pubkey is 32 bytes → 43–44 base58 chars. Truncated mints
-  // (e.g. a chopped "…pump" suffix at 32 chars) trip Solscan's
-  // validator with a 400 and keep retrying, so reject locally.
+  // (e.g. a "FHfYY…pump" 32-char fragment glued from a visually
+  // shortened address in a scrape) trip Solscan's validator with a
+  // 400 and keep retrying, so reject locally AND emit a stack trace
+  // so the next occurrence names the upstream caller for fixing.
   const SOLANA_PUBKEY_REGEX = /^[1-9A-HJ-NP-Za-km-z]{43,44}$/;
   if (!tokenMint || !SOLANA_PUBKEY_REGEX.test(tokenMint)) {
+    const stack = (new Error('upstream-trace').stack || '')
+      .split('\n')
+      .slice(1, 8)
+      .join('\n');
     console.warn(
-      `[Solscan Meta] Skipping malformed mint (len=${tokenMint?.length ?? 0}): ${tokenMint?.slice(0, 12)}…`
+      `[Solscan Meta] Skipping malformed mint (len=${tokenMint?.length ?? 0}): ${tokenMint}\n` +
+      `  ↑ called from:\n${stack}`
     );
     return null;
   }
