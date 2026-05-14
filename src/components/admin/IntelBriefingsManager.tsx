@@ -475,6 +475,15 @@ function IntelBriefingsArticlesManager() {
       if (!editingId) {
         setEditingId(id!);
       }
+      // Auto-regenerate the social-share card when the hero changed (or never existed)
+      const heroChanged = form.featured_image_url && form.featured_image_url !== originalHeroRef.current;
+      if (heroChanged) {
+        const slugForRegen = form.slug || slugify(form.title);
+        if (slugForRegen) {
+          regenerateSocialCard({ slug: slugForRegen }, { silent: true, force: true });
+        }
+      }
+      originalHeroRef.current = form.featured_image_url || '';
     },
     onError: (e: any) => {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
