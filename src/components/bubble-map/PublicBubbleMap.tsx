@@ -528,6 +528,81 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken, onActi
           addTerminalLine('⚠ no new X entities surfaced — token may have no community yet', 'error');
           addTerminalLine('  → check that this token has an X Community link in its socials', 'info');
         }
+        // --- Loud signaling: profile-only / recycled handle / recycled community ---
+        const xAccounts = afterNodes.filter(n => n.type === 'x_account');
+        const xCommunities = afterNodes.filter(n => n.type === 'x_community');
+        if (xAccounts.length > 0 && xCommunities.length === 0) {
+          toast.warning('⚠️ X Profile found — no Community linked to this token.', {
+            description: 'Only an X handle exists. There is no dedicated X Community for this token yet.',
+            duration: 7000,
+          });
+          addTerminalLine('⚠ PROFILE ONLY — no X Community detected for this token', 'error');
+        }
+        // Recycled-handle / recycled-community detection via token_social_links history
+        (async () => {
+          try {
+            const handles = xAccounts
+              .map(n => (n.label || n.fullId || n.id).replace(/^x_account:/, '').replace(/^@/, '').toLowerCase())
+              .filter(Boolean);
+            const communityIds = xCommunities
+              .map(n => (n.fullId || n.id).replace(/^x_community:/, ''))
+              .filter(Boolean);
+            if (handles.length > 0) {
+              const { data: hRows } = await supabase
+                .from('token_social_links')
+                .select('token_mint, x_handle, previous_handles')
+                .in('x_handle', handles);
+              const tokensForHandle = new Map<string, Set<string>>();
+              const renameCount = new Map<string, number>();
+              (hRows || []).forEach((r: any) => {
+                const h = (r.x_handle || '').toLowerCase();
+                if (!tokensForHandle.has(h)) tokensForHandle.set(h, new Set());
+                tokensForHandle.get(h)!.add(r.token_mint);
+                const prev = Array.isArray(r.previous_handles) ? r.previous_handles.length : 0;
+                renameCount.set(h, Math.max(renameCount.get(h) ?? 0, prev));
+              });
+              for (const h of handles) {
+                const renames = renameCount.get(h) ?? 0;
+                if (renames >= 2) {
+                  toast.warning(`🔁 @${h} has been renamed ${renames} times`, {
+                    description: 'Repeated handle changes can be dis-ingenuous and possibly misleading.',
+                    duration: 8000,
+                  });
+                }
+                const tokens = tokensForHandle.get(h);
+                if (tokens && tokens.size >= 2) {
+                  toast.warning(`🔁 @${h} reused across ${tokens.size} tokens`, {
+                    description: 'Same X handle attached to multiple tokens — possible identity recycling.',
+                    duration: 8000,
+                  });
+                }
+              }
+            }
+            if (communityIds.length > 0) {
+              const { data: cRows } = await supabase
+                .from('token_social_links')
+                .select('token_mint, x_community_id')
+                .in('x_community_id', communityIds);
+              const tokensForCommunity = new Map<string, Set<string>>();
+              (cRows || []).forEach((r: any) => {
+                const cid = r.x_community_id;
+                if (!cid) return;
+                if (!tokensForCommunity.has(cid)) tokensForCommunity.set(cid, new Set());
+                tokensForCommunity.get(cid)!.add(r.token_mint);
+              });
+              for (const [cid, tokens] of tokensForCommunity) {
+                if (tokens.size >= 2) {
+                  toast.warning(`🔁 X Community recycled across ${tokens.size} tokens`, {
+                    description: 'Same community ID attached to multiple unrelated tokens — possible disingenuous rebrand.',
+                    duration: 8000,
+                  });
+                }
+              }
+            }
+          } catch {
+            // best-effort signaling; never break the discovery flow
+          }
+        })();
         setTimeout(() => setTerminalVisible(false), 3500);
       }, 4200);
       dispatchThoughtCustom("community mapped ✓");
