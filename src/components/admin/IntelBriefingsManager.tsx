@@ -546,6 +546,7 @@ function IntelBriefingsArticlesManager() {
   const openEditor = useCallback((briefing?: Briefing) => {
     if (briefing) {
       setEditingId(briefing.id);
+      originalHeroRef.current = briefing.featured_image_url || '';
       setForm({
         title: briefing.title,
         subtitle: briefing.subtitle || '',
@@ -564,6 +565,7 @@ function IntelBriefingsArticlesManager() {
       setTagsInput((briefing.tags || []).join(', '));
     } else {
       setEditingId(null);
+      originalHeroRef.current = '';
       setForm(emptyBriefing);
     setTagsInput(DEFAULT_TAGS.join(', '));
     }
