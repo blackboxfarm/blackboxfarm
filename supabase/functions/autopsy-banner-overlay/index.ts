@@ -87,12 +87,20 @@ async function fetchSourceBanner(
 
   // Default path (post-graduation tokens): DexScreener → pump.fun.
   try {
-    const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+    const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (BlackBoxFarm/Autopsy)' },
+    });
+    console.log(`[fetchSourceBanner] DexScreener status=${r.status} for ${mint}`);
     if (r.ok) {
       const j = await r.json();
-      const header = j?.pairs?.[0]?.info?.header;
-      const name = j?.pairs?.[0]?.baseToken?.name;
+      const pair = j?.pairs?.[0];
+      const header = pair?.info?.header || pair?.info?.openGraph;
+      const name = pair?.baseToken?.name;
+      console.log(`[fetchSourceBanner] DexScreener pairs=${j?.pairs?.length || 0} header=${header || 'none'}`);
       if (header) return { url: header, visualDesc: name ? `the official banner for ${name}` : 'the official token banner' };
+    } else {
+      const t = await r.text().catch(() => '');
+      console.log(`[fetchSourceBanner] DexScreener body=${t.slice(0, 200)}`);
     }
   } catch (_) { /* fallthrough */ }
 
@@ -201,7 +209,7 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
   }
 
   try {
-    let { slug, token_mint, ticker, token_visual_description, report_id, source_feed, force } =
+    let { slug, token_mint, ticker, token_visual_description, report_id, source_feed, force, source_banner_override } =
       await req.json();
 
     if (!slug) {
@@ -282,16 +290,23 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
       console.warn('[autopsy-banner-overlay] existence check failed, continuing:', (e as any)?.message);
     }
 
-    // 1. Source banner — curve deaths AND admin-manual additions both go straight
-    // to the pump.fun mint image (square art) so we never let the AI fabricate a
-    // banner from a missing/empty DexScreener header. We pass squareSource=true
-    // to the prompt so the AI letterboxes the square art on a black canvas
-    // instead of inventing side artwork.
-    const useMintImage = source_feed === 'pumpfun_curve_death' || source_feed === 'admin_manual';
-    const { url: sourceBannerUrl, visualDesc } = await fetchSourceBanner(token_mint, {
-      curveDeath: useMintImage,
-      supabase,
-    });
+    // 1. Source banner — only pre-graduation curve deaths skip DexScreener,
+    // because they don't have a DexScreener page. Admin-manual triggers should
+    // try the DexScreener header FIRST (real banner art) and only fall back to
+    // the pump.fun mint image when no header exists. fetchSourceBanner already
+    // implements that fallback chain when curveDeath=false.
+    let sourceBannerUrl: string | null = null;
+    let visualDesc = 'the original token banner artwork';
+    if (source_banner_override) {
+      sourceBannerUrl = source_banner_override;
+      visualDesc = `the official ${ticker || 'token'} banner`;
+      console.log(`[autopsy-banner-overlay] using source_banner_override: ${sourceBannerUrl}`);
+    } else {
+      const useMintImage = source_feed === 'pumpfun_curve_death';
+      const fetched = await fetchSourceBanner(token_mint, { curveDeath: useMintImage, supabase });
+      sourceBannerUrl = fetched.url;
+      visualDesc = fetched.visualDesc;
+    }
     if (!sourceBannerUrl) {
       return new Response(JSON.stringify({ error: 'No source banner available for token', token_mint }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
