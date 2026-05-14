@@ -196,8 +196,8 @@ function esc(str: string): string {
     .replace(/'/g, "&#039;");
 }
 
-function resolveImage(url?: string | null): string {
-  if (!url) return DEFAULT_OG_IMAGE;
+function resolveImage(url?: string | null): string | undefined {
+  if (!url) return undefined;
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
   if (url.startsWith("/")) return `${SITE_URL}${url}`;
   return `${SITE_URL}/${url}`;
