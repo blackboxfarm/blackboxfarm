@@ -60,29 +60,50 @@ export default {
     const url = new URL(request.url);
     const ua = request.headers.get('user-agent') || '';
 
-    // --- /s/:slug or /:slug on share subdomain — short share URL, proxy ALL requests to intel-share ---
     const isShareSubdomain = url.hostname === 'share.blackbox.farm';
-    const shortMatch = url.pathname.match(/^\/s\/([^/]+)\/?$/)
-      || (isShareSubdomain && url.pathname.match(/^\/([^/]+)\/?$/));
-    if (shortMatch) {
-      const slug = shortMatch[1];
+
+    // --- share.blackbox.farm routes — proxy ALL requests to intel-share ---
+    // Matches:
+    //   share.blackbox.farm/:slug              (short URL)
+    //   share.blackbox.farm/intel/briefing/:slug  (long URL shared from app)
+    //   /s/:slug on any host                   (legacy short URL)
+    const longShareMatch = isShareSubdomain
+      ? url.pathname.match(/^\/intel\/briefing\/([^/]+)\/?$/)
+      : null;
+    const shortShareMatch = url.pathname.match(/^\/s\/([^/]+)\/?$/)
+      || (isShareSubdomain && !longShareMatch && url.pathname.match(/^\/([^/]+)\/?$/));
+    const shareMatch = longShareMatch || shortShareMatch;
+    if (shareMatch) {
+      const slug = shareMatch[1];
       const proxyUrl = `${SUPABASE_FUNCTIONS_BASE}/intel-share?slug=${encodeURIComponent(slug)}${url.search ? '&' + url.search.slice(1) : ''}`;
       try {
         const response = await fetch(proxyUrl, {
+          redirect: 'manual',
           headers: {
             'User-Agent': ua,
             'Accept': 'text/html',
+            'Referer': request.headers.get('referer') || '',
+            'X-Forwarded-For': request.headers.get('cf-connecting-ip') || '',
           },
         });
+
+        // Preserve 3xx redirects (humans get sent to canonical blackbox.farm URL)
+        if (response.status >= 300 && response.status < 400) {
+          const location = response.headers.get('location');
+          if (location) {
+            return Response.redirect(location, 302);
+          }
+        }
+
         const body = await response.arrayBuffer();
         const headers = new Headers(response.headers);
-        headers.set('X-OG-Source', 'cloudflare-short-url');
+        headers.set('X-OG-Source', 'cloudflare-share-proxy');
         return new Response(body, {
           status: response.status,
           headers,
         });
       } catch (err) {
-        console.error('[short-url] error:', err.message);
+        console.error('[share-proxy] error:', err.message);
         return fetch(request);
       }
     }
