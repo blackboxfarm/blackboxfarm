@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
 
     const { data: article, error } = await supabase
       .from("intel_briefings")
-      .select("title, subtitle, seo_title, seo_description, featured_image_url, slug, category, author, published_at, created_at, tags")
+      .select("title, subtitle, seo_title, seo_description, featured_image_url, social_image_url, slug, category, author, published_at, created_at, tags")
       .eq("slug", slug)
       .eq("is_published", true)
       .maybeSingle();
@@ -70,7 +70,11 @@ Deno.serve(async (req) => {
 
     const ogTitle = (article.seo_title || article.title || meta.og_title || "").slice(0, 120);
     const ogDescription = (article.seo_description || article.subtitle || meta.og_description || "").slice(0, 200);
-    const ogImage = resolveOgImage(article.featured_image_url) || meta.og_image_url || DEFAULT_OG_IMAGE;
+    const ogImage =
+      resolveOgImage(article.social_image_url) ||
+      resolveOgImage(article.featured_image_url) ||
+      meta.og_image_url ||
+      DEFAULT_OG_IMAGE;
     // Article canonical/URL/type must ALWAYS be article-specific, never sitewide
     const articleUrl = `${SITE_URL}/intel/briefing/${article.slug}`;
     const publishedAt = article.published_at || article.created_at;
@@ -242,6 +246,6 @@ function normalizeImageUrl(imageUrl?: string | null): string | null {
   return `${SITE_URL}/${imageUrl.replace(/^\/+/, "")}`;
 }
 
-function resolveOgImage(featuredImageUrl?: string | null): string {
-  return normalizeImageUrl(featuredImageUrl) || DEFAULT_OG_IMAGE;
+function resolveOgImage(featuredImageUrl?: string | null): string | undefined {
+  return normalizeImageUrl(featuredImageUrl) || undefined;
 }

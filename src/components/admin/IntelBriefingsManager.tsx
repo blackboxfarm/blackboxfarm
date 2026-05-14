@@ -49,6 +49,8 @@ interface Briefing {
   tags: string[] | null;
   author: string;
   featured_image_url: string | null;
+  social_image_url: string | null;
+  social_image_generated_at: string | null;
   seo_title: string | null;
   seo_description: string | null;
   is_published: boolean;
@@ -251,6 +253,9 @@ function IntelBriefingsArticlesManager() {
   const [showCrop, setShowCrop] = useState(false);
   const [showImageManager, setShowImageManager] = useState(false);
   const [rebrandingId, setRebrandingId] = useState<string | null>(null);
+  const [regeneratingSocialId, setRegeneratingSocialId] = useState<string | null>(null);
+  // Remember the hero URL the editor opened with, so we can detect a change on save
+  const originalHeroRef = useRef<string>('');
 
   const rebrandImages = async (b: Briefing) => {
     setRebrandingId(b.id);
@@ -266,6 +271,42 @@ function IntelBriefingsArticlesManager() {
       toast({ title: 'Rebrand failed', description: e.message, variant: 'destructive' });
     } finally {
       setRebrandingId(null);
+    }
+  };
+
+  // Regenerate the 1.91:1 social-share card from the current hero image
+  const regenerateSocialCard = async (
+    target: { slug?: string; slugs?: string[]; all?: boolean; id?: string },
+    opts: { silent?: boolean; force?: boolean } = { force: true }
+  ) => {
+    if (target.id) setRegeneratingSocialId(target.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-intel-social-card', {
+        body: {
+          slug: target.slug,
+          slugs: target.slugs,
+          all: target.all,
+          force: opts.force ?? true,
+        },
+      });
+      if (error) throw error;
+      const ok = (data?.results || []).filter((r: any) => r.status === 'ok').length;
+      const total = data?.processed ?? 0;
+      if (!opts.silent) {
+        toast({
+          title: 'Social card regenerated',
+          description: `${ok}/${total} card${total === 1 ? '' : 's'} updated for Twitter / Facebook / LinkedIn previews.`,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ['admin-intel-briefings'] });
+      return data;
+    } catch (e: any) {
+      if (!opts.silent) {
+        toast({ title: 'Social card regen failed', description: e.message, variant: 'destructive' });
+      }
+      console.error('[social-card] regen failed:', e);
+    } finally {
+      if (target.id) setRegeneratingSocialId(null);
     }
   };
 
@@ -434,6 +475,15 @@ function IntelBriefingsArticlesManager() {
       if (!editingId) {
         setEditingId(id!);
       }
+      // Auto-regenerate the social-share card when the hero changed (or never existed)
+      const heroChanged = form.featured_image_url && form.featured_image_url !== originalHeroRef.current;
+      if (heroChanged) {
+        const slugForRegen = form.slug || slugify(form.title);
+        if (slugForRegen) {
+          regenerateSocialCard({ slug: slugForRegen }, { silent: true, force: true });
+        }
+      }
+      originalHeroRef.current = form.featured_image_url || '';
     },
     onError: (e: any) => {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
@@ -496,6 +546,7 @@ function IntelBriefingsArticlesManager() {
   const openEditor = useCallback((briefing?: Briefing) => {
     if (briefing) {
       setEditingId(briefing.id);
+      originalHeroRef.current = briefing.featured_image_url || '';
       setForm({
         title: briefing.title,
         subtitle: briefing.subtitle || '',
@@ -514,6 +565,7 @@ function IntelBriefingsArticlesManager() {
       setTagsInput((briefing.tags || []).join(', '));
     } else {
       setEditingId(null);
+      originalHeroRef.current = '';
       setForm(emptyBriefing);
     setTagsInput(DEFAULT_TAGS.join(', '));
     }
@@ -1156,6 +1208,42 @@ function IntelBriefingsArticlesManager() {
             </Button>
           </div>
         )}
+
+        {/* Social-share card (1.91:1 — used by Twitter/Facebook/LinkedIn previews) */}
+        {editingId && form.featured_image_url && (() => {
+          const current = briefings.find(b => b.id === editingId);
+          const socialUrl = current?.social_image_url;
+          const genAt = current?.social_image_generated_at;
+          const isRegen = regeneratingSocialId === editingId;
+          return (
+            <div className="mt-2 p-3 border border-border/50 rounded-md bg-muted/20 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs">
+                  <div className="font-medium">Social-share card (1.91:1, 1200×628)</div>
+                  <div className="text-muted-foreground">
+                    Used by Twitter / Facebook / LinkedIn previews. Auto-regenerated when you change the hero.
+                    {genAt && <> Last generated {new Date(genAt).toLocaleString()}.</>}
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isRegen}
+                  onClick={() => regenerateSocialCard({ slug: form.slug, id: editingId }, { force: true })}
+                >
+                  {isRegen ? 'Regenerating…' : 'Regenerate Social Card'}
+                </Button>
+              </div>
+              {socialUrl ? (
+                <img src={socialUrl} alt="Social card" className="h-16 w-auto rounded border border-border/40" />
+              ) : (
+                <div className="text-xs text-muted-foreground italic">
+                  No social card yet — sharing will fall back to the hero image (which Twitter crops).
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* SEO collapsible */}

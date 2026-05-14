@@ -8477,6 +8477,8 @@ export type Database = {
           seo_description: string | null
           seo_title: string | null
           slug: string
+          social_image_generated_at: string | null
+          social_image_url: string | null
           subtitle: string | null
           tags: string[] | null
           target_persona_slug: string | null
@@ -8498,6 +8500,8 @@ export type Database = {
           seo_description?: string | null
           seo_title?: string | null
           slug: string
+          social_image_generated_at?: string | null
+          social_image_url?: string | null
           subtitle?: string | null
           tags?: string[] | null
           target_persona_slug?: string | null
@@ -8519,6 +8523,8 @@ export type Database = {
           seo_description?: string | null
           seo_title?: string | null
           slug?: string
+          social_image_generated_at?: string | null
+          social_image_url?: string | null
           subtitle?: string | null
           tags?: string[] | null
           target_persona_slug?: string | null

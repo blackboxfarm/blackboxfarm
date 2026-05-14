@@ -582,3 +582,6 @@ verify_jwt = false
 
 [functions.avatar-upload-scan]
 verify_jwt = false
+
+[functions.generate-intel-social-card]
+verify_jwt = false

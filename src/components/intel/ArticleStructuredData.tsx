@@ -15,6 +15,7 @@ interface ArticleStructuredDataProps {
   datePublished: string;
   author?: string;
   imageUrl?: string;
+  socialImageUrl?: string;
   slug: string;
   category?: string;
   tags?: string[];
@@ -27,6 +28,7 @@ export function ArticleStructuredData({
   datePublished,
   author = 'BlackBox Research',
   imageUrl,
+  socialImageUrl,
   slug,
   category,
   tags = [],
@@ -37,6 +39,8 @@ export function ArticleStructuredData({
     document.title = `${title} | Intel Briefings | BlackBox Farm`;
 
     const normalizedImageUrl = normalizeImageUrl(imageUrl);
+    // Twitter/Facebook/LinkedIn render 1.91:1; prefer the dedicated social card
+    const normalizedSocialUrl = normalizeImageUrl(socialImageUrl) || normalizedImageUrl;
 
     const setMeta = (name: string, content: string, prop = 'name') => {
       let el = document.querySelector(`meta[${prop}="${name}"]`) as HTMLMetaElement;
@@ -66,15 +70,15 @@ export function ArticleStructuredData({
     setMeta('og:description', description, 'property');
     setMeta('og:type', 'article', 'property');
     setMeta('og:url', articleUrl, 'property');
-    if (normalizedImageUrl) {
-      setMeta('og:image', normalizedImageUrl, 'property');
-      setMeta('og:image:secure_url', normalizedImageUrl, 'property');
+    if (normalizedSocialUrl) {
+      setMeta('og:image', normalizedSocialUrl, 'property');
+      setMeta('og:image:secure_url', normalizedSocialUrl, 'property');
       setMeta('og:image:width', '1200', 'property');
-      setMeta('og:image:height', '630', 'property');
-      setMeta('twitter:image', normalizedImageUrl);
-      setMeta('image', normalizedImageUrl, 'itemprop');
+      setMeta('og:image:height', socialImageUrl ? '628' : '630', 'property');
+      setMeta('twitter:image', normalizedSocialUrl);
+      setMeta('image', normalizedSocialUrl, 'itemprop');
     }
-    setMeta('twitter:card', normalizedImageUrl ? 'summary_large_image' : 'summary');
+    setMeta('twitter:card', normalizedSocialUrl ? 'summary_large_image' : 'summary');
     setMeta('twitter:site', '@HoldersIntel');
     setMeta('twitter:title', ogTitle);
     setMeta('twitter:description', description);
@@ -111,7 +115,7 @@ export function ArticleStructuredData({
       document.getElementById('intel-briefing-jsonld')?.remove();
       if (prevCanonical) canonical.href = prevCanonical;
     };
-  }, [title, description, datePublished, author, imageUrl, slug, category, tags, sameAs]);
+  }, [title, description, datePublished, author, imageUrl, socialImageUrl, slug, category, tags, sameAs]);
 
   return null;
 }
