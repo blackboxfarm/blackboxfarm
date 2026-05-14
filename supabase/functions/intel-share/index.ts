@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
 
     const { data: article, error } = await supabase
       .from("intel_briefings")
-      .select("id, title, subtitle, seo_title, seo_description, featured_image_url, slug, category, author, published_at, created_at, tags, updated_at")
+      .select("id, title, subtitle, seo_title, seo_description, featured_image_url, social_image_url, slug, category, author, published_at, created_at, tags, updated_at")
       .eq("slug", slug)
       .eq("is_published", true)
       .maybeSingle();
@@ -55,7 +55,13 @@ Deno.serve(async (req) => {
     const ogTitle = fullTitle.slice(0, 120);
     const pageTitle = fullTitle.slice(0, 60);
     const ogDescription = (article.seo_description || article.subtitle || meta.og_description || "").slice(0, 200);
-    const ogImage = resolveImage(article.featured_image_url) || meta.og_image_url || DEFAULT_OG_IMAGE;
+    const ogImage =
+      resolveImage(article.social_image_url) ||
+      resolveImage(article.featured_image_url) ||
+      meta.og_image_url ||
+      DEFAULT_OG_IMAGE;
+    const ogImageWidth = article.social_image_url ? "1200" : "1200";
+    const ogImageHeight = article.social_image_url ? "628" : "630";
     const canonicalUrl = `${SITE_URL}/intel/briefing/${article.slug}`;
     const shareRequestUrl = `https://share.blackbox.farm/${encodeURIComponent(article.slug)}`;
     const publishedAt = article.published_at || article.created_at;
@@ -136,8 +142,8 @@ Deno.serve(async (req) => {
   <meta property="og:description" content="${esc(ogDescription)}" />
   <meta property="og:image" content="${ogImage}" />
   <meta property="og:image:secure_url" content="${ogImage}" />
-  <meta property="og:image:width" content="1200" />
-  <meta property="og:image:height" content="630" />
+  <meta property="og:image:width" content="${ogImageWidth}" />
+  <meta property="og:image:height" content="${ogImageHeight}" />
   <meta property="og:image:alt" content="${esc(ogTitle)}" />
   <meta property="og:site_name" content="BlackBox Farm | HoldersIntel" />
   <meta property="og:locale" content="en_US" />
