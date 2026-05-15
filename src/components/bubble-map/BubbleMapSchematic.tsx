@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, forwardRef, useImperativeHandle } from 'react';
+import React, { useMemo, useCallback, forwardRef, useImperativeHandle, useState, useEffect } from 'react';
 import {
   ReactFlow,
   Background,
@@ -12,6 +12,14 @@ import {
 import '@xyflow/react/dist/style.css';
 import dagre from 'dagre';
 import { ENTITY_COLORS, MeshNode } from '@/hooks/useMeshGraph';
+import { Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+
+interface ResolvedLabels {
+  communities: Record<string, { name: string | null; member_count: number | null; recycled_count: number | null; recycled_band: string | null }>;
+  tokens: Record<string, { ticker: string | null; name: string | null }>;
+  pending: Set<string>;
+}
 
 interface BubbleMapSchematicProps {
   graphData: { nodes: any[]; links: any[] };
@@ -98,7 +106,10 @@ function pruneToTokenAndSocials(graphData: { nodes: any[]; links: any[] }) {
   return { nodes, links };
 }
 
-function buildLayout(graphData: { nodes: any[]; links: any[] }) {
+function buildLayout(
+  graphData: { nodes: any[]; links: any[] },
+  resolved: ResolvedLabels,
+) {
   const g = new dagre.graphlib.Graph();
   g.setGraph({ rankdir: 'TB', nodesep: 40, ranksep: 90, marginx: 20, marginy: 20 });
   g.setDefaultEdgeLabel(() => ({}));
@@ -171,37 +182,50 @@ function buildLayout(graphData: { nodes: any[]; links: any[] }) {
     const color = ENTITY_COLORS[n.type] || '#888';
 
     // ----- Smart label resolution -----
-    // Token: prefer a clean $TICKER from label/displayName, else short mint fallback.
-    // X Community: prefer the human community name, else "Community #<short id>".
-    let label: string;
+    // Token: prefer resolved ticker from cache, else label/displayName, else spinner+mint fallback.
+    // X Community: prefer resolved human name from cache, else label, else spinner+id fallback.
+    let label: React.ReactNode;
+    let unresolvedSpinner = false;
     const rawLabel = (n.label || '').toString();
     const rawDisplay = (n.displayName || '').toString();
     const fullId = (n.fullId || n.id || '').toString();
     if (n.type === 'token') {
-      const ticker = rawLabel.startsWith('$') && rawLabel.length > 1 && rawLabel.length <= 12
+      const mint = fullId.replace(/^token:/, '');
+      const cached = resolved.tokens[mint];
+      const cachedTicker = cached?.ticker ? `$${cached.ticker.replace(/^\$/, '')}` : '';
+      const ticker = cachedTicker
+        || (rawLabel.startsWith('$') && rawLabel.length > 1 && rawLabel.length <= 12
         ? rawLabel
         : rawDisplay && rawDisplay.length <= 12
         ? rawDisplay.startsWith('$') ? rawDisplay : `$${rawDisplay}`
-        : '';
+        : '');
       if (ticker) {
         label = ticker;
       } else {
-        const mint = fullId.replace(/^token:/, '');
-        label = mint.length > 10 ? `${mint.slice(0, 4)}…${mint.slice(-4)}` : mint || '$pending';
+        const fallback = mint.length > 10 ? `${mint.slice(0, 4)}…${mint.slice(-4)}` : mint || '$pending';
+        unresolvedSpinner = resolved.pending.has(`token:${mint}`);
+        label = fallback;
       }
     } else if (n.type === 'x_community') {
       const cid = fullId.replace(/^x_community:/, '');
-      // Treat label as "name" only if it is NOT just the numeric id.
+      const cachedName = resolved.communities[cid]?.name || '';
       const looksLikeId = !rawLabel || /^\d+$/.test(rawLabel) || rawLabel.includes(cid.slice(0, 6));
-      const name = !looksLikeId ? rawLabel : (rawDisplay && !/^\d+$/.test(rawDisplay) ? rawDisplay : '');
-      label = name || `Community #${cid.slice(0, 6)}`;
+      const name = cachedName
+        || (!looksLikeId ? rawLabel : (rawDisplay && !/^\d+$/.test(rawDisplay) ? rawDisplay : ''));
+      if (name) {
+        label = name;
+      } else {
+        unresolvedSpinner = resolved.pending.has(`community:${cid}`);
+        label = `Community #${cid.slice(0, 6)}`;
+      }
     } else {
       label = rawDisplay || rawLabel || (fullId.length > 14 ? fullId.slice(0, 14) + '…' : fullId);
     }
 
-    const recycledCount = n.type === 'x_community'
-      ? (communityTokenNeighbors.get(n.id)?.size ?? 0)
-      : 0;
+    const cidForRecycle = n.type === 'x_community' ? fullId.replace(/^x_community:/, '') : '';
+    const cachedRecycle = cidForRecycle ? (resolved.communities[cidForRecycle]?.recycled_count ?? 0) : 0;
+    const graphRecycle = n.type === 'x_community' ? (communityTokenNeighbors.get(n.id)?.size ?? 0) : 0;
+    const recycledCount = Math.max(cachedRecycle, graphRecycle);
     const isRecycled = recycledCount > 1;
 
     const subLabel =
@@ -231,7 +255,10 @@ function buildLayout(graphData: { nodes: any[]; links: any[] }) {
           >
             {subLabel}
           </span>
-          <span className="font-semibold text-xs truncate max-w-[160px]">{label}</span>
+          <span className="font-semibold text-xs truncate max-w-[160px] inline-flex items-center gap-1">
+            {unresolvedSpinner && <Loader2 className="h-3 w-3 animate-spin opacity-60" />}
+            {label}
+          </span>
         </div>
       ) },
       sourcePosition: Position.Bottom,
