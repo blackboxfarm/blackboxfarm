@@ -932,34 +932,58 @@ Deno.serve(withRunLog('allstar-mint-auditor', async (req) => {
       .order('last_audit_at', { ascending: true, nullsFirst: true })
       .limit(audit_batch_size);
 
-    const auditQueue = async () => {
-      for (const allstar of allstarsToAudit || []) {
-        try {
-          const familySize = (allstar.family_wallets || []).length;
-          results.total_family_wallets_scanned += familySize;
+    // Soft deadline so the background task always wraps up well within the
+    // 25-min mark, leaving runway before the next */30 cron tick.
+    const SOFT_DEADLINE_MS = 23 * 60 * 1000;
+    const CONCURRENCY = 8;
 
-          const hits = await auditAllstarFamily(supabase, allstar, heliusApiKey!, effectiveHoursLookback);
-          results.allstars_audited++;
+    const auditOne = async (allstar: any) => {
+      if (Date.now() - startTime > SOFT_DEADLINE_MS) {
+        results.errors.push(`${allstar.master_wallet.slice(0, 8)}: deadline-skip`);
+        return;
+      }
+      try {
+        const familySize = (allstar.family_wallets || []).length;
+        results.total_family_wallets_scanned += familySize;
 
-          for (const hit of hits) {
-            await createAllstarAlert(supabase, allstar, hit);
-            results.new_mints_detected++;
-            results.alerts_created++;
-          }
+        const hits = await auditAllstarFamily(supabase, allstar, heliusApiKey!, effectiveHoursLookback);
+        results.allstars_audited++;
 
-          await supabase
+        for (const hit of hits) {
+          await createAllstarAlert(supabase, allstar, hit);
+          results.new_mints_detected++;
+          results.alerts_created++;
+        }
+
+        await assertDbWrite(
+          supabase
             .from('allstar_dev_registry')
             .update({
               last_audit_at: new Date().toISOString(),
               audit_count: (allstar.audit_count || 0) + 1,
             })
-            .eq('id', allstar.id);
-        } catch (e: any) {
-          results.errors.push(`${allstar.master_wallet.slice(0, 8)}: ${e.message}`);
-        }
+            .eq('id', allstar.id)
+            .select('id'),
+          'allstar_dev_registry',
+          'UPDATE last_audit_at'
+        );
+      } catch (e: any) {
+        results.errors.push(`${allstar.master_wallet.slice(0, 8)}: ${e.message}`);
       }
+    };
+
+    const auditQueue = async () => {
+      const queue = [...(allstarsToAudit || [])];
+      const workers = Array.from({ length: CONCURRENCY }, async () => {
+        while (queue.length) {
+          const next = queue.shift();
+          if (!next) break;
+          await auditOne(next);
+        }
+      });
+      await Promise.all(workers);
       const elapsedBg = Date.now() - startTime;
-      console.log(`[allstar] ✅ Background batch complete in ${elapsedBg}ms:`, results);
+      console.log(`[allstar] ✅ Background sweep complete in ${elapsedBg}ms:`, results);
     };
 
     // Background mode: queue and return immediately so the client doesn't time out
