@@ -16,7 +16,7 @@ import { Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 interface ResolvedLabels {
-  communities: Record<string, { name: string | null; member_count: number | null; recycled_count: number | null; recycled_band: string | null }>;
+  communities: Record<string, { name: string | null; member_count: number | null; recycled_count: number | null; recycled_band: string | null; name_history?: any[] | null; linked_token_mints?: string[] | null }>;
   tokens: Record<string, { ticker: string | null; name: string | null }>;
   pending: Set<string>;
 }
@@ -32,6 +32,13 @@ interface BubbleMapSchematicProps {
    *                         and any socials directly attached to that token.
    */
   mode?: 'branches' | 'prune';
+  /**
+   * Which entity is the centerpiece of the search. When 'handle', the layout
+   * re-roots on the X handle and reads:
+   *   handle → x_communities (role badge on edge) → token ($TICKER) → dev wallet.
+   */
+  centerpiece?: 'token' | 'handle' | 'wallet' | 'community';
+  centerpieceId?: string | null;
 }
 
 export interface SchematicHandle {
