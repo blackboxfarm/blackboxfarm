@@ -707,6 +707,24 @@ export type Database = {
           },
         ]
       }
+      allstar_sms_throttle: {
+        Row: {
+          last_sent_at: string
+          master_wallet: string
+          total_sent: number
+        }
+        Insert: {
+          last_sent_at?: string
+          master_wallet: string
+          total_sent?: number
+        }
+        Update: {
+          last_sent_at?: string
+          master_wallet?: string
+          total_sent?: number
+        }
+        Relationships: []
+      }
       api_provider_config: {
         Row: {
           created_at: string | null
