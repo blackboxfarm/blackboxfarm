@@ -463,11 +463,24 @@ const SchematicInner = forwardRef<SchematicHandle, BubbleMapSchematicProps>(func
 
   const effectiveData = useMemo(() => {
     if (centerpiece === 'handle') {
-      // Find the handle node — prefer explicit id, else first x_account.
-      const handleNode =
-        (centerpieceId && graphData.nodes.find((n: any) => n.id === centerpieceId || (n.fullId || '').endsWith(`:${centerpieceId}`))) ||
+      const wanted = canonicalHandleId(centerpieceId);
+      // Find the handle node by canonical handle, regardless of `x_account:`/`@` prefix.
+      let handleNode =
+        (wanted && graphData.nodes.find((n: any) =>
+          (n.type === 'x_account' || n.type === 'x_user') &&
+          (canonicalHandleId(n.fullId || n.id) === wanted || canonicalHandleId(n.label) === wanted)
+        )) ||
         graphData.nodes.find((n: any) => n.type === 'x_account');
-      return pruneToHandleChain(graphData, handleNode?.id || null);
+      // Synthesize a handle root if none exists yet — guarantees the schematic
+      // always has a single root and avoids the "no handle node → return full
+      // graph → 56-node mess" failure mode.
+      let workingGraph = graphData;
+      if (!handleNode && wanted) {
+        const synthId = `x_account:${wanted}`;
+        handleNode = { id: synthId, fullId: wanted, type: 'x_account', label: `@${wanted}`, val: 1, displayName: `@${wanted}` } as any;
+        workingGraph = { nodes: [handleNode, ...graphData.nodes], links: graphData.links };
+      }
+      return pruneToHandleChain(workingGraph, handleNode?.id || null);
     }
     if (mode === 'prune') return pruneToTokenAndSocials(graphData);
     return graphData;
