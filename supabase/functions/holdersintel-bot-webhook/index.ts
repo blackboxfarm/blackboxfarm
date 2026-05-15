@@ -9,6 +9,7 @@ import { getTokenWarnings, writeEarlyWarnings, generateWarningsFromHoldersData }
 import { sanitizeTelegramInput, isInputSafeToProcess } from "../_shared/telegram-input-sanitizer.ts";
 import { obfuscateTicker } from "../_shared/ticker-obfuscator.ts";
 import { runBadActorCheck } from "../_shared/bad-actor-check.ts";
+import { xHandleReverseLookup, formatXLookupForTelegram } from "../_shared/x-handle-reverse-lookup.ts";
 
 const BOT_TOKEN = Deno.env.get("TELEGRAM_HOLDERSINTEL_BOT_TOKEN")!;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
@@ -4840,6 +4841,48 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
             if (dmCA) {
               console.log('[bot] DM auto-scan triggered:', dmCA.slice(0, 12));
               await handleHolders(chatId, telegramUserId, dmCA);
+            }
+            // DM: auto-detect bare X handle (e.g., "@pumpfun711" or "pumpfun711")
+            // and run mesh reverse-lookup to surface linked dev wallets / tokens / communities.
+            else if (/^@?[A-Za-z0-9_]{2,15}$/.test(sanitized.rawTruncated.trim())) {
+              const handle = sanitized.rawTruncated.trim().replace(/^@/, '').toLowerCase();
+              console.log('[bot] X-handle reverse lookup:', handle);
+              try {
+                // Daily quota: Free = 3, Pro+ = unlimited
+                const linked = await getLinkedUser(telegramUserId);
+                let tier = 'free';
+                if (linked?.user_id) tier = await getUserTier(linked.user_id);
+                const isPaid = ['x_subscriber', 'pro', 'dev', 'enterprise'].includes(tier);
+                if (!isPaid) {
+                  const today = new Date().toISOString().slice(0, 10);
+                  const { data: usageRow } = await supabase
+                    .from('telegram_xlookup_usage')
+                    .select('count')
+                    .eq('telegram_user_id', telegramUserId)
+                    .eq('used_on', today)
+                    .maybeSingle();
+                  if ((usageRow?.count ?? 0) >= 3) {
+                    await sendMessage(chatId,
+                      `🔒 *Daily X-handle lookups exhausted* (3/day on Free).\n\nUpgrade to Pro for unlimited reverse-lookups: /payment`,
+                      'Markdown');
+                    break;
+                  }
+                  await supabase.from('telegram_xlookup_usage').upsert({
+                    telegram_user_id: telegramUserId,
+                    used_on: today,
+                    count: (usageRow?.count ?? 0) + 1,
+                    updated_at: new Date().toISOString(),
+                  }, { onConflict: 'telegram_user_id,used_on' });
+                }
+                const result = await xHandleReverseLookup(supabase, handle);
+                const reply = formatXLookupForTelegram(result, obfuscateTicker);
+                await sendMessage(chatId, reply, 'Markdown');
+              } catch (e) {
+                console.error('[bot] x-handle lookup failed:', e);
+                await sendMessage(chatId,
+                  `⚠️ Couldn't run lookup for @${handle}. Try again in a moment.`,
+                  'Markdown');
+              }
             }
             // "Did you mean?" for unrecognized slash commands
             else if (sanitized.rawTruncated.startsWith('/')) {
