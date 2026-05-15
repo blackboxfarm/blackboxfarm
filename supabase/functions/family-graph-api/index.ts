@@ -79,7 +79,19 @@ Deno.serve(withRunLog('family-graph-api', async (req) => {
         .select('id', { count: 'exact', head: true })
         .eq('status', 'active');
 
-      return new Response(JSON.stringify({ families: enriched }), {
+      const totalFamilies = (families || []).length;
+      const totalUnreadMints = (families || []).reduce(
+        (acc: number, f: any) => acc + ((f.wallet_family_mint_events || []).filter((m: any) => !m.is_acknowledged).length),
+        0,
+      );
+      const kpis = {
+        active_devs: activeDevCount || 0,
+        discovered_families: totalFamilies,
+        coverage_pct: activeDevCount ? Math.round((totalFamilies / activeDevCount) * 100) : 0,
+        unread_mints: totalUnreadMints,
+      };
+
+      return new Response(JSON.stringify({ families: enriched, kpis }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
