@@ -205,13 +205,44 @@ Deno.serve(async (req) => {
           }
         }
 
+        // Fresh DexScreener snapshot so the admin sees current mcap & 1h
+        // volume on regenerate — for posting-decision context only, NOT
+        // injected into the tweet template.
+        let snapshot: { mcap: number | null; vol1h: number | null; priceUsd: number | null } = {
+          mcap: null, vol1h: null, priceUsd: null,
+        };
+        try {
+          const dsRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${item.token_mint}`);
+          if (dsRes.ok) {
+            const j: any = await dsRes.json();
+            const pairs: any[] = Array.isArray(j?.pairs) ? j.pairs : [];
+            pairs.sort((a, b) => (b?.liquidity?.usd ?? 0) - (a?.liquidity?.usd ?? 0));
+            const p = pairs[0];
+            if (p) {
+              snapshot = {
+                mcap: typeof p.marketCap === 'number' ? p.marketCap : (typeof p.fdv === 'number' ? p.fdv : null),
+                vol1h: typeof p.volume?.h1 === 'number' ? p.volume.h1 : null,
+                priceUsd: p.priceUsd ? Number(p.priceUsd) : null,
+              };
+            }
+          }
+        } catch (e) {
+          console.warn(`[compose-preview] snapshot fetch failed: ${(e as Error).message}`);
+        }
+
         const { error: updErr } = await supabase
           .from('holders_intel_post_queue')
           .update(updatePayload)
           .eq('id', item.id);
         if (updErr) throw updErr;
 
-        results.push({ id: item.id, ok: true, length: tweetText.length, dex_banner_url: updatePayload.dex_banner_url ?? item.dex_banner_url ?? null });
+        results.push({
+          id: item.id,
+          ok: true,
+          length: tweetText.length,
+          dex_banner_url: updatePayload.dex_banner_url ?? item.dex_banner_url ?? null,
+          snapshot,
+        });
       } catch (e: any) {
         results.push({ id: item.id, ok: false, error: e?.message || String(e) });
       }
