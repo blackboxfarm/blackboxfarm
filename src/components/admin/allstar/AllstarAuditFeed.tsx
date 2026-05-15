@@ -39,19 +39,23 @@ export function AllstarAuditFeed() {
 
   const handleRunNow = async () => {
     setRunning(true);
-    const t = toast.loading('Running auditor now… (batch of 100)');
+    const t = toast.loading('Queuing auditor in background (batch of 100)…');
     try {
       const { data, error } = await supabase.functions.invoke('allstar-mint-auditor', {
-        // IMPORTANT: param name MUST be `audit_batch_size` — function ignores anything else
-        body: { audit_batch_size: 100, hours_lookback: 2 },
+        // Background mode avoids the 150s edge-runtime idle timeout for large batches.
+        body: { audit_batch_size: 100, hours_lookback: 2, background: true },
       });
       if (error) throw error;
-      const r = data?.results ?? {};
+      const queued = data?.queued_allstars ?? 0;
+      const newQual = data?.new_allstars_qualified ?? 0;
       toast.success(
-        `Audited ${r.allstars_audited ?? 0} devs · ${r.total_family_wallets_scanned ?? 0} wallets · ${r.new_mints_detected ?? 0} new mints · ${r.new_allstars_qualified ?? 0} new allstars (${Math.round((data?.elapsed ?? 0) / 1000)}s)`,
+        `Auditor running in background for ${queued} devs · ${newQual} new allstars qualified. Feed will refresh as results land.`,
         { id: t, duration: 6000 },
       );
+      // Poll for updates over the next ~90s as the background job lands rows.
       await Promise.all([refetch(), refetchTotals()]);
+      const intervals = [10_000, 25_000, 45_000, 75_000];
+      intervals.forEach((ms) => setTimeout(() => { refetch(); refetchTotals(); }, ms));
     } catch (e: any) {
       toast.error(`Auditor failed: ${e?.message ?? e}`, { id: t });
     } finally {
