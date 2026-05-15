@@ -73,22 +73,18 @@ Deno.serve(withRunLog('family-graph-api', async (req) => {
         enriched = enriched.filter((f: any) => (f.mint_count || 0) > 0);
       }
 
-      // Registry KPI counts (independent of filters)
-      const { count: activeDevCount } = await supabase
-        .from('allstar_dev_registry')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'active');
-
-      const totalFamilies = (families || []).length;
-      const totalUnreadMints = (families || []).reduce(
-        (acc: number, f: any) => acc + ((f.wallet_family_mint_events || []).filter((m: any) => !m.is_acknowledged).length),
-        0,
-      );
+      // KPIs computed from full tables — independent of the 200-row fetch above
+      const [{ count: activeDevCount }, { count: totalFamilies }, { count: coveredFamilies }, { count: totalUnreadMints }] = await Promise.all([
+        supabase.from('allstar_dev_registry').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+        supabase.from('wallet_families').select('id', { count: 'exact', head: true }),
+        supabase.from('wallet_families').select('id', { count: 'exact', head: true }).not('allstar_id', 'is', null),
+        supabase.from('wallet_family_mint_events').select('id', { count: 'exact', head: true }).eq('is_acknowledged', false),
+      ]);
       const kpis = {
         active_devs: activeDevCount || 0,
-        discovered_families: totalFamilies,
-        coverage_pct: activeDevCount ? Math.round((totalFamilies / activeDevCount) * 100) : 0,
-        unread_mints: totalUnreadMints,
+        discovered_families: totalFamilies || 0,
+        coverage_pct: activeDevCount ? Math.round(((coveredFamilies || 0) / activeDevCount) * 100) : 0,
+        unread_mints: totalUnreadMints || 0,
       };
 
       return new Response(JSON.stringify({ families: enriched, kpis }), {
