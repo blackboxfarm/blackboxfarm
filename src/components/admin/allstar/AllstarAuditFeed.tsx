@@ -25,6 +25,16 @@ export function AllstarAuditFeed() {
     },
   });
 
+  // Realtime: refetch when registry rows or mint alerts change
+  React.useEffect(() => {
+    const channel = supabase
+      .channel('allstar-audit-feed-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'allstar_dev_registry' }, () => refetch())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'allstar_mint_alerts' }, () => refetch())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [refetch]);
+
   const copyWallet = (w: string) => {
     navigator.clipboard.writeText(w);
     toast.success('Copied');
