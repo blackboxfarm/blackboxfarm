@@ -4,6 +4,7 @@ import { getHeliusApiKey, getHeliusRestUrl, getHeliusRpcUrl } from '../_shared/h
 import { withRunLog } from '../_shared/run-logger.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 import { sendAdminSms } from '../_shared/sms-notify.ts';
+import { assertDbWrite } from '../_shared/db-assert.ts';
 enableHeliusTracking('allstar-mint-auditor');
 
 const corsHeaders = {
