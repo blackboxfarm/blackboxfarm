@@ -329,14 +329,29 @@ function buildLayout(
     const cidForRecycle = n.type === 'x_community' ? fullId.replace(/^x_community:/, '') : '';
     const cachedRecycle = cidForRecycle ? (resolved.communities[cidForRecycle]?.recycled_count ?? 0) : 0;
     const graphRecycle = n.type === 'x_community' ? (communityTokenNeighbors.get(n.id)?.size ?? 0) : 0;
-    const recycledCount = Math.max(cachedRecycle, graphRecycle);
+    let recycledCount = Math.max(cachedRecycle, graphRecycle);
+    let nameHistory: any[] | null = cidForRecycle ? (resolved.communities[cidForRecycle]?.name_history ?? null) : null;
+    // Handle-level rotation: treat handle_history entries the same way we
+    // treat recycled communities so the user gets the ghost-stack visual.
+    if (n.type === 'x_account' || n.type === 'x_user') {
+      const hKey = (() => {
+        const raw = (n.fullId || n.id || '').toString();
+        return raw.replace(/^x_account:/, '').replace(/^x_user:/, '').replace(/^@/, '').toLowerCase();
+      })();
+      const hh = resolved.handles?.[hKey]?.handle_history;
+      if (Array.isArray(hh) && hh.length > 0) {
+        recycledCount = Math.max(recycledCount, hh.length + 1);
+        nameHistory = hh.map((e: any) => ({ name: '@' + (e.handle || e.name || '?'), last_seen: e.last_seen, member_count: null }));
+      }
+    }
     const isRecycled = recycledCount > 1;
     const ghostStack = Math.min(Math.max(recycledCount - 1, 0), 3);
-    const nameHistory = cidForRecycle ? (resolved.communities[cidForRecycle]?.name_history ?? null) : null;
     const linkedMints = cidForRecycle ? (resolved.communities[cidForRecycle]?.linked_token_mints ?? null) : null;
     const ghostTooltip = isRecycled
       ? [
-          `Recycled across ${recycledCount} tokens`,
+          n.type === 'x_account' || n.type === 'x_user'
+            ? `Handle rotated ${recycledCount} times`
+            : `Recycled across ${recycledCount} tokens`,
           ...(Array.isArray(nameHistory)
             ? nameHistory.map((h: any) => {
                 const nm = h?.name || h?.prev_name || '?';
