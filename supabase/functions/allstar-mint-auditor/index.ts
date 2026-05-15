@@ -486,7 +486,8 @@ async function createAllstarAlert(
 
   // Insert alert record with verified mint timestamp
   const mintDate = new Date(hit.mintTimestamp * 1000);
-  await supabase.from('allstar_mint_alerts').insert({
+  await assertDbWrite(
+    supabase.from('allstar_mint_alerts').insert({
     allstar_id: allstar.id,
     developer_id: allstar.developer_id,
     token_mint: mintAddr,
@@ -509,7 +510,10 @@ async function createAllstarAlert(
       mint_age: hit.mintAge,
       verified_onchain: !!hit.mintTimestamp,
     },
-  });
+    }).select('id'),
+    'allstar_mint_alerts',
+    'INSERT'
+  );
 
   // Admin notification (dashboard badge)
   const emoji = alertLevel === 'critical' ? '🌟🚨' : alertLevel === 'high' ? '⭐🔔' : '✨';
