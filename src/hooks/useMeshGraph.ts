@@ -255,6 +255,21 @@ export function useMeshGraph(initialEntityId?: string) {
                   .from('reputation_mesh')
                   .upsert(upserts, { onConflict: 'source_id,linked_id,relationship', ignoreDuplicates: true });
                 console.log(`[MeshGraph] Upserted ${upserts.length} reverse community links`);
+                // Also push these links into the in-memory batch so the FIRST
+                // render shows them — without waiting for a refresh round-trip.
+                for (const u of upserts) {
+                  allLinks.push({
+                    id: `rev:${u.source_id}:${u.linked_id}:${u.relationship}`,
+                    source_id: u.source_id,
+                    source_type: u.source_type,
+                    linked_id: u.linked_id,
+                    linked_type: u.linked_type,
+                    relationship: u.relationship,
+                    confidence: u.confidence,
+                    evidence: u.evidence,
+                    discovered_at: u.discovered_at,
+                  });
+                }
               }
             }
           } catch (err) {
@@ -330,6 +345,19 @@ export function useMeshGraph(initialEntityId?: string) {
                   .from('reputation_mesh')
                   .upsert(upserts, { onConflict: 'source_id,linked_id,relationship', ignoreDuplicates: true });
                 console.log(`[MeshGraph] Upserted ${upserts.length} community mesh links`);
+                for (const u of upserts) {
+                  allLinks.push({
+                    id: `commrev:${u.source_id}:${u.linked_id}:${u.relationship}`,
+                    source_id: u.source_id,
+                    source_type: u.source_type,
+                    linked_id: u.linked_id,
+                    linked_type: u.linked_type,
+                    relationship: u.relationship,
+                    confidence: u.confidence,
+                    evidence: u.evidence,
+                    discovered_at: u.discovered_at,
+                  });
+                }
               }
             } else {
               console.log(`[MeshGraph] Community ${commId} not in x_communities table — will need scraping`);
