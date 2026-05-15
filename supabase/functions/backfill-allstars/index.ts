@@ -7,13 +7,22 @@ const corsHeaders = {
 };
 
 /**
- * Backfill AllStars from Top 200
- * 
- * 1. Fetches tokens from token_lifecycle with market_cap >= $100K and no creator_wallet
- * 2. Resolves creator wallets via Pump.fun / Helius
- * 3. Promotes qualifying developers to allstar_dev_registry
- * 
- * Can be triggered manually from the AllStars admin panel.
+ * Backfill AllStars — Full History Sweep
+ *
+ * Qualifies devs by the BEST historical signal we have, not just live mcap:
+ *    qualifying_mcap = GREATEST(
+ *       ath_alltime_usd, first_24h_ath_usd, ath_24h_usd, market_cap, fdv
+ *    ) >= $100K
+ *
+ * Sources merged:
+ *   - token_lifecycle (paginated, all rows that ever crossed $100k by any signal)
+ *   - proven_dev_tokens.market_cap_ath (732 rows)
+ *   - dev_wallet_reputation (legitimate builders / graduated devs) when wide=true
+ *
+ * For each newly promoted dev:
+ *   - inserts into allstar_dev_registry
+ *   - seeds wallet_families + wallet_family_members + wallet_family_poll_queue
+ *     so family-mint-monitor immediately starts polling for new mints.
  */
 
 const MIN_MCAP = 100_000;
@@ -43,28 +52,54 @@ Deno.serve(async (req) => {
     const maxResolve = body.max_resolve || 30;
     const dryRun = body.dry_run || false;
     const wide: boolean = !!body.wide;
+    const pageSize = 1000;
 
     console.log(`[BackfillAllstars] Starting (min mcap: $${minMcap.toLocaleString()}, max resolve: ${maxResolve}, dry_run: ${dryRun}, wide: ${wide})`);
 
-    // Step 1: Find tokens with high mcap but no creator_wallet
-    const { data: unresolvedTokens, error: fetchErr } = await supabase
-      .from('token_lifecycle')
-      .select('token_mint, symbol, name, market_cap, fdv, creator_wallet, launchpad')
-      .or(`market_cap.gte.${minMcap},fdv.gte.${minMcap}`)
-      .is('creator_wallet', null)
-      .order('market_cap', { ascending: false })
-      .limit(200);
+    // Step 1: paginate token_lifecycle for ANY signal >= $100k
+    // We can't OR on 5 columns cheaply via PostgREST, so pull all rows that have *any*
+    // ATH/fdv/mcap > 0 in slices and filter in memory.
+    const orFilter = [
+      `market_cap.gte.${minMcap}`,
+      `fdv.gte.${minMcap}`,
+      `ath_24h_usd.gte.${minMcap}`,
+      `first_24h_ath_usd.gte.${minMcap}`,
+      `ath_alltime_usd.gte.${minMcap}`,
+    ].join(',');
 
-    if (fetchErr) throw new Error(`Failed to query token_lifecycle: ${fetchErr.message}`);
+    type TokenRow = {
+      token_mint: string; symbol: string | null; name: string | null;
+      market_cap: number | null; fdv: number | null;
+      ath_24h_usd: number | null; first_24h_ath_usd: number | null; ath_alltime_usd: number | null;
+      creator_wallet: string | null; launchpad: string | null;
+    };
 
-    // Also find tokens that DO have creator_wallet but aren't in AllStars yet
-    const { data: resolvedTokens } = await supabase
-      .from('token_lifecycle')
-      .select('token_mint, symbol, name, market_cap, fdv, creator_wallet, launchpad')
-      .or(`market_cap.gte.${minMcap},fdv.gte.${minMcap}`)
-      .not('creator_wallet', 'is', null)
-      .order('market_cap', { ascending: false })
-      .limit(200);
+    const allLifecycle: TokenRow[] = [];
+    let page = 0;
+    while (true) {
+      const from = page * pageSize;
+      const to = from + pageSize - 1;
+      const { data: chunk, error: chunkErr } = await supabase
+        .from('token_lifecycle')
+        .select('token_mint, symbol, name, market_cap, fdv, ath_24h_usd, first_24h_ath_usd, ath_alltime_usd, creator_wallet, launchpad')
+        .or(orFilter)
+        .range(from, to);
+      if (chunkErr) throw new Error(`token_lifecycle page ${page}: ${chunkErr.message}`);
+      if (!chunk || chunk.length === 0) break;
+      allLifecycle.push(...(chunk as TokenRow[]));
+      if (chunk.length < pageSize) break;
+      page++;
+      if (page > 50) break; // safety
+    }
+
+    const bestSignal = (t: TokenRow) => Math.max(
+      t.market_cap || 0, t.fdv || 0,
+      t.ath_24h_usd || 0, t.first_24h_ath_usd || 0, t.ath_alltime_usd || 0,
+    );
+
+    const unresolvedTokens = allLifecycle.filter(t => !t.creator_wallet);
+    const resolvedTokens   = allLifecycle.filter(t =>  t.creator_wallet);
+    console.log(`[BackfillAllstars] token_lifecycle scan: ${allLifecycle.length} qualifying (${resolvedTokens.length} with creator, ${unresolvedTokens.length} need resolve)`);
 
     const stats = {
       tokens_scanned: (unresolvedTokens?.length || 0) + (resolvedTokens?.length || 0),
@@ -75,6 +110,8 @@ Deno.serve(async (req) => {
       failed_resolution: 0,
       wide_proven_added: 0,
       wide_reputation_added: 0,
+      families_seeded: 0,
+      poll_queue_seeded: 0,
       errors: [] as string[],
       promotions: [] as { wallet: string; symbol: string; mcap: number; tier: number }[],
     };
@@ -89,7 +126,7 @@ Deno.serve(async (req) => {
           token_mint: t.token_mint,
           symbol: t.symbol,
           name: t.name,
-          market_cap: Math.max((t as any).market_cap || 0, (t as any).fdv || 0),
+          market_cap: bestSignal(t),
           creator_wallet: t.creator_wallet,
         });
       }
@@ -172,7 +209,7 @@ Deno.serve(async (req) => {
             token_mint: token.token_mint,
             symbol: token.symbol,
             name: token.name,
-            market_cap: Math.max(token.market_cap || 0, token.fdv || 0),
+            market_cap: bestSignal(token),
             creator_wallet: resolution.creatorWallet,
           });
 
@@ -236,19 +273,62 @@ Deno.serve(async (req) => {
 
       // New promotion
       if (!dryRun) {
-        const { error: insertErr } = await supabase.from('allstar_dev_registry').insert({
+        const { data: inserted, error: insertErr } = await supabase.from('allstar_dev_registry').insert({
           master_wallet: wallet,
           best_tier: tier,
           best_mcap_achieved: token.market_cap,
           best_token_symbol: token.symbol,
           best_token_mint: token.token_mint,
           status: 'active',
-          notes: `Auto-promoted from Top 200 backfill. $${token.symbol} mcap: $${token.market_cap.toLocaleString()}`,
-        });
+          notes: `Auto-promoted from full-history backfill. $${token.symbol || '?'} best mcap signal: $${token.market_cap.toLocaleString()}`,
+        }).select('id').single();
 
         if (insertErr) {
           stats.errors.push(`Failed to insert ${wallet.slice(0, 8)}: ${insertErr.message}`);
           continue;
+        }
+
+        // Seed wallet_families + poll_queue so family-mint-monitor starts watching this wallet.
+        try {
+          const { data: existingFamily } = await supabase
+            .from('wallet_families').select('id').eq('seed_wallet', wallet).maybeSingle();
+
+          let familyId = existingFamily?.id as string | undefined;
+          if (!familyId) {
+            const { data: newFam, error: famErr } = await supabase
+              .from('wallet_families').insert({
+                seed_wallet: wallet,
+                family_name: `Allstar-${(token.symbol || wallet.slice(0,6)).slice(0,12)}`,
+                allstar_id: inserted?.id ?? null,
+                total_wallets: 1,
+                risk_score: tier >= 4 ? 20 : tier >= 2 ? 40 : 60,
+                total_mints_detected: 0,
+              }).select('id').single();
+            if (famErr) throw famErr;
+            familyId = newFam?.id;
+            stats.families_seeded++;
+          }
+
+          if (familyId) {
+            await supabase.from('wallet_family_members').insert({
+              family_id: familyId, wallet_address: wallet, label: 'seed',
+              tier: tier >= 4 ? 'A' : tier >= 2 ? 'B' : 'C',
+              confidence_score: 100, status: 'active',
+              first_seen_at: new Date().toISOString(),
+            }).then(() => {}, () => {}); // dup-safe
+
+            // Poll cadence: P1 (5m) for T4+, P2 (15m) for T2-3, P3 (1h) for T1
+            const priority = tier >= 4 ? 'P1' : tier >= 2 ? 'P2' : 'P3';
+            const interval = tier >= 4 ? 300 : tier >= 2 ? 900 : 3600;
+            const { error: queueErr } = await supabase.from('wallet_family_poll_queue').insert({
+              wallet_address: wallet, family_id: familyId,
+              priority, poll_interval_sec: interval,
+              next_poll_at: new Date().toISOString(),
+            });
+            if (!queueErr) stats.poll_queue_seeded++;
+          }
+        } catch (seedErr) {
+          stats.errors.push(`family-seed ${wallet.slice(0,8)}: ${(seedErr as Error).message}`);
         }
       }
 
@@ -269,6 +349,8 @@ Deno.serve(async (req) => {
       upgraded: stats.upgraded,
       wide_proven_added: stats.wide_proven_added,
       wide_reputation_added: stats.wide_reputation_added,
+      families_seeded: stats.families_seeded,
+      poll_queue_seeded: stats.poll_queue_seeded,
       promotions: stats.promotions,
       errors: stats.errors.slice(0, 10),
     };
