@@ -1,61 +1,61 @@
-# Live Audit Feed → Allstar System Integration
+# Family Intel Tab → New Allstar Registry Rewire
 
-Per your `Mandatory Approval` rule — reply **"Plan Approved"** to execute. Nothing changes until then.
+## Current state
+
+- `FamilyDashboard` calls `family-graph-api` `action: 'list'` which reads `wallet_families` + members. No link back to the **Allstar Registry** row (tier, twitter handle, status, best mcap).
+- `FamilyMintFeed` reads `wallet_family_mint_events` only — ignores parallel inserts into `allstar_mint_alerts`.
+- No realtime: Registry edits (add/remove dev, retier) don't propagate; mint monitor inserts don't appear until manual refresh.
+- No tier/registry filter, no "discover now for these devs" trigger, no header KPIs sourced from Registry.
 
 ## Goals
-1. Live Audit Feed pulls from the **new** Allstar Registry (post-rebuild dataset), not the legacy 216-row source.
-2. Realtime updates: when Registry rows change, Audit Feed re-fetches automatically.
-3. Active cron-driven audits of every active allstar wallet (Solscan v2 Pro for tx history, Helius for mint detection).
-4. A single **SMS toggle** that controls notifications for *both* Live Audit Feed findings *and* Mint Alerts.
-5. Every new mint detected is recorded in **System Alerts → Transactions tab** with a deep link to **Mint Alerts**.
-6. When SMS is toggled ON, that admin receives an SMS per new mint event.
 
----
+1. Family Intel views display data **joined with the Allstar Registry** (tier, X handle, status, best mcap).
+2. UI updates **live** when Registry, families, members, edges, or mints change.
+3. Operator can **trigger discovery** for filtered Registry rows from the tab.
+4. Mint feed shows the **union of `wallet_family_mint_events` + `allstar_mint_alerts`** (deduped on `mint_address`), matching the Mint Alerts tab.
 
 ## Implementation
 
-### 1. Audit Feed data source (frontend)
-- `AllstarAuditFeed.tsx`: query `allstar_devs` joined with `allstar_audit_log` ordered by `last_audited_at DESC`. Replace any legacy filter (e.g. `is_legacy=true` or fixed 216 set) with the unified registry filter currently used by `AllstarRegistry`.
-- Add Supabase Realtime subscription on `allstar_devs` and `allstar_audit_log` → `refetch()` on INSERT/UPDATE so the feed reflects Registry edits and rebuild runs live.
+### 1. `family-graph-api` (edge fn) — enrich `list` action
+- Join `wallet_families.allstar_id` → `allstar_dev_registry` and return per-family: `tier`, `twitter_handle`, `status`, `best_mcap_achieved`, `best_token_symbol`.
+- Add optional filter params: `tier` (e.g. `T8`), `status`, `min_members`, `has_mints`.
+- Keep existing `family_id` / `seed_wallet` actions untouched.
 
-### 2. Cron auditor (new edge function)
-- New function `allstar-audit-cron` (runs every 30 min via `pg_cron`):
-  - Pages through all `allstar_devs` where `is_active=true`, ordered by `last_audited_at ASC NULLS FIRST` (stalest first).
-  - Wall-time guard 110s, chunked (100 wallets/run, continues on next tick).
-  - For each wallet: call **Solscan Pro v2** `/account/transfer` filtered to `tokenCreate`/mint instructions since `last_audited_at`. Cross-check with Helius `getSignaturesForAddress` as fallback.
-  - On new mint detected → INSERT into `allstar_mint_alerts` AND `allstar_audit_log` (status=`new_mint_found`).
-  - Update `allstar_devs.last_audited_at` and `audit_count`.
+### 2. `FamilyDashboard.tsx`
+- New columns: **Tier**, **X Handle** (links to `x.com/<handle>`), **Best $MC**.
+- Header KPIs (sourced from Registry counts): `Active Devs`, `Discovered Families`, `Coverage % (families ÷ active devs)`, `Unread Mints`.
+- Tier filter dropdown (T1–T9 + All) and "Has mints only" toggle, both routed as `family-graph-api` params.
+- "🔄 Discover now" button → invokes `family-discovery-engine` with `{ maxSeeds: 10 }` then `refetch()`.
+- Supabase Realtime subs on `wallet_families`, `wallet_family_members`, `allstar_dev_registry` → debounced `refetch()`.
 
-### 3. System Alerts → Transactions tab
-- New tab in **System Alerts** page: `Transactions`. Lists rows from `allstar_mint_alerts` (most recent first) with columns: time, dev wallet, new mint, tier, link icon → routes to `/super-admin?tab=allstars&sub=alerts&mint=<addr>`.
-- Add a top-of-tab CTA "View full Mint Alerts →" linking to that sub-tab.
+### 3. `FamilyMintFeed.tsx`
+- Replace single-table query with parallel fetch:
+  - `wallet_family_mint_events` joined with `wallet_families(family_name, allstar_id)`
+  - `allstar_mint_alerts` for the same `creator_wallet`s
+- Merge + dedupe by `mint_address`, keep newest, attach Allstar tier + handle from registry.
+- Realtime subs on both tables → re-fetch.
+- Row click deep-links to `/super-admin?tab=allstars&sub=alerts&mint=<addr>` (matches the deep-link convention from System Alerts).
 
-### 4. Unified SMS toggle
-- New table `admin_alert_preferences` (one row per admin user_id):
-  - `sms_enabled boolean default false`
-  - `phone_e164 text`
-  - `alert_types jsonb` (e.g. `{"new_mint": true, "audit_anomaly": true}`)
-- UI: toggle lives in Allstars header (also mirrored on Mint Alerts tab) — a single switch covering both surfaces.
-- In `allstar-audit-cron`, after inserting an alert, fetch all admins with `sms_enabled=true` and call `sendAdminSms()` (already in `_shared/sms-notify.ts`) per recipient, with body:
-  `🚨 NEW MINT — {symbol} by {tier} dev {short_wallet} → pump.fun/coin/{mint}`
+### 4. `FamilyIntelTab.tsx`
+- Header row showing the same KPIs (compact) so they're visible in Dashboard, Graph, and Feed views.
+- Pass `registryFilter` (tier) state down so Mint Feed and Dashboard share the same lens.
 
-### 5. Realtime + idempotency
-- Audit cron uses `ON CONFLICT (creator_wallet, token_mint) DO NOTHING` on `allstar_mint_alerts` so re-runs don't duplicate.
-- Realtime publication added for `allstar_devs`, `allstar_audit_log`, `allstar_mint_alerts`.
+### 5. No DB schema changes
+- Reuse existing tables: `wallet_families`, `wallet_family_members`, `wallet_family_edges`, `wallet_family_mint_events`, `allstar_dev_registry`, `allstar_mint_alerts`.
+- Realtime publication: confirm `wallet_families`, `wallet_family_members`, `wallet_family_mint_events`, `allstar_mint_alerts`, `allstar_dev_registry` are in `supabase_realtime`. If any are missing, add via migration (one tiny SQL).
 
----
+## Files touched
 
-## Files to touch
-- **New:** `supabase/functions/allstar-audit-cron/index.ts`
-- **New migration:** create `admin_alert_preferences` table + RLS, add cron schedule, enable realtime on the 3 tables
-- **Edit:** `src/components/admin/allstar/AllstarAuditFeed.tsx` (data source + realtime sub)
-- **Edit:** `src/components/admin/allstar/AllstarMintAlerts.tsx` (add SMS toggle UI + Transactions link)
-- **Edit:** System Alerts page (add Transactions tab)
-- **Reuse:** `supabase/functions/_shared/sms-notify.ts`
+- **Edit:** `supabase/functions/family-graph-api/index.ts` (enrich list action + filters)
+- **Edit:** `src/components/admin/allstar/FamilyDashboard.tsx` (columns, KPIs, filters, realtime, discover button)
+- **Edit:** `src/components/admin/allstar/FamilyMintFeed.tsx` (union query, realtime, deep-link)
+- **Edit:** `src/components/admin/allstar/FamilyIntelTab.tsx` (header KPIs, shared filter state)
+- **Possible migration:** add missing tables to `supabase_realtime` publication only if not present.
 
 ## Open questions
-- **Solscan Pro v2 vs Helius primary?** Solscan v2 `/account/transfer` is cleanest for `tokenCreate` filtering but burns Pro credits. Helius `getSignaturesForAddress` + parse is free but noisier. Recommend **Solscan primary, Helius fallback**.
-- **Cron frequency:** 30 min default. Want tighter (15 min) for T8/T9 dev wallets?
-- **SMS rate cap:** Should I add a per-hour cap (e.g. max 10 SMS/hr) to prevent flood if a dev mints rapidly?
 
-Reply **Plan Approved** (and answer the 3 questions if you have preferences) and I'll build it.
+1. **Discover-now scope:** should the button respect the active tier filter (e.g. only T8/T9 devs), or always run the global `maxSeeds=10` rotation?
+2. **Dedupe rule for Mint Feed:** if a mint exists in both `wallet_family_mint_events` and `allstar_mint_alerts`, prefer the **family event** (richer evidence) or the **allstar alert** (canonical)? Default: allstar alert wins, family evidence shown as expandable detail.
+3. **KPI "Coverage %":** counted vs **all** active devs in Registry, or only devs with `best_tier >= T5`? Default: all active.
+
+Reply **"Plan Approved"** (and answer the 3 questions if you have preferences) and I'll build it.

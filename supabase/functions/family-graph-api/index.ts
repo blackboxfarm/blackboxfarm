@@ -19,21 +19,28 @@ Deno.serve(withRunLog('family-graph-api', async (req) => {
 
     // Action: list all families
     if (action === 'list') {
+      const tierFilter: string | null = body.tier || null;
+      const statusFilter: string | null = body.status || null;
+      const minMembers: number = Number(body.min_members) || 0;
+      const hasMintsOnly: boolean = !!body.has_mints;
+
       const { data: families, error } = await supabase
         .from('wallet_families')
         .select(`
           *,
+          allstar_dev_registry:allstar_id ( id, master_wallet, twitter_handle, status, best_tier, best_mcap_achieved, best_token_symbol ),
           wallet_family_members(wallet_address, label, tier, confidence_score, status, last_activity_at),
           wallet_family_mint_events(id, mint_address, event_type, confidence, token_name, token_symbol, launchpad, created_at, is_acknowledged)
         `)
         .order('updated_at', { ascending: false })
-        .limit(50);
+        .limit(200);
 
       if (error) throw error;
 
       // Compute tier counts per family
-      const enriched = (families || []).map(f => {
+      let enriched = (families || []).map(f => {
         const members = f.wallet_family_members || [];
+        const reg = (f as any).allstar_dev_registry || null;
         return {
           ...f,
           tier_counts: {
@@ -43,10 +50,48 @@ Deno.serve(withRunLog('family-graph-api', async (req) => {
           },
           active_members: members.filter((m: any) => m.status === 'active').length,
           mint_count: (f.wallet_family_mint_events || []).length,
+          unread_mint_count: (f.wallet_family_mint_events || []).filter((m: any) => !m.is_acknowledged).length,
+          allstar_tier: reg?.best_tier || null,
+          allstar_handle: reg?.twitter_handle || null,
+          allstar_status: reg?.status || null,
+          allstar_best_mcap: reg?.best_mcap_achieved || null,
+          allstar_best_symbol: reg?.best_token_symbol || null,
         };
       });
 
-      return new Response(JSON.stringify({ families: enriched }), {
+      // Apply post-fetch filters
+      if (tierFilter && tierFilter !== 'ALL') {
+        enriched = enriched.filter((f: any) => f.allstar_tier === tierFilter);
+      }
+      if (statusFilter) {
+        enriched = enriched.filter((f: any) => f.allstar_status === statusFilter);
+      }
+      if (minMembers > 0) {
+        enriched = enriched.filter((f: any) => (f.active_members || 0) >= minMembers);
+      }
+      if (hasMintsOnly) {
+        enriched = enriched.filter((f: any) => (f.mint_count || 0) > 0);
+      }
+
+      // Registry KPI counts (independent of filters)
+      const { count: activeDevCount } = await supabase
+        .from('allstar_dev_registry')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'active');
+
+      const totalFamilies = (families || []).length;
+      const totalUnreadMints = (families || []).reduce(
+        (acc: number, f: any) => acc + ((f.wallet_family_mint_events || []).filter((m: any) => !m.is_acknowledged).length),
+        0,
+      );
+      const kpis = {
+        active_devs: activeDevCount || 0,
+        discovered_families: totalFamilies,
+        coverage_pct: activeDevCount ? Math.round((totalFamilies / activeDevCount) * 100) : 0,
+        unread_mints: totalUnreadMints,
+      };
+
+      return new Response(JSON.stringify({ families: enriched, kpis }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
