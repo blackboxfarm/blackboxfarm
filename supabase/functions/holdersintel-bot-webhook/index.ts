@@ -4854,23 +4854,26 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
                 if (linked?.user_id) tier = await getUserTier(linked.user_id);
                 const isPaid = ['x_subscriber', 'pro', 'dev', 'enterprise'].includes(tier);
                 if (!isPaid) {
-                  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-                  const { count } = await supabase
+                  const today = new Date().toISOString().slice(0, 10);
+                  const { data: usageRow } = await supabase
                     .from('telegram_xlookup_usage')
-                    .select('*', { count: 'exact', head: true })
+                    .select('count')
                     .eq('telegram_user_id', telegramUserId)
-                    .gte('created_at', since);
-                  if ((count ?? 0) >= 3) {
+                    .eq('used_on', today)
+                    .maybeSingle();
+                  if ((usageRow?.count ?? 0) >= 3) {
                     await sendMessage(chatId,
                       `🔒 *Daily X-handle lookups exhausted* (3/day on Free).\n\nUpgrade to Pro for unlimited reverse-lookups: /payment`,
                       'Markdown');
                     break;
                   }
+                  await supabase.from('telegram_xlookup_usage').upsert({
+                    telegram_user_id: telegramUserId,
+                    used_on: today,
+                    count: (usageRow?.count ?? 0) + 1,
+                    updated_at: new Date().toISOString(),
+                  }, { onConflict: 'telegram_user_id,used_on' });
                 }
-                await supabase.from('telegram_xlookup_usage').insert({
-                  telegram_user_id: telegramUserId,
-                  handle,
-                });
                 const result = await xHandleReverseLookup(supabase, handle);
                 const reply = formatXLookupForTelegram(result, obfuscateTicker);
                 await sendMessage(chatId, reply, 'Markdown');
