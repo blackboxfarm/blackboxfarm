@@ -39,13 +39,18 @@ export function AllstarAuditFeed() {
 
   const handleRunNow = async () => {
     setRunning(true);
-    const t = toast.loading('Running auditor now…');
+    const t = toast.loading('Running auditor now… (batch of 100)');
     try {
       const { data, error } = await supabase.functions.invoke('allstar-mint-auditor', {
-        body: { manual: true, limit: 50 },
+        // IMPORTANT: param name MUST be `audit_batch_size` — function ignores anything else
+        body: { audit_batch_size: 100, hours_lookback: 2 },
       });
       if (error) throw error;
-      toast.success(`Auditor finished: ${data?.audited ?? '?'} wallets checked, ${data?.new_mints ?? 0} new mints`, { id: t });
+      const r = data?.results ?? {};
+      toast.success(
+        `Audited ${r.allstars_audited ?? 0} devs · ${r.total_family_wallets_scanned ?? 0} wallets · ${r.new_mints_detected ?? 0} new mints · ${r.new_allstars_qualified ?? 0} new allstars (${Math.round((data?.elapsed ?? 0) / 1000)}s)`,
+        { id: t, duration: 6000 },
+      );
       await Promise.all([refetch(), refetchTotals()]);
     } catch (e: any) {
       toast.error(`Auditor failed: ${e?.message ?? e}`, { id: t });
