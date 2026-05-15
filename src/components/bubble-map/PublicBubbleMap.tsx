@@ -429,8 +429,9 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken, onActi
     setNodeCap(NODE_CAP_DEFAULT);
     setCapBroken(false);
 
-    // Silently queue token mint lookups to the post pipeline
-    if (type !== 'x_account' && rawInput.length >= 30) {
+    // Silently queue ONLY token mint lookups into the post pipeline.
+    // Handle / community / wallet inputs must not trigger queueTokenFromFrontend.
+    if (type === 'token' && rawInput.length >= 30) {
       queueTokenFromFrontend(rawInput, 'bubblemap_input', {
         comment: `Bubblemap ${mode} lookup`,
       });
