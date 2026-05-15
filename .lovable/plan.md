@@ -1,46 +1,104 @@
-## Goal
+## Why the list is only 216
 
-When a user searches an X handle (e.g. `@pumpfun711`), the schematic must render the full fan-out, with **resolved human labels everywhere**:
+`allstar-promotion-engine` (the cron that fills the registry) qualifies devs **only by `token_lifecycle.market_cap`** — i.e. the token's *current* mcap, right now. Anything that pumped past $100k and then died is invisible to it. It also caps each run at **15 promotions** and never reads our richer history tables.
+
+What we actually have in the DB:
+
+| Source | Tokens ≥ $100k | Distinct devs |
+|---|---|---|
+| `token_lifecycle.market_cap` (what the engine uses today) | 149 | ~149 |
+| `token_lifecycle` ANY ath/fdv/mcap signal ≥ $100k | **677** | ~567 |
+| `proven_dev_tokens.market_cap_ath` ≥ $100k | **732** | **610** |
+| Currently in `allstar_dev_registry` | 216 | 216 |
+
+So we're missing ~400 qualified devs. `ath_alltime_usd` is also empty (backfill never finished), which makes the gap worse.
+
+## End-state we're building toward
 
 ```text
-                @pumpfun711
-                /    |    \
-        Comm A   Comm B   Comm C        (named, e.g. "Unstable Unicorn")
-        /  \      |       / | \
-     $TKN $TKN  $TKN   $TKN $TKN $TKN   (tickers, not mint slugs)
-        \  |     /       \  |  /
-           Dev Wallet ── Dev Wallet     (convergence)
-                \         /
-                 KYC Root (CEX)
+   Funnel (token_lifecycle, proven_dev_tokens, autopsy, holders-intel)
+            │
+            ▼
+  [ allstar-backfill-historical ]   ← one-shot sweep of all $100k+ history
+            │
+            ▼
+  allstar_dev_registry  (devs grouped, deduped, KYC-rooted, family-expanded)
+            │
+            ▼
+  wallet_family_poll_queue          ← every dev wallet + family wallet
+            │
+            ▼
+  [ family-mint-monitor cron, every N min ]
+            │   detects new InitializeMint by any tracked wallet
+            ▼
+  allstar_mint_alerts  →  Telegram  +  SMS to admin
 ```
 
-DB confirms `@pumpfun711` admins **3 communities** (1 nameless + "Unstable Unicorn" 3 tokens + "Great Auto Income Now" 6 tokens) with 10 tokens total — but the schematic currently shows only 1 community + 1 token + a "funded_rejected_dev" badge sitting on the dev card.
+## The plan
 
-## Root causes
+### 1. Fix the qualification logic (engine rewrite)
 
-1. **Reverse community lookup writes to DB but the in-memory `allLinks` for the current render never gets those rows** — they only appear on the next page load. Need to also push the upserted links into `allLinks` so the first render is complete.
-2. **`pruneToHandleChain` Hop 3 requires `wallet.isDev === true`**, but dev-wallet flagging only happens when a `created`/`created_by` link exists in the fetched batch. With 10 tokens the 2-hop budget (capped at 20 entities) is exhausted before dev wallets get queried, so they're absent — Hop 3 finds nothing and the chain truncates.
-3. **Token tickers and community names render as `$` / `Community #202216`** because:
-   - `resolve-labels` only reads `token_metadata` / `x_communities.name` — the nameless community has `name = null` and many tokens aren't in `token_metadata`. Need fallbacks: `token_lifecycle.symbol`, `dexscreener_cache.symbol`, and pump.fun mint suffix → enqueue resolver.
-4. **Edge labels for non-chain relationships (`funded_rejected_dev`, `linked_to_dev`, `promotes_token`) leak into the schematic** when both endpoints survive pruning, dropping their badge on top of nearby cards. Already partially fixed last turn — extend the allowed-pair filter to also drop label text for any edge whose relationship doesn't match the chain semantics (admin/mod/created/community_for/funded/same_kyc_root).
+Rewrite `allstar-promotion-engine` so it qualifies on the **best signal we have**, not just live mcap:
 
-## Changes
+```text
+qualifying_mcap = GREATEST(
+   ath_alltime_usd, first_24h_ath_usd, ath_24h_usd, market_cap, fdv
+) ≥ $100,000
+```
 
-### `src/hooks/useMeshGraph.ts`
-- After the reverse-community-lookup `upsert`, **push the same link rows into `allLinks`** (mapped to the `reputation_mesh` shape) so the first render has them — no second page load required.
-- Same treatment for the `x_community` focus branch (lines 268-340).
-- Bump the 2-hop cap from 20 → 60 **only when the centerpiece is `x_account`/`x_user`** so all token→dev edges get fetched.
-- Add a third-hop fetch for any wallet node that doesn't yet have a `created`/`created_by` neighbor — this guarantees `isDev` flagging before the schematic prunes.
+- Also pull from `proven_dev_tokens.market_cap_ath` (732 rows ready to import).
+- Remove the 15/run cap; replace with a paginated sweep (process up to 500 new candidates/run).
+- Keep the rug-pull skip-guard.
 
-### `supabase/functions/resolve-labels/index.ts`
-- Token name fallback chain: `token_metadata.symbol` → `token_lifecycle.symbol` → `dexscreener_cache.symbol`. Return whichever resolves first.
-- Community name fallback: if `x_communities.name` is null, return `name_history[-1].name` if present; else leave null and let the client show `Community #<6-char-id>` as today.
+### 2. One-shot historical backfill
 
-### `src/components/bubble-map/BubbleMapSchematic.tsx`
-- Tighten the edge filter so only chain-semantic relationships render labels: `community_admin`/`admin_of`, `community_mod`/`mod_of`, `community_for`/`linked_token`, `created`/`created_by`, `funded`/`funded_by`, `same_kyc_root`. All other edges between kept nodes get dropped (no label, no line) to prevent badge collisions on cards.
-- Token card label: if ticker is still missing after `resolve-labels`, show the **last 4 chars of the mint suffix** (e.g. `pump`, `bonk`) as a temporary label instead of bare `$`, plus the spinner.
+New edge function `allstar-backfill-historical`:
+- Pulls every dev with any token ≥ $100k from `proven_dev_tokens` + `token_lifecycle` (any signal).
+- For tokens missing `creator_wallet`, resolves via Helius/Pump.fun (existing `creator-resolver`).
+- Expands each dev into its family using `reputation_mesh` + `developer_wallets`.
+- Resolves KYC root via existing `kyc-fast-path`.
+- Bulk inserts into `allstar_dev_registry` (idempotent on `master_wallet`).
+- Seeds `wallet_families` + `wallet_family_members` + `wallet_family_poll_queue` for every wallet.
+- Triggered by a SuperAdmin button in the Allstar tab ("Rebuild from Full History").
 
-### Verification
-1. Search `@pumpfun711` in schematic view — expect 3 community cards (one with `Community #202216` fallback, two with real names), each fanning to its tokens with tickers, all token edges meeting at the dev wallet(s), with KYC root above when present.
-2. Confirm no `funded_rejected_dev` / `linked_to_dev` text overlaps any card.
-3. Confirm a fresh handle (no prior reverse-lookup) renders fully on first paint, not after refresh.
+Expected outcome: registry jumps from **216 → ~600+** real qualified devs.
+
+### 3. Continuous funnel from the rest of the pipeline
+
+Make sure `allstar-promotion-engine` is fed automatically from:
+- new entries in `proven_dev_tokens` (already inserted by the lifecycle scoring path),
+- `holders_intel_seen_tokens` graduations (Holders Intel funnel),
+- `token_autopsy` survivors (anything that hit ≥$100k before dying).
+
+Run it every 30 min as today, but with the new qualification + paginated batching.
+
+### 4. Mint monitoring + SMS alert
+
+`family-mint-monitor` already exists and watches `wallet_family_poll_queue` — we extend it:
+- Make sure every allstar dev wallet AND every family wallet is in the poll queue (the backfill in step 2 does this).
+- On new `InitializeMint` detection it already writes to `allstar_mint_alerts`.
+- Add an SMS hop: when a new alert lands, call `security-sms-alert` (existing Twilio function) to text the admin phone on file. Throttled to max 1 SMS per dev per 6 h to avoid spam.
+- TG alert continues in parallel (existing path).
+
+Polling cadence:
+- **P1** (Tier 4-6 devs, KYC-rooted): every 5 min.
+- **P2** (Tier 2-3): every 15 min.
+- **P3** (Tier 1, family siblings): every hour.
+
+### 5. UI cleanup in `AllstarTab`
+
+- "Backfill from Top 200" button → renamed and rewired to call `allstar-backfill-historical`.
+- New stat header: *Qualified devs from history: X · In registry: Y · Coverage: Z%*.
+- "New Mints" column wired to live count from `allstar_mint_alerts` (last 24 h).
+- "SMS alerts: ON/OFF" toggle for the admin.
+
+## Technical notes (for me)
+
+- Files touched: `supabase/functions/allstar-promotion-engine/index.ts` (rewrite), new `supabase/functions/allstar-backfill-historical/index.ts`, `supabase/functions/family-mint-monitor/index.ts` (add SMS hop + dedupe window), `src/components/admin/allstar/AllstarRegistry.tsx` (button + stats), `src/components/admin/tabs/AllstarTab.tsx` (header).
+- New table: `allstar_sms_throttle (master_wallet, last_sent_at)` to enforce 6h dedupe.
+- Secrets needed (verify present): `TWILIO_*`, admin phone in `app_secrets` or env.
+- No destructive migrations — additive only.
+
+---
+
+**Reply "Plan Approved" to proceed.** First action will be the historical backfill (step 2) so you can immediately see the registry jump from 216 → 600+, then I wire the SMS hop.

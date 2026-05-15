@@ -6,10 +6,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Star, ExternalLink, RefreshCw, Search, Copy, Zap, Loader2 } from 'lucide-react';
+import { Star, ExternalLink, RefreshCw, Search, Copy, Zap, Loader2, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Switch } from '@/components/ui/switch';
 
 // Higher tier number = better developer (matches proven_dev_tokens scale)
 const TIER_LABELS: Record<number, { label: string; color: string }> = {
@@ -28,6 +29,35 @@ export function AllstarRegistry() {
   const [backfilling, setBackfilling] = useState(false);
   const [wideBackfilling, setWideBackfilling] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [smsEnabled, setSmsEnabled] = useState<boolean>(false);
+  const [smsLoaded, setSmsLoaded] = useState(false);
+
+  // Load SMS flag
+  React.useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('intelligence_feature_flags')
+        .select('enabled')
+        .eq('feature_name', 'allstar_mint_sms_alerts')
+        .maybeSingle();
+      setSmsEnabled(!!data?.enabled);
+      setSmsLoaded(true);
+    })();
+  }, []);
+
+  const toggleSms = async (next: boolean) => {
+    setSmsEnabled(next);
+    const { error } = await supabase
+      .from('intelligence_feature_flags')
+      .update({ enabled: next })
+      .eq('feature_name', 'allstar_mint_sms_alerts');
+    if (error) {
+      toast.error(`Could not update SMS flag: ${error.message}`);
+      setSmsEnabled(!next);
+    } else {
+      toast.success(next ? 'SMS alerts ON — admin will be texted on new mints' : 'SMS alerts OFF');
+    }
+  };
 
   const runBackfill = async (wide: boolean) => {
     const setter = wide ? setWideBackfilling : setBackfilling;
@@ -39,8 +69,8 @@ export function AllstarRegistry() {
       if (error) throw error;
       if (data?.success) {
         const extra = wide
-          ? ` (proven: +${data.wide_proven_added || 0}, rep: +${data.wide_reputation_added || 0})`
-          : '';
+          ? ` (proven: +${data.wide_proven_added || 0}, rep: +${data.wide_reputation_added || 0}, families: +${data.families_seeded || 0}, polling: +${data.poll_queue_seeded || 0})`
+          : ` (families: +${data.families_seeded || 0}, polling: +${data.poll_queue_seeded || 0})`;
         toast.success(
           `Backfill complete: ${data.newly_promoted} promoted, ${data.upgraded} upgraded${extra}`,
           { duration: 8000 }
@@ -102,6 +132,15 @@ export function AllstarRegistry() {
             Tracked Developers ({filtered.length})
           </CardTitle>
           <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 mr-2 px-2 py-1 rounded border border-border/50">
+              <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">SMS</span>
+              <Switch
+                checked={smsEnabled}
+                disabled={!smsLoaded}
+                onCheckedChange={toggleSms}
+              />
+            </div>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -113,11 +152,11 @@ export function AllstarRegistry() {
                     className="gap-1 border-primary/50 text-primary hover:bg-primary/10"
                   >
                     {backfilling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-                    Backfill from Top 200
+                    Backfill (lifecycle ATH)
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs">
-                  Scans token_lifecycle for tokens with current market_cap or fdv ≥ $100k and promotes their creators. Narrow universe (~200 tokens).
+                  Scans token_lifecycle for ANY signal (ath_alltime, first_24h_ath, ath_24h, mcap, fdv) ≥ $100k and promotes their creators. Also seeds wallet_families + poll queue.
                 </TooltipContent>
               </Tooltip>
               <Tooltip>
@@ -130,11 +169,11 @@ export function AllstarRegistry() {
                     className="gap-1 border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/10"
                   >
                     {wideBackfilling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-                    Wide Backfill
+                    Rebuild from Full History
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs">
-                  Wide universe: also pulls every dev from proven_dev_tokens (732 rows) and qualifying devs from dev_wallet_reputation (tokens_successful ≥ 1, graduated, or legitimate_builder). Expect ~480+ new promotions.
+                  Full sweep: token_lifecycle (any ATH/mcap signal) + proven_dev_tokens (732 rows) + dev_wallet_reputation (legitimate builders). Expected jump from ~216 → 600+. Also seeds families and poll queue so family-mint-monitor begins watching every dev.
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

@@ -25,7 +25,7 @@ const MIN_MCAP_TIER_4 = 1_000_000;
 const MIN_MCAP_TIER_5 = 5_000_000;
 const MIN_MCAP_TIER_6 = 10_000_000;
 
-const MAX_PROMOTIONS_PER_RUN = 15;
+const MAX_PROMOTIONS_PER_RUN = 100;
 
 function mcapToTier(mcap: number): number {
   if (mcap >= MIN_MCAP_TIER_6) return 6;
@@ -58,18 +58,29 @@ Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
 
     console.log(`[AllstarPromotion] Starting scan (min mcap: $${minMcap.toLocaleString()}, max: ${maxPromotions})`);
 
-    // ═══ Step 1: Find high-mcap tokens with known creators ═══
-    const { data: candidates, error: candidateErr } = await supabase
+    // ═══ Step 1: Find tokens that EVER hit minMcap by any signal (ath/fdv/mcap) ═══
+    const orFilter = [
+      `market_cap.gte.${minMcap}`,
+      `fdv.gte.${minMcap}`,
+      `ath_24h_usd.gte.${minMcap}`,
+      `first_24h_ath_usd.gte.${minMcap}`,
+      `ath_alltime_usd.gte.${minMcap}`,
+    ].join(',');
+    const { data: candidatesRaw, error: candidateErr } = await supabase
       .from('token_lifecycle')
-      .select('token_mint, name, symbol, creator_wallet, market_cap, launchpad')
-      .gte('market_cap', minMcap)
+      .select('token_mint, name, symbol, creator_wallet, market_cap, fdv, ath_24h_usd, first_24h_ath_usd, ath_alltime_usd, launchpad')
+      .or(orFilter)
       .not('creator_wallet', 'is', null)
-      .order('market_cap', { ascending: false })
-      .limit(500);
+      .limit(1000);
 
     if (candidateErr) {
       throw new Error(`Failed to query token_lifecycle: ${candidateErr.message}`);
     }
+    const bestSignal = (t: any) => Math.max(
+      t.market_cap || 0, t.fdv || 0,
+      t.ath_24h_usd || 0, t.first_24h_ath_usd || 0, t.ath_alltime_usd || 0,
+    );
+    const candidates = (candidatesRaw || []).map(t => ({ ...t, market_cap: bestSignal(t) }));
 
     if (!candidates || candidates.length === 0) {
       console.log('[AllstarPromotion] No high-mcap candidates found');
@@ -81,14 +92,14 @@ Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
 
     console.log(`[AllstarPromotion] Found ${candidates.length} high-mcap token candidates`);
 
-    // ═══ Step 2: Resolve creators for unresolved high-mcap tokens ═══
-    const { data: unresolvedCandidates } = await supabase
+    // ═══ Step 2: Resolve creators for unresolved candidates ═══
+    const { data: unresolvedRaw } = await supabase
       .from('token_lifecycle')
-      .select('token_mint, name, symbol, market_cap, launchpad')
-      .gte('market_cap', minMcap)
+      .select('token_mint, name, symbol, market_cap, fdv, ath_24h_usd, first_24h_ath_usd, ath_alltime_usd, launchpad')
+      .or(orFilter)
       .is('creator_wallet', null)
-      .order('market_cap', { ascending: false })
       .limit(30);
+    const unresolvedCandidates = (unresolvedRaw || []).map(t => ({ ...t, market_cap: bestSignal(t) }));
 
     const resolvedFromUnresolved: typeof candidates = [];
     if (unresolvedCandidates && unresolvedCandidates.length > 0) {
