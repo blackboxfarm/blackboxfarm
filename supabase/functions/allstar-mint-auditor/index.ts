@@ -720,6 +720,9 @@ Deno.serve(withRunLog('allstar-mint-auditor', async (req) => {
       force_requalify = false,
       // Manual add mode: provide a token_mint to add its dev to allstars
       manual_add_token_mint = null,
+      // Background mode: kick off the audit and return immediately so the
+      // client doesn't hit the 150s edge-runtime idle timeout.
+      background = false,
     } = body;
 
     const effectiveHoursLookback = Math.min(
@@ -924,33 +927,56 @@ Deno.serve(withRunLog('allstar-mint-auditor', async (req) => {
       .order('last_audit_at', { ascending: true, nullsFirst: true })
       .limit(audit_batch_size);
 
-    for (const allstar of allstarsToAudit || []) {
-      try {
-        const familySize = (allstar.family_wallets || []).length;
-        results.total_family_wallets_scanned += familySize;
+    const auditQueue = async () => {
+      for (const allstar of allstarsToAudit || []) {
+        try {
+          const familySize = (allstar.family_wallets || []).length;
+          results.total_family_wallets_scanned += familySize;
 
-        const hits = await auditAllstarFamily(supabase, allstar, heliusApiKey!, effectiveHoursLookback);
-        results.allstars_audited++;
+          const hits = await auditAllstarFamily(supabase, allstar, heliusApiKey!, effectiveHoursLookback);
+          results.allstars_audited++;
 
-        for (const hit of hits) {
-          await createAllstarAlert(supabase, allstar, hit);
-          results.new_mints_detected++;
-          results.alerts_created++;
+          for (const hit of hits) {
+            await createAllstarAlert(supabase, allstar, hit);
+            results.new_mints_detected++;
+            results.alerts_created++;
+          }
+
+          await supabase
+            .from('allstar_dev_registry')
+            .update({
+              last_audit_at: new Date().toISOString(),
+              audit_count: (allstar.audit_count || 0) + 1,
+            })
+            .eq('id', allstar.id);
+        } catch (e: any) {
+          results.errors.push(`${allstar.master_wallet.slice(0, 8)}: ${e.message}`);
         }
-
-        // Mark as audited
-        await supabase
-          .from('allstar_dev_registry')
-          .update({
-            last_audit_at: new Date().toISOString(),
-            audit_count: (allstar.audit_count || 0) + 1,
-          })
-          .eq('id', allstar.id);
-
-      } catch (e: any) {
-        results.errors.push(`${allstar.master_wallet.slice(0, 8)}: ${e.message}`);
       }
+      const elapsedBg = Date.now() - startTime;
+      console.log(`[allstar] ✅ Background batch complete in ${elapsedBg}ms:`, results);
+    };
+
+    // Background mode: queue and return immediately so the client doesn't time out
+    if (background) {
+      const queued = (allstarsToAudit || []).length;
+      // @ts-ignore - EdgeRuntime is a Deno deploy global
+      try { EdgeRuntime.waitUntil(auditQueue()); } catch { auditQueue(); }
+      return new Response(
+        JSON.stringify({
+          success: true,
+          background: true,
+          queued_allstars: queued,
+          message: `Audit running in background for ${queued} allstars. Refresh the feed in 30-60s.`,
+          effective_hours_lookback: effectiveHoursLookback,
+          creators_backfilled: results.creators_backfilled,
+          new_allstars_qualified: results.new_allstars_qualified,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
+
+    await auditQueue();
 
     const elapsed = Date.now() - startTime;
     console.log(`[allstar] ✅ Complete in ${elapsed}ms with ${effectiveHoursLookback}h max mint age:`, results);
