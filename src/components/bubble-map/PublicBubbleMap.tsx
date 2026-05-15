@@ -24,6 +24,7 @@ import BubbleMapSchematic, { type SchematicHandle } from "./BubbleMapSchematic";
 import SnapshotShareDialog from "./SnapshotShareDialog";
 import { DailyTraceInfo } from "./DailyTraceInfo";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { classifyMeshInput } from "./inputClassifier";
 
 type ViewMode = 'bubble' | 'tree' | '3d' | 'schematic';
 type SolarMode = 'minimum' | 'clusters';
@@ -384,22 +385,45 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken, onActi
     setTraceButtonPulse(false);
     if (traceNudgeTimerRef.current) clearTimeout(traceNudgeTimerRef.current);
     clearCooldown(searchInput.trim());
-    let type = 'wallet';
     const rawInput = searchInput.trim();
-    let normalizedId = rawInput;
-    if (rawInput.startsWith('@')) {
-      type = 'x_account';
-      normalizedId = rawInput.replace(/^@/, '').toLowerCase();
-      // Auto-switch to Schematic — best view for handle → community → token → wallet lineage.
-      if (viewMode !== 'schematic') {
-        setViewMode('schematic');
-        toast.info('Switched to Schematic view', {
-          description: 'Best layout for X handle → community → token → dev lineage.',
-          duration: 3500,
-        });
-      }
-    } else if (rawInput.length < 20) {
-      type = 'token';
+    const classified = classifyMeshInput(rawInput);
+    let type: string;
+    let normalizedId: string;
+    let switchToSchematic = false;
+    let schematicReason = '';
+    switch (classified.kind) {
+      case 'handle':
+        type = 'x_account';
+        normalizedId = classified.value;
+        switchToSchematic = true;
+        schematicReason = 'X handle → community → token → dev lineage.';
+        break;
+      case 'community':
+        type = 'x_community';
+        normalizedId = classified.value;
+        switchToSchematic = true;
+        schematicReason = 'X community → tokens → dev → KYC root lineage.';
+        break;
+      case 'wallet':
+        type = 'wallet';
+        normalizedId = classified.value;
+        switchToSchematic = true;
+        schematicReason = 'Wallet → tokens → communities → KYC root lineage.';
+        break;
+      case 'token':
+        type = 'token';
+        normalizedId = classified.value;
+        break;
+      default:
+        type = rawInput.length < 20 ? 'token' : 'wallet';
+        normalizedId = rawInput;
+    }
+    if (switchToSchematic && viewMode !== 'schematic') {
+      setViewMode('schematic');
+      toast.info('Switched to Schematic view', {
+        description: schematicReason,
+        duration: 3500,
+      });
     }
     focusOnEntity(normalizedId, type);
     setNodeCap(NODE_CAP_DEFAULT);
