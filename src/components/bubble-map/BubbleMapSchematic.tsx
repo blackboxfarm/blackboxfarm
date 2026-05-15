@@ -451,7 +451,22 @@ function buildLayout(
     const isFunding = rel.includes('funded');
     const isCreated = rel.includes('created');
     const role = ROLE_BADGE[rel];
-    const edgeLabel = role ? `${role.icon} ${role.label}` : (rel || undefined);
+    // Only render a textual edge label for chain-semantic relationships.
+    // Anything else (e.g. `funded_rejected_dev`, `linked_to_dev`,
+    // `promotes_token`) gets a plain unlabelled line so its text can't
+    // land on top of a neighboring card.
+    const CHAIN_LABEL_RELS = new Set([
+      'community_admin', 'admin_of',
+      'community_mod', 'mod_of',
+      'community_creator', 'created_community',
+      'community_for', 'linked_token',
+      'created', 'created_by',
+      'funded', 'funded_by',
+      'same_kyc_root',
+    ]);
+    const edgeLabel = role
+      ? `${role.icon} ${role.label}`
+      : (CHAIN_LABEL_RELS.has(rel) ? rel : undefined);
     const edgeStroke = role
       ? role.color
       : isFunding ? 'hsl(45 90% 55%)' : isCreated ? 'hsl(var(--primary))' : 'hsl(var(--border))';
