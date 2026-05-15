@@ -177,10 +177,37 @@ export function useMeshGraph(initialEntityId?: string) {
         if (!reverseCommunityLookupDone.current.has(handle)) {
           reverseCommunityLookupDone.current.add(handle);
           try {
-            const { data: communities } = await supabase
+            // 1) Communities where the handle is admin/mod
+            const { data: directCommunities } = await supabase
               .from('x_communities')
               .select('community_id, name, admin_usernames, moderator_usernames, linked_token_mints')
               .or(`admin_usernames.cs.{"${handle}"},moderator_usernames.cs.{"${handle}"}`);
+
+            // 2) Tokens that reference the handle as their X account, then any
+            //    community that lists those tokens in linked_token_mints.
+            const { data: socialRows } = await supabase
+              .from('token_social_links')
+              .select('mint')
+              .ilike('extracted_handle', handle)
+              .limit(50);
+            const handleMints: string[] = Array.from(new Set(((socialRows || []) as any[])
+              .map((r) => (r as any).mint).filter(Boolean)));
+
+            let tokenCommunities: any[] = [];
+            if (handleMints.length > 0) {
+              const { data: tc } = await supabase
+                .from('x_communities')
+                .select('community_id, name, admin_usernames, moderator_usernames, linked_token_mints')
+                .overlaps('linked_token_mints', handleMints);
+              tokenCommunities = tc || [];
+            }
+
+            // Merge by community_id
+            const merged = new Map<string, any>();
+            for (const c of [...(directCommunities || []), ...tokenCommunities]) {
+              merged.set((c as any).community_id, c);
+            }
+            const communities = Array.from(merged.values());
 
             if (communities && communities.length > 0) {
               console.log(`[MeshGraph] Reverse community lookup found ${communities.length} communities for @${handle}`);
@@ -190,7 +217,7 @@ export function useMeshGraph(initialEntityId?: string) {
               for (const comm of communities) {
                 const isAdmin = (comm.admin_usernames || []).map((u: string) => u.toLowerCase()).includes(handle);
                 const isMod = (comm.moderator_usernames || []).map((u: string) => u.toLowerCase()).includes(handle);
-                const relationship = isAdmin ? 'community_admin' : isMod ? 'community_mod' : 'community_mod';
+                const relationship = isAdmin ? 'community_admin' : isMod ? 'community_mod' : 'member_of';
 
                 // Link handle → community
                 upserts.push({
@@ -207,6 +234,9 @@ export function useMeshGraph(initialEntityId?: string) {
                 // Also link community → any linked tokens
                 const tokens = comm.linked_token_mints || [];
                 for (const mint of tokens) {
+                  // Restrict to mints we know are tied to this handle to avoid
+                  // dragging in every other token a recycled community ever held.
+                  if (handleMints.length > 0 && !handleMints.includes(mint) && !isAdmin && !isMod) continue;
                   upserts.push({
                     source_id: comm.community_id,
                     source_type: 'x_community',
