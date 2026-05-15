@@ -1803,6 +1803,13 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken, onActi
               height={600}
               onNodeClick={handleNodeClick}
               mode={schematicMode}
+              centerpiece={
+                focusedEntity?.type === 'x_account' ? 'handle'
+                : focusedEntity?.type === 'x_community' ? 'community'
+                : focusedEntity?.type === 'wallet' ? 'wallet'
+                : 'token'
+              }
+              centerpieceId={focusedEntity?.id || null}
             />
           ) : (
             <ForceGraph2D
