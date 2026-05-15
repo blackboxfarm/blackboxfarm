@@ -29,7 +29,10 @@ export function readSecrets(): Secrets | null {
 }
 
 export function saveSecrets(next: Secrets) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  // SECURITY: never persist the plaintext trading private key to localStorage.
+  // Keep it in React state only — components hold the live key in-memory via useLocalSecrets().
+  const safe = { ...next, tradingPrivateKey: '***' };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(safe));
 }
 
 export function clearSecrets() {
@@ -66,8 +69,8 @@ export function useLocalSecrets() {
   const ready = useMemo(() => !!(secrets?.rpcUrl && secrets?.tradingPrivateKey), [secrets]);
 
   const update = useCallback((next: Secrets) => {
-    saveSecrets(next);
-    setSecrets(next);
+    saveSecrets(next);   // persists everything except the plaintext key
+    setSecrets(next);    // in-memory copy retains the real key for the active session
   }, []);
 
   const reset = useCallback(() => {
