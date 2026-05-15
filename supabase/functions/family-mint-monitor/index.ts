@@ -1,6 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getHeliusRpcUrl, redactHeliusSecrets } from '../_shared/helius-client.ts';
+import { sendAdminSms } from '../_shared/sms-notify.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -113,6 +114,7 @@ Deno.serve(withRunLog('family-mint-monitor', async (req) => {
 
     // ═══ TIER 2: Check predictive burst mode flag ═══
     let predictiveBurstEnabled = false;
+    let smsAlertsEnabled = false;
     try {
       const { data: burstFlag } = await supabase
         .from('intelligence_feature_flags')
@@ -121,6 +123,14 @@ Deno.serve(withRunLog('family-mint-monitor', async (req) => {
         .single();
       predictiveBurstEnabled = burstFlag?.enabled ?? false;
     } catch { /* flag table may not exist yet */ }
+    try {
+      const { data: smsFlag } = await supabase
+        .from('intelligence_feature_flags')
+        .select('enabled')
+        .eq('feature_name', 'allstar_mint_sms_alerts')
+        .single();
+      smsAlertsEnabled = smsFlag?.enabled ?? false;
+    } catch { /* flag may not exist */ }
 
     for (const item of queue) {
       await sleep(DELAY_MS);
@@ -175,6 +185,41 @@ Deno.serve(withRunLog('family-mint-monitor', async (req) => {
               launchpad: det.launchpad, alert_level: det.eventType === 'DIRECT_DEV_MINT' ? 'critical' : 'high',
               metadata: { source: 'family_mint_monitor', event_type: det.eventType },
             });
+
+            // ═══ SMS hop: 1 per allstar dev per 6h, only if flag enabled ═══
+            if (smsAlertsEnabled && familyData.seed_wallet) {
+              try {
+                const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString();
+                const { data: throttle } = await supabase
+                  .from('allstar_sms_throttle')
+                  .select('last_sent_at, total_sent')
+                  .eq('master_wallet', familyData.seed_wallet)
+                  .maybeSingle();
+
+                const recentlySent = throttle?.last_sent_at && throttle.last_sent_at > sixHoursAgo;
+                if (!recentlySent) {
+                  const smsBody = [
+                    `🚨 ALLSTAR MINT`,
+                    `Dev: ${(familyData.family_name || familyData.seed_wallet.slice(0,8))}`,
+                    `New token: ${det.mintAddress.slice(0,8)}…${det.mintAddress.slice(-4)}`,
+                    `Via: ${det.launchpad || 'unknown'} (${det.eventType})`,
+                    `https://solscan.io/token/${det.mintAddress}`,
+                  ].join('\n');
+                  const sent = await sendAdminSms(smsBody);
+                  if (sent) {
+                    await supabase.from('allstar_sms_throttle').upsert({
+                      master_wallet: familyData.seed_wallet,
+                      last_sent_at: new Date().toISOString(),
+                      total_sent: (throttle?.total_sent || 0) + 1,
+                    });
+                  }
+                } else {
+                  console.log(`[FamilyMintMonitor] SMS throttled for ${familyData.seed_wallet.slice(0,8)} (sent in last 6h)`);
+                }
+              } catch (smsErr) {
+                console.warn('[FamilyMintMonitor] SMS hop failed (non-fatal):', smsErr);
+              }
+            }
           }
 
           // ═══ CROSS-FEED 2: Auto-add to pumpfun_watchlist (Master DB pipeline) ═══
