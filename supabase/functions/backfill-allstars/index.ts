@@ -49,10 +49,15 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const minMcap = body.min_mcap || MIN_MCAP;
-    const maxResolve = body.max_resolve || 30;
+    const maxResolve = body.max_resolve ?? 0; // default OFF — slow Helius/Pump.fun calls
     const dryRun = body.dry_run || false;
     const wide: boolean = !!body.wide;
     const pageSize = 1000;
+    const chunkOffset: number = Math.max(0, Number(body.chunk_offset) || 0);
+    const chunkSize: number = Math.max(50, Math.min(Number(body.chunk_size) || 250, 500));
+    const startedAt = Date.now();
+    const WALL_BUDGET_MS = 110_000; // bail well before 150s edge timeout
+    const timeUp = () => (Date.now() - startedAt) > WALL_BUDGET_MS;
 
     console.log(`[BackfillAllstars] Starting (min mcap: $${minMcap.toLocaleString()}, max resolve: ${maxResolve}, dry_run: ${dryRun}, wide: ${wide})`);
 
@@ -237,18 +242,28 @@ Deno.serve(async (req) => {
     }
 
     const uniqueCreators = Array.from(creatorMap.keys());
-    console.log(`[BackfillAllstars] ${uniqueCreators.length} unique creators to evaluate`);
+    console.log(`[BackfillAllstars] ${uniqueCreators.length} unique creators total; processing slice [${chunkOffset}..${chunkOffset + chunkSize})`);
 
-    // Step 4: Check existing AllStars
+    // Slice this call's work — caller loops with next_offset until done.
+    const sliceCreators = uniqueCreators.slice(chunkOffset, chunkOffset + chunkSize);
+    const sliceMap = new Map(sliceCreators.map(w => [w, creatorMap.get(w)!]));
+
+    // Step 4: Check existing AllStars (only for this slice)
     const { data: existingAllstars } = await supabase
       .from('allstar_dev_registry')
       .select('master_wallet, best_tier, best_mcap_achieved')
-      .in('master_wallet', uniqueCreators.length > 0 ? uniqueCreators : ['__none__']);
+      .in('master_wallet', sliceCreators.length > 0 ? sliceCreators : ['__none__']);
 
     const existingMap = new Map((existingAllstars || []).map(a => [a.master_wallet, a]));
 
     // Step 5: Promote or upgrade
-    for (const [wallet, token] of creatorMap.entries()) {
+    let lastProcessedIndex = chunkOffset;
+    let bailedOnTime = false;
+    let i = chunkOffset;
+    for (const [wallet, token] of sliceMap.entries()) {
+      if (timeUp()) { bailedOnTime = true; break; }
+      lastProcessedIndex = i + 1;
+      i++;
       const tier = mcapToTier(token.market_cap);
       const existing = existingMap.get(wallet);
 
@@ -337,10 +352,19 @@ Deno.serve(async (req) => {
       console.log(`[BackfillAllstars] 🌟 Promoted $${token.symbol} dev ${wallet.slice(0, 8)}... → T${tier} (mcap: $${token.market_cap.toLocaleString()})`);
     }
 
+    const nextOffset = bailedOnTime ? lastProcessedIndex : (chunkOffset + sliceCreators.length);
+    const done = !bailedOnTime && nextOffset >= uniqueCreators.length;
+
     const summary = {
       success: true,
       dry_run: dryRun,
       wide,
+      total_unique_creators: uniqueCreators.length,
+      chunk_offset: chunkOffset,
+      chunk_size: chunkSize,
+      next_offset: done ? null : nextOffset,
+      done,
+      elapsed_ms: Date.now() - startedAt,
       tokens_scanned: stats.tokens_scanned,
       creators_resolved: stats.creators_resolved,
       failed_resolution: stats.failed_resolution,
