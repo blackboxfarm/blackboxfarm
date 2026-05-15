@@ -89,7 +89,19 @@ function processTemplate(template: string, data: any): string {
 
   // Final pass: strip any zero-width / invisible chars that may have been
   // present in the original template text itself (e.g. copied from Telegram).
-  return sanitizeForTwitter(raw);
+  // Belt-and-suspenders: enforce ?token={ca} on every blackbox.farm/holders
+  // URL regardless of which template variant was used. Stops legacy
+  // ?v=holders5 (or any other query string) from ever shipping in a manual
+  // X post — we want the canonical token-deeplink the FIRST time we compose,
+  // not after a banner re-fetch rewrites it.
+  const ca = data.tokenMint || '';
+  const normalized = ca
+    ? raw.replace(
+        /https?:\/\/blackbox\.farm\/holders(?:\?[^\s)]*)?/gi,
+        `https://blackbox.farm/holders?token=${ca}`,
+      )
+    : raw;
+  return sanitizeForTwitter(normalized);
 }
 
 async function fetchActiveTemplate(supabase: any): Promise<string> {
