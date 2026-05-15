@@ -57,8 +57,13 @@ Deno.serve(async (req) => {
         seen.add(cid);
         const linked = (row as any).linked_token_mints as string[] | null;
         const nh = (row as any).name_history;
+        // Fallback: when name is null, surface the most recent name from name_history
+        const histArr = Array.isArray(nh) ? nh : [];
+        const lastHistName = histArr.length > 0
+          ? (histArr[histArr.length - 1]?.name || histArr[histArr.length - 1]?.title || null)
+          : null;
         communities[cid] = {
-          name: (row as any).name || null,
+          name: (row as any).name || lastHistName || null,
           member_count: (row as any).member_count ?? null,
           recycled_count: Array.isArray(linked) ? linked.length : null,
           recycled_band: (row as any).recycled_band || null,
@@ -90,14 +95,33 @@ Deno.serve(async (req) => {
       const seen = new Set<string>();
       for (const row of data || []) {
         const mint = (row as any).mint_address as string;
-        seen.add(mint);
-        tokens[mint] = {
-          ticker: (row as any).symbol || null,
-          name: (row as any).name || null,
-        };
+        const ticker = (row as any).symbol || null;
+        const name = (row as any).name || null;
+        if (ticker || name) {
+          seen.add(mint);
+          tokens[mint] = { ticker, name };
+        }
       }
-      for (const m of tokenMints) {
-        if (!seen.has(m)) tokens[m] = { ticker: null, name: null };
+      // Fallback to token_lifecycle for any mint that still has no ticker/name
+      const misses = tokenMints.filter((m) => !seen.has(m));
+      if (misses.length > 0) {
+        const { data: lifecycleRows, error: lcErr } = await supabase
+          .from('token_lifecycle')
+          .select('token_mint, name, symbol')
+          .in('token_mint', misses);
+        if (lcErr) console.warn('[resolve-labels] token_lifecycle lookup error:', lcErr.message);
+        for (const row of lifecycleRows || []) {
+          const mint = (row as any).token_mint as string;
+          const ticker = (row as any).symbol || null;
+          const name = (row as any).name || null;
+          if (ticker || name) {
+            seen.add(mint);
+            tokens[mint] = { ticker, name };
+          }
+        }
+        for (const m of tokenMints) {
+          if (!seen.has(m)) tokens[m] = { ticker: null, name: null };
+        }
       }
     }
 

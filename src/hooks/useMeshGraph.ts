@@ -255,6 +255,21 @@ export function useMeshGraph(initialEntityId?: string) {
                   .from('reputation_mesh')
                   .upsert(upserts, { onConflict: 'source_id,linked_id,relationship', ignoreDuplicates: true });
                 console.log(`[MeshGraph] Upserted ${upserts.length} reverse community links`);
+                // Also push these links into the in-memory batch so the FIRST
+                // render shows them — without waiting for a refresh round-trip.
+                for (const u of upserts) {
+                  allLinks.push({
+                    id: `rev:${u.source_id}:${u.linked_id}:${u.relationship}`,
+                    source_id: u.source_id,
+                    source_type: u.source_type,
+                    linked_id: u.linked_id,
+                    linked_type: u.linked_type,
+                    relationship: u.relationship,
+                    confidence: u.confidence,
+                    evidence: u.evidence,
+                    discovered_at: u.discovered_at,
+                  });
+                }
               }
             }
           } catch (err) {
@@ -330,6 +345,19 @@ export function useMeshGraph(initialEntityId?: string) {
                   .from('reputation_mesh')
                   .upsert(upserts, { onConflict: 'source_id,linked_id,relationship', ignoreDuplicates: true });
                 console.log(`[MeshGraph] Upserted ${upserts.length} community mesh links`);
+                for (const u of upserts) {
+                  allLinks.push({
+                    id: `commrev:${u.source_id}:${u.linked_id}:${u.relationship}`,
+                    source_id: u.source_id,
+                    source_type: u.source_type,
+                    linked_id: u.linked_id,
+                    linked_type: u.linked_type,
+                    relationship: u.relationship,
+                    confidence: u.confidence,
+                    evidence: u.evidence,
+                    discovered_at: u.discovered_at,
+                  });
+                }
               }
             } else {
               console.log(`[MeshGraph] Community ${commId} not in x_communities table — will need scraping`);
@@ -366,7 +394,12 @@ export function useMeshGraph(initialEntityId?: string) {
       
       // Only fetch 2nd-hop for IDs not already queried
       const hop2Ids = [...hop1Ids].filter(id => !uniqueIds.includes(id));
-      for (const entityId of hop2Ids.slice(0, 20)) { // Cap at 20 to avoid overload
+      // Bigger budget when the centerpiece is an X handle: a single handle can
+      // legitimately fan out to several communities and tens of tokens, and we
+      // need every token→dev edge to render the convergence.
+      const isHandleCenter = focusedEntity?.type === 'x_account' || focusedEntity?.type === 'x_user';
+      const hop2Cap = isHandleCenter ? 80 : 20;
+      for (const entityId of hop2Ids.slice(0, hop2Cap)) {
         const { data, error } = await supabase
           .from('reputation_mesh')
           .select('*')
@@ -374,6 +407,32 @@ export function useMeshGraph(initialEntityId?: string) {
           .limit(100);
         if (error) throw error;
         if (data) allLinks.push(...data);
+      }
+
+      // 3-hop for handle centerpiece: every wallet we found needs at least one
+      // `created`/`created_by` neighbor so the schematic can flag it as a dev
+      // wallet (otherwise pruneToHandleChain drops it and the chain truncates).
+      if (isHandleCenter) {
+        const walletIds = new Set<string>();
+        const walletsWithCreated = new Set<string>();
+        for (const link of allLinks) {
+          if (link.source_type === 'wallet') walletIds.add(link.source_id);
+          if (link.linked_type === 'wallet') walletIds.add(link.linked_id);
+          if (link.relationship === 'created' || link.relationship === 'created_by') {
+            if (link.source_type === 'wallet') walletsWithCreated.add(link.source_id);
+            if (link.linked_type === 'wallet') walletsWithCreated.add(link.linked_id);
+          }
+        }
+        const needsDevCheck = [...walletIds].filter((w) => !walletsWithCreated.has(w)).slice(0, 40);
+        for (const wid of needsDevCheck) {
+          const { data } = await supabase
+            .from('reputation_mesh')
+            .select('*')
+            .or(`source_id.eq.${wid},linked_id.eq.${wid}`)
+            .in('relationship', ['created', 'created_by', 'same_kyc_root'])
+            .limit(20);
+          if (data) allLinks.push(...data);
+        }
       }
 
       const seen = new Set<string>();
