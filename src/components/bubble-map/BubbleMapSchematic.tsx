@@ -16,7 +16,7 @@ import { Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 interface ResolvedLabels {
-  communities: Record<string, { name: string | null; member_count: number | null; recycled_count: number | null; recycled_band: string | null }>;
+  communities: Record<string, { name: string | null; member_count: number | null; recycled_count: number | null; recycled_band: string | null; name_history?: any[] | null; linked_token_mints?: string[] | null }>;
   tokens: Record<string, { ticker: string | null; name: string | null }>;
   pending: Set<string>;
 }
@@ -32,6 +32,13 @@ interface BubbleMapSchematicProps {
    *                         and any socials directly attached to that token.
    */
   mode?: 'branches' | 'prune';
+  /**
+   * Which entity is the centerpiece of the search. When 'handle', the layout
+   * re-roots on the X handle and reads:
+   *   handle → x_communities (role badge on edge) → token ($TICKER) → dev wallet.
+   */
+  centerpiece?: 'token' | 'handle' | 'wallet' | 'community';
+  centerpieceId?: string | null;
 }
 
 export interface SchematicHandle {
@@ -72,6 +79,89 @@ function rankNode(n: any, devWalletId: string | null): number {
 
 const SOCIAL_TYPES = new Set(['x_account', 'x_community', 'telegram', 'website', 'tg_channel', 'discord', 'github', 'twitch', 'reddit', 'youtube', 'medium']);
 
+/**
+ * Handle-rooted prune: keep only the chain
+ *   handle → x_communities → tokens → dev wallets (→ KYC roots)
+ * Drops unrelated socials, funders, and other-token branches so the view
+ * reads top-to-bottom exactly as: who you are → which communities you run →
+ * which tokens those communities spawned → who minted them.
+ */
+function pruneToHandleChain(graphData: { nodes: any[]; links: any[] }, handleNodeId: string | null) {
+  if (!handleNodeId) return graphData;
+  const handleNode = graphData.nodes.find((n: any) => n.id === handleNodeId);
+  if (!handleNode) return graphData;
+
+  const idToNode = new Map<string, any>();
+  for (const n of graphData.nodes) idToNode.set(n.id, n);
+
+  // Build adjacency
+  const adj = new Map<string, Set<string>>();
+  for (const l of graphData.links) {
+    const s = typeof l.source === 'object' ? l.source.id : l.source;
+    const t = typeof l.target === 'object' ? l.target.id : l.target;
+    if (!s || !t) continue;
+    if (!adj.has(s)) adj.set(s, new Set());
+    if (!adj.has(t)) adj.set(t, new Set());
+    adj.get(s)!.add(t);
+    adj.get(t)!.add(s);
+  }
+
+  const keep = new Set<string>([handleNodeId]);
+  // Hop 1: communities the handle is in
+  const communities = new Set<string>();
+  for (const nb of adj.get(handleNodeId) || []) {
+    if (idToNode.get(nb)?.type === 'x_community') {
+      communities.add(nb);
+      keep.add(nb);
+    }
+  }
+  // Hop 2: tokens linked to those communities
+  const tokens = new Set<string>();
+  for (const c of communities) {
+    for (const nb of adj.get(c) || []) {
+      if (idToNode.get(nb)?.type === 'token') {
+        tokens.add(nb);
+        keep.add(nb);
+      }
+    }
+  }
+  // Hop 3: dev wallet that minted each token
+  const devWallets = new Set<string>();
+  for (const t of tokens) {
+    for (const nb of adj.get(t) || []) {
+      const n = idToNode.get(nb);
+      if (n?.type === 'wallet' && (n.isDev || true)) {
+        devWallets.add(nb);
+        keep.add(nb);
+      }
+    }
+  }
+  // Hop 4 (optional): KYC root above each dev wallet
+  for (const w of devWallets) {
+    for (const nb of adj.get(w) || []) {
+      if (idToNode.get(nb)?.type === 'kyc_root') keep.add(nb);
+    }
+  }
+
+  const nodes = graphData.nodes.filter((n: any) => keep.has(n.id));
+  const links = graphData.links.filter((l: any) => {
+    const s = typeof l.source === 'object' ? l.source.id : l.source;
+    const t = typeof l.target === 'object' ? l.target.id : l.target;
+    return keep.has(s) && keep.has(t);
+  });
+  return { nodes, links };
+}
+
+const ROLE_BADGE: Record<string, { icon: string; label: string; color: string }> = {
+  community_admin: { icon: '🛡', label: 'Admin',   color: 'hsl(45 90% 55%)' },
+  admin_of:        { icon: '🛡', label: 'Admin',   color: 'hsl(45 90% 55%)' },
+  community_mod:   { icon: '🔧', label: 'Mod',     color: 'hsl(200 80% 60%)' },
+  mod_of:          { icon: '🔧', label: 'Mod',     color: 'hsl(200 80% 60%)' },
+  community_creator: { icon: '👑', label: 'Creator', color: 'hsl(280 80% 65%)' },
+  created_community: { icon: '👑', label: 'Creator', color: 'hsl(280 80% 65%)' },
+  member_of:       { icon: '👤', label: 'Member',  color: 'hsl(var(--muted-foreground))' },
+};
+
 function pruneToTokenAndSocials(graphData: { nodes: any[]; links: any[] }) {
   // Find the primary token node (first token, or one flagged as central if any).
   const tokenNode = graphData.nodes.find((n: any) => n.type === 'token');
@@ -109,6 +199,7 @@ function pruneToTokenAndSocials(graphData: { nodes: any[]; links: any[] }) {
 function buildLayout(
   graphData: { nodes: any[]; links: any[] },
   resolved: ResolvedLabels,
+  centerpiece: 'token' | 'handle' | 'wallet' | 'community' = 'token',
 ) {
   const g = new dagre.graphlib.Graph();
   g.setGraph({ rankdir: 'TB', nodesep: 40, ranksep: 90, marginx: 20, marginy: 20 });
@@ -227,6 +318,29 @@ function buildLayout(
     const graphRecycle = n.type === 'x_community' ? (communityTokenNeighbors.get(n.id)?.size ?? 0) : 0;
     const recycledCount = Math.max(cachedRecycle, graphRecycle);
     const isRecycled = recycledCount > 1;
+    const ghostStack = Math.min(Math.max(recycledCount - 1, 0), 3);
+    const nameHistory = cidForRecycle ? (resolved.communities[cidForRecycle]?.name_history ?? null) : null;
+    const linkedMints = cidForRecycle ? (resolved.communities[cidForRecycle]?.linked_token_mints ?? null) : null;
+    const ghostTooltip = isRecycled
+      ? [
+          `Recycled across ${recycledCount} tokens`,
+          ...(Array.isArray(nameHistory)
+            ? nameHistory.map((h: any) => {
+                const nm = h?.name || h?.prev_name || '?';
+                const mc = h?.member_count ? ` · ${h.member_count.toLocaleString()} members` : '';
+                const ts = h?.observed_until || h?.last_seen || h?.timestamp;
+                const when = ts ? ` · ${new Date(ts).toLocaleDateString()}` : '';
+                return `· ${nm}${mc}${when}`;
+              })
+            : []),
+          ...(Array.isArray(linkedMints)
+            ? linkedMints.map((m: string) => {
+                const tk = resolved.tokens[m]?.ticker;
+                return tk ? `· prior $${tk.replace(/^\$/, '')}` : `· ${m.slice(0, 4)}…${m.slice(-4)}`;
+              })
+            : []),
+        ].join('\n')
+      : '';
 
     const subLabel =
       n.type === 'kyc_root'
@@ -244,7 +358,7 @@ function buildLayout(
       id: n.id,
       position: { x: pos?.x || 0, y: pos?.y || 0 },
       data: { label: (
-        <div className="flex flex-col items-center leading-tight">
+        <div className="flex flex-col items-center leading-tight" title={ghostTooltip || undefined}>
           <span
             className="text-[10px] uppercase tracking-wider"
             style={{
@@ -273,7 +387,12 @@ function buildLayout(
         boxShadow: isDev
           ? '0 0 12px hsl(45 90% 55% / 0.5)'
           : isRecycled
-          ? '0 0 10px hsl(280 80% 65% / 0.5)'
+          ? [
+              ...(ghostStack >= 1 ? ['6px 6px 0 -1px hsl(280 80% 65% / 0.55), 6px 6px 0 0 hsl(280 80% 40% / 0.6)'] : []),
+              ...(ghostStack >= 2 ? ['12px 12px 0 -2px hsl(280 80% 65% / 0.4), 12px 12px 0 -1px hsl(280 80% 40% / 0.5)'] : []),
+              ...(ghostStack >= 3 ? ['18px 18px 0 -3px hsl(280 80% 65% / 0.28), 18px 18px 0 -2px hsl(280 80% 40% / 0.4)'] : []),
+              '0 0 10px hsl(280 80% 65% / 0.5)',
+            ].join(', ')
           : undefined,
       },
     } as Node;
@@ -285,17 +404,25 @@ function buildLayout(
     const rel = l.relationship || '';
     const isFunding = rel.includes('funded');
     const isCreated = rel.includes('created');
+    const role = ROLE_BADGE[rel];
+    const edgeLabel = role ? `${role.icon} ${role.label}` : (rel || undefined);
+    const edgeStroke = role
+      ? role.color
+      : isFunding ? 'hsl(45 90% 55%)' : isCreated ? 'hsl(var(--primary))' : 'hsl(var(--border))';
     return {
       id: `e-${i}-${s}-${t}`,
       source: s,
       target: t,
       animated: isFunding,
-      label: rel || undefined,
-      labelStyle: { fontSize: 9, fill: 'hsl(var(--muted-foreground))' },
+      label: edgeLabel,
+      labelStyle: { fontSize: role ? 11 : 9, fill: role ? role.color : 'hsl(var(--muted-foreground))', fontWeight: role ? 600 : 400 },
+      labelBgStyle: role ? { fill: 'hsl(var(--background))', fillOpacity: 0.9 } : undefined,
+      labelBgPadding: role ? [4, 2] as [number, number] : undefined,
+      labelBgBorderRadius: role ? 4 : undefined,
       style: {
-        stroke: isFunding ? 'hsl(45 90% 55%)' : isCreated ? 'hsl(var(--primary))' : 'hsl(var(--border))',
-        strokeWidth: isFunding ? 2 : 1,
-        opacity: isFunding ? 0.85 : 0.5,
+        stroke: edgeStroke,
+        strokeWidth: role ? 1.5 : isFunding ? 2 : 1,
+        opacity: role ? 0.9 : isFunding ? 0.85 : 0.5,
       },
       markerEnd: { type: MarkerType.ArrowClosed },
     } as Edge;
@@ -305,7 +432,7 @@ function buildLayout(
 }
 
 const SchematicInner = forwardRef<SchematicHandle, BubbleMapSchematicProps>(function SchematicInner(
-  { graphData, width, height = 600, onNodeClick, mode = 'branches' },
+  { graphData, width, height = 600, onNodeClick, mode = 'branches', centerpiece = 'token', centerpieceId = null },
   ref,
 ) {
   const rf = useReactFlow();
@@ -321,10 +448,17 @@ const SchematicInner = forwardRef<SchematicHandle, BubbleMapSchematicProps>(func
     },
   }), [rf]);
 
-  const effectiveData = useMemo(
-    () => (mode === 'prune' ? pruneToTokenAndSocials(graphData) : graphData),
-    [graphData, mode],
-  );
+  const effectiveData = useMemo(() => {
+    if (centerpiece === 'handle') {
+      // Find the handle node — prefer explicit id, else first x_account.
+      const handleNode =
+        (centerpieceId && graphData.nodes.find((n: any) => n.id === centerpieceId || (n.fullId || '').endsWith(`:${centerpieceId}`))) ||
+        graphData.nodes.find((n: any) => n.type === 'x_account');
+      return pruneToHandleChain(graphData, handleNode?.id || null);
+    }
+    if (mode === 'prune') return pruneToTokenAndSocials(graphData);
+    return graphData;
+  }, [graphData, mode, centerpiece, centerpieceId]);
 
   const [resolved, setResolved] = useState<ResolvedLabels>(() => ({
     communities: {}, tokens: {}, pending: new Set(),
@@ -385,7 +519,7 @@ const SchematicInner = forwardRef<SchematicHandle, BubbleMapSchematicProps>(func
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveData]);
 
-  const { nodes, edges } = useMemo(() => buildLayout(effectiveData, resolved), [effectiveData, resolved]);
+  const { nodes, edges } = useMemo(() => buildLayout(effectiveData, resolved, centerpiece), [effectiveData, resolved, centerpiece]);
 
   const handleNodeClick = useCallback(
     (_e: any, node: Node) => {
