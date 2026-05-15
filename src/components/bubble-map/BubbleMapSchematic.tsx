@@ -18,6 +18,7 @@ import { supabase } from '@/integrations/supabase/client';
 interface ResolvedLabels {
   communities: Record<string, { name: string | null; member_count: number | null; recycled_count: number | null; recycled_band: string | null; name_history?: any[] | null; linked_token_mints?: string[] | null }>;
   tokens: Record<string, { ticker: string | null; name: string | null }>;
+  handles: Record<string, { display_name: string | null; handle_history: any[] | null; is_rotated: boolean }>;
   pending: Set<string>;
 }
 
@@ -80,6 +81,15 @@ function rankNode(n: any, devWalletId: string | null): number {
 const SOCIAL_TYPES = new Set(['x_account', 'x_community', 'telegram', 'website', 'tg_channel', 'discord', 'github', 'twitch', 'reddit', 'youtube', 'medium']);
 
 /**
+ * Canonicalize an X handle reference to bare lowercase handle.
+ * Accepts: "pumpfun711", "@pumpfun711", "x_account:pumpfun711", "x_account:@pumpfun711".
+ */
+function canonicalHandleId(raw: string | null | undefined): string {
+  if (!raw) return '';
+  return String(raw).replace(/^x_account:/i, '').replace(/^x_user:/i, '').replace(/^@/, '').toLowerCase().trim();
+}
+
+/**
  * Handle-rooted prune: keep only the chain
  *   handle → x_communities → tokens → dev wallets (→ KYC roots)
  * Drops unrelated socials, funders, and other-token branches so the view
@@ -130,7 +140,10 @@ function pruneToHandleChain(graphData: { nodes: any[]; links: any[] }, handleNod
   for (const t of tokens) {
     for (const nb of adj.get(t) || []) {
       const n = idToNode.get(nb);
-      if (n?.type === 'wallet' && (n.isDev || true)) {
+      // Only keep wallets that are actually flagged as dev/creator for the
+      // token. Without this the chain leaks every holder wallet attached to
+      // the token and the canvas explodes (the @pumpfun711 56-node bug).
+      if (n?.type === 'wallet' && (n.isDev === true || (n as any).is_dev === true)) {
         devWallets.add(nb);
         keep.add(nb);
       }
@@ -316,14 +329,29 @@ function buildLayout(
     const cidForRecycle = n.type === 'x_community' ? fullId.replace(/^x_community:/, '') : '';
     const cachedRecycle = cidForRecycle ? (resolved.communities[cidForRecycle]?.recycled_count ?? 0) : 0;
     const graphRecycle = n.type === 'x_community' ? (communityTokenNeighbors.get(n.id)?.size ?? 0) : 0;
-    const recycledCount = Math.max(cachedRecycle, graphRecycle);
+    let recycledCount = Math.max(cachedRecycle, graphRecycle);
+    let nameHistory: any[] | null = cidForRecycle ? (resolved.communities[cidForRecycle]?.name_history ?? null) : null;
+    // Handle-level rotation: treat handle_history entries the same way we
+    // treat recycled communities so the user gets the ghost-stack visual.
+    if (n.type === 'x_account' || n.type === 'x_user') {
+      const hKey = (() => {
+        const raw = (n.fullId || n.id || '').toString();
+        return raw.replace(/^x_account:/, '').replace(/^x_user:/, '').replace(/^@/, '').toLowerCase();
+      })();
+      const hh = resolved.handles?.[hKey]?.handle_history;
+      if (Array.isArray(hh) && hh.length > 0) {
+        recycledCount = Math.max(recycledCount, hh.length + 1);
+        nameHistory = hh.map((e: any) => ({ name: '@' + (e.handle || e.name || '?'), last_seen: e.last_seen, member_count: null }));
+      }
+    }
     const isRecycled = recycledCount > 1;
     const ghostStack = Math.min(Math.max(recycledCount - 1, 0), 3);
-    const nameHistory = cidForRecycle ? (resolved.communities[cidForRecycle]?.name_history ?? null) : null;
     const linkedMints = cidForRecycle ? (resolved.communities[cidForRecycle]?.linked_token_mints ?? null) : null;
     const ghostTooltip = isRecycled
       ? [
-          `Recycled across ${recycledCount} tokens`,
+          n.type === 'x_account' || n.type === 'x_user'
+            ? `Handle rotated ${recycledCount} times`
+            : `Recycled across ${recycledCount} tokens`,
           ...(Array.isArray(nameHistory)
             ? nameHistory.map((h: any) => {
                 const nm = h?.name || h?.prev_name || '?';
@@ -353,6 +381,8 @@ function buildLayout(
         ? '💰 Funder'
         : n.type === 'x_community'
         ? (isRecycled ? `♻ Recycled ×${recycledCount}` : 'X Community')
+        : (n.type === 'x_account' || n.type === 'x_user')
+        ? (isRecycled ? `🔄 Rotated ×${recycledCount}` : '🐦 X Handle')
         : n.type;
     return {
       id: n.id,
@@ -450,18 +480,31 @@ const SchematicInner = forwardRef<SchematicHandle, BubbleMapSchematicProps>(func
 
   const effectiveData = useMemo(() => {
     if (centerpiece === 'handle') {
-      // Find the handle node — prefer explicit id, else first x_account.
-      const handleNode =
-        (centerpieceId && graphData.nodes.find((n: any) => n.id === centerpieceId || (n.fullId || '').endsWith(`:${centerpieceId}`))) ||
+      const wanted = canonicalHandleId(centerpieceId);
+      // Find the handle node by canonical handle, regardless of `x_account:`/`@` prefix.
+      let handleNode =
+        (wanted && graphData.nodes.find((n: any) =>
+          (n.type === 'x_account' || n.type === 'x_user') &&
+          (canonicalHandleId(n.fullId || n.id) === wanted || canonicalHandleId(n.label) === wanted)
+        )) ||
         graphData.nodes.find((n: any) => n.type === 'x_account');
-      return pruneToHandleChain(graphData, handleNode?.id || null);
+      // Synthesize a handle root if none exists yet — guarantees the schematic
+      // always has a single root and avoids the "no handle node → return full
+      // graph → 56-node mess" failure mode.
+      let workingGraph = graphData;
+      if (!handleNode && wanted) {
+        const synthId = `x_account:${wanted}`;
+        handleNode = { id: synthId, fullId: wanted, type: 'x_account', label: `@${wanted}`, val: 1, displayName: `@${wanted}` } as any;
+        workingGraph = { nodes: [handleNode, ...graphData.nodes], links: graphData.links };
+      }
+      return pruneToHandleChain(workingGraph, handleNode?.id || null);
     }
     if (mode === 'prune') return pruneToTokenAndSocials(graphData);
     return graphData;
   }, [graphData, mode, centerpiece, centerpieceId]);
 
   const [resolved, setResolved] = useState<ResolvedLabels>(() => ({
-    communities: {}, tokens: {}, pending: new Set(),
+    communities: {}, tokens: {}, handles: {}, pending: new Set(),
   }));
 
   // Collect unresolved community/token ids from the current graph and batch-fetch
@@ -470,6 +513,7 @@ const SchematicInner = forwardRef<SchematicHandle, BubbleMapSchematicProps>(func
   useEffect(() => {
     const communityIds: string[] = [];
     const tokenMints: string[] = [];
+    const handleIds: string[] = [];
     for (const n of effectiveData.nodes) {
       const fullId = (n.fullId || n.id || '').toString();
       if (n.type === 'x_community') {
@@ -478,9 +522,12 @@ const SchematicInner = forwardRef<SchematicHandle, BubbleMapSchematicProps>(func
       } else if (n.type === 'token') {
         const mint = fullId.replace(/^token:/, '');
         if (mint && mint.length >= 30 && !resolved.tokens[mint]) tokenMints.push(mint);
+      } else if (n.type === 'x_account' || n.type === 'x_user') {
+        const h = canonicalHandleId(fullId || n.id);
+        if (h && !resolved.handles[h]) handleIds.push(h);
       }
     }
-    if (communityIds.length === 0 && tokenMints.length === 0) return;
+    if (communityIds.length === 0 && tokenMints.length === 0 && handleIds.length === 0) return;
 
     const pending = new Set<string>([
       ...communityIds.map((c) => `community:${c}`),
@@ -491,7 +538,7 @@ const SchematicInner = forwardRef<SchematicHandle, BubbleMapSchematicProps>(func
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 4000);
     supabase.functions
-      .invoke('resolve-labels', { body: { communities: communityIds, tokens: tokenMints } })
+      .invoke('resolve-labels', { body: { communities: communityIds, tokens: tokenMints, handles: handleIds } })
       .then(({ data, error }: any) => {
         clearTimeout(t);
         if (error || !data) return;
@@ -502,6 +549,7 @@ const SchematicInner = forwardRef<SchematicHandle, BubbleMapSchematicProps>(func
           return {
             communities: { ...prev.communities, ...(data.communities || {}) },
             tokens: { ...prev.tokens, ...(data.tokens || {}) },
+            handles: { ...prev.handles, ...(data.handles || {}) },
             pending: nextPending,
           };
         });
