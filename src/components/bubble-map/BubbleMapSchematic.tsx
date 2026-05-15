@@ -15,6 +15,61 @@ import { ENTITY_COLORS, MeshNode } from '@/hooks/useMeshGraph';
 import { Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
+/**
+ * Rolodex-style label for recycled communities / rotated handles.
+ * Shows the current alias by default; click (or long-press) flips to the
+ * next prior alias with a quick rotateX animation. Cycles back to the
+ * current name after the last historical entry.
+ */
+function RolodexLabel({
+  entries,
+  currentLabel,
+}: {
+  entries: { label: string; sub?: string }[]; // history only (no current)
+  currentLabel: string;
+}) {
+  const all = React.useMemo(
+    () => [{ label: currentLabel, sub: 'current' }, ...entries],
+    [currentLabel, entries]
+  );
+  const [idx, setIdx] = React.useState(0);
+  const [flipping, setFlipping] = React.useState(false);
+  const total = all.length;
+  const cur = all[idx % total];
+  const advance = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setFlipping(true);
+    window.setTimeout(() => {
+      setIdx((i) => (i + 1) % total);
+      setFlipping(false);
+    }, 140);
+  };
+  return (
+    <span
+      onClick={advance}
+      onTouchEnd={advance}
+      className="inline-flex flex-col items-center cursor-pointer select-none"
+      style={{ perspective: 200 }}
+      title={`Click to flip — ${total} alias${total === 1 ? '' : 'es'}`}
+    >
+      <span
+        className="font-semibold text-xs truncate max-w-[160px] inline-block"
+        style={{
+          transition: 'transform 140ms ease-in-out, opacity 140ms',
+          transform: flipping ? 'rotateX(90deg)' : 'rotateX(0deg)',
+          opacity: flipping ? 0.2 : 1,
+        }}
+      >
+        {cur.label}
+      </span>
+      <span className="text-[8px] uppercase tracking-wider opacity-60 leading-none mt-0.5">
+        {idx === 0 ? `↻ ${total - 1} prior` : `${idx}/${total - 1} · tap`}
+      </span>
+    </span>
+  );
+}
+
 interface ResolvedLabels {
   communities: Record<string, { name: string | null; member_count: number | null; recycled_count: number | null; recycled_band: string | null; name_history?: any[] | null; linked_token_mints?: string[] | null }>;
   tokens: Record<string, { ticker: string | null; name: string | null }>;
