@@ -171,6 +171,21 @@ serve(withRunLog('admin-add-seen-token', async (req) => {
           if (!updateError) {
             communityLinked = true;
             console.log(`[admin-add-seen-token] Added ${tokenMint} to existing community ${effectiveId}`);
+            // Canonical recycle event: same community_id now linked to a 2nd+ distinct token.
+            if (existingMints.length > 0) {
+              try {
+                const { recordCommunityRecycle } = await import('../_shared/recycle-events.ts');
+                await recordCommunityRecycle(supabase, {
+                  community_id: effectiveId,
+                  prev_token_mint: existingMints[existingMints.length - 1],
+                  new_token_mint: tokenMint,
+                  triggered_by: 'admin-add-seen-token',
+                  severity: existingMints.length >= 2 ? 'red' : 'info',
+                });
+              } catch (e) {
+                console.warn('[admin-add-seen-token] recycle event failed:', (e as Error).message);
+              }
+            }
           }
         } else {
           communityLinked = true; // Already linked

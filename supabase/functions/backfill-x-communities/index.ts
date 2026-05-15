@@ -516,6 +516,21 @@ Deno.serve(withRunLog('backfill-x-communities', async (req) => {
                 updated_at: new Date().toISOString(),
               }).eq('id', existing.id);
               communitiesUpdated++;
+              // Canonical recycle event: same community_id linked to a 2nd+ distinct token.
+              if (mints.length > 0) {
+                try {
+                  const { recordCommunityRecycle } = await import('../_shared/recycle-events.ts');
+                  await recordCommunityRecycle(supabase, {
+                    community_id: foundCommunityId,
+                    prev_token_mint: mints[mints.length - 1],
+                    new_token_mint: mint,
+                    triggered_by: `backfill-${communitySource}`,
+                    severity: mints.length >= 2 ? 'red' : 'info',
+                  });
+                } catch (e) {
+                  console.warn('[backfill-x-communities] recycle event failed:', (e as Error).message);
+                }
+              }
             }
           } else {
             await supabase.from('x_communities').insert({
