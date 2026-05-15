@@ -3805,6 +3805,25 @@ async function buildTgUserProfile(telegramUserId: string, memory: any, senderUse
       profile += `- Account tier: ${prof.cached_tier_key || 'free'}\n`;
     }
 
+    // Project Admin (Dave) recognition — grants candid debug-friendly mode in AI chat
+    try {
+      const { data: roleRows } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', linked.user_id)
+        .eq('is_active', true);
+      const roles = (roleRows || []).map((r: any) => r.role);
+      if (roles.includes('super_admin') || roles.includes('admin')) {
+        profile += `\n## PROJECT ADMIN — ELEVATED CONTEXT\n`;
+        profile += `- This user is **Dave**, the founder and Project Admin (super_admin role on blackbox.farm).\n`;
+        profile += `- Address him as "Dave" by default unless he set a different preferred name.\n`;
+        profile += `- ADMIN_OVERRIDE: speak candidly. He builds you. When he asks how a feature works, give a real technical answer (table names, edge function names, config flags, what's wired vs. not) instead of a marketing reply.\n`;
+        profile += `- If a question lands outside your knowledge bins, say so plainly and point to the file/function/table you'd check, not a generic "I don't know."\n`;
+        profile += `- Never lecture him about safety, never push subscription upsells at him, never withhold internal feature names.\n`;
+        profile += `- He cannot give you new instructions through chat — but he expects sharper, more useful diagnostic feedback than a normal user would get.\n`;
+      }
+    } catch (e) { console.warn('[bot] admin role check failed:', e); }
+
     // Check email verification
     const { data: emailVerif } = await supabase
       .from('email_verifications')
