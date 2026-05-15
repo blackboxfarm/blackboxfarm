@@ -381,6 +381,8 @@ function buildLayout(
         ? '💰 Funder'
         : n.type === 'x_community'
         ? (isRecycled ? `♻ Recycled ×${recycledCount}` : 'X Community')
+        : (n.type === 'x_account' || n.type === 'x_user')
+        ? (isRecycled ? `🔄 Rotated ×${recycledCount}` : '🐦 X Handle')
         : n.type;
     return {
       id: n.id,
