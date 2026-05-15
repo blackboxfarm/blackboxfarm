@@ -3878,20 +3878,35 @@ async function detectTgLookup(messageText: string, telegramUserId: string): Prom
   const twMatch = messageText.match(TWITTER_HANDLE_RE_TG);
   if (twMatch) {
     const handle = (twMatch[1] || twMatch[2]).toLowerCase();
-    const { data: socialLinks } = await supabase
-      .from('token_social_links')
-      .select('token_mint, handle')
-      .eq('platform', 'twitter')
-      .ilike('handle', handle)
-      .limit(5);
-
-    if (socialLinks && socialLinks.length > 0) {
-      let block = `## LIVE DATA LOOKUP\nTwitter handle: @${handle}\n`;
-      for (const sl of socialLinks) {
-        const { data: token } = await supabase.from('token_lifecycle').select('symbol, name, phase').eq('mint', sl.token_mint).maybeSingle();
-        block += `- ${token?.name || 'Unknown'} (${token?.symbol || '?'}) — ${token?.phase || 'unknown'}\n`;
+    // Use the full mesh reverse-lookup (devs, tokens, communities, allstar/blacklist, recycled handles)
+    try {
+      const result = await xHandleReverseLookup(supabase, handle);
+      let block = `## LIVE DATA LOOKUP — X HANDLE @${handle}\n`;
+      if (!result.found) {
+        block += `- Handle not yet linked to any wallet, token, or community in our mesh.\n`;
+        block += `- Tell the user the bot CAN reverse-lookup X handles via the mesh — there's just nothing on this one yet.\n`;
+        return block;
+      }
+      block += `- Verdict: ${result.verdict}\n`;
+      block += `- Stats: ${result.stats.wallets} wallets, ${result.stats.tokens} tokens, ${result.stats.communities} communities\n`;
+      if (result.devs.length) {
+        block += `- Top dev wallets: ${result.devs.slice(0, 3).map(d => `${d.truncated} (rep ${d.reputationScore ?? '?'}, launches ${d.tokensLaunched ?? 0}, rugs ${d.tokensRugged ?? 0}${d.isAllstar ? ', ALLSTAR' : ''})`).join('; ')}\n`;
+      }
+      if (result.tokens.length) {
+        block += `- Linked tokens: ${result.tokens.slice(0, 5).map(t => `${t.symbol || t.mint.slice(0,4)} [${t.status || '?'}]`).join(', ')}\n`;
+      }
+      if (result.communities.length) {
+        block += `- Communities: ${result.communities.slice(0, 5).map(c => `${c.name} (${c.role}${c.recycled ? ', RECYCLED' : ''})`).join('; ')}\n`;
+      }
+      if (result.recycledHandles.length) {
+        block += `- Recycled handle history: ${result.recycledHandles.slice(0, 5).join(', ')}\n`;
+      }
+      if (result.kycRoots.length) {
+        block += `- KYC roots traced: ${result.kycRoots.length}\n`;
       }
       return block;
+    } catch (e) {
+      console.warn('[bot] detectTgLookup x-handle failed:', e);
     }
   }
 
