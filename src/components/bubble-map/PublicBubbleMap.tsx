@@ -1134,7 +1134,14 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken, onActi
     return { nodes: baseNodes, links: baseLinks };
   }, [graphData, nodeCap, capBroken, xAccountsRevealed, solarMode, schematicMode]);
 
-  const displayData = filteredDisplayData;
+  // When the centerpiece is an X handle in schematic view, bypass the
+  // bubble-mode filters (xAccountsRevealed gate + Solar-Min BFS rooted at a
+  // token) — those drop the handle node and its community/token chain,
+  // leaving the schematic with nothing to render but a synthesized root.
+  const isHandleSchematic =
+    viewMode === 'schematic' &&
+    (focusedEntity?.type === 'x_account' || focusedEntity?.type === 'x_user');
+  const displayData = isHandleSchematic ? graphData : filteredDisplayData;
   const isOverCap = !capBroken && graphData.nodes.length > nodeCap;
 
   // Auto-fit when node count grows (first trace, spider expand) so the user
