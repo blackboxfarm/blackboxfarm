@@ -76,6 +76,7 @@ export function ManualXPostingQueue() {
   const [autopsying, setAutopsying] = useState<Record<string, boolean>>({});
   const [decorating, setDecorating] = useState<Record<string, boolean>>({});
   const [regenerating, setRegenerating] = useState<Record<string, boolean>>({});
+  const [snapshots, setSnapshots] = useState<Record<string, { mcap: number | null; vol1h: number | null; priceUsd: number | null; at: number }>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -218,7 +219,16 @@ export function ManualXPostingQueue() {
       if (error) throw error;
       const r = (data as any)?.results?.[0];
       if (!r?.ok) throw new Error(r?.error || "regenerate failed");
-      toast({ title: "Post regenerated", description: "Pulled fresh holder data." });
+      if (r.snapshot) {
+        setSnapshots((p) => ({ ...p, [id]: { ...r.snapshot, at: Date.now() } }));
+      }
+      const snap = r.snapshot || {};
+      const mcapStr = snap.mcap != null ? fmtMcap(snap.mcap) : "—";
+      const volStr = snap.vol1h != null ? fmtMcap(snap.vol1h) : "—";
+      toast({
+        title: "Post regenerated",
+        description: `Fresh: MC ${mcapStr} · 1h Vol ${volStr}`,
+      });
       await load();
     } catch (e: any) {
       toast({ title: "Regenerate failed", description: e?.message || String(e), variant: "destructive" });
