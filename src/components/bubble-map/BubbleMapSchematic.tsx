@@ -79,6 +79,89 @@ function rankNode(n: any, devWalletId: string | null): number {
 
 const SOCIAL_TYPES = new Set(['x_account', 'x_community', 'telegram', 'website', 'tg_channel', 'discord', 'github', 'twitch', 'reddit', 'youtube', 'medium']);
 
+/**
+ * Handle-rooted prune: keep only the chain
+ *   handle → x_communities → tokens → dev wallets (→ KYC roots)
+ * Drops unrelated socials, funders, and other-token branches so the view
+ * reads top-to-bottom exactly as: who you are → which communities you run →
+ * which tokens those communities spawned → who minted them.
+ */
+function pruneToHandleChain(graphData: { nodes: any[]; links: any[] }, handleNodeId: string | null) {
+  if (!handleNodeId) return graphData;
+  const handleNode = graphData.nodes.find((n: any) => n.id === handleNodeId);
+  if (!handleNode) return graphData;
+
+  const idToNode = new Map<string, any>();
+  for (const n of graphData.nodes) idToNode.set(n.id, n);
+
+  // Build adjacency
+  const adj = new Map<string, Set<string>>();
+  for (const l of graphData.links) {
+    const s = typeof l.source === 'object' ? l.source.id : l.source;
+    const t = typeof l.target === 'object' ? l.target.id : l.target;
+    if (!s || !t) continue;
+    if (!adj.has(s)) adj.set(s, new Set());
+    if (!adj.has(t)) adj.set(t, new Set());
+    adj.get(s)!.add(t);
+    adj.get(t)!.add(s);
+  }
+
+  const keep = new Set<string>([handleNodeId]);
+  // Hop 1: communities the handle is in
+  const communities = new Set<string>();
+  for (const nb of adj.get(handleNodeId) || []) {
+    if (idToNode.get(nb)?.type === 'x_community') {
+      communities.add(nb);
+      keep.add(nb);
+    }
+  }
+  // Hop 2: tokens linked to those communities
+  const tokens = new Set<string>();
+  for (const c of communities) {
+    for (const nb of adj.get(c) || []) {
+      if (idToNode.get(nb)?.type === 'token') {
+        tokens.add(nb);
+        keep.add(nb);
+      }
+    }
+  }
+  // Hop 3: dev wallet that minted each token
+  const devWallets = new Set<string>();
+  for (const t of tokens) {
+    for (const nb of adj.get(t) || []) {
+      const n = idToNode.get(nb);
+      if (n?.type === 'wallet' && (n.isDev || true)) {
+        devWallets.add(nb);
+        keep.add(nb);
+      }
+    }
+  }
+  // Hop 4 (optional): KYC root above each dev wallet
+  for (const w of devWallets) {
+    for (const nb of adj.get(w) || []) {
+      if (idToNode.get(nb)?.type === 'kyc_root') keep.add(nb);
+    }
+  }
+
+  const nodes = graphData.nodes.filter((n: any) => keep.has(n.id));
+  const links = graphData.links.filter((l: any) => {
+    const s = typeof l.source === 'object' ? l.source.id : l.source;
+    const t = typeof l.target === 'object' ? l.target.id : l.target;
+    return keep.has(s) && keep.has(t);
+  });
+  return { nodes, links };
+}
+
+const ROLE_BADGE: Record<string, { icon: string; label: string; color: string }> = {
+  community_admin: { icon: '🛡', label: 'Admin',   color: 'hsl(45 90% 55%)' },
+  admin_of:        { icon: '🛡', label: 'Admin',   color: 'hsl(45 90% 55%)' },
+  community_mod:   { icon: '🔧', label: 'Mod',     color: 'hsl(200 80% 60%)' },
+  mod_of:          { icon: '🔧', label: 'Mod',     color: 'hsl(200 80% 60%)' },
+  community_creator: { icon: '👑', label: 'Creator', color: 'hsl(280 80% 65%)' },
+  created_community: { icon: '👑', label: 'Creator', color: 'hsl(280 80% 65%)' },
+  member_of:       { icon: '👤', label: 'Member',  color: 'hsl(var(--muted-foreground))' },
+};
+
 function pruneToTokenAndSocials(graphData: { nodes: any[]; links: any[] }) {
   // Find the primary token node (first token, or one flagged as central if any).
   const tokenNode = graphData.nodes.find((n: any) => n.type === 'token');
