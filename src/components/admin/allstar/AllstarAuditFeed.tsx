@@ -5,12 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Activity, RefreshCw, ExternalLink, Copy, Loader2 } from 'lucide-react';
+import { Activity, RefreshCw, ExternalLink, Copy, Loader2, PlayCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
 export function AllstarAuditFeed() {
   const [refreshing, setRefreshing] = React.useState(false);
+  const [running, setRunning] = React.useState(false);
   const { data: audited, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['allstar-audit-feed'],
     refetchInterval: 30_000, // live refresh every 30s
@@ -33,6 +34,23 @@ export function AllstarAuditFeed() {
       toast.success('Refreshed');
     } finally {
       setTimeout(() => setRefreshing(false), 300);
+    }
+  };
+
+  const handleRunNow = async () => {
+    setRunning(true);
+    const t = toast.loading('Running auditor now…');
+    try {
+      const { data, error } = await supabase.functions.invoke('allstar-mint-auditor', {
+        body: { manual: true, limit: 50 },
+      });
+      if (error) throw error;
+      toast.success(`Auditor finished: ${data?.audited ?? '?'} wallets checked, ${data?.new_mints ?? 0} new mints`, { id: t });
+      await Promise.all([refetch(), refetchTotals()]);
+    } catch (e: any) {
+      toast.error(`Auditor failed: ${e?.message ?? e}`, { id: t });
+    } finally {
+      setRunning(false);
     }
   };
 
@@ -92,18 +110,30 @@ export function AllstarAuditFeed() {
             Live Audit Feed
             <Badge variant="outline" className="text-[10px] animate-pulse">LIVE</Badge>
           </CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={refreshing || isFetching}
-            className="gap-1 active:scale-95 transition-transform"
-          >
-            {refreshing || isFetching
-              ? <Loader2 className="h-3 w-3 animate-spin" />
-              : <RefreshCw className="h-3 w-3" />}
-            {refreshing || isFetching ? 'Refreshing…' : 'Refresh'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleRunNow}
+              disabled={running}
+              className="gap-1 active:scale-95 transition-transform"
+            >
+              {running ? <Loader2 className="h-3 w-3 animate-spin" /> : <PlayCircle className="h-3 w-3" />}
+              {running ? 'Auditing…' : 'Run Audit Now'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={refreshing || isFetching}
+              className="gap-1 active:scale-95 transition-transform"
+            >
+              {refreshing || isFetching
+                ? <Loader2 className="h-3 w-3 animate-spin" />
+                : <RefreshCw className="h-3 w-3" />}
+              {refreshing || isFetching ? 'Refreshing…' : 'Refresh'}
+            </Button>
+          </div>
         </div>
         <p className="text-xs text-muted-foreground">
           Real-time feed of allstar wallet audits — checks Solscan history for new mints every 30min
