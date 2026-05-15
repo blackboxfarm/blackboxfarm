@@ -38,13 +38,13 @@ Deno.serve(async (req) => {
     const tokenMints: string[] = Array.from(new Set(((body.tokens || []) as any[])
       .filter((x) => typeof x === 'string' && x.length >= 30 && x.length <= 64)));
 
-    const communities: Record<string, { name: string | null; member_count: number | null; recycled_count: number | null; recycled_band: string | null }> = {};
+    const communities: Record<string, { name: string | null; member_count: number | null; recycled_count: number | null; recycled_band: string | null; name_history: any[] | null; linked_token_mints: string[] | null }> = {};
     const tokens: Record<string, { ticker: string | null; name: string | null }> = {};
 
     if (communityIds.length > 0) {
       const { data, error } = await supabase
         .from('x_communities')
-        .select('community_id, name, member_count, linked_token_mints, recycled_band')
+        .select('community_id, name, member_count, linked_token_mints, recycled_band, name_history')
         .in('community_id', communityIds);
       if (error) console.warn('[resolve-labels] x_communities lookup error:', error.message);
       const seen = new Set<string>();
@@ -52,11 +52,14 @@ Deno.serve(async (req) => {
         const cid = (row as any).community_id as string;
         seen.add(cid);
         const linked = (row as any).linked_token_mints as string[] | null;
+        const nh = (row as any).name_history;
         communities[cid] = {
           name: (row as any).name || null,
           member_count: (row as any).member_count ?? null,
           recycled_count: Array.isArray(linked) ? linked.length : null,
           recycled_band: (row as any).recycled_band || null,
+          name_history: Array.isArray(nh) ? nh.slice(-4) : null,
+          linked_token_mints: Array.isArray(linked) ? linked.slice(-4) : null,
         };
       }
       // Enqueue misses
@@ -69,7 +72,7 @@ Deno.serve(async (req) => {
           .then(() => {})
           .catch(() => {});
         for (const c of misses) {
-          communities[c] = { name: null, member_count: null, recycled_count: null, recycled_band: null };
+          communities[c] = { name: null, member_count: null, recycled_count: null, recycled_band: null, name_history: null, linked_token_mints: null };
         }
       }
     }
