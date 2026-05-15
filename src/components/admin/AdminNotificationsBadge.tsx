@@ -564,6 +564,16 @@ export function AdminNotificationsBadge() {
             {renderNotificationList(signupNotifs, 'signups')}
           </TabsContent>
           <TabsContent value="transactions" className="mt-0">
+            <div className="px-3 py-2 border-b border-border bg-blue-500/5 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Includes 🚀 Allstar dev mints</span>
+              <a
+                href="/super-admin?tab=allstars&sub=alerts"
+                onClick={() => setIsOpen(false)}
+                className="text-blue-400 hover:text-blue-300 font-medium"
+              >
+                View full Mint Alerts →
+              </a>
+            </div>
             {renderNotificationList(transactionNotifs, 'transactions')}
           </TabsContent>
           <TabsContent value="tickets" className="mt-0">
