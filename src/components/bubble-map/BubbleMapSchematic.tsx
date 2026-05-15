@@ -15,6 +15,61 @@ import { ENTITY_COLORS, MeshNode } from '@/hooks/useMeshGraph';
 import { Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
+/**
+ * Rolodex-style label for recycled communities / rotated handles.
+ * Shows the current alias by default; click (or long-press) flips to the
+ * next prior alias with a quick rotateX animation. Cycles back to the
+ * current name after the last historical entry.
+ */
+function RolodexLabel({
+  entries,
+  currentLabel,
+}: {
+  entries: { label: string; sub?: string }[]; // history only (no current)
+  currentLabel: string;
+}) {
+  const all = React.useMemo(
+    () => [{ label: currentLabel, sub: 'current' }, ...entries],
+    [currentLabel, entries]
+  );
+  const [idx, setIdx] = React.useState(0);
+  const [flipping, setFlipping] = React.useState(false);
+  const total = all.length;
+  const cur = all[idx % total];
+  const advance = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setFlipping(true);
+    window.setTimeout(() => {
+      setIdx((i) => (i + 1) % total);
+      setFlipping(false);
+    }, 140);
+  };
+  return (
+    <span
+      onClick={advance}
+      onTouchEnd={advance}
+      className="inline-flex flex-col items-center cursor-pointer select-none"
+      style={{ perspective: 200 }}
+      title={`Click to flip — ${total} alias${total === 1 ? '' : 'es'}`}
+    >
+      <span
+        className="font-semibold text-xs truncate max-w-[160px] inline-block"
+        style={{
+          transition: 'transform 140ms ease-in-out, opacity 140ms',
+          transform: flipping ? 'rotateX(90deg)' : 'rotateX(0deg)',
+          opacity: flipping ? 0.2 : 1,
+        }}
+      >
+        {cur.label}
+      </span>
+      <span className="text-[8px] uppercase tracking-wider opacity-60 leading-none mt-0.5">
+        {idx === 0 ? `↻ ${total - 1} prior` : `${idx}/${total - 1} · tap`}
+      </span>
+    </span>
+  );
+}
+
 interface ResolvedLabels {
   communities: Record<string, { name: string | null; member_count: number | null; recycled_count: number | null; recycled_band: string | null; name_history?: any[] | null; linked_token_mints?: string[] | null }>;
   tokens: Record<string, { ticker: string | null; name: string | null }>;
@@ -400,6 +455,31 @@ function buildLayout(
         : (n.type === 'x_account' || n.type === 'x_user')
         ? (isRecycled ? `🔄 Rotated ×${recycledCount}` : '🐦 X Handle')
         : n.type;
+
+    // Build rolodex history entries (prior aliases) for recycled
+    // communities and rotated X handles. Each entry is one flip card.
+    const rolodexEntries: { label: string; sub?: string }[] = [];
+    if (isRecycled) {
+      if (Array.isArray(nameHistory)) {
+        for (const h of nameHistory) {
+          const nm = (h?.name || h?.prev_name || '').toString().trim();
+          if (!nm) continue;
+          const ts = h?.observed_until || h?.last_seen || h?.timestamp;
+          const when = ts ? new Date(ts).toLocaleDateString() : '';
+          rolodexEntries.push({ label: nm, sub: when || undefined });
+        }
+      }
+      if (n.type === 'x_community' && Array.isArray(linkedMints)) {
+        for (const m of linkedMints) {
+          const tk = resolved.tokens[m]?.ticker;
+          const lab = tk ? `prior $${tk.replace(/^\$/, '')}` : `prior ${m.slice(0, 4)}…${m.slice(-4)}`;
+          // Avoid duplicating something already in history
+          if (!rolodexEntries.find((e) => e.label === lab)) rolodexEntries.push({ label: lab });
+        }
+      }
+    }
+    const useRolodex = isRecycled && rolodexEntries.length > 0 && typeof label === 'string';
+
     return {
       id: n.id,
       position: { x: pos?.x || 0, y: pos?.y || 0 },
@@ -415,10 +495,14 @@ function buildLayout(
           >
             {subLabel}
           </span>
-          <span className="font-semibold text-xs truncate max-w-[160px] inline-flex items-center gap-1">
-            {unresolvedSpinner && <Loader2 className="h-3 w-3 animate-spin opacity-60" />}
-            {label}
-          </span>
+          {useRolodex ? (
+            <RolodexLabel entries={rolodexEntries} currentLabel={label as string} />
+          ) : (
+            <span className="font-semibold text-xs truncate max-w-[160px] inline-flex items-center gap-1">
+              {unresolvedSpinner && <Loader2 className="h-3 w-3 animate-spin opacity-60" />}
+              {label}
+            </span>
+          )}
         </div>
       ) },
       sourcePosition: Position.Bottom,
