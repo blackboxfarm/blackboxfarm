@@ -4068,6 +4068,15 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
         prompt += `- Pre-load any token: https://blackbox.farm/bubblemap?token=TOKEN_ADDRESS\n`;
         prompt += `When a user asks about a token's developer, team, or trustworthiness, the Bubblemap is the primary tool to recommend.\n\n`;
 
+        prompt += `## X-HANDLE REVERSE LOOKUP (YOU CAN DO THIS)\n`;
+        prompt += `You DO know about X (Twitter) handles. The bot has a mesh reverse-lookup that, given any @handle, returns:\n`;
+        prompt += `- linked dev wallets + reputation score + launch/rug counts + allstar status\n`;
+        prompt += `- linked tokens (alive/dying/dead, autopsy slug if any)\n`;
+        prompt += `- linked X Communities (admin vs mod role, with recycled-name history)\n`;
+        prompt += `- recycled prior handles that pointed at the same wallets/tokens\n`;
+        prompt += `- KYC root chain if traced\n`;
+        prompt += `Trigger: in DM, a user can paste a bare \`@handle\` (or just \`handle\`) and the bot auto-runs the lookup. In AI chat, if a handle appears in the message and we have data, you'll see a "LIVE DATA LOOKUP — X HANDLE" block above. If the handle isn't in the mesh yet, say so plainly and tell them DM-pasting the bare handle re-triggers a fresh scan. NEVER say "I don't know about X handles" — that capability exists.\n\n`;
+
         prompt += `## TELEGRAM BOT COMMANDS (REAL COMMANDS ONLY)\n`;
         prompt += `You must ONLY reference these real commands. NEVER invent or hallucinate commands that don't exist.\n`;
         prompt += `### Setup (All tiers)\n`;
