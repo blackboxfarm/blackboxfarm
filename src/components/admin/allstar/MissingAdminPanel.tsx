@@ -66,13 +66,13 @@ export function MissingAdminPanel() {
       const mints = [...new Set((links || []).map(l => l.token_mint).filter(Boolean))] as string[];
       if (mints.length) {
         const { data: toks } = await supabase
-          .from('tokens')
-          .select('mint_address, creator_wallet')
-          .in('mint_address', mints)
+          .from('token_lifecycle')
+          .select('token_mint, creator_wallet')
+          .in('token_mint', mints)
           .not('creator_wallet', 'is', null);
-        const mintToWallet = new Map((toks || []).map(t => [t.mint_address, t.creator_wallet]));
+        const mintToWallet = new Map(((toks as any[]) || []).map((t: any) => [t.token_mint, t.creator_wallet]));
 
-        const wallets = [...new Set((toks || []).map(t => t.creator_wallet).filter(Boolean))] as string[];
+        const wallets = [...new Set(((toks as any[]) || []).map((t: any) => t.creator_wallet).filter(Boolean))] as string[];
         if (wallets.length) {
           const { data: regs } = await supabase
             .from('allstar_dev_registry')
