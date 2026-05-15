@@ -325,7 +325,67 @@ const SchematicInner = forwardRef<SchematicHandle, BubbleMapSchematicProps>(func
     () => (mode === 'prune' ? pruneToTokenAndSocials(graphData) : graphData),
     [graphData, mode],
   );
-  const { nodes, edges } = useMemo(() => buildLayout(effectiveData), [effectiveData]);
+
+  const [resolved, setResolved] = useState<ResolvedLabels>(() => ({
+    communities: {}, tokens: {}, pending: new Set(),
+  }));
+
+  // Collect unresolved community/token ids from the current graph and batch-fetch
+  // human labels via the resolve-labels edge function. Results swap the spinner
+  // labels for readable names within ~1s.
+  useEffect(() => {
+    const communityIds: string[] = [];
+    const tokenMints: string[] = [];
+    for (const n of effectiveData.nodes) {
+      const fullId = (n.fullId || n.id || '').toString();
+      if (n.type === 'x_community') {
+        const cid = fullId.replace(/^x_community:/, '');
+        if (/^\d{6,25}$/.test(cid) && !resolved.communities[cid]) communityIds.push(cid);
+      } else if (n.type === 'token') {
+        const mint = fullId.replace(/^token:/, '');
+        if (mint && mint.length >= 30 && !resolved.tokens[mint]) tokenMints.push(mint);
+      }
+    }
+    if (communityIds.length === 0 && tokenMints.length === 0) return;
+
+    const pending = new Set<string>([
+      ...communityIds.map((c) => `community:${c}`),
+      ...tokenMints.map((m) => `token:${m}`),
+    ]);
+    setResolved((prev) => ({ ...prev, pending: new Set([...prev.pending, ...pending]) }));
+
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 4000);
+    supabase.functions
+      .invoke('resolve-labels', { body: { communities: communityIds, tokens: tokenMints } })
+      .then(({ data, error }: any) => {
+        clearTimeout(t);
+        if (error || !data) return;
+        setResolved((prev) => {
+          const nextPending = new Set(prev.pending);
+          for (const c of communityIds) nextPending.delete(`community:${c}`);
+          for (const m of tokenMints) nextPending.delete(`token:${m}`);
+          return {
+            communities: { ...prev.communities, ...(data.communities || {}) },
+            tokens: { ...prev.tokens, ...(data.tokens || {}) },
+            pending: nextPending,
+          };
+        });
+      })
+      .catch(() => {
+        clearTimeout(t);
+        setResolved((prev) => {
+          const nextPending = new Set(prev.pending);
+          for (const c of communityIds) nextPending.delete(`community:${c}`);
+          for (const m of tokenMints) nextPending.delete(`token:${m}`);
+          return { ...prev, pending: nextPending };
+        });
+      });
+    return () => { clearTimeout(t); ctrl.abort(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveData]);
+
+  const { nodes, edges } = useMemo(() => buildLayout(effectiveData, resolved), [effectiveData, resolved]);
 
   const handleNodeClick = useCallback(
     (_e: any, node: Node) => {
