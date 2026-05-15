@@ -76,7 +76,16 @@ export function ManualXPostingQueue() {
   const [autopsying, setAutopsying] = useState<Record<string, boolean>>({});
   const [decorating, setDecorating] = useState<Record<string, boolean>>({});
   const [regenerating, setRegenerating] = useState<Record<string, boolean>>({});
-  const [snapshots, setSnapshots] = useState<Record<string, { mcap: number | null; vol1h: number | null; priceUsd: number | null; at: number }>>({});
+  const [snapshots, setSnapshots] = useState<Record<string, {
+    mcap: number | null;
+    vol1h: number | null;
+    vol24h: number | null;
+    priceUsd: number | null;
+    liquidityUsd: number | null;
+    boosts: number | null;
+    pairAgeHours: number | null;
+    at: number;
+  }>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -225,9 +234,11 @@ export function ManualXPostingQueue() {
       const snap = r.snapshot || {};
       const mcapStr = snap.mcap != null ? fmtMcap(snap.mcap) : "—";
       const volStr = snap.vol1h != null ? fmtMcap(snap.vol1h) : "—";
+      const liqStr = snap.liquidityUsd != null ? fmtMcap(snap.liquidityUsd) : "—";
+      const rankStr = snap.boosts != null ? `boost×${snap.boosts}` : "no boost";
       toast({
         title: "Post regenerated",
-        description: `Fresh: MC ${mcapStr} · 1h Vol ${volStr}`,
+        description: `Fresh: MC ${mcapStr} · 1h Vol ${volStr} · Liq ${liqStr} · ${rankStr}`,
       });
       await load();
     } catch (e: any) {
@@ -502,7 +513,11 @@ export function ManualXPostingQueue() {
                             title={`Live DexScreener snapshot taken ${new Date(snapshots[row.id].at).toLocaleTimeString()} — for your posting decision only, not in tweet text`}
                           >
                             📡 MC {snapshots[row.id].mcap != null ? fmtMcap(snapshots[row.id].mcap) : "—"}
-                            {" · "}1h Vol {snapshots[row.id].vol1h != null ? fmtMcap(snapshots[row.id].vol1h) : "—"}
+                            {" · "}1h {snapshots[row.id].vol1h != null ? fmtMcap(snapshots[row.id].vol1h) : "—"}
+                            {" · "}24h {snapshots[row.id].vol24h != null ? fmtMcap(snapshots[row.id].vol24h) : "—"}
+                            {" · "}Liq {snapshots[row.id].liquidityUsd != null ? fmtMcap(snapshots[row.id].liquidityUsd) : "—"}
+                            {" · "}{snapshots[row.id].boosts != null ? `🚀×${snapshots[row.id].boosts}` : "no boost"}
+                            {snapshots[row.id].pairAgeHours != null ? ` · ${snapshots[row.id].pairAgeHours}h old` : ""}
                           </span>
                         )}
                       </div>
