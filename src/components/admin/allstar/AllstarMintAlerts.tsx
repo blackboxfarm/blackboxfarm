@@ -5,11 +5,41 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Bell, ExternalLink, RefreshCw, Check, Copy } from 'lucide-react';
+import { Bell, ExternalLink, RefreshCw, Check, Copy, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { Switch } from '@/components/ui/switch';
 
 export function AllstarMintAlerts() {
+  const [smsEnabled, setSmsEnabled] = React.useState<boolean>(false);
+  const [smsLoaded, setSmsLoaded] = React.useState(false);
+
+  React.useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('intelligence_feature_flags')
+        .select('enabled')
+        .eq('feature_name', 'allstar_mint_sms_alerts')
+        .maybeSingle();
+      setSmsEnabled(!!data?.enabled);
+      setSmsLoaded(true);
+    })();
+  }, []);
+
+  const toggleSms = async (next: boolean) => {
+    setSmsEnabled(next);
+    const { error } = await supabase
+      .from('intelligence_feature_flags')
+      .update({ enabled: next })
+      .eq('feature_name', 'allstar_mint_sms_alerts');
+    if (error) {
+      toast.error(`Could not update SMS flag: ${error.message}`);
+      setSmsEnabled(!next);
+    } else {
+      toast.success(next ? 'SMS alerts ON' : 'SMS alerts OFF');
+    }
+  };
+
   const { data: alerts, isLoading, refetch } = useQuery({
     queryKey: ['allstar-mint-alerts'],
     queryFn: async () => {
@@ -22,6 +52,15 @@ export function AllstarMintAlerts() {
       return data || [];
     },
   });
+
+  // Realtime: new mint alerts pop in instantly
+  React.useEffect(() => {
+    const channel = supabase
+      .channel('allstar-mint-alerts-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'allstar_mint_alerts' }, () => refetch())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [refetch]);
 
   const acknowledgeAlert = async (id: string) => {
     const { error } = await supabase
@@ -58,9 +97,16 @@ export function AllstarMintAlerts() {
             <Bell className="h-5 w-5 text-orange-400" />
             Mint Alerts ({alerts?.length || 0})
           </CardTitle>
-          <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-1">
-            <RefreshCw className="h-3 w-3" /> Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded border border-border/50">
+              <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">SMS</span>
+              <Switch checked={smsEnabled} disabled={!smsLoaded} onCheckedChange={toggleSms} />
+            </div>
+            <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-1">
+              <RefreshCw className="h-3 w-3" /> Refresh
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="p-0">

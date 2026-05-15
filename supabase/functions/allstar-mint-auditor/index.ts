@@ -3,6 +3,7 @@ import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRestUrl, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 import { withRunLog } from '../_shared/run-logger.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
+import { sendAdminSms } from '../_shared/sms-notify.ts';
 enableHeliusTracking('allstar-mint-auditor');
 
 const corsHeaders = {
@@ -518,6 +519,9 @@ async function createAllstarAlert(
     metadata: {
       token_mint: mintAddr, allstar_id: allstar.id, allstar_tier: allstar.best_tier,
       creator_wallet: hit.creatorWallet, pump_url: pumpUrl, padre_url: padreUrl,
+      // Deep link target → Mint Alerts sub-tab
+      deep_link: `/super-admin?tab=allstars&sub=alerts&mint=${mintAddr}`,
+      category: 'transactions',
     },
   });
 
@@ -664,6 +668,31 @@ async function createAllstarAlert(
     }
   } catch (e) {
     console.warn('[allstar] Email alert failed:', e);
+  }
+
+  // ──────────────────────────────────────────────
+  // CHANNEL 4: SMS to admin (gated by feature flag)
+  // ──────────────────────────────────────────────
+  try {
+    const { data: smsFlag } = await supabase
+      .from('intelligence_feature_flags')
+      .select('enabled')
+      .eq('feature_name', 'allstar_mint_sms_alerts')
+      .maybeSingle();
+    if (smsFlag?.enabled) {
+      const smsBody =
+        `🚀 ALLSTAR MINT — $${ticker}\n` +
+        `T${allstar.best_tier} ${devHandle}\n` +
+        `Best: $${allstar.best_token_symbol} → ${mcapLabel}\n` +
+        `Minted: ${hit.mintAge}\n` +
+        `${pumpUrl}`;
+      await sendAdminSms(smsBody);
+      console.log('[allstar] ✓ SMS dispatched (flag ON)');
+    } else {
+      console.log('[allstar] SMS skipped (flag OFF)');
+    }
+  } catch (e) {
+    console.warn('[allstar] SMS dispatch failed:', e);
   }
 
   console.log(`[allstar] 🚀 ALERT COMPLETE: ${tierLabel} dev ${allstar.master_wallet.slice(0, 8)}... minted $${ticker} (${alertLevel}) → TG+DM+Email`);

@@ -40,7 +40,7 @@ interface CommentNotif {
 const COMMENTS_SEEN_KEY = 'admin_comments_last_seen_at';
 
 const SIGNUP_TYPES = ['new_signup', 'user_registered', 'account_created'];
-const TRANSACTION_TYPES = ['banner_purchase', 'payment_confirmed', 'transaction', 'fantasy_buy', 'fantasy_sell', 'swap'];
+const TRANSACTION_TYPES = ['banner_purchase', 'payment_confirmed', 'transaction', 'fantasy_buy', 'fantasy_sell', 'swap', 'allstar_mint'];
 const TICKET_TYPES = ['support_ticket', 'ticket_reply'];
 const AUDIT_TYPES = ['api_failure_critical', 'api_failure_warning', 'quota_critical', 'quota_warning', 'repeated_failure', 'table_bloat', 'security', 'error', 'rug_pull_detected'];
 const NON_AUDIT_TYPES = [...SIGNUP_TYPES, ...TRANSACTION_TYPES, ...TICKET_TYPES];
@@ -269,6 +269,7 @@ export function AdminNotificationsBadge() {
       case 'table_bloat': return '💾';
       case 'support_ticket': return '🎫';
       case 'ticket_reply': return '📩';
+      case 'allstar_mint': return '🚀';
       default: return '🔔';
     }
   };
@@ -359,14 +360,21 @@ export function AdminNotificationsBadge() {
         <div className="divide-y divide-border">
           {items.map((notification) => {
             const isTicketType = TICKET_TYPES.includes(notification.notification_type);
+            const meta = (notification.metadata || {}) as Record<string, any>;
+            const deepLink = typeof meta.deep_link === 'string' ? meta.deep_link : null;
+            const isClickable = isTicketType || !!deepLink;
             return (
             <div
               key={notification.id}
-              className={`p-3 hover:bg-muted/50 transition-colors overflow-hidden ${!notification.is_read ? 'bg-primary/5' : ''} ${isTicketType ? 'cursor-pointer' : ''}`}
-              onClick={isTicketType ? () => {
+              className={`p-3 hover:bg-muted/50 transition-colors overflow-hidden ${!notification.is_read ? 'bg-primary/5' : ''} ${isClickable ? 'cursor-pointer' : ''}`}
+              onClick={isClickable ? () => {
                 markAsRead(notification.id);
                 setIsOpen(false);
-                window.dispatchEvent(new CustomEvent('navigate-admin-tab', { detail: { tab: 'tickets', ticketId: (notification.metadata as any)?.ticket_id } }));
+                if (isTicketType) {
+                  window.dispatchEvent(new CustomEvent('navigate-admin-tab', { detail: { tab: 'tickets', ticketId: meta?.ticket_id } }));
+                } else if (deepLink) {
+                  window.location.assign(deepLink);
+                }
               } : undefined}
             >
               <div className="flex items-start gap-2 max-w-full overflow-hidden">
@@ -556,6 +564,16 @@ export function AdminNotificationsBadge() {
             {renderNotificationList(signupNotifs, 'signups')}
           </TabsContent>
           <TabsContent value="transactions" className="mt-0">
+            <div className="px-3 py-2 border-b border-border bg-blue-500/5 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Includes 🚀 Allstar dev mints</span>
+              <a
+                href="/super-admin?tab=allstars&sub=alerts"
+                onClick={() => setIsOpen(false)}
+                className="text-blue-400 hover:text-blue-300 font-medium"
+              >
+                View full Mint Alerts →
+              </a>
+            </div>
             {renderNotificationList(transactionNotifs, 'transactions')}
           </TabsContent>
           <TabsContent value="tickets" className="mt-0">
