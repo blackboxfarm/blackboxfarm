@@ -37,9 +37,13 @@ Deno.serve(async (req) => {
       .filter((x) => typeof x === 'string' && /^\d{6,25}$/.test(x))));
     const tokenMints: string[] = Array.from(new Set(((body.tokens || []) as any[])
       .filter((x) => typeof x === 'string' && x.length >= 30 && x.length <= 64)));
+    const handles: string[] = Array.from(new Set(((body.handles || []) as any[])
+      .filter((x) => typeof x === 'string' && x.length > 0 && x.length <= 32)
+      .map((x) => x.replace(/^@/, '').toLowerCase())));
 
     const communities: Record<string, { name: string | null; member_count: number | null; recycled_count: number | null; recycled_band: string | null; name_history: any[] | null; linked_token_mints: string[] | null }> = {};
     const tokens: Record<string, { ticker: string | null; name: string | null }> = {};
+    const handlesOut: Record<string, { display_name: string | null; handle_history: any[] | null; is_rotated: boolean }> = {};
 
     if (communityIds.length > 0) {
       const { data, error } = await supabase
@@ -97,7 +101,31 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ communities, tokens }), {
+    if (handles.length > 0) {
+      const { data, error } = await supabase
+        .from('x_account_registry')
+        .select('current_handle, display_name, handle_history')
+        .in('current_handle', handles);
+      if (error) console.warn('[resolve-labels] x_account_registry lookup error:', error.message);
+      const seen = new Set<string>();
+      for (const row of data || []) {
+        const h = ((row as any).current_handle || '').toLowerCase();
+        if (!h) continue;
+        seen.add(h);
+        const hist = (row as any).handle_history;
+        const arr = Array.isArray(hist) ? hist.slice(-4) : null;
+        handlesOut[h] = {
+          display_name: (row as any).display_name || null,
+          handle_history: arr,
+          is_rotated: Array.isArray(arr) && arr.length > 0,
+        };
+      }
+      for (const h of handles) {
+        if (!seen.has(h)) handlesOut[h] = { display_name: null, handle_history: null, is_rotated: false };
+      }
+    }
+
+    return new Response(JSON.stringify({ communities, tokens, handles: handlesOut }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
