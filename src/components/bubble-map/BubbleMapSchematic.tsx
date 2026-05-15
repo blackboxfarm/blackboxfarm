@@ -18,6 +18,7 @@ import { supabase } from '@/integrations/supabase/client';
 interface ResolvedLabels {
   communities: Record<string, { name: string | null; member_count: number | null; recycled_count: number | null; recycled_band: string | null; name_history?: any[] | null; linked_token_mints?: string[] | null }>;
   tokens: Record<string, { ticker: string | null; name: string | null }>;
+  handles: Record<string, { display_name: string | null; handle_history: any[] | null; is_rotated: boolean }>;
   pending: Set<string>;
 }
 
@@ -80,6 +81,15 @@ function rankNode(n: any, devWalletId: string | null): number {
 const SOCIAL_TYPES = new Set(['x_account', 'x_community', 'telegram', 'website', 'tg_channel', 'discord', 'github', 'twitch', 'reddit', 'youtube', 'medium']);
 
 /**
+ * Canonicalize an X handle reference to bare lowercase handle.
+ * Accepts: "pumpfun711", "@pumpfun711", "x_account:pumpfun711", "x_account:@pumpfun711".
+ */
+function canonicalHandleId(raw: string | null | undefined): string {
+  if (!raw) return '';
+  return String(raw).replace(/^x_account:/i, '').replace(/^x_user:/i, '').replace(/^@/, '').toLowerCase().trim();
+}
+
+/**
  * Handle-rooted prune: keep only the chain
  *   handle → x_communities → tokens → dev wallets (→ KYC roots)
  * Drops unrelated socials, funders, and other-token branches so the view
@@ -130,7 +140,10 @@ function pruneToHandleChain(graphData: { nodes: any[]; links: any[] }, handleNod
   for (const t of tokens) {
     for (const nb of adj.get(t) || []) {
       const n = idToNode.get(nb);
-      if (n?.type === 'wallet' && (n.isDev || true)) {
+      // Only keep wallets that are actually flagged as dev/creator for the
+      // token. Without this the chain leaks every holder wallet attached to
+      // the token and the canvas explodes (the @pumpfun711 56-node bug).
+      if (n?.type === 'wallet' && (n.isDev === true || (n as any).is_dev === true)) {
         devWallets.add(nb);
         keep.add(nb);
       }
