@@ -455,6 +455,31 @@ function buildLayout(
         : (n.type === 'x_account' || n.type === 'x_user')
         ? (isRecycled ? `🔄 Rotated ×${recycledCount}` : '🐦 X Handle')
         : n.type;
+
+    // Build rolodex history entries (prior aliases) for recycled
+    // communities and rotated X handles. Each entry is one flip card.
+    const rolodexEntries: { label: string; sub?: string }[] = [];
+    if (isRecycled) {
+      if (Array.isArray(nameHistory)) {
+        for (const h of nameHistory) {
+          const nm = (h?.name || h?.prev_name || '').toString().trim();
+          if (!nm) continue;
+          const ts = h?.observed_until || h?.last_seen || h?.timestamp;
+          const when = ts ? new Date(ts).toLocaleDateString() : '';
+          rolodexEntries.push({ label: nm, sub: when || undefined });
+        }
+      }
+      if (n.type === 'x_community' && Array.isArray(linkedMints)) {
+        for (const m of linkedMints) {
+          const tk = resolved.tokens[m]?.ticker;
+          const lab = tk ? `prior $${tk.replace(/^\$/, '')}` : `prior ${m.slice(0, 4)}…${m.slice(-4)}`;
+          // Avoid duplicating something already in history
+          if (!rolodexEntries.find((e) => e.label === lab)) rolodexEntries.push({ label: lab });
+        }
+      }
+    }
+    const useRolodex = isRecycled && rolodexEntries.length > 0 && typeof label === 'string';
+
     return {
       id: n.id,
       position: { x: pos?.x || 0, y: pos?.y || 0 },
@@ -470,10 +495,14 @@ function buildLayout(
           >
             {subLabel}
           </span>
-          <span className="font-semibold text-xs truncate max-w-[160px] inline-flex items-center gap-1">
-            {unresolvedSpinner && <Loader2 className="h-3 w-3 animate-spin opacity-60" />}
-            {label}
-          </span>
+          {useRolodex ? (
+            <RolodexLabel entries={rolodexEntries} currentLabel={label as string} />
+          ) : (
+            <span className="font-semibold text-xs truncate max-w-[160px] inline-flex items-center gap-1">
+              {unresolvedSpinner && <Loader2 className="h-3 w-3 animate-spin opacity-60" />}
+              {label}
+            </span>
+          )}
         </div>
       ) },
       sourcePosition: Position.Bottom,
