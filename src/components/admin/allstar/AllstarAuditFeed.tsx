@@ -25,15 +25,38 @@ export function AllstarAuditFeed() {
     },
   });
 
+  // Totals strip — keeps the feed visibly synced to the Registry tab
+  const { data: totals, refetch: refetchTotals } = useQuery({
+    queryKey: ['allstar-audit-feed-totals'],
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      const since24h = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+      const [reg, active, audited24, never, mints24] = await Promise.all([
+        supabase.from('allstar_dev_registry').select('id', { count: 'exact', head: true }),
+        supabase.from('allstar_dev_registry').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+        supabase.from('allstar_dev_registry').select('id', { count: 'exact', head: true }).gte('last_audit_at', since24h),
+        supabase.from('allstar_dev_registry').select('id', { count: 'exact', head: true }).is('last_audit_at', null),
+        supabase.from('allstar_mint_alerts').select('id', { count: 'exact', head: true }).gte('created_at', since24h),
+      ]);
+      return {
+        registry: reg.count ?? 0,
+        active: active.count ?? 0,
+        audited24h: audited24.count ?? 0,
+        neverAudited: never.count ?? 0,
+        newMints24h: mints24.count ?? 0,
+      };
+    },
+  });
+
   // Realtime: refetch when registry rows or mint alerts change
   React.useEffect(() => {
     const channel = supabase
       .channel('allstar-audit-feed-rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'allstar_dev_registry' }, () => refetch())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'allstar_mint_alerts' }, () => refetch())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'allstar_dev_registry' }, () => { refetch(); refetchTotals(); })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'allstar_mint_alerts' }, () => { refetch(); refetchTotals(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [refetch]);
+  }, [refetch, refetchTotals]);
 
   const copyWallet = (w: string) => {
     navigator.clipboard.writeText(w);
@@ -58,13 +81,27 @@ export function AllstarAuditFeed() {
             Live Audit Feed
             <Badge variant="outline" className="text-[10px] animate-pulse">LIVE</Badge>
           </CardTitle>
-          <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-1">
+          <Button variant="outline" size="sm" onClick={() => { refetch(); refetchTotals(); }} className="gap-1">
             <RefreshCw className="h-3 w-3" /> Refresh
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
           Real-time feed of allstar wallet audits — checks Solscan history for new mints every 30min
         </p>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-3">
+          {[
+            { label: 'Registry Total', value: totals?.registry ?? '—', tone: 'text-foreground' },
+            { label: 'Active', value: totals?.active ?? '—', tone: 'text-green-400' },
+            { label: 'Audited (24h)', value: totals?.audited24h ?? '—', tone: 'text-sky-400' },
+            { label: 'Never Audited', value: totals?.neverAudited ?? '—', tone: 'text-amber-400' },
+            { label: 'New Mints (24h)', value: totals?.newMints24h ?? '—', tone: 'text-rose-400' },
+          ].map((s) => (
+            <div key={s.label} className="rounded-md border border-border/40 bg-muted/20 px-2 py-1.5">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{s.label}</div>
+              <div className={`text-lg font-bold font-mono ${s.tone}`}>{s.value}</div>
+            </div>
+          ))}
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         <div className="overflow-x-auto">
