@@ -360,14 +360,21 @@ export function AdminNotificationsBadge() {
         <div className="divide-y divide-border">
           {items.map((notification) => {
             const isTicketType = TICKET_TYPES.includes(notification.notification_type);
+            const meta = (notification.metadata || {}) as Record<string, any>;
+            const deepLink = typeof meta.deep_link === 'string' ? meta.deep_link : null;
+            const isClickable = isTicketType || !!deepLink;
             return (
             <div
               key={notification.id}
-              className={`p-3 hover:bg-muted/50 transition-colors overflow-hidden ${!notification.is_read ? 'bg-primary/5' : ''} ${isTicketType ? 'cursor-pointer' : ''}`}
-              onClick={isTicketType ? () => {
+              className={`p-3 hover:bg-muted/50 transition-colors overflow-hidden ${!notification.is_read ? 'bg-primary/5' : ''} ${isClickable ? 'cursor-pointer' : ''}`}
+              onClick={isClickable ? () => {
                 markAsRead(notification.id);
                 setIsOpen(false);
-                window.dispatchEvent(new CustomEvent('navigate-admin-tab', { detail: { tab: 'tickets', ticketId: (notification.metadata as any)?.ticket_id } }));
+                if (isTicketType) {
+                  window.dispatchEvent(new CustomEvent('navigate-admin-tab', { detail: { tab: 'tickets', ticketId: meta?.ticket_id } }));
+                } else if (deepLink) {
+                  window.location.assign(deepLink);
+                }
               } : undefined}
             >
               <div className="flex items-start gap-2 max-w-full overflow-hidden">
