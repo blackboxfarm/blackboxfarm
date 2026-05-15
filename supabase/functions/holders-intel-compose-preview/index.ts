@@ -208,8 +208,17 @@ Deno.serve(async (req) => {
         // Fresh DexScreener snapshot so the admin sees current mcap & 1h
         // volume on regenerate — for posting-decision context only, NOT
         // injected into the tweet template.
-        let snapshot: { mcap: number | null; vol1h: number | null; priceUsd: number | null } = {
-          mcap: null, vol1h: null, priceUsd: null,
+        let snapshot: {
+          mcap: number | null;
+          vol1h: number | null;
+          vol24h: number | null;
+          priceUsd: number | null;
+          liquidityUsd: number | null;
+          boosts: number | null;
+          pairAgeHours: number | null;
+        } = {
+          mcap: null, vol1h: null, vol24h: null, priceUsd: null,
+          liquidityUsd: null, boosts: null, pairAgeHours: null,
         };
         try {
           const dsRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${item.token_mint}`);
@@ -222,7 +231,13 @@ Deno.serve(async (req) => {
               snapshot = {
                 mcap: typeof p.marketCap === 'number' ? p.marketCap : (typeof p.fdv === 'number' ? p.fdv : null),
                 vol1h: typeof p.volume?.h1 === 'number' ? p.volume.h1 : null,
+                vol24h: typeof p.volume?.h24 === 'number' ? p.volume.h24 : null,
                 priceUsd: p.priceUsd ? Number(p.priceUsd) : null,
+                liquidityUsd: typeof p.liquidity?.usd === 'number' ? p.liquidity.usd : null,
+                boosts: typeof p.boosts?.active === 'number' ? p.boosts.active : null,
+                pairAgeHours: p.pairCreatedAt
+                  ? Math.round((Date.now() - new Date(p.pairCreatedAt).getTime()) / 3_600_000)
+                  : null,
               };
             }
           }
