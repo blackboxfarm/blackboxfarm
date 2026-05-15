@@ -1,104 +1,61 @@
-## Why the list is only 216
+# Live Audit Feed → Allstar System Integration
 
-`allstar-promotion-engine` (the cron that fills the registry) qualifies devs **only by `token_lifecycle.market_cap`** — i.e. the token's *current* mcap, right now. Anything that pumped past $100k and then died is invisible to it. It also caps each run at **15 promotions** and never reads our richer history tables.
+Per your `Mandatory Approval` rule — reply **"Plan Approved"** to execute. Nothing changes until then.
 
-What we actually have in the DB:
-
-| Source | Tokens ≥ $100k | Distinct devs |
-|---|---|---|
-| `token_lifecycle.market_cap` (what the engine uses today) | 149 | ~149 |
-| `token_lifecycle` ANY ath/fdv/mcap signal ≥ $100k | **677** | ~567 |
-| `proven_dev_tokens.market_cap_ath` ≥ $100k | **732** | **610** |
-| Currently in `allstar_dev_registry` | 216 | 216 |
-
-So we're missing ~400 qualified devs. `ath_alltime_usd` is also empty (backfill never finished), which makes the gap worse.
-
-## End-state we're building toward
-
-```text
-   Funnel (token_lifecycle, proven_dev_tokens, autopsy, holders-intel)
-            │
-            ▼
-  [ allstar-backfill-historical ]   ← one-shot sweep of all $100k+ history
-            │
-            ▼
-  allstar_dev_registry  (devs grouped, deduped, KYC-rooted, family-expanded)
-            │
-            ▼
-  wallet_family_poll_queue          ← every dev wallet + family wallet
-            │
-            ▼
-  [ family-mint-monitor cron, every N min ]
-            │   detects new InitializeMint by any tracked wallet
-            ▼
-  allstar_mint_alerts  →  Telegram  +  SMS to admin
-```
-
-## The plan
-
-### 1. Fix the qualification logic (engine rewrite)
-
-Rewrite `allstar-promotion-engine` so it qualifies on the **best signal we have**, not just live mcap:
-
-```text
-qualifying_mcap = GREATEST(
-   ath_alltime_usd, first_24h_ath_usd, ath_24h_usd, market_cap, fdv
-) ≥ $100,000
-```
-
-- Also pull from `proven_dev_tokens.market_cap_ath` (732 rows ready to import).
-- Remove the 15/run cap; replace with a paginated sweep (process up to 500 new candidates/run).
-- Keep the rug-pull skip-guard.
-
-### 2. One-shot historical backfill
-
-New edge function `allstar-backfill-historical`:
-- Pulls every dev with any token ≥ $100k from `proven_dev_tokens` + `token_lifecycle` (any signal).
-- For tokens missing `creator_wallet`, resolves via Helius/Pump.fun (existing `creator-resolver`).
-- Expands each dev into its family using `reputation_mesh` + `developer_wallets`.
-- Resolves KYC root via existing `kyc-fast-path`.
-- Bulk inserts into `allstar_dev_registry` (idempotent on `master_wallet`).
-- Seeds `wallet_families` + `wallet_family_members` + `wallet_family_poll_queue` for every wallet.
-- Triggered by a SuperAdmin button in the Allstar tab ("Rebuild from Full History").
-
-Expected outcome: registry jumps from **216 → ~600+** real qualified devs.
-
-### 3. Continuous funnel from the rest of the pipeline
-
-Make sure `allstar-promotion-engine` is fed automatically from:
-- new entries in `proven_dev_tokens` (already inserted by the lifecycle scoring path),
-- `holders_intel_seen_tokens` graduations (Holders Intel funnel),
-- `token_autopsy` survivors (anything that hit ≥$100k before dying).
-
-Run it every 30 min as today, but with the new qualification + paginated batching.
-
-### 4. Mint monitoring + SMS alert
-
-`family-mint-monitor` already exists and watches `wallet_family_poll_queue` — we extend it:
-- Make sure every allstar dev wallet AND every family wallet is in the poll queue (the backfill in step 2 does this).
-- On new `InitializeMint` detection it already writes to `allstar_mint_alerts`.
-- Add an SMS hop: when a new alert lands, call `security-sms-alert` (existing Twilio function) to text the admin phone on file. Throttled to max 1 SMS per dev per 6 h to avoid spam.
-- TG alert continues in parallel (existing path).
-
-Polling cadence:
-- **P1** (Tier 4-6 devs, KYC-rooted): every 5 min.
-- **P2** (Tier 2-3): every 15 min.
-- **P3** (Tier 1, family siblings): every hour.
-
-### 5. UI cleanup in `AllstarTab`
-
-- "Backfill from Top 200" button → renamed and rewired to call `allstar-backfill-historical`.
-- New stat header: *Qualified devs from history: X · In registry: Y · Coverage: Z%*.
-- "New Mints" column wired to live count from `allstar_mint_alerts` (last 24 h).
-- "SMS alerts: ON/OFF" toggle for the admin.
-
-## Technical notes (for me)
-
-- Files touched: `supabase/functions/allstar-promotion-engine/index.ts` (rewrite), new `supabase/functions/allstar-backfill-historical/index.ts`, `supabase/functions/family-mint-monitor/index.ts` (add SMS hop + dedupe window), `src/components/admin/allstar/AllstarRegistry.tsx` (button + stats), `src/components/admin/tabs/AllstarTab.tsx` (header).
-- New table: `allstar_sms_throttle (master_wallet, last_sent_at)` to enforce 6h dedupe.
-- Secrets needed (verify present): `TWILIO_*`, admin phone in `app_secrets` or env.
-- No destructive migrations — additive only.
+## Goals
+1. Live Audit Feed pulls from the **new** Allstar Registry (post-rebuild dataset), not the legacy 216-row source.
+2. Realtime updates: when Registry rows change, Audit Feed re-fetches automatically.
+3. Active cron-driven audits of every active allstar wallet (Solscan v2 Pro for tx history, Helius for mint detection).
+4. A single **SMS toggle** that controls notifications for *both* Live Audit Feed findings *and* Mint Alerts.
+5. Every new mint detected is recorded in **System Alerts → Transactions tab** with a deep link to **Mint Alerts**.
+6. When SMS is toggled ON, that admin receives an SMS per new mint event.
 
 ---
 
-**Reply "Plan Approved" to proceed.** First action will be the historical backfill (step 2) so you can immediately see the registry jump from 216 → 600+, then I wire the SMS hop.
+## Implementation
+
+### 1. Audit Feed data source (frontend)
+- `AllstarAuditFeed.tsx`: query `allstar_devs` joined with `allstar_audit_log` ordered by `last_audited_at DESC`. Replace any legacy filter (e.g. `is_legacy=true` or fixed 216 set) with the unified registry filter currently used by `AllstarRegistry`.
+- Add Supabase Realtime subscription on `allstar_devs` and `allstar_audit_log` → `refetch()` on INSERT/UPDATE so the feed reflects Registry edits and rebuild runs live.
+
+### 2. Cron auditor (new edge function)
+- New function `allstar-audit-cron` (runs every 30 min via `pg_cron`):
+  - Pages through all `allstar_devs` where `is_active=true`, ordered by `last_audited_at ASC NULLS FIRST` (stalest first).
+  - Wall-time guard 110s, chunked (100 wallets/run, continues on next tick).
+  - For each wallet: call **Solscan Pro v2** `/account/transfer` filtered to `tokenCreate`/mint instructions since `last_audited_at`. Cross-check with Helius `getSignaturesForAddress` as fallback.
+  - On new mint detected → INSERT into `allstar_mint_alerts` AND `allstar_audit_log` (status=`new_mint_found`).
+  - Update `allstar_devs.last_audited_at` and `audit_count`.
+
+### 3. System Alerts → Transactions tab
+- New tab in **System Alerts** page: `Transactions`. Lists rows from `allstar_mint_alerts` (most recent first) with columns: time, dev wallet, new mint, tier, link icon → routes to `/super-admin?tab=allstars&sub=alerts&mint=<addr>`.
+- Add a top-of-tab CTA "View full Mint Alerts →" linking to that sub-tab.
+
+### 4. Unified SMS toggle
+- New table `admin_alert_preferences` (one row per admin user_id):
+  - `sms_enabled boolean default false`
+  - `phone_e164 text`
+  - `alert_types jsonb` (e.g. `{"new_mint": true, "audit_anomaly": true}`)
+- UI: toggle lives in Allstars header (also mirrored on Mint Alerts tab) — a single switch covering both surfaces.
+- In `allstar-audit-cron`, after inserting an alert, fetch all admins with `sms_enabled=true` and call `sendAdminSms()` (already in `_shared/sms-notify.ts`) per recipient, with body:
+  `🚨 NEW MINT — {symbol} by {tier} dev {short_wallet} → pump.fun/coin/{mint}`
+
+### 5. Realtime + idempotency
+- Audit cron uses `ON CONFLICT (creator_wallet, token_mint) DO NOTHING` on `allstar_mint_alerts` so re-runs don't duplicate.
+- Realtime publication added for `allstar_devs`, `allstar_audit_log`, `allstar_mint_alerts`.
+
+---
+
+## Files to touch
+- **New:** `supabase/functions/allstar-audit-cron/index.ts`
+- **New migration:** create `admin_alert_preferences` table + RLS, add cron schedule, enable realtime on the 3 tables
+- **Edit:** `src/components/admin/allstar/AllstarAuditFeed.tsx` (data source + realtime sub)
+- **Edit:** `src/components/admin/allstar/AllstarMintAlerts.tsx` (add SMS toggle UI + Transactions link)
+- **Edit:** System Alerts page (add Transactions tab)
+- **Reuse:** `supabase/functions/_shared/sms-notify.ts`
+
+## Open questions
+- **Solscan Pro v2 vs Helius primary?** Solscan v2 `/account/transfer` is cleanest for `tokenCreate` filtering but burns Pro credits. Helius `getSignaturesForAddress` + parse is free but noisier. Recommend **Solscan primary, Helius fallback**.
+- **Cron frequency:** 30 min default. Want tighter (15 min) for T8/T9 dev wallets?
+- **SMS rate cap:** Should I add a per-hour cap (e.g. max 10 SMS/hr) to prevent flood if a dev mints rapidly?
+
+Reply **Plan Approved** (and answer the 3 questions if you have preferences) and I'll build it.
