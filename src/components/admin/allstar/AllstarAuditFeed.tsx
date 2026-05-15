@@ -5,12 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Activity, RefreshCw, ExternalLink, Copy } from 'lucide-react';
+import { Activity, RefreshCw, ExternalLink, Copy, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
 export function AllstarAuditFeed() {
-  const { data: audited, isLoading, refetch } = useQuery({
+  const [refreshing, setRefreshing] = React.useState(false);
+  const { data: audited, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['allstar-audit-feed'],
     refetchInterval: 30_000, // live refresh every 30s
     queryFn: async () => {
@@ -24,6 +25,16 @@ export function AllstarAuditFeed() {
       return data || [];
     },
   });
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([refetch(), refetchTotals()]);
+      toast.success('Refreshed');
+    } finally {
+      setTimeout(() => setRefreshing(false), 300);
+    }
+  };
 
   // Totals strip — keeps the feed visibly synced to the Registry tab
   const { data: totals, refetch: refetchTotals } = useQuery({
@@ -81,8 +92,17 @@ export function AllstarAuditFeed() {
             Live Audit Feed
             <Badge variant="outline" className="text-[10px] animate-pulse">LIVE</Badge>
           </CardTitle>
-          <Button variant="outline" size="sm" onClick={() => { refetch(); refetchTotals(); }} className="gap-1">
-            <RefreshCw className="h-3 w-3" /> Refresh
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={refreshing || isFetching}
+            className="gap-1 active:scale-95 transition-transform"
+          >
+            {refreshing || isFetching
+              ? <Loader2 className="h-3 w-3 animate-spin" />
+              : <RefreshCw className="h-3 w-3" />}
+            {refreshing || isFetching ? 'Refreshing…' : 'Refresh'}
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">

@@ -102,9 +102,21 @@ export function AllstarRegistry() {
         .select('*')
         .order('best_tier', { ascending: false })
         .order('best_mcap_achieved', { ascending: false })
-        .limit(1000);
+        .limit(5000);
       if (error) throw error;
       return data || [];
+    },
+  });
+
+  // True total (independent of fetch limit) so the title isn't capped
+  const { data: totalCount } = useQuery({
+    queryKey: ['allstar-registry-count'],
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const { count } = await supabase
+        .from('allstar_dev_registry')
+        .select('id', { count: 'exact', head: true });
+      return count ?? 0;
     },
   });
 
@@ -137,7 +149,7 @@ export function AllstarRegistry() {
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg flex items-center gap-2">
             <Star className="h-5 w-5 text-yellow-400" />
-            Tracked Developers ({filtered.length})
+            Tracked Developers ({filtered.length}{totalCount && totalCount !== filtered.length ? ` / ${totalCount}` : ''})
           </CardTitle>
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 mr-2 px-2 py-1 rounded border border-border/50">
