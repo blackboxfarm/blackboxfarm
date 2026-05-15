@@ -13789,6 +13789,57 @@ export type Database = {
         }
         Relationships: []
       }
+      recycle_events: {
+        Row: {
+          created_at: string
+          dev_wallet: string | null
+          entity_id: string
+          entity_type: string
+          id: string
+          kyc_root: string | null
+          new_community_id: string | null
+          new_label_snapshot: Json | null
+          new_token_mint: string | null
+          prev_community_id: string | null
+          prev_label_snapshot: Json | null
+          prev_token_mint: string | null
+          severity: string
+          triggered_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          dev_wallet?: string | null
+          entity_id: string
+          entity_type: string
+          id?: string
+          kyc_root?: string | null
+          new_community_id?: string | null
+          new_label_snapshot?: Json | null
+          new_token_mint?: string | null
+          prev_community_id?: string | null
+          prev_label_snapshot?: Json | null
+          prev_token_mint?: string | null
+          severity?: string
+          triggered_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          dev_wallet?: string | null
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          kyc_root?: string | null
+          new_community_id?: string | null
+          new_label_snapshot?: Json | null
+          new_token_mint?: string | null
+          prev_community_id?: string | null
+          prev_label_snapshot?: Json | null
+          prev_token_mint?: string | null
+          severity?: string
+          triggered_by?: string | null
+        }
+        Relationships: []
+      }
       referral_programs: {
         Row: {
           created_at: string
