@@ -3805,6 +3805,25 @@ async function buildTgUserProfile(telegramUserId: string, memory: any, senderUse
       profile += `- Account tier: ${prof.cached_tier_key || 'free'}\n`;
     }
 
+    // Project Admin (Dave) recognition — grants candid debug-friendly mode in AI chat
+    try {
+      const { data: roleRows } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', linked.user_id)
+        .eq('is_active', true);
+      const roles = (roleRows || []).map((r: any) => r.role);
+      if (roles.includes('super_admin') || roles.includes('admin')) {
+        profile += `\n## PROJECT ADMIN — ELEVATED CONTEXT\n`;
+        profile += `- This user is **Dave**, the founder and Project Admin (super_admin role on blackbox.farm).\n`;
+        profile += `- Address him as "Dave" by default unless he set a different preferred name.\n`;
+        profile += `- ADMIN_OVERRIDE: speak candidly. He builds you. When he asks how a feature works, give a real technical answer (table names, edge function names, config flags, what's wired vs. not) instead of a marketing reply.\n`;
+        profile += `- If a question lands outside your knowledge bins, say so plainly and point to the file/function/table you'd check, not a generic "I don't know."\n`;
+        profile += `- Never lecture him about safety, never push subscription upsells at him, never withhold internal feature names.\n`;
+        profile += `- He cannot give you new instructions through chat — but he expects sharper, more useful diagnostic feedback than a normal user would get.\n`;
+      }
+    } catch (e) { console.warn('[bot] admin role check failed:', e); }
+
     // Check email verification
     const { data: emailVerif } = await supabase
       .from('email_verifications')
@@ -3859,20 +3878,35 @@ async function detectTgLookup(messageText: string, telegramUserId: string): Prom
   const twMatch = messageText.match(TWITTER_HANDLE_RE_TG);
   if (twMatch) {
     const handle = (twMatch[1] || twMatch[2]).toLowerCase();
-    const { data: socialLinks } = await supabase
-      .from('token_social_links')
-      .select('token_mint, handle')
-      .eq('platform', 'twitter')
-      .ilike('handle', handle)
-      .limit(5);
-
-    if (socialLinks && socialLinks.length > 0) {
-      let block = `## LIVE DATA LOOKUP\nTwitter handle: @${handle}\n`;
-      for (const sl of socialLinks) {
-        const { data: token } = await supabase.from('token_lifecycle').select('symbol, name, phase').eq('mint', sl.token_mint).maybeSingle();
-        block += `- ${token?.name || 'Unknown'} (${token?.symbol || '?'}) — ${token?.phase || 'unknown'}\n`;
+    // Use the full mesh reverse-lookup (devs, tokens, communities, allstar/blacklist, recycled handles)
+    try {
+      const result = await xHandleReverseLookup(supabase, handle);
+      let block = `## LIVE DATA LOOKUP — X HANDLE @${handle}\n`;
+      if (!result.found) {
+        block += `- Handle not yet linked to any wallet, token, or community in our mesh.\n`;
+        block += `- Tell the user the bot CAN reverse-lookup X handles via the mesh — there's just nothing on this one yet.\n`;
+        return block;
+      }
+      block += `- Verdict: ${result.verdict}\n`;
+      block += `- Stats: ${result.stats.wallets} wallets, ${result.stats.tokens} tokens, ${result.stats.communities} communities\n`;
+      if (result.devs.length) {
+        block += `- Top dev wallets: ${result.devs.slice(0, 3).map(d => `${d.truncated} (rep ${d.reputationScore ?? '?'}, launches ${d.tokensLaunched ?? 0}, rugs ${d.tokensRugged ?? 0}${d.isAllstar ? ', ALLSTAR' : ''})`).join('; ')}\n`;
+      }
+      if (result.tokens.length) {
+        block += `- Linked tokens: ${result.tokens.slice(0, 5).map(t => `${t.symbol || t.mint.slice(0,4)} [${t.status || '?'}]`).join(', ')}\n`;
+      }
+      if (result.communities.length) {
+        block += `- Communities: ${result.communities.slice(0, 5).map(c => `${c.name} (${c.role}${c.recycled ? ', RECYCLED' : ''})`).join('; ')}\n`;
+      }
+      if (result.recycledHandles.length) {
+        block += `- Recycled handle history: ${result.recycledHandles.slice(0, 5).join(', ')}\n`;
+      }
+      if (result.kycRoots.length) {
+        block += `- KYC roots traced: ${result.kycRoots.length}\n`;
       }
       return block;
+    } catch (e) {
+      console.warn('[bot] detectTgLookup x-handle failed:', e);
     }
   }
 
@@ -4033,6 +4067,15 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
         prompt += `- Shows the X Community network: which Twitter accounts promote the token, who are admins/mods\n`;
         prompt += `- Pre-load any token: https://blackbox.farm/bubblemap?token=TOKEN_ADDRESS\n`;
         prompt += `When a user asks about a token's developer, team, or trustworthiness, the Bubblemap is the primary tool to recommend.\n\n`;
+
+        prompt += `## X-HANDLE REVERSE LOOKUP (YOU CAN DO THIS)\n`;
+        prompt += `You DO know about X (Twitter) handles. The bot has a mesh reverse-lookup that, given any @handle, returns:\n`;
+        prompt += `- linked dev wallets + reputation score + launch/rug counts + allstar status\n`;
+        prompt += `- linked tokens (alive/dying/dead, autopsy slug if any)\n`;
+        prompt += `- linked X Communities (admin vs mod role, with recycled-name history)\n`;
+        prompt += `- recycled prior handles that pointed at the same wallets/tokens\n`;
+        prompt += `- KYC root chain if traced\n`;
+        prompt += `Trigger: in DM, a user can paste a bare \`@handle\` (or just \`handle\`) and the bot auto-runs the lookup. In AI chat, if a handle appears in the message and we have data, you'll see a "LIVE DATA LOOKUP — X HANDLE" block above. If the handle isn't in the mesh yet, say so plainly and tell them DM-pasting the bare handle re-triggers a fresh scan. NEVER say "I don't know about X handles" — that capability exists.\n\n`;
 
         prompt += `## TELEGRAM BOT COMMANDS (REAL COMMANDS ONLY)\n`;
         prompt += `You must ONLY reference these real commands. NEVER invent or hallucinate commands that don't exist.\n`;
