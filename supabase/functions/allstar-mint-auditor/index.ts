@@ -912,30 +912,11 @@ Deno.serve(withRunLog('allstar-mint-auditor', async (req) => {
       errors: [] as string[],
     };
 
-    // ─── PHASE 0: Backfill missing creator wallets on proven_dev_tokens ───
-    console.log('[allstar] Phase 0: Backfilling creator wallets...');
-    results.creators_backfilled = await backfillCreatorWallets(supabase);
-    console.log(`[allstar] Backfilled ${results.creators_backfilled} creator wallets`);
-
-    // ─── PHASE 1: Qualify new allstars ───
-    console.log('[allstar] Phase 1: Qualifying allstars from proven_dev_tokens...');
-    results.new_allstars_qualified = await qualifyAllstars(supabase);
-    console.log(`[allstar] Qualified ${results.new_allstars_qualified} new allstars`);
-
-    // ─── PHASE 2: Audit oldest-scanned allstars ───
-    console.log('[allstar] Phase 2: Auditing allstar wallet families...');
-    
-    const { data: allstarsToAudit } = await supabase
-      .from('allstar_dev_registry')
-      .select('*')
-      .eq('status', 'active')
-      .order('last_audit_at', { ascending: true, nullsFirst: true })
-      .limit(audit_batch_size);
-
     // Soft deadline so the background task always wraps up well within the
     // 25-min mark, leaving runway before the next */30 cron tick.
     const SOFT_DEADLINE_MS = 23 * 60 * 1000;
     const CONCURRENCY = 8;
+    let allstarsToAudit: any[] = [];
 
     const auditOne = async (allstar: any) => {
       if (Date.now() - startTime > SOFT_DEADLINE_MS) {
@@ -973,6 +954,27 @@ Deno.serve(withRunLog('allstar-mint-auditor', async (req) => {
     };
 
     const auditQueue = async () => {
+      // ─── PHASE 0: Backfill missing creator wallets ───
+      console.log('[allstar] Phase 0: Backfilling creator wallets...');
+      results.creators_backfilled = await backfillCreatorWallets(supabase);
+      console.log(`[allstar] Backfilled ${results.creators_backfilled} creator wallets`);
+
+      // ─── PHASE 1: Qualify new allstars ───
+      console.log('[allstar] Phase 1: Qualifying allstars from proven_dev_tokens...');
+      results.new_allstars_qualified = await qualifyAllstars(supabase);
+      console.log(`[allstar] Qualified ${results.new_allstars_qualified} new allstars`);
+
+      // ─── PHASE 2: Pull batch of allstars to audit ───
+      console.log('[allstar] Phase 2: Auditing allstar wallet families...');
+      const { data: batch } = await supabase
+        .from('allstar_dev_registry')
+        .select('*')
+        .eq('status', 'active')
+        .order('last_audit_at', { ascending: true, nullsFirst: true })
+        .limit(audit_batch_size);
+      allstarsToAudit = batch || [];
+      console.log(`[allstar] Pulled ${allstarsToAudit.length} allstars to audit (batch_size=${audit_batch_size})`);
+
       const queue = [...(allstarsToAudit || [])];
       const workers = Array.from({ length: CONCURRENCY }, async () => {
         while (queue.length) {
@@ -988,18 +990,14 @@ Deno.serve(withRunLog('allstar-mint-auditor', async (req) => {
 
     // Background mode: queue and return immediately so the client doesn't time out
     if (background) {
-      const queued = (allstarsToAudit || []).length;
       // @ts-ignore - EdgeRuntime is a Deno deploy global
       try { EdgeRuntime.waitUntil(auditQueue()); } catch { auditQueue(); }
       return new Response(
         JSON.stringify({
           success: true,
           background: true,
-          queued_allstars: queued,
-          message: `Audit running in background for ${queued} allstars. Refresh the feed in 30-60s.`,
+          message: `Full sweep running in background (batch_size=${audit_batch_size}). Refresh the feed in 1-3 min.`,
           effective_hours_lookback: effectiveHoursLookback,
-          creators_backfilled: results.creators_backfilled,
-          new_allstars_qualified: results.new_allstars_qualified,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
