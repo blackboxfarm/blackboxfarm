@@ -40,7 +40,7 @@ interface CommentNotif {
 const COMMENTS_SEEN_KEY = 'admin_comments_last_seen_at';
 
 const SIGNUP_TYPES = ['new_signup', 'user_registered', 'account_created'];
-const TRANSACTION_TYPES = ['banner_purchase', 'payment_confirmed', 'transaction', 'fantasy_buy', 'fantasy_sell', 'swap'];
+const TRANSACTION_TYPES = ['banner_purchase', 'payment_confirmed', 'transaction', 'fantasy_buy', 'fantasy_sell', 'swap', 'allstar_mint'];
 const TICKET_TYPES = ['support_ticket', 'ticket_reply'];
 const AUDIT_TYPES = ['api_failure_critical', 'api_failure_warning', 'quota_critical', 'quota_warning', 'repeated_failure', 'table_bloat', 'security', 'error', 'rug_pull_detected'];
 const NON_AUDIT_TYPES = [...SIGNUP_TYPES, ...TRANSACTION_TYPES, ...TICKET_TYPES];
@@ -269,6 +269,7 @@ export function AdminNotificationsBadge() {
       case 'table_bloat': return '💾';
       case 'support_ticket': return '🎫';
       case 'ticket_reply': return '📩';
+      case 'allstar_mint': return '🚀';
       default: return '🔔';
     }
   };
