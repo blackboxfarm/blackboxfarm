@@ -432,7 +432,7 @@ function buildLayout(
 }
 
 const SchematicInner = forwardRef<SchematicHandle, BubbleMapSchematicProps>(function SchematicInner(
-  { graphData, width, height = 600, onNodeClick, mode = 'branches' },
+  { graphData, width, height = 600, onNodeClick, mode = 'branches', centerpiece = 'token', centerpieceId = null },
   ref,
 ) {
   const rf = useReactFlow();
@@ -448,10 +448,17 @@ const SchematicInner = forwardRef<SchematicHandle, BubbleMapSchematicProps>(func
     },
   }), [rf]);
 
-  const effectiveData = useMemo(
-    () => (mode === 'prune' ? pruneToTokenAndSocials(graphData) : graphData),
-    [graphData, mode],
-  );
+  const effectiveData = useMemo(() => {
+    if (centerpiece === 'handle') {
+      // Find the handle node — prefer explicit id, else first x_account.
+      const handleNode =
+        (centerpieceId && graphData.nodes.find((n: any) => n.id === centerpieceId || (n.fullId || '').endsWith(`:${centerpieceId}`))) ||
+        graphData.nodes.find((n: any) => n.type === 'x_account');
+      return pruneToHandleChain(graphData, handleNode?.id || null);
+    }
+    if (mode === 'prune') return pruneToTokenAndSocials(graphData);
+    return graphData;
+  }, [graphData, mode, centerpiece, centerpieceId]);
 
   const [resolved, setResolved] = useState<ResolvedLabels>(() => ({
     communities: {}, tokens: {}, pending: new Set(),
@@ -512,7 +519,7 @@ const SchematicInner = forwardRef<SchematicHandle, BubbleMapSchematicProps>(func
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveData]);
 
-  const { nodes, edges } = useMemo(() => buildLayout(effectiveData, resolved), [effectiveData, resolved]);
+  const { nodes, edges } = useMemo(() => buildLayout(effectiveData, resolved, centerpiece), [effectiveData, resolved, centerpiece]);
 
   const handleNodeClick = useCallback(
     (_e: any, node: Node) => {
