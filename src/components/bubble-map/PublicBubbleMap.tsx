@@ -390,6 +390,14 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken, onActi
     if (rawInput.startsWith('@')) {
       type = 'x_account';
       normalizedId = rawInput.replace(/^@/, '').toLowerCase();
+      // Auto-switch to Schematic — best view for handle → community → token → wallet lineage.
+      if (viewMode !== 'schematic') {
+        setViewMode('schematic');
+        toast.info('Switched to Schematic view', {
+          description: 'Best layout for X handle → community → token → dev lineage.',
+          duration: 3500,
+        });
+      }
     } else if (rawInput.length < 20) {
       type = 'token';
     }
