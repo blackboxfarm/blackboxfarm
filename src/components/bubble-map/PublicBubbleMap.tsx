@@ -412,7 +412,7 @@ const PublicBubbleMap = ({ showUpgradePrompt = false, mode, initialToken, onActi
       });
       onActiveTokenChange?.(rawInput);
     }
-  }, [searchInput, focusOnEntity, resetView, canSearch, recordSearch, remaining, limit, isSubscriber, mode, recordInteraction, onActiveTokenChange]);
+  }, [searchInput, focusOnEntity, resetView, canSearch, recordSearch, remaining, limit, isSubscriber, mode, recordInteraction, onActiveTokenChange, viewMode]);
 
   // Auto-load from URL ?token= parameter
   useEffect(() => {
