@@ -9,6 +9,7 @@ import { getTokenWarnings, writeEarlyWarnings, generateWarningsFromHoldersData }
 import { sanitizeTelegramInput, isInputSafeToProcess } from "../_shared/telegram-input-sanitizer.ts";
 import { obfuscateTicker } from "../_shared/ticker-obfuscator.ts";
 import { runBadActorCheck } from "../_shared/bad-actor-check.ts";
+import { xHandleReverseLookup, formatXLookupForTelegram } from "../_shared/x-handle-reverse-lookup.ts";
 
 const BOT_TOKEN = Deno.env.get("TELEGRAM_HOLDERSINTEL_BOT_TOKEN")!;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
