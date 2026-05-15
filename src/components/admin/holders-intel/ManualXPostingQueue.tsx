@@ -492,9 +492,20 @@ export function ManualXPostingQueue() {
                       </div>
                     )}
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">
-                        {charCount} chars (Premium · long-form OK)
-                      </span>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="text-xs text-muted-foreground">
+                          {charCount} chars (Premium · long-form OK)
+                        </span>
+                        {snapshots[row.id] && (
+                          <span
+                            className="text-xs font-mono px-2 py-0.5 rounded border border-primary/30 bg-primary/5 text-primary"
+                            title={`Live DexScreener snapshot taken ${new Date(snapshots[row.id].at).toLocaleTimeString()} — for your posting decision only, not in tweet text`}
+                          >
+                            📡 MC {snapshots[row.id].mcap != null ? fmtMcap(snapshots[row.id].mcap) : "—"}
+                            {" · "}1h Vol {snapshots[row.id].vol1h != null ? fmtMcap(snapshots[row.id].vol1h) : "—"}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex gap-2">
                         <Button size="sm" variant="outline" asChild title="Open DexScreener page in new tab to verify life status">
                           <a
