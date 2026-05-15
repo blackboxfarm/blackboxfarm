@@ -63,22 +63,30 @@ export function AllstarRegistry() {
     const setter = wide ? setWideBackfilling : setBackfilling;
     setter(true);
     try {
-      const { data, error } = await supabase.functions.invoke('backfill-allstars', {
-        body: { max_resolve: 30, wide },
-      });
-      if (error) throw error;
-      if (data?.success) {
-        const extra = wide
-          ? ` (proven: +${data.wide_proven_added || 0}, rep: +${data.wide_reputation_added || 0}, families: +${data.families_seeded || 0}, polling: +${data.poll_queue_seeded || 0})`
-          : ` (families: +${data.families_seeded || 0}, polling: +${data.poll_queue_seeded || 0})`;
-        toast.success(
-          `Backfill complete: ${data.newly_promoted} promoted, ${data.upgraded} upgraded${extra}`,
-          { duration: 8000 }
-        );
-        refetch();
-      } else {
-        toast.error(data?.error || 'Backfill failed');
+      let offset = 0;
+      let totals = { newly_promoted: 0, upgraded: 0, families_seeded: 0, poll_queue_seeded: 0, wide_proven_added: 0, wide_reputation_added: 0 };
+      let safety = 30; // max chunks per click
+      while (safety-- > 0) {
+        const { data, error } = await supabase.functions.invoke('backfill-allstars', {
+          body: { max_resolve: 0, wide, chunk_offset: offset, chunk_size: 250 },
+        });
+        if (error) throw error;
+        if (!data?.success) { toast.error(data?.error || 'Backfill failed'); break; }
+        totals.newly_promoted += data.newly_promoted || 0;
+        totals.upgraded += data.upgraded || 0;
+        totals.families_seeded += data.families_seeded || 0;
+        totals.poll_queue_seeded += data.poll_queue_seeded || 0;
+        totals.wide_proven_added += data.wide_proven_added || 0;
+        totals.wide_reputation_added += data.wide_reputation_added || 0;
+        toast.message(`Chunk ${offset}/${data.total_unique_creators} — promoted ${totals.newly_promoted}…`, { duration: 2000 });
+        if (data.done || data.next_offset == null) break;
+        offset = data.next_offset;
       }
+      const extra = wide
+        ? ` (proven: +${totals.wide_proven_added}, rep: +${totals.wide_reputation_added}, families: +${totals.families_seeded}, polling: +${totals.poll_queue_seeded})`
+        : ` (families: +${totals.families_seeded}, polling: +${totals.poll_queue_seeded})`;
+      toast.success(`Backfill complete: ${totals.newly_promoted} promoted, ${totals.upgraded} upgraded${extra}`, { duration: 8000 });
+      refetch();
     } catch (err: any) {
       toast.error(`Backfill error: ${err.message}`);
     } finally {
