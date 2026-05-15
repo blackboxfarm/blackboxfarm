@@ -474,7 +474,7 @@ const SchematicInner = forwardRef<SchematicHandle, BubbleMapSchematicProps>(func
   }, [graphData, mode, centerpiece, centerpieceId]);
 
   const [resolved, setResolved] = useState<ResolvedLabels>(() => ({
-    communities: {}, tokens: {}, pending: new Set(),
+    communities: {}, tokens: {}, handles: {}, pending: new Set(),
   }));
 
   // Collect unresolved community/token ids from the current graph and batch-fetch
@@ -483,6 +483,7 @@ const SchematicInner = forwardRef<SchematicHandle, BubbleMapSchematicProps>(func
   useEffect(() => {
     const communityIds: string[] = [];
     const tokenMints: string[] = [];
+    const handleIds: string[] = [];
     for (const n of effectiveData.nodes) {
       const fullId = (n.fullId || n.id || '').toString();
       if (n.type === 'x_community') {
@@ -491,9 +492,12 @@ const SchematicInner = forwardRef<SchematicHandle, BubbleMapSchematicProps>(func
       } else if (n.type === 'token') {
         const mint = fullId.replace(/^token:/, '');
         if (mint && mint.length >= 30 && !resolved.tokens[mint]) tokenMints.push(mint);
+      } else if (n.type === 'x_account' || n.type === 'x_user') {
+        const h = canonicalHandleId(fullId || n.id);
+        if (h && !resolved.handles[h]) handleIds.push(h);
       }
     }
-    if (communityIds.length === 0 && tokenMints.length === 0) return;
+    if (communityIds.length === 0 && tokenMints.length === 0 && handleIds.length === 0) return;
 
     const pending = new Set<string>([
       ...communityIds.map((c) => `community:${c}`),
@@ -504,7 +508,7 @@ const SchematicInner = forwardRef<SchematicHandle, BubbleMapSchematicProps>(func
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 4000);
     supabase.functions
-      .invoke('resolve-labels', { body: { communities: communityIds, tokens: tokenMints } })
+      .invoke('resolve-labels', { body: { communities: communityIds, tokens: tokenMints, handles: handleIds } })
       .then(({ data, error }: any) => {
         clearTimeout(t);
         if (error || !data) return;
@@ -515,6 +519,7 @@ const SchematicInner = forwardRef<SchematicHandle, BubbleMapSchematicProps>(func
           return {
             communities: { ...prev.communities, ...(data.communities || {}) },
             tokens: { ...prev.tokens, ...(data.tokens || {}) },
+            handles: { ...prev.handles, ...(data.handles || {}) },
             pending: nextPending,
           };
         });
