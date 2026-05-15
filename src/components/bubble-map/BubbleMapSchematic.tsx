@@ -106,6 +106,26 @@ function buildLayout(graphData: { nodes: any[]; links: any[] }) {
   const devNode = graphData.nodes.find((n: any) => n.type === 'wallet' && n.isDev);
   const devId = devNode?.id || null;
 
+  // Build a map: x_community node id → set of distinct token neighbors.
+  // Any community linked to >1 token is flagged as "recycled" (same community
+  // ID reused across multiple token projects under different aliased names).
+  const communityTokenNeighbors = new Map<string, Set<string>>();
+  const idToType = new Map<string, string>();
+  for (const n of graphData.nodes) idToType.set(n.id, n.type);
+  for (const l of graphData.links) {
+    const s = typeof l.source === 'object' ? l.source.id : l.source;
+    const t = typeof l.target === 'object' ? l.target.id : l.target;
+    const sType = idToType.get(s);
+    const tType = idToType.get(t);
+    if (sType === 'x_community' && tType === 'token') {
+      if (!communityTokenNeighbors.has(s)) communityTokenNeighbors.set(s, new Set());
+      communityTokenNeighbors.get(s)!.add(t);
+    } else if (tType === 'x_community' && sType === 'token') {
+      if (!communityTokenNeighbors.has(t)) communityTokenNeighbors.set(t, new Set());
+      communityTokenNeighbors.get(t)!.add(s);
+    }
+  }
+
   const NODE_W = 180;
   const NODE_H = 48;
 
@@ -149,7 +169,41 @@ function buildLayout(graphData: { nodes: any[]; links: any[] }) {
     const pos = g.node(n.id);
     const isDev = n.isDev || n.id === devId;
     const color = ENTITY_COLORS[n.type] || '#888';
-    const label = n.displayName || n.label || (n.fullId || n.id).slice(0, 14) + '…';
+
+    // ----- Smart label resolution -----
+    // Token: prefer a clean $TICKER from label/displayName, else short mint fallback.
+    // X Community: prefer the human community name, else "Community #<short id>".
+    let label: string;
+    const rawLabel = (n.label || '').toString();
+    const rawDisplay = (n.displayName || '').toString();
+    const fullId = (n.fullId || n.id || '').toString();
+    if (n.type === 'token') {
+      const ticker = rawLabel.startsWith('$') && rawLabel.length > 1 && rawLabel.length <= 12
+        ? rawLabel
+        : rawDisplay && rawDisplay.length <= 12
+        ? rawDisplay.startsWith('$') ? rawDisplay : `$${rawDisplay}`
+        : '';
+      if (ticker) {
+        label = ticker;
+      } else {
+        const mint = fullId.replace(/^token:/, '');
+        label = mint.length > 10 ? `${mint.slice(0, 4)}…${mint.slice(-4)}` : mint || '$pending';
+      }
+    } else if (n.type === 'x_community') {
+      const cid = fullId.replace(/^x_community:/, '');
+      // Treat label as "name" only if it is NOT just the numeric id.
+      const looksLikeId = !rawLabel || /^\d+$/.test(rawLabel) || rawLabel.includes(cid.slice(0, 6));
+      const name = !looksLikeId ? rawLabel : (rawDisplay && !/^\d+$/.test(rawDisplay) ? rawDisplay : '');
+      label = name || `Community #${cid.slice(0, 6)}`;
+    } else {
+      label = rawDisplay || rawLabel || (fullId.length > 14 ? fullId.slice(0, 14) + '…' : fullId);
+    }
+
+    const recycledCount = n.type === 'x_community'
+      ? (communityTokenNeighbors.get(n.id)?.size ?? 0)
+      : 0;
+    const isRecycled = recycledCount > 1;
+
     const subLabel =
       n.type === 'kyc_root'
         ? '🏦 CEX'
@@ -159,13 +213,24 @@ function buildLayout(graphData: { nodes: any[]; links: any[] }) {
         ? '🪙 Token'
         : n.type === 'wallet'
         ? '💰 Funder'
+        : n.type === 'x_community'
+        ? (isRecycled ? `♻ Recycled ×${recycledCount}` : 'X Community')
         : n.type;
     return {
       id: n.id,
       position: { x: pos?.x || 0, y: pos?.y || 0 },
       data: { label: (
         <div className="flex flex-col items-center leading-tight">
-          <span className="text-[10px] uppercase tracking-wider opacity-70">{subLabel}</span>
+          <span
+            className="text-[10px] uppercase tracking-wider"
+            style={{
+              color: isRecycled ? 'hsl(280 80% 70%)' : undefined,
+              opacity: isRecycled ? 1 : 0.7,
+              fontWeight: isRecycled ? 600 : 400,
+            }}
+          >
+            {subLabel}
+          </span>
           <span className="font-semibold text-xs truncate max-w-[160px]">{label}</span>
         </div>
       ) },
@@ -173,12 +238,16 @@ function buildLayout(graphData: { nodes: any[]; links: any[] }) {
       targetPosition: Position.Top,
       style: {
         background: isDev ? 'rgba(234,179,8,0.12)' : 'hsl(var(--card))',
-        border: `1px solid ${isDev ? 'hsl(45 90% 55%)' : color}`,
+        border: `${isRecycled ? '2px' : '1px'} solid ${isDev ? 'hsl(45 90% 55%)' : isRecycled ? 'hsl(280 80% 65%)' : color}`,
         color: 'hsl(var(--foreground))',
         borderRadius: n.type === 'kyc_root' ? 4 : isDev ? 14 : 8,
         padding: 6,
         width: 180,
-        boxShadow: isDev ? '0 0 12px hsl(45 90% 55% / 0.5)' : undefined,
+        boxShadow: isDev
+          ? '0 0 12px hsl(45 90% 55% / 0.5)'
+          : isRecycled
+          ? '0 0 10px hsl(280 80% 65% / 0.5)'
+          : undefined,
       },
     } as Node;
   });
