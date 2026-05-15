@@ -199,6 +199,7 @@ function pruneToTokenAndSocials(graphData: { nodes: any[]; links: any[] }) {
 function buildLayout(
   graphData: { nodes: any[]; links: any[] },
   resolved: ResolvedLabels,
+  centerpiece: 'token' | 'handle' | 'wallet' | 'community' = 'token',
 ) {
   const g = new dagre.graphlib.Graph();
   g.setGraph({ rankdir: 'TB', nodesep: 40, ranksep: 90, marginx: 20, marginy: 20 });
@@ -317,6 +318,29 @@ function buildLayout(
     const graphRecycle = n.type === 'x_community' ? (communityTokenNeighbors.get(n.id)?.size ?? 0) : 0;
     const recycledCount = Math.max(cachedRecycle, graphRecycle);
     const isRecycled = recycledCount > 1;
+    const ghostStack = Math.min(Math.max(recycledCount - 1, 0), 3);
+    const nameHistory = cidForRecycle ? (resolved.communities[cidForRecycle]?.name_history ?? null) : null;
+    const linkedMints = cidForRecycle ? (resolved.communities[cidForRecycle]?.linked_token_mints ?? null) : null;
+    const ghostTooltip = isRecycled
+      ? [
+          `Recycled across ${recycledCount} tokens`,
+          ...(Array.isArray(nameHistory)
+            ? nameHistory.map((h: any) => {
+                const nm = h?.name || h?.prev_name || '?';
+                const mc = h?.member_count ? ` · ${h.member_count.toLocaleString()} members` : '';
+                const ts = h?.observed_until || h?.last_seen || h?.timestamp;
+                const when = ts ? ` · ${new Date(ts).toLocaleDateString()}` : '';
+                return `· ${nm}${mc}${when}`;
+              })
+            : []),
+          ...(Array.isArray(linkedMints)
+            ? linkedMints.map((m: string) => {
+                const tk = resolved.tokens[m]?.ticker;
+                return tk ? `· prior $${tk.replace(/^\$/, '')}` : `· ${m.slice(0, 4)}…${m.slice(-4)}`;
+              })
+            : []),
+        ].join('\n')
+      : '';
 
     const subLabel =
       n.type === 'kyc_root'
@@ -334,7 +358,7 @@ function buildLayout(
       id: n.id,
       position: { x: pos?.x || 0, y: pos?.y || 0 },
       data: { label: (
-        <div className="flex flex-col items-center leading-tight">
+        <div className="flex flex-col items-center leading-tight" title={ghostTooltip || undefined}>
           <span
             className="text-[10px] uppercase tracking-wider"
             style={{
@@ -363,7 +387,12 @@ function buildLayout(
         boxShadow: isDev
           ? '0 0 12px hsl(45 90% 55% / 0.5)'
           : isRecycled
-          ? '0 0 10px hsl(280 80% 65% / 0.5)'
+          ? [
+              ...(ghostStack >= 1 ? ['6px 6px 0 -1px hsl(280 80% 65% / 0.55), 6px 6px 0 0 hsl(280 80% 40% / 0.6)'] : []),
+              ...(ghostStack >= 2 ? ['12px 12px 0 -2px hsl(280 80% 65% / 0.4), 12px 12px 0 -1px hsl(280 80% 40% / 0.5)'] : []),
+              ...(ghostStack >= 3 ? ['18px 18px 0 -3px hsl(280 80% 65% / 0.28), 18px 18px 0 -2px hsl(280 80% 40% / 0.4)'] : []),
+              '0 0 10px hsl(280 80% 65% / 0.5)',
+            ].join(', ')
           : undefined,
       },
     } as Node;
@@ -375,17 +404,25 @@ function buildLayout(
     const rel = l.relationship || '';
     const isFunding = rel.includes('funded');
     const isCreated = rel.includes('created');
+    const role = ROLE_BADGE[rel];
+    const edgeLabel = role ? `${role.icon} ${role.label}` : (rel || undefined);
+    const edgeStroke = role
+      ? role.color
+      : isFunding ? 'hsl(45 90% 55%)' : isCreated ? 'hsl(var(--primary))' : 'hsl(var(--border))';
     return {
       id: `e-${i}-${s}-${t}`,
       source: s,
       target: t,
       animated: isFunding,
-      label: rel || undefined,
-      labelStyle: { fontSize: 9, fill: 'hsl(var(--muted-foreground))' },
+      label: edgeLabel,
+      labelStyle: { fontSize: role ? 11 : 9, fill: role ? role.color : 'hsl(var(--muted-foreground))', fontWeight: role ? 600 : 400 },
+      labelBgStyle: role ? { fill: 'hsl(var(--background))', fillOpacity: 0.9 } : undefined,
+      labelBgPadding: role ? [4, 2] as [number, number] : undefined,
+      labelBgBorderRadius: role ? 4 : undefined,
       style: {
-        stroke: isFunding ? 'hsl(45 90% 55%)' : isCreated ? 'hsl(var(--primary))' : 'hsl(var(--border))',
-        strokeWidth: isFunding ? 2 : 1,
-        opacity: isFunding ? 0.85 : 0.5,
+        stroke: edgeStroke,
+        strokeWidth: role ? 1.5 : isFunding ? 2 : 1,
+        opacity: role ? 0.9 : isFunding ? 0.85 : 0.5,
       },
       markerEnd: { type: MarkerType.ArrowClosed },
     } as Edge;
