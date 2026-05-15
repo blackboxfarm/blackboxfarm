@@ -4842,6 +4842,45 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
               console.log('[bot] DM auto-scan triggered:', dmCA.slice(0, 12));
               await handleHolders(chatId, telegramUserId, dmCA);
             }
+            // DM: auto-detect bare X handle (e.g., "@pumpfun711" or "pumpfun711")
+            // and run mesh reverse-lookup to surface linked dev wallets / tokens / communities.
+            else if (/^@?[A-Za-z0-9_]{2,15}$/.test(sanitized.rawTruncated.trim())) {
+              const handle = sanitized.rawTruncated.trim().replace(/^@/, '').toLowerCase();
+              console.log('[bot] X-handle reverse lookup:', handle);
+              try {
+                // Daily quota: Free = 3, Pro+ = unlimited
+                const linked = await getLinkedUser(telegramUserId);
+                let tier = 'free';
+                if (linked?.user_id) tier = await getUserTier(linked.user_id);
+                const isPaid = ['x_subscriber', 'pro', 'dev', 'enterprise'].includes(tier);
+                if (!isPaid) {
+                  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+                  const { count } = await supabase
+                    .from('telegram_xlookup_usage')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('telegram_user_id', telegramUserId)
+                    .gte('created_at', since);
+                  if ((count ?? 0) >= 3) {
+                    await sendMessage(chatId,
+                      `🔒 *Daily X-handle lookups exhausted* (3/day on Free).\n\nUpgrade to Pro for unlimited reverse-lookups: /payment`,
+                      'Markdown');
+                    break;
+                  }
+                }
+                await supabase.from('telegram_xlookup_usage').insert({
+                  telegram_user_id: telegramUserId,
+                  handle,
+                });
+                const result = await xHandleReverseLookup(supabase, handle);
+                const reply = formatXLookupForTelegram(result, obfuscateTicker);
+                await sendMessage(chatId, reply, 'Markdown');
+              } catch (e) {
+                console.error('[bot] x-handle lookup failed:', e);
+                await sendMessage(chatId,
+                  `⚠️ Couldn't run lookup for @${handle}. Try again in a moment.`,
+                  'Markdown');
+              }
+            }
             // "Did you mean?" for unrecognized slash commands
             else if (sanitized.rawTruncated.startsWith('/')) {
               const attempted = sanitized.rawTruncated.split(/\s/)[0].replace(/@\w+$/, '').toLowerCase();
