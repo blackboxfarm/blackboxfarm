@@ -157,10 +157,26 @@ function pruneToHandleChain(graphData: { nodes: any[]; links: any[] }, handleNod
   }
 
   const nodes = graphData.nodes.filter((n: any) => keep.has(n.id));
+  // Only keep edges that follow the allowed chain pair-types. Without this,
+  // stray relationships like `funded_rejected_dev` between the handle and a
+  // dev wallet get rendered as edges and their label lands on top of the dev
+  // wallet card (the "funded_rejected_dev overlapping DEV WALLET" bug).
+  const HANDLE_TYPES = new Set(['x_account', 'x_user']);
+  const allowedPair = (a?: string, b?: string) => {
+    if (!a || !b) return false;
+    const pair = new Set([a, b]);
+    if (HANDLE_TYPES.has(a) && b === 'x_community') return true;
+    if (HANDLE_TYPES.has(b) && a === 'x_community') return true;
+    if (pair.has('x_community') && pair.has('token')) return true;
+    if (pair.has('token') && pair.has('wallet')) return true;
+    if (pair.has('wallet') && pair.has('kyc_root')) return true;
+    return false;
+  };
   const links = graphData.links.filter((l: any) => {
     const s = typeof l.source === 'object' ? l.source.id : l.source;
     const t = typeof l.target === 'object' ? l.target.id : l.target;
-    return keep.has(s) && keep.has(t);
+    if (!keep.has(s) || !keep.has(t)) return false;
+    return allowedPair(idToNode.get(s)?.type, idToNode.get(t)?.type);
   });
   return { nodes, links };
 }
