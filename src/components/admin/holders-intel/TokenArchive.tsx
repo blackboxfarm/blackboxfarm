@@ -42,7 +42,7 @@ export function TokenArchive() {
       let q = supabase
         .from("holders_intel_post_queue")
         .select(ARCHIVE_COLUMNS, { count: "exact" })
-        .eq("manual_status", "posted_manual")
+        .not("tweet_text", "is", null)
         .order("manual_posted_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
         .range(from, to);
