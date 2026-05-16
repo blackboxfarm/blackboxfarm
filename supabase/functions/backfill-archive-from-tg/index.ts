@@ -152,7 +152,7 @@ async function fetchChannelPage(opts: {
     for (const m of raw) {
       const id = Number(m.id);
       if (oldestId == null || id < oldestId) oldestId = id;
-      const text: string = m.text || "";
+      const text: string = (m?.text ?? m?.caption ?? m?.message ?? "") as string;
       if (!text) continue;
       const date = m.date ? new Date(m.date * 1000).toISOString() : new Date().toISOString();
       parsed.push(parseMessage(text, id, date));
