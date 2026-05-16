@@ -108,7 +108,7 @@ export function ManualXPostingQueue() {
       .from("holders_intel_post_queue")
       .select(
         "id, token_mint, symbol, name, market_cap, trigger_source, created_at, tweet_text, manual_status, manual_posted_at, manual_tweet_url, autopsy_slug, autopsy_url, autopsy_hero_image, dex_banner_url, decorated_banner_url, decoration_theme",
-        { count: "exact" }
+        { count: "estimated" }
       )
       .eq("manual_status", "pending")
       .order("created_at", { ascending: false })
