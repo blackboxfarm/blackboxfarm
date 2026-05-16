@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, ExternalLink, RefreshCw, SkipForward, Check, Wand2, Skull, Sparkles, Download, RotateCw, Trash2, ChevronLeft, ChevronRight, ChevronFirst, ChevronLast, Search } from "lucide-react";
+import { Copy, ExternalLink, RefreshCw, SkipForward, Check, Wand2, Skull, Sparkles, Download, RotateCw, Trash2, ChevronLeft, ChevronRight, ChevronFirst, ChevronLast, Search, Archive } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -402,6 +402,27 @@ export function ManualXPostingQueue() {
           </Button>
           <Button onClick={composeMissing} size="sm" variant="default" disabled={loading || rows.every((r) => !!r.tweet_text)}>
             <Wand2 className="h-4 w-4 mr-1" /> Compose all missing
+          </Button>
+          <Button
+            onClick={async () => {
+              if (!confirm(`Post ${Math.min(pendingTotal, 50)} pending tokens to the Archive page (fetch banner + decorate + publish)?`)) return;
+              setLoading(true);
+              const { data, error } = await supabase.functions.invoke("holders-intel-archive-batch", {
+                body: { limit: 50, concurrency: 3 },
+              });
+              setLoading(false);
+              if (error) {
+                toast({ title: "Batch archive failed", description: error.message, variant: "destructive" });
+              } else {
+                toast({ title: "Batch archive complete", description: `${data?.ok || 0} posted, ${data?.failed || 0} failed` });
+                load();
+              }
+            }}
+            size="sm"
+            variant="default"
+            disabled={loading || pendingTotal === 0}
+          >
+            <Archive className="h-4 w-4 mr-1" /> Post 50 to Archive
           </Button>
         </div>
       </div>
