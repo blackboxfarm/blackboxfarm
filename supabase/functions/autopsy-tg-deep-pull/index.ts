@@ -76,15 +76,15 @@ Deno.serve(withRunLog('autopsy-tg-deep-pull', async (req) => {
 
   const tgRow = (socials ?? []).find((s: any) => /telegram|t\.me/i.test(`${s.platform ?? ''} ${s.link_type ?? ''} ${s.url ?? ''}`));
   if (!tgRow?.url) {
-    return new Response(JSON.stringify({ error: 'no telegram url on token' }), {
-      status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    return new Response(JSON.stringify({ success: true, skipped: true, reason: 'no telegram url on token' }), {
+      status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
   const username = extractTgUsername(tgRow.url);
   if (!username) {
-    return new Response(JSON.stringify({ error: 'invite-only or unparseable TG link', url: tgRow.url }), {
-      status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    return new Response(JSON.stringify({ success: true, skipped: true, reason: 'invite-only or unparseable TG link', url: tgRow.url }), {
+      status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
