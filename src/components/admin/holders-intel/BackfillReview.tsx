@@ -110,7 +110,7 @@ export function BackfillReview() {
     // Push patch_json onto the archive row
     const { error: upErr } = await supabase
       .from("holders_intel_post_queue")
-      .update(p.patch_json)
+      .update(p.patch_json as any)
       .eq("id", p.archive_id);
     if (upErr) {
       toast.error(`Apply failed for ${p.token_mint.slice(0, 8)}…`, {
@@ -138,7 +138,7 @@ export function BackfillReview() {
     }
     const { error: upErr } = await supabase
       .from("holders_intel_post_queue")
-      .update(beforeOnly)
+      .update(beforeOnly as any)
       .eq("id", p.archive_id);
     if (upErr) {
       toast.error("Revert failed", { description: upErr.message, duration: 12000 });
@@ -195,7 +195,7 @@ export function BackfillReview() {
     for (const p of list) {
       const { error: e1 } = await supabase
         .from("holders_intel_post_queue")
-        .update(p.patch_json).eq("id", p.archive_id);
+        .update(p.patch_json as any).eq("id", p.archive_id);
       if (e1) { fail++; continue; }
       await supabase
         .from("holders_intel_backfill_proposals")
@@ -227,7 +227,7 @@ export function BackfillReview() {
       }
       const { error: e1 } = await supabase
         .from("holders_intel_post_queue")
-        .update(beforeOnly).eq("id", p.archive_id);
+        .update(beforeOnly as any).eq("id", p.archive_id);
       if (e1) { fail++; continue; }
       await supabase
         .from("holders_intel_backfill_proposals")
