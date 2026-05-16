@@ -202,6 +202,30 @@ Deno.serve(withRunLog('family-mint-monitor', async (req) => {
         for (const det of detections) {
           if (!det.mintAddress) continue;
 
+          // ═══ FRESHNESS SANITY CHECK ═══
+          // A real "new mint" must have a blockTime that is:
+          //   (1) present, AND
+          //   (2) within the last 6 hours, AND
+          //   (3) newer than the last time we polled this wallet
+          //       (older than last_polled_at = we'd have caught it already
+          //        OR it's a years-old established mint surfacing via
+          //        getSignaturesForAddress pagination — both = false positive).
+          if (!det.timestamp) {
+            console.log(`[FamilyMintMonitor] ⏭️  Skip ${det.mintAddress.slice(0,8)} — no blockTime`);
+            continue;
+          }
+          const mintTimeMs = new Date(det.timestamp).getTime();
+          const ageMs = now.getTime() - mintTimeMs;
+          const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+          if (ageMs > SIX_HOURS_MS) {
+            console.log(`[FamilyMintMonitor] ⏭️  Skip ${det.mintAddress.slice(0,8)} — mint age ${Math.round(ageMs/3600000)}h > 6h (established/historical)`);
+            continue;
+          }
+          if (item.last_polled_at && mintTimeMs < new Date(item.last_polled_at).getTime()) {
+            console.log(`[FamilyMintMonitor] ⏭️  Skip ${det.mintAddress.slice(0,8)} — mint predates last_polled_at (${item.last_polled_at})`);
+            continue;
+          }
+
           const { data: existing } = await supabase
             .from('wallet_family_mint_events').select('id')
             .eq('mint_address', det.mintAddress).eq('family_id', item.family_id).maybeSingle();
