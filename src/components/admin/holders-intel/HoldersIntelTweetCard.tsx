@@ -159,12 +159,12 @@ export function HoldersIntelTweetCard({ row }: { row: ArchiveRow }) {
 
       {/* Banner */}
       {banner && (
-        <div className="mt-3 rounded-xl overflow-hidden border border-zinc-800">
+        <div className="mt-3 rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900">
           <img
             src={banner}
             alt={`${symbol} banner`}
             loading="lazy"
-            className="w-full aspect-[2/1] object-cover bg-zinc-900"
+            className="w-full h-auto object-contain"
           />
         </div>
       )}
