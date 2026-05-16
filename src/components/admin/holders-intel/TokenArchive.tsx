@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { toast as sonnerToast } from "sonner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -13,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, RefreshCw, Search } from "lucide-react";
 import { HoldersIntelTweetCard, type ArchiveRow } from "./HoldersIntelTweetCard";
+import { BackfillReview } from "./BackfillReview";
 
 const PAGE_SIZES = [50, 100, 250, 500] as const;
 type PageSize = (typeof PAGE_SIZES)[number];
@@ -32,6 +35,9 @@ export function TokenArchive() {
   const [triggerFilter, setTriggerFilter] = useState<string>("all");
   const [backfillBusy, setBackfillBusy] = useState(false);
   const [backfillOffset, setBackfillOffset] = useState<number | null>(null);
+  const [backfillLog, setBackfillLog] = useState<Array<{
+    ts: string; mode: string; summary: string; nextOffsetId: number | null;
+  }>>([]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -88,9 +94,10 @@ export function TokenArchive() {
   async function runBackfill(dryRun: boolean) {
     setBackfillBusy(true);
     try {
+      const mode = dryRun ? "dryrun" : "apply";
       const { data, error } = await supabase.functions.invoke("backfill-archive-from-tg", {
         body: {
-          dryRun,
+          mode,
           pages: 5,
           pageSize: 100,
           offsetId: backfillOffset ?? undefined,
@@ -99,13 +106,47 @@ export function TokenArchive() {
       if (error) throw error;
       const d: any = data || {};
       setBackfillOffset(d.nextOffsetId ?? null);
-      toast({
-        title: dryRun ? "TG backfill — dry run" : "TG backfill — applied",
-        description: `scanned ${d.msgsScanned}, proposals ${d.proposals}, updated ${d.updated}, skipped noMint=${d.skippedNoMint} noMatch=${d.skippedNoMatch} noStats=${d.skippedNoStats}. nextOffset=${d.nextOffsetId ?? "—"}`,
+      const summary = `scanned ${d.msgsScanned ?? 0} · proposals ${d.proposals ?? 0} · written ${d.proposalsWritten ?? 0} · skip noMint=${d.skippedNoMint ?? 0} noMatch=${d.skippedNoMatch ?? 0} noStats=${d.skippedNoStats ?? 0} dup=${d.skippedDuplicate ?? 0}`;
+      sonnerToast.success(`TG backfill (${mode})`, {
+        description: summary + ` · nextOffset=${d.nextOffsetId ?? "—"}`,
+        duration: 20000,
       });
-      if (!dryRun) await load();
+      setBackfillLog((prev) => [
+        { ts: new Date().toLocaleTimeString(), mode, summary, nextOffsetId: d.nextOffsetId ?? null },
+        ...prev,
+      ].slice(0, 10));
     } catch (e: any) {
-      toast({ title: "Backfill failed", description: e?.message || String(e), variant: "destructive" });
+      sonnerToast.error("Backfill failed", { description: e?.message || String(e), duration: 20000 });
+      setBackfillLog((prev) => [
+        { ts: new Date().toLocaleTimeString(), mode: dryRun ? "dryrun" : "apply", summary: `ERROR: ${e?.message || e}`, nextOffsetId: null },
+        ...prev,
+      ].slice(0, 10));
+    } finally {
+      setBackfillBusy(false);
+    }
+  }
+
+  async function runSample() {
+    setBackfillBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("backfill-archive-from-tg", {
+        body: { mode: "sample", sampleN: 5, offsetId: backfillOffset ?? undefined },
+      });
+      if (error) throw error;
+      const d: any = data || {};
+      const lines = (d.samples || []).map((s: any) =>
+        `#${s.messageId} (${s.date}) mint=${s.mintFound ?? "—"}\n${(s.rawText || "").slice(0, 400)}`
+      ).join("\n\n---\n\n");
+      sonnerToast.message("TG sample", {
+        description: `Fetched ${(d.samples || []).length} raw messages — see Backfill Log for full text`,
+        duration: 20000,
+      });
+      setBackfillLog((prev) => [
+        { ts: new Date().toLocaleTimeString(), mode: "sample", summary: lines || "(no text)", nextOffsetId: d.nextOffsetId ?? null },
+        ...prev,
+      ].slice(0, 10));
+    } catch (e: any) {
+      sonnerToast.error("Sample failed", { description: e?.message || String(e), duration: 20000 });
     } finally {
       setBackfillBusy(false);
     }
@@ -124,11 +165,11 @@ export function TokenArchive() {
           <Badge variant="outline" className="bg-green-500/20 text-green-400">
             {total.toLocaleString()} archived
           </Badge>
-          <Button onClick={() => runBackfill(true)} size="sm" variant="outline" disabled={backfillBusy}>
-            {backfillBusy ? "Working…" : "TG Backfill (dry-run)"}
+          <Button onClick={runSample} size="sm" variant="ghost" disabled={backfillBusy}>
+            TG Sample
           </Button>
-          <Button onClick={() => runBackfill(false)} size="sm" variant="default" disabled={backfillBusy}>
-            {backfillBusy ? "Working…" : "TG Backfill (apply)"}
+          <Button onClick={() => runBackfill(true)} size="sm" variant="outline" disabled={backfillBusy}>
+            {backfillBusy ? "Working…" : "TG Dry-run → Queue"}
           </Button>
           {backfillOffset != null && (
             <Badge variant="outline" className="text-xs">
@@ -149,6 +190,30 @@ export function TokenArchive() {
         </div>
       </div>
 
+      {backfillLog.length > 0 && (
+        <div className="rounded-md border border-border bg-muted/30 p-2 text-xs space-y-1 max-h-64 overflow-auto">
+          <div className="font-semibold flex items-center justify-between">
+            <span>Backfill Log (last {backfillLog.length})</span>
+            <button className="text-muted-foreground hover:text-foreground" onClick={() => setBackfillLog([])}>clear</button>
+          </div>
+          {backfillLog.map((l, i) => (
+            <details key={i} className="font-mono">
+              <summary className="cursor-pointer">
+                [{l.ts}] {l.mode} · nextOffset={l.nextOffsetId ?? "—"}
+              </summary>
+              <pre className="whitespace-pre-wrap break-words mt-1 pl-3 text-[11px] opacity-90">{l.summary}</pre>
+            </details>
+          ))}
+        </div>
+      )}
+
+      <Tabs defaultValue="archive">
+        <TabsList>
+          <TabsTrigger value="archive">Archive</TabsTrigger>
+          <TabsTrigger value="review">Backfill Review</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="archive" className="space-y-4 mt-4">
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-2">
         <form onSubmit={onSearch} className="flex items-center gap-1">
@@ -240,6 +305,12 @@ export function TokenArchive() {
         onChange={setPage}
         disabled={loading}
       />
+        </TabsContent>
+
+        <TabsContent value="review" className="mt-4">
+          <BackfillReview />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

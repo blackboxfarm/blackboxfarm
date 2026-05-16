@@ -174,12 +174,17 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const dryRun: boolean = body.dryRun !== false; // default true
+    // mode: 'sample' returns raw TG text only; 'dryrun' writes proposals to
+    // holders_intel_backfill_proposals (no archive mutation); 'apply' is
+    // handled client-side via direct supabase updates by super_admins.
+    const mode: string = (body.mode || (body.dryRun === false ? "dryrun" : "dryrun")).toLowerCase();
+    const dryRun: boolean = mode !== "apply"; // legacy: always treat as proposal-write
     const pages: number = Math.max(1, Math.min(30, Number(body.pages) || 5));
     const pageSize: number = Math.max(20, Math.min(100, Number(body.pageSize) || 100));
     const channel: string = body.channel || "HoldersIntel";
     let offsetId: number | undefined = body.offsetId ? Number(body.offsetId) : undefined;
     const matchWindowDays: number = Math.max(1, Math.min(60, Number(body.matchWindowDays) || 7));
+    const sampleN: number = Math.max(1, Math.min(20, Number(body.sampleN) || 5));
 
     const apiIdRaw = Deno.env.get("TELEGRAM_API_ID");
     const apiHash = Deno.env.get("TELEGRAM_API_HASH");
@@ -193,6 +198,24 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+
+    // SAMPLE MODE — just dump raw TG text so we can fix the parser
+    if (mode === "sample") {
+      const page = await fetchChannelPage({
+        sessionString, apiId, apiHash, channel,
+        limit: Math.max(sampleN, 20),
+        offsetId,
+      });
+      const samples = page.messages.slice(0, sampleN).map((m) => ({
+        messageId: m.messageId,
+        date: m.date,
+        mintFound: m.mint,
+        rawText: m.raw,
+      }));
+      return new Response(JSON.stringify({
+        ok: true, mode, samples, nextOffsetId: page.oldestId,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     // Load all archive rows once (id, mint, created_at)
     const archive: { id: string; token_mint: string; created_at: string }[] = [];
@@ -242,10 +265,11 @@ serve(async (req) => {
     }
 
     const proposals: any[] = [];
-    let updated = 0;
+    let proposalsWritten = 0;
     let skippedNoMint = 0;
     let skippedNoMatch = 0;
     let skippedNoStats = 0;
+    let skippedDuplicate = 0;
 
     for (const m of allParsed) {
       if (!m.mint) {
@@ -305,32 +329,55 @@ serve(async (req) => {
         patch,
       });
 
-      if (!dryRun) {
-        const { error } = await supabase
-          .from("holders_intel_post_queue")
-          .update(patch)
-          .eq("id", best.id);
-        if (error) {
-          console.warn(`[backfill] update failed for ${best.id}: ${error.message}`);
-        } else {
-          updated++;
-        }
+      // Always write proposals to the review queue (idempotent via UNIQUE).
+      // Capture before snapshot of the current archive row.
+      const { data: beforeRow, error: beforeErr } = await supabase
+        .from("holders_intel_post_queue")
+        .select("real_holders,total_wallets,whales_count,serious_count,retail_count,dust_count,dust_pct,health_grade,health_score,ai_snippet,manual_posted_at")
+        .eq("id", best.id)
+        .maybeSingle();
+      if (beforeErr) {
+        console.warn(`[backfill] before-snapshot failed for ${best.id}: ${beforeErr.message}`);
+        continue;
+      }
+      const afterRow = { ...(beforeRow || {}), ...patch };
+      const { error: upErr } = await supabase
+        .from("holders_intel_backfill_proposals")
+        .upsert({
+          archive_id: best.id,
+          token_mint: m.mint,
+          tg_message_id: m.messageId,
+          tg_message_date: m.date,
+          tg_raw_text: m.raw,
+          match_diff_hours: +(bestDiff / 3600000).toFixed(2),
+          before_json: beforeRow || {},
+          after_json: afterRow,
+          patch_json: patch,
+          status: "pending",
+        }, { onConflict: "archive_id,tg_message_id" });
+      if (upErr) {
+        if (/duplicate/i.test(upErr.message)) skippedDuplicate++;
+        else console.warn(`[backfill] proposal insert failed: ${upErr.message}`);
+      } else {
+        proposalsWritten++;
       }
     }
 
     return new Response(
       JSON.stringify({
         ok: true,
+        mode,
         dryRun,
         channel,
         pagesRequested: pages,
         pageSize,
         msgsScanned: allParsed.length,
         proposals: proposals.length,
-        updated,
+        proposalsWritten,
         skippedNoMint,
         skippedNoMatch,
         skippedNoStats,
+        skippedDuplicate,
         nextOffsetId: lastOldest,
         sample: proposals.slice(0, 5),
       }),
