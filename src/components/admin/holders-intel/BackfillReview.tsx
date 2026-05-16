@@ -84,6 +84,7 @@ function changedFields(p: Proposal): string[] {
 
 export function BackfillReview() {
   const [batch, setBatch] = useState<Proposal[]>([]);
+  const [recentPosts, setRecentPosts] = useState<ArchiveRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [counts, setCounts] = useState({ pending: 0, accepted: 0, rejected: 0, applied: 0, reverted: 0 });
@@ -121,19 +122,17 @@ export function BackfillReview() {
     }
   }, []);
 
-  useEffect(() => { loadBatch(); loadCounts(); }, [loadBatch, loadCounts]);
+  const loadRecentPosts = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("holders_intel_post_queue")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (error) { toast.error("Failed to load posts", { description: error.message, duration: 12000 }); return; }
+    setRecentPosts((data as any) || []);
+  }, []);
 
-  // Auto-fetch on first load if queue is empty so the user never sees a dead screen.
-  const [autoTried, setAutoTried] = useState(false);
-  useEffect(() => {
-    if (autoTried) return;
-    if (loading || generating) return;
-    if (batch.length === 0 && counts.pending === 0) {
-      setAutoTried(true);
-      generateFromTG();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [batch.length, counts.pending, loading, generating, autoTried]);
+  useEffect(() => { loadBatch(); loadCounts(); loadRecentPosts(); }, [loadBatch, loadCounts, loadRecentPosts]);
 
   async function generateFromTG() {
     setGenerating(true);
@@ -296,18 +295,27 @@ export function BackfillReview() {
       {loading && batch.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">Loading…</div>
       ) : batch.length === 0 ? (
-        <div className="text-center py-12 space-y-4">
-          <div className="text-muted-foreground">
-            No pending proposals in the queue yet.
+        <div className="space-y-4">
+          <div className="rounded-lg border border-border/60 bg-muted/20 p-4 text-sm space-y-2">
+            <div className="font-semibold">No Before/After proposals staged yet.</div>
+            <div className="text-xs text-muted-foreground">
+              Below are the <b>{recentPosts.length}</b> most recent archive posts as they currently look.
+              To stage Before/After comparisons, click <b>🔭 Fetch from TG</b> in the header above.
+            </div>
+            <Button onClick={generateFromTG} disabled={generating} size="sm" className="bg-sky-600 hover:bg-sky-700">
+              {generating ? <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Fetching…</> : <>🔭 Fetch proposals from Telegram</>}
+            </Button>
           </div>
-          <div className="text-xs text-muted-foreground max-w-md mx-auto">
-            Click below to pull the last ~300 messages from @HoldersIntel on Telegram,
-            match them to archive rows by mint, and stage them here as Before/After pairs
-            for your review.
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {recentPosts.map((row) => (
+              <div key={row.id} className="space-y-1">
+                <div className="text-xs font-mono text-muted-foreground px-1 break-all">
+                  {row.symbol ?? "?"} · {row.token_mint}
+                </div>
+                <HoldersIntelTweetCard row={row} />
+              </div>
+            ))}
           </div>
-          <Button onClick={generateFromTG} disabled={generating} size="lg" className="bg-sky-600 hover:bg-sky-700">
-            {generating ? <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Fetching from Telegram…</> : <>🔭 Fetch proposals from Telegram</>}
-          </Button>
         </div>
       ) : (
         <div className="space-y-8">
