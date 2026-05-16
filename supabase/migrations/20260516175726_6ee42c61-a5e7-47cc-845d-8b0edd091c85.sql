@@ -1,0 +1,1 @@
+ALTER TABLE public.holders_intel_backfill_proposals ADD COLUMN IF NOT EXISTS reviewer_feedback text;

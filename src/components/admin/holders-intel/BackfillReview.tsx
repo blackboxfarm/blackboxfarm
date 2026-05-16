@@ -1,21 +1,13 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { Input } from "@/components/ui/input";
-import { Check, RefreshCw, Undo2, X } from "lucide-react";
+import { Check, RefreshCw, Undo2, X, ArrowRight } from "lucide-react";
+import { HoldersIntelTweetCard, ArchiveRow } from "./HoldersIntelTweetCard";
+
+type ProposalStatus = "pending" | "accepted" | "rejected" | "applied" | "reverted";
 
 type Proposal = {
   id: string;
@@ -28,14 +20,12 @@ type Proposal = {
   before_json: Record<string, any>;
   after_json: Record<string, any>;
   patch_json: Record<string, any>;
-  status: "pending" | "accepted" | "rejected" | "applied" | "reverted";
+  status: ProposalStatus;
   applied_at: string | null;
   reverted_at: string | null;
+  reviewer_feedback: string | null;
   created_at: string;
 };
-
-const STATUS_TABS = ["pending", "accepted", "applied", "rejected", "reverted"] as const;
-type StatusTab = (typeof STATUS_TABS)[number];
 
 const TRACKED_FIELDS = [
   "real_holders", "total_wallets", "whales_count", "serious_count",
@@ -43,25 +33,65 @@ const TRACKED_FIELDS = [
   "health_score", "ai_snippet", "manual_posted_at",
 ] as const;
 
-function fmt(v: any): string {
-  if (v == null) return "—";
-  if (typeof v === "number") return v.toLocaleString();
-  if (typeof v === "string" && v.length > 80) return v.slice(0, 80) + "…";
-  return String(v);
+const BATCH_SIZE = 5;
+
+function buildRow(p: Proposal, which: "before" | "after"): ArchiveRow {
+  const base = (p.before_json || {}) as Record<string, any>;
+  const overlay = which === "after" ? (p.after_json || {}) : {};
+  const merged: any = { ...base, ...overlay };
+  return {
+    id: p.archive_id,
+    token_mint: p.token_mint,
+    symbol: merged.symbol ?? null,
+    name: merged.name ?? null,
+    market_cap: merged.market_cap ?? null,
+    created_at: merged.created_at ?? p.created_at,
+    trigger_source: merged.trigger_source ?? "tg-backfill",
+    tweet_text: merged.tweet_text ?? null,
+    tweet_composed_at: merged.tweet_composed_at ?? null,
+    ai_snippet: merged.ai_snippet ?? null,
+    health_grade: merged.health_grade ?? null,
+    health_score: merged.health_score ?? null,
+    health_label: merged.health_label ?? null,
+    real_holders: merged.real_holders ?? null,
+    total_wallets: merged.total_wallets ?? null,
+    whales_count: merged.whales_count ?? null,
+    serious_count: merged.serious_count ?? null,
+    retail_count: merged.retail_count ?? null,
+    dust_count: merged.dust_count ?? null,
+    dust_pct: merged.dust_pct ?? null,
+    snapshot_label: merged.snapshot_label ?? null,
+    hashtags_line: merged.hashtags_line ?? null,
+    banner_used_url: merged.banner_used_url ?? null,
+    dex_banner_url: merged.dex_banner_url ?? null,
+    decorated_banner_url: merged.decorated_banner_url ?? null,
+    manual_status: merged.manual_status ?? "posted_manual",
+    manual_posted_at: merged.manual_posted_at ?? p.tg_message_date,
+    manual_tweet_url: merged.manual_tweet_url ?? null,
+    posted_handle: merged.posted_handle ?? "HoldersIntel",
+  };
+}
+
+function changedFields(p: Proposal): string[] {
+  const out: string[] = [];
+  for (const k of TRACKED_FIELDS) {
+    const b = p.before_json?.[k] ?? null;
+    const a = p.after_json?.[k] ?? null;
+    if (JSON.stringify(b) !== JSON.stringify(a) && a != null) out.push(k);
+  }
+  return out;
 }
 
 export function BackfillReview() {
-  const [statusTab, setStatusTab] = useState<StatusTab>("pending");
-  const [rows, setRows] = useState<Proposal[]>([]);
+  const [batch, setBatch] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(false);
-  const [counts, setCounts] = useState<Record<StatusTab, number>>({
-    pending: 0, accepted: 0, applied: 0, rejected: 0, reverted: 0,
-  });
-  const [revertConfirm, setRevertConfirm] = useState("");
+  const [counts, setCounts] = useState({ pending: 0, accepted: 0, rejected: 0, applied: 0, reverted: 0 });
+  const [decisions, setDecisions] = useState<Record<string, { status: "accepted" | "rejected"; feedback: string }>>({});
 
   const loadCounts = useCallback(async () => {
-    const next = { ...counts };
-    await Promise.all(STATUS_TABS.map(async (s) => {
+    const keys: ProposalStatus[] = ["pending", "accepted", "rejected", "applied", "reverted"];
+    const next: any = {};
+    await Promise.all(keys.map(async (s) => {
       const { count } = await supabase
         .from("holders_intel_backfill_proposals")
         .select("id", { count: "exact", head: true })
@@ -69,342 +99,262 @@ export function BackfillReview() {
       next[s] = count || 0;
     }));
     setCounts(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const load = useCallback(async () => {
+  const loadBatch = useCallback(async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from("holders_intel_backfill_proposals")
         .select("*")
-        .eq("status", statusTab)
+        .eq("status", "pending")
         .order("tg_message_date", { ascending: false })
-        .limit(100);
+        .limit(BATCH_SIZE);
       if (error) throw error;
-      setRows((data as any) || []);
+      setBatch((data as any) || []);
+      setDecisions({});
     } catch (e: any) {
-      toast.error("Failed to load proposals", { description: e?.message, duration: 12000 });
+      toast.error("Failed to load batch", { description: e?.message, duration: 12000 });
     } finally {
       setLoading(false);
     }
-  }, [statusTab]);
+  }, []);
 
-  useEffect(() => { load(); }, [load]);
-  useEffect(() => { loadCounts(); }, [loadCounts, rows.length]);
+  useEffect(() => { loadBatch(); loadCounts(); }, [loadBatch, loadCounts]);
 
-  async function setStatus(p: Proposal, status: Proposal["status"]) {
-    const { error } = await supabase
-      .from("holders_intel_backfill_proposals")
-      .update({ status, reviewed_at: new Date().toISOString() })
-      .eq("id", p.id);
-    if (error) {
-      toast.error("Update failed", { description: error.message, duration: 12000 });
-      return;
-    }
-    setRows((r) => r.filter((x) => x.id !== p.id));
-    loadCounts();
+  function decide(id: string, status: "accepted" | "rejected") {
+    setDecisions((d) => ({ ...d, [id]: { status, feedback: d[id]?.feedback ?? "" } }));
+  }
+  function updateFeedback(id: string, feedback: string) {
+    setDecisions((d) => ({ ...d, [id]: { status: d[id]?.status ?? "rejected", feedback } }));
   }
 
-  async function applyProposal(p: Proposal) {
-    // Push patch_json onto the archive row
-    const { error: upErr } = await supabase
-      .from("holders_intel_post_queue")
-      .update(p.patch_json as any)
-      .eq("id", p.archive_id);
-    if (upErr) {
-      toast.error(`Apply failed for ${p.token_mint.slice(0, 8)}…`, {
-        description: upErr.message, duration: 12000,
-      });
+  const acceptedCount = useMemo(
+    () => Object.values(decisions).filter((d) => d.status === "accepted").length,
+    [decisions]
+  );
+  const rejectedCount = useMemo(
+    () => Object.values(decisions).filter((d) => d.status === "rejected").length,
+    [decisions]
+  );
+
+  async function saveBatch() {
+    const ids = Object.keys(decisions);
+    if (!ids.length) {
+      toast.error("No decisions made yet", { duration: 8000 });
       return;
     }
-    const { error: stErr } = await supabase
-      .from("holders_intel_backfill_proposals")
-      .update({ status: "applied", applied_at: new Date().toISOString() })
-      .eq("id", p.id);
-    if (stErr) {
-      toast.warning("Applied to archive, but status update failed", {
-        description: stErr.message, duration: 12000,
-      });
-    }
-    setRows((r) => r.filter((x) => x.id !== p.id));
-    loadCounts();
-  }
-
-  async function revertProposal(p: Proposal) {
-    const beforeOnly: Record<string, any> = {};
-    for (const k of TRACKED_FIELDS) {
-      if (k in p.before_json) beforeOnly[k] = p.before_json[k] ?? null;
-    }
-    const { error: upErr } = await supabase
-      .from("holders_intel_post_queue")
-      .update(beforeOnly as any)
-      .eq("id", p.archive_id);
-    if (upErr) {
-      toast.error("Revert failed", { description: upErr.message, duration: 12000 });
-      return;
-    }
-    await supabase
-      .from("holders_intel_backfill_proposals")
-      .update({ status: "reverted", reverted_at: new Date().toISOString() })
-      .eq("id", p.id);
-    setRows((r) => r.filter((x) => x.id !== p.id));
-    loadCounts();
-    toast.success("Reverted to original values", { duration: 8000 });
-  }
-
-  async function bulkAcceptPage() {
-    if (!rows.length) return;
-    const ids = rows.map((r) => r.id);
-    const { error } = await supabase
-      .from("holders_intel_backfill_proposals")
-      .update({ status: "accepted", reviewed_at: new Date().toISOString() })
-      .in("id", ids);
-    if (error) {
-      toast.error("Bulk accept failed", { description: error.message, duration: 12000 });
-      return;
-    }
-    toast.success(`Accepted ${ids.length}`, { duration: 8000 });
-    load(); loadCounts();
-  }
-
-  async function bulkRejectPage() {
-    if (!rows.length) return;
-    const ids = rows.map((r) => r.id);
-    const { error } = await supabase
-      .from("holders_intel_backfill_proposals")
-      .update({ status: "rejected", reviewed_at: new Date().toISOString() })
-      .in("id", ids);
-    if (error) {
-      toast.error("Bulk reject failed", { description: error.message, duration: 12000 });
-      return;
-    }
-    toast.success(`Rejected ${ids.length}`, { duration: 8000 });
-    load(); loadCounts();
-  }
-
-  async function applyAllAccepted() {
-    const { data, error } = await supabase
-      .from("holders_intel_backfill_proposals")
-      .select("*")
-      .eq("status", "accepted")
-      .limit(500);
-    if (error) { toast.error(error.message, { duration: 12000 }); return; }
-    const list = (data as any[]) || [];
-    let ok = 0, fail = 0;
-    for (const p of list) {
-      const { error: e1 } = await supabase
+    let ok = 0, fail = 0, applied = 0;
+    for (const p of batch) {
+      const d = decisions[p.id];
+      if (!d) continue;
+      if (d.status === "rejected") {
+        const { error } = await supabase
+          .from("holders_intel_backfill_proposals")
+          .update({
+            status: "rejected",
+            reviewer_feedback: d.feedback || null,
+            reviewed_at: new Date().toISOString(),
+          })
+          .eq("id", p.id);
+        if (error) fail++; else ok++;
+        continue;
+      }
+      // accepted -> apply patch to archive AND mark applied
+      const { error: upErr } = await supabase
         .from("holders_intel_post_queue")
-        .update(p.patch_json as any).eq("id", p.archive_id);
-      if (e1) { fail++; continue; }
-      await supabase
+        .update(p.patch_json as any)
+        .eq("id", p.archive_id);
+      if (upErr) { fail++; continue; }
+      const { error: stErr } = await supabase
         .from("holders_intel_backfill_proposals")
-        .update({ status: "applied", applied_at: new Date().toISOString() })
+        .update({
+          status: "applied",
+          applied_at: new Date().toISOString(),
+          reviewer_feedback: d.feedback || null,
+        })
         .eq("id", p.id);
-      ok++;
+      if (stErr) fail++; else { ok++; applied++; }
     }
-    toast.success(`Applied ${ok} · failed ${fail}`, { duration: 15000 });
-    load(); loadCounts();
+    toast.success(`Saved ${ok} · applied ${applied} · failed ${fail}`, { duration: 15000 });
+    await loadBatch();
+    await loadCounts();
   }
 
-  async function revertAllApplied() {
-    if (revertConfirm !== "REVERT") {
-      toast.error("Type REVERT to confirm", { duration: 8000 });
-      return;
-    }
+  async function revertLastApplied() {
     const { data, error } = await supabase
       .from("holders_intel_backfill_proposals")
       .select("*")
       .eq("status", "applied")
-      .limit(2000);
+      .order("applied_at", { ascending: false })
+      .limit(BATCH_SIZE);
     if (error) { toast.error(error.message, { duration: 12000 }); return; }
     const list = (data as any[]) || [];
-    let ok = 0, fail = 0;
+    if (!list.length) { toast.error("Nothing to revert", { duration: 8000 }); return; }
+    let ok = 0;
     for (const p of list) {
       const beforeOnly: Record<string, any> = {};
       for (const k of TRACKED_FIELDS) {
-        if (k in p.before_json) beforeOnly[k] = p.before_json[k] ?? null;
+        if (k in (p.before_json || {})) beforeOnly[k] = p.before_json[k] ?? null;
       }
       const { error: e1 } = await supabase
         .from("holders_intel_post_queue")
         .update(beforeOnly as any).eq("id", p.archive_id);
-      if (e1) { fail++; continue; }
+      if (e1) continue;
       await supabase
         .from("holders_intel_backfill_proposals")
         .update({ status: "reverted", reverted_at: new Date().toISOString() })
         .eq("id", p.id);
       ok++;
     }
-    setRevertConfirm("");
-    toast.success(`Reverted ${ok} · failed ${fail}`, { duration: 15000 });
-    load(); loadCounts();
+    toast.success(`Reverted last ${ok}`, { duration: 12000 });
+    await loadCounts();
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 className="text-base font-semibold">🧪 Backfill Review</h3>
-          <p className="text-xs text-muted-foreground">
-            Side-by-side current vs Telegram-sourced values. Nothing touches the archive until you click <b>Apply</b>.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={load} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} /> Refresh
-          </Button>
-          {statusTab === "accepted" && (
-            <Button size="sm" onClick={applyAllAccepted}>
-              <Check className="h-4 w-4 mr-1" /> Apply All Accepted ({counts.accepted})
+      {/* Sticky header */}
+      <div className="sticky top-0 z-10 -mx-2 px-2 py-3 bg-background/95 backdrop-blur border-b border-border/60">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-base font-semibold">🧪 Backfill Review — Side-by-Side</h3>
+            <p className="text-xs text-muted-foreground">
+              Loaded {batch.length} of {counts.pending} pending. Decide each, then{" "}
+              <b>Save batch</b>: accepted = applied to archive, rejected = logged with your feedback.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary">pending {counts.pending}</Badge>
+            <Badge className="bg-emerald-600 hover:bg-emerald-600">applied {counts.applied}</Badge>
+            <Badge variant="outline">rejected {counts.rejected}</Badge>
+            <Badge variant="outline">reverted {counts.reverted}</Badge>
+            <Button size="sm" variant="outline" onClick={() => { loadBatch(); loadCounts(); }} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} /> Refresh
             </Button>
-          )}
-          {statusTab === "applied" && counts.applied > 0 && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button size="sm" variant="destructive">
-                  <Undo2 className="h-4 w-4 mr-1" /> Revert ALL Applied
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Revert {counts.applied} applied proposals?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This restores each archive row to its pre-backfill values from the
-                    stored before-snapshot. Type <b>REVERT</b> to confirm.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <Input
-                  placeholder="Type REVERT"
-                  value={revertConfirm}
-                  onChange={(e) => setRevertConfirm(e.target.value)}
-                />
-                <AlertDialogFooter>
-                  <AlertDialogCancel onClick={() => setRevertConfirm("")}>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={revertAllApplied}>Revert All</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-1">
-        {STATUS_TABS.map((s) => (
-          <Button
-            key={s}
-            size="sm"
-            variant={statusTab === s ? "default" : "outline"}
-            onClick={() => setStatusTab(s)}
-          >
-            {s} <Badge variant="secondary" className="ml-2">{counts[s]}</Badge>
-          </Button>
-        ))}
-        {statusTab === "pending" && rows.length > 0 && (
-          <div className="ml-auto flex gap-1">
-            <Button size="sm" variant="outline" onClick={bulkAcceptPage}>
-              <Check className="h-4 w-4 mr-1" /> Accept page ({rows.length})
-            </Button>
-            <Button size="sm" variant="outline" onClick={bulkRejectPage}>
-              <X className="h-4 w-4 mr-1" /> Reject page
+            <Button size="sm" variant="destructive" onClick={revertLastApplied}>
+              <Undo2 className="h-4 w-4 mr-1" /> Revert last {BATCH_SIZE}
             </Button>
           </div>
-        )}
+        </div>
+
+        <div className="mt-2 flex items-center gap-2">
+          <Badge variant="outline" className="text-emerald-500 border-emerald-500/40">
+            ✓ {acceptedCount} accepted
+          </Badge>
+          <Badge variant="outline" className="text-red-400 border-red-400/40">
+            ✗ {rejectedCount} rejected
+          </Badge>
+          <Badge variant="secondary">{batch.length - acceptedCount - rejectedCount} undecided</Badge>
+          <div className="ml-auto flex gap-2">
+            <Button size="sm" onClick={saveBatch} disabled={!Object.keys(decisions).length}>
+              <Check className="h-4 w-4 mr-1" /> Save batch ({Object.keys(decisions).length})
+            </Button>
+            <Button size="sm" variant="outline" onClick={loadBatch}>
+              Skip & load next 5 <ArrowRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </div>
       </div>
 
-      {loading && rows.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">Loading proposals…</div>
-      ) : rows.length === 0 ? (
+      {loading && batch.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">Loading…</div>
+      ) : batch.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
-          No {statusTab} proposals. Run a TG dry-run from the Archive tab to populate this queue.
+          No pending proposals. Run a TG dry-run from the Archive tab to populate this queue.
         </div>
       ) : (
-        <div className="space-y-3">
-          {rows.map((p) => (
-            <ProposalCard
-              key={p.id}
-              proposal={p}
-              onAccept={() => setStatus(p, "accepted")}
-              onReject={() => setStatus(p, "rejected")}
-              onApply={() => applyProposal(p)}
-              onRevert={() => revertProposal(p)}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+        <div className="space-y-8">
+          {batch.map((p, idx) => {
+            const beforeRow = buildRow(p, "before");
+            const afterRow = buildRow(p, "after");
+            const changed = changedFields(p);
+            const decision = decisions[p.id];
+            return (
+              <div
+                key={p.id}
+                className={`rounded-xl border-2 p-4 space-y-3 transition-colors ${
+                  decision?.status === "accepted"
+                    ? "border-emerald-500/60 bg-emerald-500/5"
+                    : decision?.status === "rejected"
+                    ? "border-red-500/60 bg-red-500/5"
+                    : "border-border bg-card"
+                }`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2 font-mono">
+                    <Badge>#{idx + 1} of {batch.length}</Badge>
+                    <span className="break-all">{p.token_mint}</span>
+                    <span className="text-muted-foreground">
+                      TG #{p.tg_message_id} · {new Date(p.tg_message_date).toLocaleString()}
+                    </span>
+                    {p.match_diff_hours != null && (
+                      <Badge variant="secondary">Δ {p.match_diff_hours}h</Badge>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {changed.length === 0 ? (
+                      <Badge variant="outline" className="text-muted-foreground">no field changes</Badge>
+                    ) : (
+                      changed.map((f) => (
+                        <Badge key={f} variant="outline" className="text-amber-400 border-amber-400/40 font-mono text-[10px]">
+                          {f}
+                        </Badge>
+                      ))
+                    )}
+                  </div>
+                </div>
 
-function ProposalCard({
-  proposal: p,
-  onAccept, onReject, onApply, onRevert,
-}: {
-  proposal: Proposal;
-  onAccept: () => void;
-  onReject: () => void;
-  onApply: () => void;
-  onRevert: () => void;
-}) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-3 space-y-2">
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-        <div className="flex items-center gap-2 font-mono">
-          <Badge variant="outline">{p.status}</Badge>
-          <span className="break-all">{p.token_mint}</span>
-          <span className="text-muted-foreground">
-            TG #{p.tg_message_id} · {new Date(p.tg_message_date).toLocaleString()}
-          </span>
-          {p.match_diff_hours != null && (
-            <Badge variant="secondary">Δ {p.match_diff_hours}h</Badge>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          {p.status === "pending" && (
-            <>
-              <Button size="sm" variant="outline" onClick={onAccept}>
-                <Check className="h-3.5 w-3.5 mr-1" /> Accept
-              </Button>
-              <Button size="sm" variant="ghost" onClick={onReject}>
-                <X className="h-3.5 w-3.5 mr-1" /> Reject
-              </Button>
-            </>
-          )}
-          {p.status === "accepted" && (
-            <Button size="sm" onClick={onApply}>Apply now</Button>
-          )}
-          {p.status === "applied" && (
-            <Button size="sm" variant="destructive" onClick={onRevert}>
-              <Undo2 className="h-3.5 w-3.5 mr-1" /> Revert
-            </Button>
-          )}
-        </div>
-      </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <div className="text-xs font-semibold text-red-400 uppercase tracking-wider px-1">
+                      {idx + 1}a — Before (current archive)
+                    </div>
+                    <HoldersIntelTweetCard row={beforeRow} />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-xs font-semibold text-emerald-400 uppercase tracking-wider px-1">
+                      {idx + 1}b — After (Telegram-parsed)
+                    </div>
+                    <HoldersIntelTweetCard row={afterRow} />
+                  </div>
+                </div>
 
-      <div className="grid grid-cols-3 gap-2 text-xs">
-        <div className="font-semibold text-muted-foreground">Field</div>
-        <div className="font-semibold text-muted-foreground">Current (archive)</div>
-        <div className="font-semibold text-muted-foreground">Proposed (Telegram)</div>
-        {TRACKED_FIELDS.map((k) => {
-          const before = p.before_json?.[k];
-          const after = p.after_json?.[k];
-          const changed = JSON.stringify(before ?? null) !== JSON.stringify(after ?? null);
-          return (
-            <React.Fragment key={k}>
-              <div className="font-mono text-muted-foreground">{k}</div>
-              <div className={`font-mono ${changed ? "text-red-400" : ""}`}>{fmt(before)}</div>
-              <div className={`font-mono ${changed ? "text-green-400" : ""}`}>{fmt(after)}</div>
-            </React.Fragment>
-          );
-        })}
-      </div>
+                <div className="flex flex-wrap items-start gap-2 pt-2 border-t border-border/40">
+                  <Button
+                    size="sm"
+                    variant={decision?.status === "accepted" ? "default" : "outline"}
+                    className={decision?.status === "accepted" ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+                    onClick={() => decide(p.id, "accepted")}
+                  >
+                    <Check className="h-4 w-4 mr-1" /> Accept (apply 1b)
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={decision?.status === "rejected" ? "destructive" : "outline"}
+                    onClick={() => decide(p.id, "rejected")}
+                  >
+                    <X className="h-4 w-4 mr-1" /> Reject (keep 1a)
+                  </Button>
+                  <Textarea
+                    placeholder="Optional feedback — what's wrong with the parser? (e.g. 'dust_pct lost decimal', 'snippet stripped')"
+                    value={decision?.feedback ?? ""}
+                    onChange={(e) => updateFeedback(p.id, e.target.value)}
+                    className="flex-1 min-w-[280px] min-h-[60px] text-xs"
+                  />
+                </div>
 
-      {p.tg_raw_text && (
-        <details className="text-xs">
-          <summary className="cursor-pointer text-muted-foreground">Raw TG message</summary>
-          <pre className="whitespace-pre-wrap break-words mt-1 p-2 bg-muted/40 rounded font-mono text-[11px] max-h-60 overflow-auto">
-            {p.tg_raw_text}
-          </pre>
-        </details>
+                {p.tg_raw_text && (
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-muted-foreground">Raw TG message</summary>
+                    <pre className="whitespace-pre-wrap break-words mt-1 p-2 bg-muted/40 rounded font-mono text-[11px] max-h-60 overflow-auto">
+                      {p.tg_raw_text}
+                    </pre>
+                  </details>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
