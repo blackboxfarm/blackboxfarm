@@ -4,6 +4,7 @@ import { getHeliusApiKey, getHeliusRestUrl, getHeliusRpcUrl } from '../_shared/h
 import { withRunLog } from '../_shared/run-logger.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 import { sendAdminSms } from '../_shared/sms-notify.ts';
+import { assertDbWrite } from '../_shared/db-assert.ts';
 enableHeliusTracking('allstar-mint-auditor');
 
 const corsHeaders = {
@@ -485,7 +486,8 @@ async function createAllstarAlert(
 
   // Insert alert record with verified mint timestamp
   const mintDate = new Date(hit.mintTimestamp * 1000);
-  await supabase.from('allstar_mint_alerts').insert({
+  await assertDbWrite(
+    supabase.from('allstar_mint_alerts').insert({
     allstar_id: allstar.id,
     developer_id: allstar.developer_id,
     token_mint: mintAddr,
@@ -508,7 +510,10 @@ async function createAllstarAlert(
       mint_age: hit.mintAge,
       verified_onchain: !!hit.mintTimestamp,
     },
-  });
+    }).select('id'),
+    'allstar_mint_alerts',
+    'INSERT'
+  );
 
   // Admin notification (dashboard badge)
   const emoji = alertLevel === 'critical' ? '🌟🚨' : alertLevel === 'high' ? '⭐🔔' : '✨';
@@ -907,70 +912,92 @@ Deno.serve(withRunLog('allstar-mint-auditor', async (req) => {
       errors: [] as string[],
     };
 
-    // ─── PHASE 0: Backfill missing creator wallets on proven_dev_tokens ───
-    console.log('[allstar] Phase 0: Backfilling creator wallets...');
-    results.creators_backfilled = await backfillCreatorWallets(supabase);
-    console.log(`[allstar] Backfilled ${results.creators_backfilled} creator wallets`);
+    // Soft deadline so the background task always wraps up well within the
+    // 25-min mark, leaving runway before the next */30 cron tick.
+    const SOFT_DEADLINE_MS = 23 * 60 * 1000;
+    const CONCURRENCY = 8;
+    let allstarsToAudit: any[] = [];
 
-    // ─── PHASE 1: Qualify new allstars ───
-    console.log('[allstar] Phase 1: Qualifying allstars from proven_dev_tokens...');
-    results.new_allstars_qualified = await qualifyAllstars(supabase);
-    console.log(`[allstar] Qualified ${results.new_allstars_qualified} new allstars`);
+    const auditOne = async (allstar: any) => {
+      if (Date.now() - startTime > SOFT_DEADLINE_MS) {
+        results.errors.push(`${allstar.master_wallet.slice(0, 8)}: deadline-skip`);
+        return;
+      }
+      try {
+        const familySize = (allstar.family_wallets || []).length;
+        results.total_family_wallets_scanned += familySize;
 
-    // ─── PHASE 2: Audit oldest-scanned allstars ───
-    console.log('[allstar] Phase 2: Auditing allstar wallet families...');
-    
-    const { data: allstarsToAudit } = await supabase
-      .from('allstar_dev_registry')
-      .select('*')
-      .eq('status', 'active')
-      .order('last_audit_at', { ascending: true, nullsFirst: true })
-      .limit(audit_batch_size);
+        const hits = await auditAllstarFamily(supabase, allstar, heliusApiKey!, effectiveHoursLookback);
+        results.allstars_audited++;
 
-    const auditQueue = async () => {
-      for (const allstar of allstarsToAudit || []) {
-        try {
-          const familySize = (allstar.family_wallets || []).length;
-          results.total_family_wallets_scanned += familySize;
+        for (const hit of hits) {
+          await createAllstarAlert(supabase, allstar, hit);
+          results.new_mints_detected++;
+          results.alerts_created++;
+        }
 
-          const hits = await auditAllstarFamily(supabase, allstar, heliusApiKey!, effectiveHoursLookback);
-          results.allstars_audited++;
-
-          for (const hit of hits) {
-            await createAllstarAlert(supabase, allstar, hit);
-            results.new_mints_detected++;
-            results.alerts_created++;
-          }
-
-          await supabase
+        await assertDbWrite(
+          supabase
             .from('allstar_dev_registry')
             .update({
               last_audit_at: new Date().toISOString(),
               audit_count: (allstar.audit_count || 0) + 1,
             })
-            .eq('id', allstar.id);
-        } catch (e: any) {
-          results.errors.push(`${allstar.master_wallet.slice(0, 8)}: ${e.message}`);
-        }
+            .eq('id', allstar.id)
+            .select('id'),
+          'allstar_dev_registry',
+          'UPDATE last_audit_at'
+        );
+      } catch (e: any) {
+        results.errors.push(`${allstar.master_wallet.slice(0, 8)}: ${e.message}`);
       }
+    };
+
+    const auditQueue = async () => {
+      // ─── PHASE 0: Backfill missing creator wallets ───
+      console.log('[allstar] Phase 0: Backfilling creator wallets...');
+      results.creators_backfilled = await backfillCreatorWallets(supabase);
+      console.log(`[allstar] Backfilled ${results.creators_backfilled} creator wallets`);
+
+      // ─── PHASE 1: Qualify new allstars ───
+      console.log('[allstar] Phase 1: Qualifying allstars from proven_dev_tokens...');
+      results.new_allstars_qualified = await qualifyAllstars(supabase);
+      console.log(`[allstar] Qualified ${results.new_allstars_qualified} new allstars`);
+
+      // ─── PHASE 2: Pull batch of allstars to audit ───
+      console.log('[allstar] Phase 2: Auditing allstar wallet families...');
+      const { data: batch } = await supabase
+        .from('allstar_dev_registry')
+        .select('*')
+        .eq('status', 'active')
+        .order('last_audit_at', { ascending: true, nullsFirst: true })
+        .limit(audit_batch_size);
+      allstarsToAudit = batch || [];
+      console.log(`[allstar] Pulled ${allstarsToAudit.length} allstars to audit (batch_size=${audit_batch_size})`);
+
+      const queue = [...(allstarsToAudit || [])];
+      const workers = Array.from({ length: CONCURRENCY }, async () => {
+        while (queue.length) {
+          const next = queue.shift();
+          if (!next) break;
+          await auditOne(next);
+        }
+      });
+      await Promise.all(workers);
       const elapsedBg = Date.now() - startTime;
-      console.log(`[allstar] ✅ Background batch complete in ${elapsedBg}ms:`, results);
+      console.log(`[allstar] ✅ Background sweep complete in ${elapsedBg}ms:`, results);
     };
 
     // Background mode: queue and return immediately so the client doesn't time out
     if (background) {
-      const queued = (allstarsToAudit || []).length;
       // @ts-ignore - EdgeRuntime is a Deno deploy global
       try { EdgeRuntime.waitUntil(auditQueue()); } catch { auditQueue(); }
       return new Response(
         JSON.stringify({
           success: true,
           background: true,
-          queued_allstars: queued,
-          message: `Audit running in background for ${queued} allstars. Refresh the feed in 30-60s.`,
+          message: `Full sweep running in background (batch_size=${audit_batch_size}). Refresh the feed in 1-3 min.`,
           effective_hours_lookback: effectiveHoursLookback,
-          creators_backfilled: results.creators_backfilled,
-          new_allstars_qualified: results.new_allstars_qualified,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
