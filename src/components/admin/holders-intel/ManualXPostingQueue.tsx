@@ -6,7 +6,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, ExternalLink, RefreshCw, SkipForward, Check, Wand2, Skull, Sparkles, Download, RotateCw, Trash2 } from "lucide-react";
+import { Copy, ExternalLink, RefreshCw, SkipForward, Check, Wand2, Skull, Sparkles, Download, RotateCw, Trash2, ChevronLeft, ChevronRight, ChevronFirst, ChevronLast, Search } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { sanitizeForTwitter } from "@/lib/twitterSanitizer";
 
 interface QueueRow {
@@ -64,6 +71,11 @@ export function ManualXPostingQueue() {
   const { toast } = useToast();
   const [rows, setRows] = useState<QueueRow[]>([]);
   const [history, setHistory] = useState<QueueRow[]>([]);
+  const [pendingTotal, setPendingTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState<number>(50);
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
@@ -89,13 +101,28 @@ export function ManualXPostingQueue() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+
+    let pendingQ = supabase
+      .from("holders_intel_post_queue")
+      .select(
+        "id, token_mint, symbol, name, market_cap, trigger_source, created_at, tweet_text, manual_status, manual_posted_at, manual_tweet_url, autopsy_slug, autopsy_url, autopsy_hero_image, dex_banner_url, decorated_banner_url, decoration_theme",
+        { count: "exact" }
+      )
+      .eq("manual_status", "pending")
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (search.trim()) {
+      const s = search.trim();
+      pendingQ = pendingQ.or(
+        `token_mint.ilike.%${s}%,symbol.ilike.%${s}%,name.ilike.%${s}%`
+      );
+    }
+
     const [pendingRes, historyRes] = await Promise.all([
-      supabase
-        .from("holders_intel_post_queue")
-        .select("id, token_mint, symbol, name, market_cap, trigger_source, created_at, tweet_text, manual_status, manual_posted_at, manual_tweet_url, autopsy_slug, autopsy_url, autopsy_hero_image, dex_banner_url, decorated_banner_url, decoration_theme")
-        .eq("manual_status", "pending")
-        .order("created_at", { ascending: false })
-        .limit(50),
+      pendingQ,
       supabase
         .from("holders_intel_post_queue")
         .select("id, token_mint, symbol, name, market_cap, trigger_source, created_at, tweet_text, manual_status, manual_posted_at, manual_tweet_url, autopsy_slug, autopsy_url, autopsy_hero_image, dex_banner_url, decorated_banner_url, decoration_theme")
@@ -108,14 +135,16 @@ export function ManualXPostingQueue() {
       toast({ title: "Failed to load queue", description: pendingRes.error.message, variant: "destructive" });
     } else {
       setRows((pendingRes.data || []) as QueueRow[]);
+      setPendingTotal(pendingRes.count || 0);
     }
     if (!historyRes.error) {
       setHistory((historyRes.data || []) as QueueRow[]);
     }
     setLoading(false);
-  }, [toast]);
+  }, [toast, page, pageSize, search]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { setPage(0); }, [pageSize, search]);
   useEffect(() => {
     if (!autoRefresh) return;
     const i = setInterval(load, 30000);
@@ -353,7 +382,9 @@ export function ManualXPostingQueue() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Badge variant="outline" className="bg-yellow-500/20 text-yellow-400">{rows.length} pending</Badge>
+          <Badge variant="outline" className="bg-yellow-500/20 text-yellow-400">
+            {pendingTotal.toLocaleString()} pending
+          </Badge>
           <Badge variant="outline" className="bg-green-500/20 text-green-400">{todayCounts.posted} posted today</Badge>
           <Badge variant="outline" className="bg-muted text-muted-foreground">{todayCounts.skipped} skipped today</Badge>
           <label className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer">
