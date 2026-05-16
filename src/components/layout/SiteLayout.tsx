@@ -53,7 +53,7 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
     ? [...BASE_NAV_ITEMS, { label: 'Intel Briefings', path: '/intel' }]
     : BASE_NAV_ITEMS;
   const FINAL_NAV_ITEMS = isSuperAdmin
-    ? [...NAV_ITEMS, { label: '🔴 Live', path: '/feed' }]
+    ? [...NAV_ITEMS, { label: '🔴 Live', path: '/feed' }, { label: '🗄 Token Archive', path: '/token-archive' }]
     : NAV_ITEMS;
   const [authModalTab, setAuthModalTab] = useState<'signin' | 'signup'>('signin');
 
