@@ -85,6 +85,7 @@ function changedFields(p: Proposal): string[] {
 export function BackfillReview() {
   const [batch, setBatch] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [counts, setCounts] = useState({ pending: 0, accepted: 0, rejected: 0, applied: 0, reverted: 0 });
   const [decisions, setDecisions] = useState<Record<string, { status: "accepted" | "rejected"; feedback: string }>>({});
 
@@ -121,6 +122,27 @@ export function BackfillReview() {
   }, []);
 
   useEffect(() => { loadBatch(); loadCounts(); }, [loadBatch, loadCounts]);
+
+  async function generateFromTG() {
+    setGenerating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("backfill-archive-from-tg", {
+        body: { mode: "dryrun", pages: 3, pageSize: 100 },
+      });
+      if (error) throw error;
+      const d: any = data || {};
+      toast.success("TG fetch complete", {
+        description: `Scanned ${d.msgsScanned ?? 0} msgs · ${d.proposalsWritten ?? 0} new proposals written · ${d.skippedNoMatch ?? 0} no-match · ${d.skippedNoStats ?? 0} no-stats · ${d.skippedDuplicate ?? 0} dup`,
+        duration: 20000,
+      });
+      await loadBatch();
+      await loadCounts();
+    } catch (e: any) {
+      toast.error("TG fetch failed", { description: e?.message || String(e), duration: 15000 });
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   function decide(id: string, status: "accepted" | "rejected") {
     setDecisions((d) => ({ ...d, [id]: { status, feedback: d[id]?.feedback ?? "" } }));
@@ -231,6 +253,9 @@ export function BackfillReview() {
             <Button size="sm" variant="outline" onClick={() => { loadBatch(); loadCounts(); }} disabled={loading}>
               <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} /> Refresh
             </Button>
+            <Button size="sm" onClick={generateFromTG} disabled={generating} className="bg-sky-600 hover:bg-sky-700">
+              {generating ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : "🔭"} Fetch from TG
+            </Button>
             <Button size="sm" variant="destructive" onClick={revertLastApplied}>
               <Undo2 className="h-4 w-4 mr-1" /> Revert last {BATCH_SIZE}
             </Button>
@@ -259,8 +284,18 @@ export function BackfillReview() {
       {loading && batch.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">Loading…</div>
       ) : batch.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          No pending proposals. Run a TG dry-run from the Archive tab to populate this queue.
+        <div className="text-center py-12 space-y-4">
+          <div className="text-muted-foreground">
+            No pending proposals in the queue yet.
+          </div>
+          <div className="text-xs text-muted-foreground max-w-md mx-auto">
+            Click below to pull the last ~300 messages from @HoldersIntel on Telegram,
+            match them to archive rows by mint, and stage them here as Before/After pairs
+            for your review.
+          </div>
+          <Button onClick={generateFromTG} disabled={generating} size="lg" className="bg-sky-600 hover:bg-sky-700">
+            {generating ? <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Fetching from Telegram…</> : <>🔭 Fetch proposals from Telegram</>}
+          </Button>
         </div>
       ) : (
         <div className="space-y-8">
