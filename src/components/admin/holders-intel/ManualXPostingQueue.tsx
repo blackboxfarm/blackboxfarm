@@ -6,7 +6,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, ExternalLink, RefreshCw, SkipForward, Check, Wand2, Skull, Sparkles, Download, RotateCw, Trash2 } from "lucide-react";
+import { Copy, ExternalLink, RefreshCw, SkipForward, Check, Wand2, Skull, Sparkles, Download, RotateCw, Trash2, ChevronLeft, ChevronRight, ChevronFirst, ChevronLast, Search } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { sanitizeForTwitter } from "@/lib/twitterSanitizer";
 
 interface QueueRow {
@@ -64,6 +71,11 @@ export function ManualXPostingQueue() {
   const { toast } = useToast();
   const [rows, setRows] = useState<QueueRow[]>([]);
   const [history, setHistory] = useState<QueueRow[]>([]);
+  const [pendingTotal, setPendingTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState<number>(50);
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
@@ -89,13 +101,28 @@ export function ManualXPostingQueue() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+
+    let pendingQ = supabase
+      .from("holders_intel_post_queue")
+      .select(
+        "id, token_mint, symbol, name, market_cap, trigger_source, created_at, tweet_text, manual_status, manual_posted_at, manual_tweet_url, autopsy_slug, autopsy_url, autopsy_hero_image, dex_banner_url, decorated_banner_url, decoration_theme",
+        { count: "exact" }
+      )
+      .eq("manual_status", "pending")
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (search.trim()) {
+      const s = search.trim();
+      pendingQ = pendingQ.or(
+        `token_mint.ilike.%${s}%,symbol.ilike.%${s}%,name.ilike.%${s}%`
+      );
+    }
+
     const [pendingRes, historyRes] = await Promise.all([
-      supabase
-        .from("holders_intel_post_queue")
-        .select("id, token_mint, symbol, name, market_cap, trigger_source, created_at, tweet_text, manual_status, manual_posted_at, manual_tweet_url, autopsy_slug, autopsy_url, autopsy_hero_image, dex_banner_url, decorated_banner_url, decoration_theme")
-        .eq("manual_status", "pending")
-        .order("created_at", { ascending: false })
-        .limit(50),
+      pendingQ,
       supabase
         .from("holders_intel_post_queue")
         .select("id, token_mint, symbol, name, market_cap, trigger_source, created_at, tweet_text, manual_status, manual_posted_at, manual_tweet_url, autopsy_slug, autopsy_url, autopsy_hero_image, dex_banner_url, decorated_banner_url, decoration_theme")
@@ -108,14 +135,16 @@ export function ManualXPostingQueue() {
       toast({ title: "Failed to load queue", description: pendingRes.error.message, variant: "destructive" });
     } else {
       setRows((pendingRes.data || []) as QueueRow[]);
+      setPendingTotal(pendingRes.count || 0);
     }
     if (!historyRes.error) {
       setHistory((historyRes.data || []) as QueueRow[]);
     }
     setLoading(false);
-  }, [toast]);
+  }, [toast, page, pageSize, search]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { setPage(0); }, [pageSize, search]);
   useEffect(() => {
     if (!autoRefresh) return;
     const i = setInterval(load, 30000);
@@ -353,7 +382,9 @@ export function ManualXPostingQueue() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Badge variant="outline" className="bg-yellow-500/20 text-yellow-400">{rows.length} pending</Badge>
+          <Badge variant="outline" className="bg-yellow-500/20 text-yellow-400">
+            {pendingTotal.toLocaleString()} pending
+          </Badge>
           <Badge variant="outline" className="bg-green-500/20 text-green-400">{todayCounts.posted} posted today</Badge>
           <Badge variant="outline" className="bg-muted text-muted-foreground">{todayCounts.skipped} skipped today</Badge>
           <label className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer">
@@ -371,6 +402,75 @@ export function ManualXPostingQueue() {
           </Button>
           <Button onClick={composeMissing} size="sm" variant="default" disabled={loading || rows.every((r) => !!r.tweet_text)}>
             <Wand2 className="h-4 w-4 mr-1" /> Compose all missing
+          </Button>
+        </div>
+      </div>
+
+      {/* Search + pagination controls */}
+      <div className="flex flex-wrap items-center gap-2">
+        <form
+          onSubmit={(e) => { e.preventDefault(); setSearch(searchInput.trim()); }}
+          className="flex items-center gap-1"
+        >
+          <div className="relative">
+            <Search className="h-3.5 w-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search mint, symbol or name…"
+              className="pl-7 w-72 h-8"
+            />
+          </div>
+          <Button type="submit" size="sm" variant="outline">Search</Button>
+          {search && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => { setSearchInput(""); setSearch(""); }}
+            >
+              Clear
+            </Button>
+          )}
+        </form>
+
+        <div className="flex items-center gap-1 ml-auto">
+          <span className="text-xs text-muted-foreground">Per page</span>
+          <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+            <SelectTrigger className="w-20 h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="50">50</SelectItem>
+              <SelectItem value="100">100</SelectItem>
+              <SelectItem value="250">250</SelectItem>
+              <SelectItem value="500">500</SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="text-xs text-muted-foreground ml-2">
+            Page {page + 1} of {Math.max(1, Math.ceil(pendingTotal / pageSize))}
+          </span>
+          <Button size="sm" variant="outline" disabled={loading || page === 0} onClick={() => setPage(0)}>
+            <ChevronFirst className="h-4 w-4" />
+          </Button>
+          <Button size="sm" variant="outline" disabled={loading || page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={loading || page >= Math.ceil(pendingTotal / pageSize) - 1}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={loading || page >= Math.ceil(pendingTotal / pageSize) - 1}
+            onClick={() => setPage(Math.max(0, Math.ceil(pendingTotal / pageSize) - 1))}
+          >
+            <ChevronLast className="h-4 w-4" />
           </Button>
         </div>
       </div>

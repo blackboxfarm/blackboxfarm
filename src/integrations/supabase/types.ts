@@ -7832,16 +7832,24 @@ export type Database = {
       }
       holders_intel_post_queue: {
         Row: {
+          ai_snippet: string | null
           autopsy_hero_image: string | null
           autopsy_slug: string | null
           autopsy_triggered_at: string | null
           autopsy_triggered_by: string | null
           autopsy_url: string | null
+          banner_used_url: string | null
           created_at: string
           decorated_banner_url: string | null
           decoration_theme: string | null
           dex_banner_url: string | null
+          dust_count: number | null
+          dust_pct: number | null
           error_message: string | null
+          hashtags_line: string | null
+          health_grade: string | null
+          health_label: string | null
+          health_score: number | null
           id: string
           manual_posted_at: string | null
           manual_posted_by: string | null
@@ -7851,28 +7859,44 @@ export type Database = {
           market_cap: number | null
           name: string | null
           posted_at: string | null
+          posted_handle: string | null
+          real_holders: number | null
+          retail_count: number | null
           retry_count: number
           scheduled_at: string
+          serious_count: number | null
+          snapshot_label: string | null
           snapshot_slot: string | null
           status: string
           symbol: string | null
           token_mint: string
+          total_wallets: number | null
           trigger_comment: string | null
           trigger_source: string | null
+          tweet_composed_at: string | null
           tweet_id: string | null
           tweet_text: string | null
+          whales_count: number | null
         }
         Insert: {
+          ai_snippet?: string | null
           autopsy_hero_image?: string | null
           autopsy_slug?: string | null
           autopsy_triggered_at?: string | null
           autopsy_triggered_by?: string | null
           autopsy_url?: string | null
+          banner_used_url?: string | null
           created_at?: string
           decorated_banner_url?: string | null
           decoration_theme?: string | null
           dex_banner_url?: string | null
+          dust_count?: number | null
+          dust_pct?: number | null
           error_message?: string | null
+          hashtags_line?: string | null
+          health_grade?: string | null
+          health_label?: string | null
+          health_score?: number | null
           id?: string
           manual_posted_at?: string | null
           manual_posted_by?: string | null
@@ -7882,28 +7906,44 @@ export type Database = {
           market_cap?: number | null
           name?: string | null
           posted_at?: string | null
+          posted_handle?: string | null
+          real_holders?: number | null
+          retail_count?: number | null
           retry_count?: number
           scheduled_at: string
+          serious_count?: number | null
+          snapshot_label?: string | null
           snapshot_slot?: string | null
           status?: string
           symbol?: string | null
           token_mint: string
+          total_wallets?: number | null
           trigger_comment?: string | null
           trigger_source?: string | null
+          tweet_composed_at?: string | null
           tweet_id?: string | null
           tweet_text?: string | null
+          whales_count?: number | null
         }
         Update: {
+          ai_snippet?: string | null
           autopsy_hero_image?: string | null
           autopsy_slug?: string | null
           autopsy_triggered_at?: string | null
           autopsy_triggered_by?: string | null
           autopsy_url?: string | null
+          banner_used_url?: string | null
           created_at?: string
           decorated_banner_url?: string | null
           decoration_theme?: string | null
           dex_banner_url?: string | null
+          dust_count?: number | null
+          dust_pct?: number | null
           error_message?: string | null
+          hashtags_line?: string | null
+          health_grade?: string | null
+          health_label?: string | null
+          health_score?: number | null
           id?: string
           manual_posted_at?: string | null
           manual_posted_by?: string | null
@@ -7913,16 +7953,24 @@ export type Database = {
           market_cap?: number | null
           name?: string | null
           posted_at?: string | null
+          posted_handle?: string | null
+          real_holders?: number | null
+          retail_count?: number | null
           retry_count?: number
           scheduled_at?: string
+          serious_count?: number | null
+          snapshot_label?: string | null
           snapshot_slot?: string | null
           status?: string
           symbol?: string | null
           token_mint?: string
+          total_wallets?: number | null
           trigger_comment?: string | null
           trigger_source?: string | null
+          tweet_composed_at?: string | null
           tweet_id?: string | null
           tweet_text?: string | null
+          whales_count?: number | null
         }
         Relationships: []
       }

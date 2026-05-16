@@ -1,61 +1,118 @@
-# Family Intel Tab → New Allstar Registry Rewire
+## What I found in the DB right now
 
-## Current state
+| manual_status | rows | with `tweet_text` saved |
+|---|---:|---:|
+| pending | **160,874** | 1,455 |
+| posted_manual | 13 | 13 |
+| skipped_manual | 4 | 4 |
 
-- `FamilyDashboard` calls `family-graph-api` `action: 'list'` which reads `wallet_families` + members. No link back to the **Allstar Registry** row (tier, twitter handle, status, best mcap).
-- `FamilyMintFeed` reads `wallet_family_mint_events` only — ignores parallel inserts into `allstar_mint_alerts`.
-- No realtime: Registry edits (add/remove dev, retier) don't propagate; mint monitor inserts don't appear until manual refresh.
-- No tier/registry filter, no "discover now for these devs" trigger, no header KPIs sourced from Registry.
+So the "only 50 pending" you see is a **UI cap** — `ManualXPostingQueue.tsx` hard-codes `.limit(50)` on both the Pending and History lists. The real backlog is 160k+. Composed `tweet_text` is only present on ~1,455 rows because compose runs lazily (only when you click "Compose Missing"), so anything never reviewed never had its text stored.
 
-## Goals
+The number `15,612` you mentioned earlier was the older "posted to X" count from a different filter; full pending is much larger. We'll treat that as legacy noise and **start the archive clean going forward** as you asked.
 
-1. Family Intel views display data **joined with the Allstar Registry** (tier, X handle, status, best mcap).
-2. UI updates **live** when Registry, families, members, edges, or mints change.
-3. Operator can **trigger discovery** for filtered Registry rows from the tab.
-4. Mint feed shows the **union of `wallet_family_mint_events` + `allstar_mint_alerts`** (deduped on `mint_address`), matching the Mint Alerts tab.
+---
 
-## Implementation
+## Plan
 
-### 1. `family-graph-api` (edge fn) — enrich `list` action
-- Join `wallet_families.allstar_id` → `allstar_dev_registry` and return per-family: `tier`, `twitter_handle`, `status`, `best_mcap_achieved`, `best_token_symbol`.
-- Add optional filter params: `tier` (e.g. `T8`), `status`, `min_members`, `has_mints`.
-- Keep existing `family_id` / `seed_wallet` actions untouched.
+### 1. Save the FULL manual-X payload at compose time (not just `tweet_text`)
 
-### 2. `FamilyDashboard.tsx`
-- New columns: **Tier**, **X Handle** (links to `x.com/<handle>`), **Best $MC**.
-- Header KPIs (sourced from Registry counts): `Active Devs`, `Discovered Families`, `Coverage % (families ÷ active devs)`, `Unread Mints`.
-- Tier filter dropdown (T1–T9 + All) and "Has mints only" toggle, both routed as `family-graph-api` params.
-- "🔄 Discover now" button → invokes `family-discovery-engine` with `{ maxSeeds: 10 }` then `refetch()`.
-- Supabase Realtime subs on `wallet_families`, `wallet_family_members`, `allstar_dev_registry` → debounced `refetch()`.
+Add columns to `holders_intel_post_queue` so an archive row can be re-rendered exactly as it was posted, without re-running compose:
 
-### 3. `FamilyMintFeed.tsx`
-- Replace single-table query with parallel fetch:
-  - `wallet_family_mint_events` joined with `wallet_families(family_name, allstar_id)`
-  - `allstar_mint_alerts` for the same `creator_wallet`s
-- Merge + dedupe by `mint_address`, keep newest, attach Allstar tier + handle from registry.
-- Realtime subs on both tables → re-fetch.
-- Row click deep-links to `/super-admin?tab=allstars&sub=alerts&mint=<addr>` (matches the deep-link convention from System Alerts).
+- `tweet_composed_at` (timestamptz) — when text was generated
+- `ai_snippet` (text) — the AI one-liner (currently only inside `tweet_text`, will be stored standalone too)
+- `health_grade` (text) — e.g. `A`
+- `health_score` (int) — e.g. `89`
+- `health_label` (text) — e.g. `King!!`
+- `real_holders`, `total_wallets`, `whales_count`, `serious_count`, `retail_count`, `dust_count`, `dust_pct` (numerics) — the body stats
+- `snapshot_label` (text) — e.g. `May 14, 9:36 PM EST`
+- `hashtags_line` (text) — final hashtag line as posted
+- `banner_used_url` (text) — exact image URL attached (decorated or dex)
+- `posted_handle` (text, default `HoldersIntel`)
 
-### 4. `FamilyIntelTab.tsx`
-- Header row showing the same KPIs (compact) so they're visible in Dashboard, Graph, and Feed views.
-- Pass `registryFilter` (tier) state down so Mint Feed and Dashboard share the same lens.
+Then update `holders-intel-compose-preview` and `holders-intel-poster` so **every** compose writes the full structured payload (not just `tweet_text`). `tweet_text` stays as the canonical rendered string, the new columns are the render-from-DB source of truth.
 
-### 5. No DB schema changes
-- Reuse existing tables: `wallet_families`, `wallet_family_members`, `wallet_family_edges`, `wallet_family_mint_events`, `allstar_dev_registry`, `allstar_mint_alerts`.
-- Realtime publication: confirm `wallet_families`, `wallet_family_members`, `wallet_family_mint_events`, `allstar_mint_alerts`, `allstar_dev_registry` are in `supabase_realtime`. If any are missing, add via migration (one tiny SQL).
+### 2. Fix the "only 50 pending" UI
 
-## Files touched
+In `ManualXPostingQueue.tsx`:
+- Remove the hard `.limit(50)`.
+- Add proper pagination: page size selector **50 / 100 / 250 / 500**, prev / next, total-count badge ("160,874 pending"), and a search by mint or symbol/name (ILIKE).
+- History tab gets the same controls.
 
-- **Edit:** `supabase/functions/family-graph-api/index.ts` (enrich list action + filters)
-- **Edit:** `src/components/admin/allstar/FamilyDashboard.tsx` (columns, KPIs, filters, realtime, discover button)
-- **Edit:** `src/components/admin/allstar/FamilyMintFeed.tsx` (union query, realtime, deep-link)
-- **Edit:** `src/components/admin/allstar/FamilyIntelTab.tsx` (header KPIs, shared filter state)
-- **Possible migration:** add missing tables to `supabase_realtime` publication only if not present.
+### 3. New page: **📚 Token Archive** under Super-Admin → HoldersIntel
 
-## Open questions
+Route already exists at `/super-admin?tab=allstars&sub=...`; we add a new sub-tab `archive`.
 
-1. **Discover-now scope:** should the button respect the active tier filter (e.g. only T8/T9 devs), or always run the global `maxSeeds=10` rotation?
-2. **Dedupe rule for Mint Feed:** if a mint exists in both `wallet_family_mint_events` and `allstar_mint_alerts`, prefer the **family event** (richer evidence) or the **allstar alert** (canonical)? Default: allstar alert wins, family evidence shown as expandable detail.
-3. **KPI "Coverage %":** counted vs **all** active devs in Registry, or only devs with `best_tier >= T5`? Default: all active.
+Source: `holders_intel_post_queue WHERE manual_status='posted_manual' OR manual_tweet_url IS NOT NULL` (later we can flip the filter to "anything with `tweet_composed_at`" once compose runs auto).
 
-Reply **"Plan Approved"** (and answer the 3 questions if you have preferences) and I'll build it.
+Sort: `manual_posted_at DESC NULLS LAST, created_at DESC`.
+
+Controls:
+- Page size: 50 / 100 / 250 / 500
+- Pagination: ‹ First · Prev … Next · Last ›
+- Search: mint (full/partial) OR symbol/name (ILIKE)
+- Filter chips: `trigger_source` (allstar / dex-top / manual / bot-dm / …)
+
+### 4. Each archive row rendered as a **@HoldersIntel X post** (SS2 style)
+
+Reusable component `<HoldersIntelTweetCard row={...} />` that mimics the X "Post" detail view:
+
+```text
+┌──────────────────────────────────────────────┐
+│ [HI avatar] Holders Intel ✓                  │
+│             @HoldersIntel                    │
+│             ⓘ Automated by @blackbox_farm    │
+│                                              │
+│ 🔬 HOLDER INTEL: $WCM World Cup Meme         │
+│ 3CQ1JwUEcMsxWMev8pw2KxpfujE2CRe4FEVMsBm5pump │
+│ Health: A (89/100) 🆕 King!!                  │
+│ ✅ 6,157 Real Holders                         │
+│ 📊 7,999 Total Wallets                        │
+│ 📸 Snapshot at May 14, 9:36 PM EST ⏱         │
+│ 🐋 0 Whales (>$1K)                            │
+│ 😎 10 Serious ($200-$1K)                      │
+│ 🔢 6,146 Retail ($1-$199)                     │
+│ 💨 1,842 Dust (<$1) = 23% Dust                │
+│ 🧬                                            │
+│ 📣 t.me/HoldersIntel                          │
+│ FULL Holder Intel👇 blackbox.farm/holders?…   │
+│                                              │
+│ #Solana #CryptoTools #HoldersIntel            │
+│ @blackbox_farm                                │
+│                                              │
+│ [banner image, 2:1]                           │
+│                                              │
+│ 10:25 PM · May 14, 2026 · Manual post         │
+│ [↗ View original on X]  [🔗 Bubblemap]         │
+└──────────────────────────────────────────────┘
+```
+
+Render strategy:
+- If row has the new structured columns → render from them (exact reproduction).
+- Else fall back to parsing `tweet_text`.
+- Else show a "Not yet composed" placeholder with a one-click "Compose & Save" button (calls `holders-intel-compose-preview`).
+
+Styling: dark X-card look, white `@HoldersIntel` header, blue verified badge, monospace mint, hashtag color `text-sky-400`, banner aspect 2:1.
+
+### 5. Going-forward auto-save (no backfill required)
+
+- Trigger `holders-intel-compose-preview` automatically on every new pending row from `holders-intel-scheduler` (small batch every cron tick: 25 rows / minute) so the archive populates organically.
+- Historical 160k rows without composed text are **left as-is**; you said start fresh.
+
+---
+
+## Files I'll touch
+
+- **Migration**: add columns listed above to `holders_intel_post_queue`.
+- `supabase/functions/holders-intel-compose-preview/index.ts` — write the full structured payload alongside `tweet_text`.
+- `supabase/functions/holders-intel-poster/index.ts` — same payload on auto-poster path.
+- `supabase/functions/holders-intel-scheduler/index.ts` — small auto-compose batch each tick.
+- `src/components/admin/holders-intel/ManualXPostingQueue.tsx` — remove 50 cap, add pagination + search + true total count.
+- **New** `src/components/admin/holders-intel/TokenArchive.tsx` — archive page with pagination/search/filters.
+- **New** `src/components/admin/holders-intel/HoldersIntelTweetCard.tsx` — X-style render card.
+- `src/components/admin/tabs/HoldersIntelTab.tsx` — wire new "📚 Archive" sub-tab.
+
+No frontend public-page changes, no Telegram changes, no AI cost (compose already uses cached AI snippet).
+
+---
+
+Reply **Plan Approved** to ship it, or tell me what to change.
