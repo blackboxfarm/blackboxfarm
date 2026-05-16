@@ -22,7 +22,6 @@ import { DevTeamForewardButton } from '@/components/layout/DevTeamForewardButton
 const BASE_NAV_ITEMS = [
   { label: 'Overview', path: '/' },
   { label: 'Join!', path: '/subscriptions' },
-  // { label: 'Live Feed', path: '/feed' },  // Hidden temporarily — re-enable ~6h from 2026-04-15 15:45 UTC
   { label: 'Holder Analysis', path: '/holders' },
   { label: 'Bubble Map', path: '/bubblepromo' },
   { label: 'Telegram Bot', path: '/tgbot' },
@@ -53,6 +52,9 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
   const NAV_ITEMS = intelPublic
     ? [...BASE_NAV_ITEMS, { label: 'Intel Briefings', path: '/intel' }]
     : BASE_NAV_ITEMS;
+  const FINAL_NAV_ITEMS = isSuperAdmin
+    ? [...NAV_ITEMS, { label: '🔴 Live', path: '/feed' }]
+    : NAV_ITEMS;
   const [authModalTab, setAuthModalTab] = useState<'signin' | 'signup'>('signin');
 
   return (
@@ -153,7 +155,7 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between gap-2">
             <nav className="flex items-center gap-1 overflow-x-auto py-1 scrollbar-hide flex-1 min-w-0">
-              {NAV_ITEMS.map((item) => {
+              {FINAL_NAV_ITEMS.map((item) => {
                 const isActive = location.pathname === item.path;
                 return (
                   <Link
