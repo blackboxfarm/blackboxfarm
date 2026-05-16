@@ -1,0 +1,2 @@
+DELETE FROM allstar_mint_alerts WHERE token_mint IN ('vH2KDQkV9UQz7zccbBpzEWUQHxxGNWZSfD7mDCjgjGb','KMNo3nJsBXfcpJTVhZcXLW7RmTwTt4GVFE7suUBo9sS','AbhBSEaQWgRXAKoKNRrH68iVEYzbYoZtfFSgZ3iKSbHk');
+DELETE FROM wallet_family_mint_events WHERE mint_address IN ('vH2KDQkV9UQz7zccbBpzEWUQHxxGNWZSfD7mDCjgjGb','KMNo3nJsBXfcpJTVhZcXLW7RmTwTt4GVFE7suUBo9sS','AbhBSEaQWgRXAKoKNRrH68iVEYzbYoZtfFSgZ3iKSbHk');
