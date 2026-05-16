@@ -588,3 +588,6 @@ verify_jwt = false
 
 [functions.holders-intel-auto-archive]
 verify_jwt = false
+
+[functions.holders-intel-archive-batch]
+verify_jwt = false
