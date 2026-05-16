@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Check, RefreshCw, Undo2, X, ArrowRight } from "lucide-react";
+import { Check, RefreshCw, X } from "lucide-react";
 import { HoldersIntelTweetCard, ArchiveRow } from "./HoldersIntelTweetCard";
 
 type ProposalStatus = "pending" | "accepted" | "rejected" | "applied" | "reverted";
@@ -132,10 +132,9 @@ export function BackfillReview() {
     setRecentPosts((data as any) || []);
   }, []);
 
-  useEffect(() => { loadBatch(); loadCounts(); loadRecentPosts(); }, [loadBatch, loadCounts, loadRecentPosts]);
-
-  // Auto-fetch from TG on mount if nothing pending — no buttons required.
+  // Auto-run on mount: load batch + counts + recents, then auto-fetch from TG if empty
   const [autoTried, setAutoTried] = useState(false);
+  useEffect(() => { loadBatch(); loadCounts(); loadRecentPosts(); }, [loadBatch, loadCounts, loadRecentPosts]);
   useEffect(() => {
     if (autoTried || loading || generating) return;
     if (batch.length === 0 && counts.pending === 0) {
@@ -152,11 +151,6 @@ export function BackfillReview() {
         body: { mode: "dryrun", pages: 3, pageSize: 100 },
       });
       if (error) throw error;
-      const d: any = data || {};
-      toast.success("TG fetch complete", {
-        description: `Scanned ${d.msgsScanned ?? 0} msgs · ${d.proposalsWritten ?? 0} new proposals written · ${d.skippedNoMatch ?? 0} no-match · ${d.skippedNoStats ?? 0} no-stats · ${d.skippedDuplicate ?? 0} dup`,
-        duration: 20000,
-      });
       await loadBatch();
       await loadCounts();
     } catch (e: any) {
@@ -257,65 +251,15 @@ export function BackfillReview() {
 
   return (
     <div className="space-y-4">
-      {/* Sticky header */}
-      <div className="sticky top-0 z-10 -mx-2 px-2 py-3 bg-background/95 backdrop-blur border-b border-border/60">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h3 className="text-base font-semibold">🧪 Backfill Review — Side-by-Side</h3>
-            <p className="text-xs text-muted-foreground">
-              Loaded {batch.length} of {counts.pending} pending. Decide each, then{" "}
-              <b>Save batch</b>: accepted = applied to archive, rejected = logged with your feedback.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary">pending {counts.pending}</Badge>
-            <Badge className="bg-emerald-600 hover:bg-emerald-600">applied {counts.applied}</Badge>
-            <Badge variant="outline">rejected {counts.rejected}</Badge>
-            <Badge variant="outline">reverted {counts.reverted}</Badge>
-            <Button size="sm" variant="outline" onClick={() => { loadBatch(); loadCounts(); }} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} /> Refresh
-            </Button>
-            <Button size="sm" onClick={generateFromTG} disabled={generating} className="bg-sky-600 hover:bg-sky-700">
-              {generating ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : "🔭"} Fetch from TG
-            </Button>
-            <Button size="sm" variant="destructive" onClick={revertLastApplied}>
-              <Undo2 className="h-4 w-4 mr-1" /> Revert last {BATCH_SIZE}
-            </Button>
-          </div>
+      {(loading || generating) && batch.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground text-sm">
+          <RefreshCw className="h-4 w-4 mr-2 inline animate-spin" />
+          {generating ? "Fetching from Telegram…" : "Loading…"}
         </div>
-
-        <div className="mt-2 flex items-center gap-2">
-          <Badge variant="outline" className="text-emerald-500 border-emerald-500/40">
-            ✓ {acceptedCount} accepted
-          </Badge>
-          <Badge variant="outline" className="text-red-400 border-red-400/40">
-            ✗ {rejectedCount} rejected
-          </Badge>
-          <Badge variant="secondary">{batch.length - acceptedCount - rejectedCount} undecided</Badge>
-          <div className="ml-auto flex gap-2">
-            <Button size="sm" onClick={saveBatch} disabled={!Object.keys(decisions).length}>
-              <Check className="h-4 w-4 mr-1" /> Save batch ({Object.keys(decisions).length})
-            </Button>
-            <Button size="sm" variant="outline" onClick={loadBatch}>
-              Skip & load next 5 <ArrowRight className="h-4 w-4 ml-1" />
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {loading && batch.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">Loading…</div>
       ) : batch.length === 0 ? (
         <div className="space-y-4">
-          <div className="rounded-lg border border-border/60 bg-muted/20 p-4 text-sm space-y-2">
-            <div className="font-semibold">No Before/After proposals staged yet.</div>
-            <div className="text-xs text-muted-foreground">
-              Below are the <b>{recentPosts.length}</b> most recent archive posts as they currently look.
-              To stage Before/After comparisons, click <b>🔭 Fetch from TG</b> in the header above.
-            </div>
-            <Button onClick={generateFromTG} disabled={generating} size="sm" className="bg-sky-600 hover:bg-sky-700">
-              {generating ? <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Fetching…</> : <>🔭 Fetch proposals from Telegram</>}
-            </Button>
+          <div className="text-xs text-muted-foreground px-1">
+            No Before/After proposals available. Showing {recentPosts.length} most recent archive posts.
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {recentPosts.map((row) => (
@@ -330,6 +274,15 @@ export function BackfillReview() {
         </div>
       ) : (
         <div className="space-y-8">
+          {Object.keys(decisions).length > 0 && (
+            <div className="sticky top-0 z-10 -mx-2 px-2 py-2 bg-background/95 backdrop-blur border-b border-border/60 flex items-center gap-2">
+              <Badge variant="outline" className="text-emerald-500 border-emerald-500/40">✓ {acceptedCount}</Badge>
+              <Badge variant="outline" className="text-red-400 border-red-400/40">✗ {rejectedCount}</Badge>
+              <Button size="sm" className="ml-auto" onClick={saveBatch}>
+                <Check className="h-4 w-4 mr-1" /> Save ({Object.keys(decisions).length})
+              </Button>
+            </div>
+          )}
           {batch.map((p, idx) => {
             const beforeRow = buildRow(p, "before");
             const afterRow = buildRow(p, "after");
