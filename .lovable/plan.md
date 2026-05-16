@@ -1,34 +1,43 @@
-# Token Archive — Standalone Page
+# Backfill Review — Side-by-Side Card Comparison
 
-Per memory, this requires "Plan Approved" before any code changes.
+## Problem
+Current Backfill Review shows a confusing field-level diff table. You want to **see** what changes — full @HoldersIntel card rendered twice (Before / After) so you can eyeball it like a real post.
 
-## Goal
-Expose the existing Token Archive (currently a Super Admin sub-tab) as a standalone page at `/token-archive` so the full 15,612-token list is browsable outside the admin panel.
+## What I'll build
 
-## What exists already
-- `src/components/admin/holders-intel/TokenArchive.tsx` — paginated archive (50/100/250/500), search by mint/name/symbol, trigger-source filter, ordered most-recent-first
-- `src/components/admin/holders-intel/HoldersIntelTweetCard.tsx` — renders each row as an @HoldersIntel X-style card
-- Data source: `holders_intel_post_queue` (posted rows + `manual_tweet_url`)
+Replace the existing `BackfillReview.tsx` queue UI with a **batch reviewer** that pulls the next **5 pending proposals** and shows each as:
 
-## Changes
+```text
+┌──────────────── Proposal 1 of 5 ────────────────┐
+│  1a — BEFORE (current archive)                   │
+│  [full HoldersIntelTweetCard rendered]           │
+│                                                  │
+│  1b — AFTER (TG-parsed)                          │
+│  [full HoldersIntelTweetCard rendered]           │
+│                                                  │
+│  Changed fields: real_holders, dust_pct, grade   │
+│  [✅ Approve]  [❌ Reject]                       │
+│  Feedback: [______________________________]      │
+└──────────────────────────────────────────────────┘
+```
 
-1. **New page** `src/pages/TokenArchive.tsx`
-   - Wraps the existing `<TokenArchive />` component inside `<SiteLayout>`
-   - Adds H1 "Token Archive", short intro, SEO title/meta/canonical
-   - Each card's "View on X" button links to `manual_tweet_url` (already wired in `HoldersIntelTweetCard`)
+Stacked vertically — 5 of these per page. Sticky header shows progress (`2/5 reviewed`) and a final **Apply Approved** button.
 
-2. **Route** in `src/App.tsx`
-   - Add `<Route path="/token-archive" element={<TokenArchive />} />`
+## Technical details
 
-3. **Nav** in `src/components/layout/SiteLayout.tsx`
-   - Add `{ label: 'Token Archive', path: '/token-archive' }` to `BASE_NAV_ITEMS` (public, visible to everyone)
+1. **`BackfillReview.tsx`** — rewrite:
+   - Fetch `holders_intel_backfill_proposals` where `status='pending'` limit 5, order oldest first
+   - For each row, build two `ArchiveRow` objects (before from `before_json`, after = before merged with `after_json`) and render `<HoldersIntelTweetCard row={...} />` twice side-by-side (md:grid-cols-2, stacks on mobile)
+   - Auto-compute `changed_fields` list (highlighted chip row between cards)
+   - Per-card actions: Approve (status='accepted'), Reject (status='rejected', optional `reviewer_feedback` text)
+   - Bottom bar: "Apply N Approved to Archive" (calls existing apply path), "Load Next 5", counts of accepted/rejected/pending in current batch
+
+2. **Migration** — add `reviewer_feedback text` column to `holders_intel_backfill_proposals` so rejection reasons feed back into parser tuning.
+
+3. **No changes** to the edge function, parser, or archive write path — only the review UX.
 
 ## Out of scope
-- No DB changes (schema already has the required columns from the prior migration)
-- No edge function changes
-- No backfill of the ~159k legacy rows with no composed `tweet_text` — archive shows only posted rows with content, as designed
+- Parser improvements (separate pass after we see what users reject)
+- Bulk-accept-all (kept but de-emphasized; per-item is the point)
 
-## Risks
-- Public exposure of `holders_intel_post_queue` posted rows — confirm RLS allows anon SELECT on `manual_status='posted_manual'` rows, or route reads through an edge function. **Need your call:** public anon read, or require login?
-
-Reply **Plan Approved** to proceed (and answer the public-vs-login question).
+Reply **Plan Approved** to proceed.
