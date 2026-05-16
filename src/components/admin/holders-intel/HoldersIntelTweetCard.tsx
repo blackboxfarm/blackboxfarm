@@ -147,7 +147,7 @@ export function HoldersIntelTweetCard({ row }: { row: ArchiveRow }) {
             </a>
           </div>
           <div className="pt-2 text-sky-400">{hashtags}</div>
-          <div className="text-sky-400">@blackbox_farm</div>
+          <div className="text-sky-400">@blackbox_farm @HoldersIntel @Dead_Tokens</div>
         </div>
       ) : (
         <pre className="whitespace-pre-wrap break-words font-sans text-[15px] leading-[1.45] text-zinc-100">
