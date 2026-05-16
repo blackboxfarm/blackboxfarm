@@ -1,5 +1,6 @@
 import React from "react";
 import { BadgeCheck, ExternalLink } from "lucide-react";
+import holdersIntelAvatar from "@/assets/holders-intel-avatar.jpg";
 
 export interface ArchiveRow {
   id: string;
@@ -76,9 +77,11 @@ export function HoldersIntelTweetCard({ row }: { row: ArchiveRow }) {
     <article className="rounded-2xl border border-border/60 bg-black text-zinc-100 p-5 max-w-2xl mx-auto shadow-lg">
       {/* Header: avatar + handle */}
       <header className="flex items-start gap-3 mb-3">
-        <div className="h-11 w-11 rounded-full bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shrink-0 ring-1 ring-sky-400/40">
-          HI
-        </div>
+        <img
+          src={holdersIntelAvatar}
+          alt="Holders Intel avatar"
+          className="h-11 w-11 rounded-full object-cover shrink-0 ring-1 ring-sky-400/40"
+        />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1 font-semibold text-zinc-50">
             Holders Intel
