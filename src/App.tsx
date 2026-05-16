@@ -84,6 +84,7 @@ const TelegramAuth = lazy(() => import("./pages/TelegramAuth"));
 const Autopsies = lazy(() => import("./pages/Autopsies"));
 const AutopsyArticle = lazy(() => import("./pages/AutopsyArticle"));
 const AutopsyRaw = lazy(() => import("./pages/AutopsyRaw"));
+const TokenArchive = lazy(() => import("./pages/TokenArchive"));
 // AutopsyQueue page removed — Autopsies admin lives inside the Super Admin Autopsies tab.
 
 const queryClient = new QueryClient();
@@ -176,6 +177,7 @@ const App = () => {
                       {/* Legacy admin route → bounce to Super Admin Autopsies tab */}
                       <Route path="/super-admin/autopsy-queue" element={<Navigate to="/super-admin?tab=autopsies" replace />} />
                       <Route path="/tester" element={<TesterFeedbackPage />} />
+                      <Route path="/token-archive" element={<SuperAdminRoute><TokenArchive /></SuperAdminRoute>} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>
