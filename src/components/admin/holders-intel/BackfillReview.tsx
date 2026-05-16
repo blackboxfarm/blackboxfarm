@@ -134,6 +134,17 @@ export function BackfillReview() {
 
   useEffect(() => { loadBatch(); loadCounts(); loadRecentPosts(); }, [loadBatch, loadCounts, loadRecentPosts]);
 
+  // Auto-fetch from TG on mount if nothing pending — no buttons required.
+  const [autoTried, setAutoTried] = useState(false);
+  useEffect(() => {
+    if (autoTried || loading || generating) return;
+    if (batch.length === 0 && counts.pending === 0) {
+      setAutoTried(true);
+      generateFromTG();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batch.length, counts.pending, loading, generating, autoTried]);
+
   async function generateFromTG() {
     setGenerating(true);
     try {
