@@ -152,7 +152,7 @@ async function fetchChannelPage(opts: {
     for (const m of raw) {
       const id = Number(m.id);
       if (oldestId == null || id < oldestId) oldestId = id;
-      const text: string = m.text || "";
+      const text: string = (m?.text ?? m?.caption ?? m?.message ?? "") as string;
       if (!text) continue;
       const date = m.date ? new Date(m.date * 1000).toISOString() : new Date().toISOString();
       parsed.push(parseMessage(text, id, date));
@@ -199,21 +199,39 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // SAMPLE MODE — just dump raw TG text so we can fix the parser
+    // SAMPLE MODE — dump raw TG message objects so we can fix the parser
     if (mode === "sample") {
-      const page = await fetchChannelPage({
-        sessionString, apiId, apiHash, channel,
-        limit: Math.max(sampleN, 20),
-        offsetId,
-      });
-      const samples = page.messages.slice(0, sampleN).map((m) => ({
-        messageId: m.messageId,
-        date: m.date,
-        mintFound: m.mint,
-        rawText: m.raw,
-      }));
+      const mtcuteSession = convertFromTelethonSession(sessionString);
+      const client = new TelegramClient({ apiId, apiHash, storage: new MemoryStorage() });
+      let debugSamples: any[] = [];
+      let oldestId: number | null = null;
+      try {
+        await client.importSession(mtcuteSession);
+        await client.connect();
+        const params: any = { limit: Math.max(sampleN, 20) };
+        if (offsetId) params.offsetId = offsetId;
+        const raw: any[] = await client.getHistory(channel, params);
+        for (const m of raw) {
+          const id = Number(m?.id);
+          if (oldestId == null || id < oldestId) oldestId = id;
+        }
+        debugSamples = raw.slice(0, sampleN).map((m: any) => {
+          const txt = m?.text ?? m?.caption ?? m?.message ?? "";
+          const date = m?.date ? new Date(m.date * 1000).toISOString() : null;
+          return {
+            messageId: Number(m?.id),
+            date,
+            textLen: typeof txt === "string" ? txt.length : 0,
+            rawText: typeof txt === "string" ? txt.slice(0, 2000) : "",
+            keys: Object.keys(m || {}).slice(0, 40),
+            mediaType: m?.media?._ ?? m?.media?.type ?? null,
+          };
+        });
+      } finally {
+        try { await client.close(); } catch { /* ignore */ }
+      }
       return new Response(JSON.stringify({
-        ok: true, mode, samples, nextOffsetId: page.oldestId,
+        ok: true, mode, samples: debugSamples, nextOffsetId: oldestId,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
