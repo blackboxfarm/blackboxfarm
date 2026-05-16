@@ -108,15 +108,7 @@ export function HoldersIntelTweetCard({ row }: { row: ArchiveRow }) {
           </div>
           <div>
             Health: {grade}
-            {score != null ? ` (${score}/100)` : ""}{" "}
-            {label && (
-              <span className="inline-flex items-center gap-1">
-                <span className="px-1.5 py-0.5 rounded bg-sky-600/20 text-sky-300 text-xs font-bold">
-                  NEW
-                </span>{" "}
-                {label}
-              </span>
-            )}
+            {score != null ? ` (${score}/100)` : ""}
           </div>
           <div>✅ {fmt(row.real_holders)} Real Holders</div>
           <div>📊 {fmt(row.total_wallets)} Total Wallets</div>
