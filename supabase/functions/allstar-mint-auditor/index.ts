@@ -452,7 +452,6 @@ async function auditAllstarFamily(
 // ─── STEP 3: Create alerts + notifications (multi-channel) ───
 
 const ALERT_EMAIL = 'wilsondavid@live.ca';
-const DRRICKGEM_CHAT_ID = 5549703183;
 
 async function createAllstarAlert(
   supabase: any,
@@ -540,7 +539,7 @@ async function createAllstarAlert(
     .eq('id', allstar.id);
 
   // ──────────────────────────────────────────────
-  // CHANNEL 1: BlackBox Telegram Group (broadcast)
+  // CHANNELS 1+2: BlackBox group + DrRick DM (unified, deduped)
   // ──────────────────────────────────────────────
   try {
     const tgMessage = [
@@ -572,29 +571,6 @@ async function createAllstarAlert(
       `💡 _This dev previously launched $ ${allstar.best_token_symbol} to ${mcapLabel}. Move fast._`,
     ].filter(Boolean).join('\n');
 
-    // Check suspension
-    let suspended = false;
-    try {
-      const { data: s } = await supabase.from('system_settings').select('value').eq('key', 'telegram_broadcast_suspended').maybeSingle();
-      suspended = s?.value === true;
-    } catch {}
-
-    if (!suspended) {
-      const { broadcastToBlackBox } = await import('../_shared/telegram-broadcast.ts');
-      const results = await broadcastToBlackBox(supabase, tgMessage);
-      const ok = results.filter(r => r.success).length;
-      console.log(`[allstar] ✓ BlackBox TG alert sent (${ok} targets)`);
-    } else {
-      console.log('[allstar] TG broadcasts suspended, skipping BlackBox');
-    }
-  } catch (e) {
-    console.warn('[allstar] BlackBox TG alert failed:', e);
-  }
-
-  // ──────────────────────────────────────────────
-  // CHANNEL 2: Direct MTProto DM to @DrRick_gem (hardcoded ID: 5549703183)
-  // ──────────────────────────────────────────────
-  try {
     const dmMessage = [
       `🚀 ALLSTAR MINT: $ ${ticker}`,
       `T${allstar.best_tier} dev ${devHandle}`,
@@ -606,12 +582,15 @@ async function createAllstarAlert(
       `DexScreener: ${dexUrl}`,
     ].join('\n');
 
-    await supabase.functions.invoke('telegram-mtproto-auth', {
-      body: { action: 'send_message', chatId: DRRICKGEM_CHAT_ID, message: dmMessage },
+    const { sendMintAlert } = await import('../_shared/mint-alert-notify.ts');
+    await sendMintAlert(supabase, {
+      tokenMint: mintAddr,
+      blackboxMessage: tgMessage,
+      drrickMessage: dmMessage,
+      sourceFunction: 'allstar-mint-auditor',
     });
-    console.log(`[allstar] ✓ DM sent to DrRick_gem (${DRRICKGEM_CHAT_ID})`);
   } catch (e) {
-    console.warn('[allstar] DM to DrRick_gem failed:', e);
+    console.warn('[allstar] mint-alert notify failed:', e);
   }
 
   // ──────────────────────────────────────────────
