@@ -900,7 +900,25 @@ Deno.serve(withRunLog('holders-intel-poster', async (req) => {
       // Post tweet
       const tweetResult = await postTweet(tweetText, supabaseUrl, anonKey, manualOverride);
       
-      // Update queue with success
+      // If X posting is paused/skipped, do NOT mark as posted — that creates
+      // false positives with tweet_id=null and no X link. Mark as skipped
+      // with a clear reason so the row can be re-queued when X comes back.
+      if (tweetResult?.skipped || !tweetResult?.tweetId) {
+        await supabase
+          .from('holders_intel_post_queue')
+          .update({
+            status: 'skipped',
+            error_message: tweetResult?.paused
+              ? 'X posting paused (account suspended) — no tweet sent'
+              : 'Tweet returned no tweet_id — not marked posted',
+          })
+          .eq('id', item.id);
+        console.warn(`[poster] Tweet not actually posted for ${item.symbol} (paused=${!!tweetResult?.paused}); marked skipped instead of posted`);
+        results.push({ symbol: item.symbol, action: 'skipped', reason: tweetResult?.paused ? 'x_posting_paused' : 'no_tweet_id' });
+        continue;
+      }
+
+      // Update queue with success — only when we have a real tweet_id
       await supabase
         .from('holders_intel_post_queue')
         .update({
