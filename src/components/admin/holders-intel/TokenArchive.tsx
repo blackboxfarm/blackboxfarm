@@ -30,6 +30,8 @@ export function TokenArchive() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [triggerFilter, setTriggerFilter] = useState<string>("all");
+  const [backfillBusy, setBackfillBusy] = useState(false);
+  const [backfillOffset, setBackfillOffset] = useState<number | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -83,6 +85,32 @@ export function TokenArchive() {
     [page, totalPages]
   );
 
+  async function runBackfill(dryRun: boolean) {
+    setBackfillBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("backfill-archive-from-tg", {
+        body: {
+          dryRun,
+          pages: 5,
+          pageSize: 100,
+          offsetId: backfillOffset ?? undefined,
+        },
+      });
+      if (error) throw error;
+      const d: any = data || {};
+      setBackfillOffset(d.nextOffsetId ?? null);
+      toast({
+        title: dryRun ? "TG backfill — dry run" : "TG backfill — applied",
+        description: `scanned ${d.msgsScanned}, proposals ${d.proposals}, updated ${d.updated}, skipped noMint=${d.skippedNoMint} noMatch=${d.skippedNoMatch} noStats=${d.skippedNoStats}. nextOffset=${d.nextOffsetId ?? "—"}`,
+      });
+      if (!dryRun) await load();
+    } catch (e: any) {
+      toast({ title: "Backfill failed", description: e?.message || String(e), variant: "destructive" });
+    } finally {
+      setBackfillBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -96,6 +124,24 @@ export function TokenArchive() {
           <Badge variant="outline" className="bg-green-500/20 text-green-400">
             {total.toLocaleString()} archived
           </Badge>
+          <Button onClick={() => runBackfill(true)} size="sm" variant="outline" disabled={backfillBusy}>
+            {backfillBusy ? "Working…" : "TG Backfill (dry-run)"}
+          </Button>
+          <Button onClick={() => runBackfill(false)} size="sm" variant="default" disabled={backfillBusy}>
+            {backfillBusy ? "Working…" : "TG Backfill (apply)"}
+          </Button>
+          {backfillOffset != null && (
+            <Badge variant="outline" className="text-xs">
+              next offset: {backfillOffset}
+              <button
+                className="ml-2 underline opacity-70 hover:opacity-100"
+                onClick={() => setBackfillOffset(null)}
+                type="button"
+              >
+                reset
+              </button>
+            </Badge>
+          )}
           <Button onClick={load} size="sm" variant="outline" disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} />
             Refresh
