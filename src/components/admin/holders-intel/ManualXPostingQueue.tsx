@@ -406,6 +406,75 @@ export function ManualXPostingQueue() {
         </div>
       </div>
 
+      {/* Search + pagination controls */}
+      <div className="flex flex-wrap items-center gap-2">
+        <form
+          onSubmit={(e) => { e.preventDefault(); setSearch(searchInput.trim()); }}
+          className="flex items-center gap-1"
+        >
+          <div className="relative">
+            <Search className="h-3.5 w-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search mint, symbol or name…"
+              className="pl-7 w-72 h-8"
+            />
+          </div>
+          <Button type="submit" size="sm" variant="outline">Search</Button>
+          {search && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => { setSearchInput(""); setSearch(""); }}
+            >
+              Clear
+            </Button>
+          )}
+        </form>
+
+        <div className="flex items-center gap-1 ml-auto">
+          <span className="text-xs text-muted-foreground">Per page</span>
+          <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+            <SelectTrigger className="w-20 h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="50">50</SelectItem>
+              <SelectItem value="100">100</SelectItem>
+              <SelectItem value="250">250</SelectItem>
+              <SelectItem value="500">500</SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="text-xs text-muted-foreground ml-2">
+            Page {page + 1} of {Math.max(1, Math.ceil(pendingTotal / pageSize))}
+          </span>
+          <Button size="sm" variant="outline" disabled={loading || page === 0} onClick={() => setPage(0)}>
+            <ChevronFirst className="h-4 w-4" />
+          </Button>
+          <Button size="sm" variant="outline" disabled={loading || page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={loading || page >= Math.ceil(pendingTotal / pageSize) - 1}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={loading || page >= Math.ceil(pendingTotal / pageSize) - 1}
+            onClick={() => setPage(Math.max(0, Math.ceil(pendingTotal / pageSize) - 1))}
+          >
+            <ChevronLast className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
       {loading && rows.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">Loading queue…</div>
       ) : rows.length === 0 ? (
