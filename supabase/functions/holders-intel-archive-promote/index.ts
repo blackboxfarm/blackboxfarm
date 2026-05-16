@@ -65,6 +65,29 @@ Deno.serve(async (req) => {
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || serviceKey;
     const supabase = createClient(supabaseUrl, serviceKey);
 
+    const authHeader = req.headers.get("Authorization") || "";
+    const jwt = authHeader.replace(/^Bearer\s+/i, "").trim();
+    if (!jwt) {
+      return new Response(JSON.stringify({ error: "Authentication required" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { data: userData, error: userErr } = await supabase.auth.getUser(jwt);
+    if (userErr || !userData?.user?.id) {
+      return new Response(JSON.stringify({ error: "Invalid session" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { data: isSuperAdmin, error: adminErr } = await supabase.rpc("is_super_admin", { _user_id: userData.user.id });
+    if (adminErr || isSuperAdmin !== true) {
+      return new Response(JSON.stringify({ error: "Super Admin required" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     let query = supabase
       .from("holders_intel_post_queue")
       .select("id, token_mint, symbol, name, created_at, tweet_text, dex_banner_url, decorated_banner_url, banner_used_url")
