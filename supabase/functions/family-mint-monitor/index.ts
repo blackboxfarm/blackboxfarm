@@ -328,7 +328,7 @@ Deno.serve(withRunLog('family-mint-monitor', async (req) => {
             notification_type: 'family_mint_detected', title: mintAlertTitle, message: mintAlertMsg, metadata: mintAlertMeta,
           });
 
-          // ═══ Telegram BlackBox Broadcast ═══
+          // ═══ Unified mint-alert notify (BlackBox group + DrRick DM, deduped) ═══
           const eventLabel = det.eventType.replace(/_/g, ' ').toLowerCase();
           const confidenceEmoji = confidence >= 90 ? '🔴' : confidence >= 70 ? '🟠' : '🟡';
           const tgMintMessage = [
@@ -348,17 +348,26 @@ Deno.serve(withRunLog('family-mint-monitor', async (req) => {
             `⏰ ${new Date().toLocaleString('en-US', { timeZone: 'UTC' })} UTC`,
           ].join('\n');
 
+          const drrickFamilyMsg = [
+            `🚨 FAMILY MINT (${eventLabel})`,
+            `Family: ${familyData?.family_name || 'Unknown'}`,
+            `Token: ${det.mintAddress.slice(0,8)}…${det.mintAddress.slice(-4)}`,
+            `Via: ${det.launchpad || 'unknown'}`,
+            `Confidence: ${confidence}%`,
+            ``,
+            `https://solscan.io/token/${det.mintAddress}`,
+          ].join('\n');
+
           try {
-            const { data: tgTargets } = await supabase
-              .from('telegram_message_targets').select('id, chat_id, label, resolved_name').eq('label', 'BLACKBOX');
-            for (const target of (tgTargets || [])) {
-              await supabase.functions.invoke('telegram-mtproto-auth', {
-                body: { action: 'send_message', chatId: Number(target.chat_id), message: tgMintMessage },
-              });
-              await supabase.from('telegram_message_targets').update({ last_used_at: new Date().toISOString() }).eq('id', target.id);
-            }
+            const { sendMintAlert } = await import('../_shared/mint-alert-notify.ts');
+            await sendMintAlert(supabase, {
+              tokenMint: det.mintAddress,
+              blackboxMessage: tgMintMessage,
+              drrickMessage: drrickFamilyMsg,
+              sourceFunction: 'family-mint-monitor',
+            });
           } catch (tgErr) {
-            console.warn('[FamilyMintMonitor] TG broadcast failed:', tgErr);
+            console.warn('[FamilyMintMonitor] mint-alert notify failed:', tgErr);
           }
 
           mintsFound++;

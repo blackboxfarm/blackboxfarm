@@ -654,6 +654,7 @@ export type Database = {
           is_acknowledged: boolean | null
           launchpad: string | null
           metadata: Json | null
+          tg_broadcasted_at: string | null
           token_mint: string
           token_name: string | null
           token_symbol: string | null
@@ -673,6 +674,7 @@ export type Database = {
           is_acknowledged?: boolean | null
           launchpad?: string | null
           metadata?: Json | null
+          tg_broadcasted_at?: string | null
           token_mint: string
           token_name?: string | null
           token_symbol?: string | null
@@ -692,6 +694,7 @@ export type Database = {
           is_acknowledged?: boolean | null
           launchpad?: string | null
           metadata?: Json | null
+          tg_broadcasted_at?: string | null
           token_mint?: string
           token_name?: string | null
           token_symbol?: string | null
