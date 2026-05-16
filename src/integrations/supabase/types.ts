@@ -7778,6 +7778,7 @@ export type Database = {
           reverted_at: string | null
           reviewed_at: string | null
           reviewed_by: string | null
+          reviewer_feedback: string | null
           status: string
           tg_message_date: string
           tg_message_id: number
@@ -7797,6 +7798,7 @@ export type Database = {
           reverted_at?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          reviewer_feedback?: string | null
           status?: string
           tg_message_date: string
           tg_message_id: number
@@ -7816,6 +7818,7 @@ export type Database = {
           reverted_at?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          reviewer_feedback?: string | null
           status?: string
           tg_message_date?: string
           tg_message_id?: number
