@@ -12,6 +12,32 @@ const PUMPFUN_PROGRAM = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
 const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 const DELAY_MS = 300;
 
+// Pump.fun "create" instruction discriminator (Anchor): first 8 bytes of
+// sha256("global:create"). This is the ONLY pump.fun ix that mints a new token.
+// Hex: 18 1e c8 28 05 1c 07 77
+const PUMPFUN_CREATE_DISCRIMINATOR_HEX = '181ec828051c0777';
+
+function ixDataToHex(data: any): string {
+  // jsonParsed returns ix.data as base58 string for non-parsed program ixs.
+  if (typeof data !== 'string' || !data) return '';
+  try {
+    // Lightweight base58 decode (bs58 not available here) — only need first 8 bytes.
+    const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+    let num = 0n;
+    for (const c of data) {
+      const v = ALPHABET.indexOf(c);
+      if (v < 0) return '';
+      num = num * 58n + BigInt(v);
+    }
+    let hex = num.toString(16);
+    if (hex.length % 2) hex = '0' + hex;
+    // Leading '1's in base58 are leading zero bytes
+    let zeros = 0;
+    for (const c of data) { if (c === '1') zeros++; else break; }
+    return '00'.repeat(zeros) + hex;
+  } catch { return ''; }
+}
+
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
 async function fetchNewSignatures(rpcUrl: string, wallet: string, lastSig?: string): Promise<any[]> {
@@ -41,42 +67,59 @@ interface MintDetection {
   launchpad?: string; timestamp?: string;
 }
 
+// Strict mint detection.
+//
+// We ONLY count it as a mint by `wallet` if:
+//   (a) the wallet is the fee payer / first signer of the tx, AND
+//   (b) the tx contains an actual `initializeMint` / `initializeMint2`
+//       SPL-Token instruction (top-level OR inner) — OR a pump.fun
+//       `create` instruction (Anchor discriminator match).
+//
+// Anything else (pump.fun buy/sell, ATA creation, being a tag-along
+// account in someone else's mint) is NOT a mint and must not be emitted.
 function detectMintEvents(tx: any, wallet: string): MintDetection[] {
   const detections: MintDetection[] = [];
   if (!tx?.transaction?.message?.instructions) return detections;
+
   const sig = tx.transaction.signatures?.[0] || '';
   const blockTime = tx.blockTime ? new Date(tx.blockTime * 1000).toISOString() : undefined;
-  const instructions = tx.transaction.message.instructions || [];
   const accountKeys = tx.transaction.message.accountKeys?.map((k: any) => typeof k === 'string' ? k : k.pubkey) || [];
 
-  for (const ix of instructions) {
-    if (ix.parsed?.type === 'initializeMint' || ix.parsed?.type === 'initializeMint2') {
-      detections.push({
-        mintAddress: ix.parsed.info?.mint || '', txSignature: sig,
-        eventType: accountKeys[0] === wallet ? 'DIRECT_DEV_MINT' : 'FAMILY_EARLY_ENTRY', timestamp: blockTime,
-      });
-    }
+  // (a) Wallet must be fee payer (account 0) — i.e. they signed & paid.
+  if (accountKeys[0] !== wallet) return detections;
+
+  const topIx = tx.transaction.message.instructions || [];
+  const innerIx: any[] = [];
+  for (const inner of (tx.meta?.innerInstructions || [])) {
+    for (const ix of (inner.instructions || [])) innerIx.push(ix);
+  }
+  const allIx = [...topIx, ...innerIx];
+
+  // (b) Look for a real mint-creation instruction.
+  const seen = new Set<string>();
+  let isPumpFunCreate = false;
+  for (const ix of allIx) {
     if (ix.programId === PUMPFUN_PROGRAM) {
-      const ixAccounts = ix.accounts || [];
-      for (const acc of ixAccounts) {
-        if (acc && acc !== wallet && acc !== PUMPFUN_PROGRAM && acc !== TOKEN_PROGRAM) {
-          detections.push({ mintAddress: acc, txSignature: sig, eventType: 'PROBABLE_DEV_ASSOCIATED_MINT', launchpad: 'pump.fun', timestamp: blockTime });
-          break;
-        }
-      }
+      const hex = ixDataToHex(ix.data).slice(0, 16).toLowerCase();
+      if (hex === PUMPFUN_CREATE_DISCRIMINATOR_HEX) isPumpFunCreate = true;
     }
   }
 
-  for (const inner of (tx.meta?.innerInstructions || [])) {
-    for (const ix of (inner.instructions || [])) {
-      if (ix.parsed?.type === 'initializeMint' || ix.parsed?.type === 'initializeMint2') {
-        const mint = ix.parsed.info?.mint;
-        if (mint && !detections.some(d => d.mintAddress === mint)) {
-          detections.push({ mintAddress: mint, txSignature: sig, eventType: 'SIBLING_WALLET_MINT', timestamp: blockTime });
-        }
-      }
+  for (const ix of allIx) {
+    if (ix.parsed?.type === 'initializeMint' || ix.parsed?.type === 'initializeMint2') {
+      const mint = ix.parsed.info?.mint;
+      if (!mint || seen.has(mint)) continue;
+      seen.add(mint);
+      detections.push({
+        mintAddress: mint,
+        txSignature: sig,
+        eventType: 'DIRECT_DEV_MINT',
+        launchpad: isPumpFunCreate ? 'pump.fun' : undefined,
+        timestamp: blockTime,
+      });
     }
   }
+
   return detections;
 }
 
