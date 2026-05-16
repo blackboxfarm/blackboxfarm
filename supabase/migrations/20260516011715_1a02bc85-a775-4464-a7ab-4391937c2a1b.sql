@@ -1,0 +1,2 @@
+DELETE FROM public.allstar_mint_alerts WHERE token_mint = 'AuQaustGiaqxRvj2gtCdrd22PBzTn8kM3kEPEkZCtuDw';
+DELETE FROM public.wallet_family_mint_events WHERE mint_address = 'AuQaustGiaqxRvj2gtCdrd22PBzTn8kM3kEPEkZCtuDw';
