@@ -19,6 +19,28 @@ const MAX_MINT_ALERT_AGE_HOURS = 2;
 // regardless of any other config. Tokens older than this are silently indexed to the mesh.
 const MAX_ABSOLUTE_MINT_AGE_HOURS = 168;
 
+// Pump.fun "create" Anchor discriminator: sha256("global:create").slice(0,8)
+const PUMPFUN_PROGRAM = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
+const PUMPFUN_CREATE_DISCRIMINATOR_HEX = '181ec828051c0777';
+
+function ixDataToHex(data: any): string {
+  if (typeof data !== 'string' || !data) return '';
+  try {
+    const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+    let num = 0n;
+    for (const c of data) {
+      const v = ALPHABET.indexOf(c);
+      if (v < 0) return '';
+      num = num * 58n + BigInt(v);
+    }
+    let hex = num.toString(16);
+    if (hex.length % 2) hex = '0' + hex;
+    let zeros = 0;
+    for (const c of data) { if (c === '1') zeros++; else break; }
+    return '00'.repeat(zeros) + hex;
+  } catch { return ''; }
+}
+
 // ─── STEP 1: Qualify new allstars from proven_dev_tokens ───
 
 // Resolve creator for a token via pump.fun API
@@ -314,133 +336,110 @@ async function auditAllstarFamily(
   heliusApiKey: string,
   sinceHours: number
 ): Promise<MintHit[]> {
-  const since = new Date(Date.now() - sinceHours * 60 * 60 * 1000);
+  // STRICT on-chain detection.
+  //
+  // A mint is only counted if:
+  //   (a) the watched family wallet is the fee payer / first signer, AND
+  //   (b) the transaction contains an actual SPL-Token `initializeMint` /
+  //       `initializeMint2` instruction (top-level OR inner), OR a pump.fun
+  //       `create` Anchor instruction (discriminator match).
+  //
+  // Helius `type=TOKEN_MINT` is NOT trusted — it includes `mintTo`, pool ops,
+  // and tag-along participation, all of which produced false positives.
+  const rpcUrl = getHeliusRpcUrl(heliusApiKey);
+  const sinceSec = Math.floor(Date.now() / 1000) - sinceHours * 3600;
   const familyWallets: string[] = allstar.family_wallets || [allstar.master_wallet];
   const hits: MintHit[] = [];
 
   for (const wallet of familyWallets.slice(0, 30)) {
     try {
-      const url = getHeliusRestUrl(`/v0/addresses/${wallet}/transactions`, { type: 'TOKEN_MINT', limit: '50' });
-      const response = await fetch(url, { method: 'GET' });
+      // 1. Pull recent signatures for this wallet
+      const sigsRes = await fetch(rpcUrl, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0', id: 1, method: 'getSignaturesForAddress',
+          params: [wallet, { limit: 50 }],
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!sigsRes.ok) continue;
+      const sigs = ((await sigsRes.json())?.result || []) as Array<{ signature: string; blockTime?: number }>;
 
-      if (!response.ok) continue;
+      for (const sigInfo of sigs) {
+        // Window guard: skip anything older than the lookback window
+        if (sigInfo.blockTime && sigInfo.blockTime < sinceSec) break; // sigs are newest→oldest
 
-      const transactions = await response.json();
+        await new Promise(r => setTimeout(r, 120));
 
-      for (const tx of transactions || []) {
-        const txTime = new Date(tx.timestamp * 1000);
-        if (txTime < since) continue;
-
-        const tokenMint = tx.tokenTransfers?.[0]?.mint || tx.events?.token?.mint;
-        if (!tokenMint) continue;
-
-        // ── CRITICAL: Verify this wallet is actually the CREATOR, not just a participant ──
-        // Check if this wallet initiated the mint (is the fee payer / signer)
-        const feePayer = tx.feePayer || tx.fee_payer;
-        const isFeePayer = feePayer === wallet;
-        
-        // Also check pump.fun creator field if available
-        const pumpCreator = tx.events?.token?.nativeTransfers?.[0]?.fromUserAccount;
-        const isDirectCreator = isFeePayer || pumpCreator === wallet;
-        
-        // If the wallet is NOT the fee payer, verify via Pump.fun API
-        if (!isDirectCreator) {
-          const verifiedCreator = await resolveCreator(tokenMint);
-          if (verifiedCreator !== wallet) {
-            // Check if verified creator is ANY wallet in the family
-            const isInFamily = familyWallets.includes(verifiedCreator || '');
-            if (!isInFamily) {
-              console.log(`[allstar] ❌ FALSE POSITIVE: ${tokenMint.slice(0, 12)} creator is ${(verifiedCreator || 'unknown').slice(0, 8)}..., NOT family wallet ${wallet.slice(0, 8)}... — skipping`);
-              continue;
-            }
-          }
-        }
-
-        // Skip if already known
-        const { data: knownToken } = await supabase
-          .from('allstar_mint_alerts')
-          .select('id')
-          .eq('token_mint', tokenMint)
-          .maybeSingle();
-
-        if (knownToken) continue;
-
-        // Also skip if in developer_tokens already with same allstar
-        const { data: devToken } = await supabase
-          .from('developer_tokens')
-          .select('id')
-          .eq('token_mint', tokenMint)
-          .maybeSingle();
-
-        // ── VERIFY ACTUAL ON-CHAIN MINT TIMESTAMP ──
-        const verifiedMintTime = await verifyMintTimestamp(tokenMint, heliusApiKey);
-        const actualMintTimestamp = verifiedMintTime || tx.timestamp;
-        const mintDate = new Date(actualMintTimestamp * 1000);
-        const mintAgeMs = Date.now() - mintDate.getTime();
-        const mintAgeHours = mintAgeMs / (1000 * 60 * 60);
-        const mintAge = formatMintAge(actualMintTimestamp);
-
-        // Log the verification result
-        if (verifiedMintTime) {
-          console.log(`[allstar] ✓ Verified mint time for ${tokenMint.slice(0, 12)}: ${mintDate.toISOString()} (${mintAge})`);
-        } else {
-          console.log(`[allstar] ⚠ Could not verify mint time for ${tokenMint.slice(0, 12)}, using TX time: ${mintDate.toISOString()}`);
-        }
-
-        // ── HARD ABSOLUTE AGE CAP: No token older than 7 days can trigger an alert ──
-        if (mintAgeHours > MAX_ABSOLUTE_MINT_AGE_HOURS) {
-          console.log(`[allstar] 🏛 OLD TOKEN DISCOVERED: ${tokenMint.slice(0, 12)} minted ${mintAge} (>${MAX_ABSOLUTE_MINT_AGE_HOURS}h) — indexing to mesh silently, NO alert`);
-          
-          // Silent mesh indexing: register in developer_tokens if not already there
-          if (!devToken) {
-            try {
-              await supabase.from('developer_tokens').upsert({
-                token_mint: tokenMint,
-                creator_wallet: wallet,
-                developer_id: allstar.developer_id || null,
-                discovered_via: 'allstar_family_scan',
-                discovery_note: `Old token (${mintAge}) discovered via allstar family scan — silent index, no alert`,
-              }, { onConflict: 'token_mint', ignoreDuplicates: true });
-              console.log(`[allstar] 📝 Silently indexed old token ${tokenMint.slice(0, 12)} to developer_tokens mesh`);
-            } catch (meshErr) {
-              console.warn(`[allstar] Failed to index old token to mesh:`, meshErr);
-            }
-          }
-          continue;
-        }
-
-        // Skip tokens that are outside the lookback window but within absolute cap
-        if (mintAgeHours > sinceHours) {
-          console.log(`[allstar] ⏭ Skipping ${tokenMint.slice(0, 12)}: minted ${mintAge} (older than ${sinceHours}h lookback but <${MAX_ABSOLUTE_MINT_AGE_HOURS}h cap)`);
-          continue;
-        }
-
-        // Detect launchpad
-        const programIds = tx.accountData?.map((a: any) => a.account) || [];
-        let launchpad = 'unknown';
-        if (programIds.includes('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P') || tx.source === 'PUMP_FUN') launchpad = 'pump.fun';
-        if (tokenMint.endsWith('pump')) launchpad = 'pump.fun';
-        if (tokenMint.endsWith('jupx')) launchpad = 'jupiter';
-
-        // Determine wallet depth in family
-        const depth = wallet === allstar.master_wallet ? 0 :
-                      wallet === allstar.kyc_root_wallet ? -1 : 1;
-
-        hits.push({
-          tokenMint,
-          symbol: tx.tokenTransfers?.[0]?.tokenSymbol || tx.events?.token?.tokenSymbol,
-          name: tx.tokenTransfers?.[0]?.tokenName || tx.events?.token?.tokenName,
-          creatorWallet: wallet,
-          walletDepth: depth,
-          launchpad,
-          signature: tx.signature,
-          timestamp: tx.timestamp,
-          mintTimestamp: actualMintTimestamp,
-          mintAge,
+        const txRes = await fetch(rpcUrl, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0', id: 1, method: 'getTransaction',
+            params: [sigInfo.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }],
+          }),
+          signal: AbortSignal.timeout(15000),
         });
+        if (!txRes.ok) continue;
+        const tx = (await txRes.json())?.result;
+        if (!tx?.transaction?.message?.instructions) continue;
+
+        const blockTime: number | undefined = tx.blockTime;
+        if (!blockTime || blockTime < sinceSec) continue;
+
+        // (a) Fee payer must be the watched family wallet
+        const accountKeys = tx.transaction.message.accountKeys?.map((k: any) => typeof k === 'string' ? k : k.pubkey) || [];
+        if (accountKeys[0] !== wallet) continue;
+
+        // (b) Look for initializeMint/initializeMint2 OR pump.fun create
+        const topIx = tx.transaction.message.instructions || [];
+        const innerIx: any[] = [];
+        for (const inner of (tx.meta?.innerInstructions || [])) {
+          for (const ix of (inner.instructions || [])) innerIx.push(ix);
+        }
+        const allIx = [...topIx, ...innerIx];
+
+        let isPumpFunCreate = false;
+        for (const ix of allIx) {
+          if (ix.programId === PUMPFUN_PROGRAM) {
+            const hex = ixDataToHex(ix.data).slice(0, 16).toLowerCase();
+            if (hex === PUMPFUN_CREATE_DISCRIMINATOR_HEX) { isPumpFunCreate = true; break; }
+          }
+        }
+
+        const mints = new Set<string>();
+        for (const ix of allIx) {
+          if (ix.parsed?.type === 'initializeMint' || ix.parsed?.type === 'initializeMint2') {
+            const m = ix.parsed.info?.mint;
+            if (m) mints.add(m);
+          }
+        }
+
+        if (mints.size === 0 && !isPumpFunCreate) continue;
+
+        for (const tokenMint of mints) {
+          // Dedupe against existing alert rows
+          const { data: knownAlert } = await supabase
+            .from('allstar_mint_alerts').select('id').eq('token_mint', tokenMint).maybeSingle();
+          if (knownAlert) continue;
+
+          const depth = wallet === allstar.master_wallet ? 0 :
+                        wallet === allstar.kyc_root_wallet ? -1 : 1;
+          const launchpad = isPumpFunCreate || tokenMint.endsWith('pump') ? 'pump.fun' : 'unknown';
+
+          hits.push({
+            tokenMint,
+            creatorWallet: wallet,
+            walletDepth: depth,
+            launchpad,
+            signature: sigInfo.signature,
+            timestamp: blockTime,
+            mintTimestamp: blockTime,
+            mintAge: formatMintAge(blockTime),
+          });
+          console.log(`[allstar] ✅ VERIFIED MINT: ${tokenMint.slice(0,12)} by ${wallet.slice(0,8)} (launchpad=${launchpad}, sig=${sigInfo.signature.slice(0,12)})`);
+        }
       }
 
-      // Rate limit
       await new Promise(r => setTimeout(r, 150));
     } catch (e) {
       console.warn(`[allstar] Error scanning ${wallet.slice(0, 8)}...:`, e);
