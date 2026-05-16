@@ -79,6 +79,42 @@ Deno.serve(async (req) => {
     const { data: rows, error } = await query;
     if (error) throw error;
 
+    if (archiveExistingOnly) {
+      const ids = ((rows || []) as QueueRow[]).map((row) => row.id);
+      if (ids.length > 0) {
+        await assertUpdate(
+          supabase
+            .from("holders_intel_post_queue")
+            .update({
+              manual_status: "posted_manual",
+              manual_posted_at: new Date().toISOString(),
+              manual_tweet_url: null,
+              posted_handle: "HoldersIntel",
+              error_message: null,
+            })
+            .in("id", ids),
+          "holders_intel_post_queue",
+        );
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        mode: "archive_existing_only",
+        selected: ids.length,
+        promoted: ids.length,
+        composed: 0,
+        decorated: 0,
+        failed: 0,
+        results: ((rows || []) as QueueRow[]).map((row) => ({
+          id: row.id,
+          token_mint: row.token_mint,
+          symbol: row.symbol,
+          ok: true,
+          notes: ["bulk_archived"],
+        })),
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     const results: any[] = [];
     let promoted = 0;
     let composed = 0;
