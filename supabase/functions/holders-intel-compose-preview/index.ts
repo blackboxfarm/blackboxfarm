@@ -192,18 +192,48 @@ Deno.serve(async (req) => {
 
         const tweetText = processTemplate(tweetTemplate, stats);
 
-        const updatePayload: Record<string, unknown> = { tweet_text: tweetText };
+        // Extract hashtag line from rendered tweet (last line starting with #)
+        const lines = tweetText.split('\n').map((l) => l.trim()).filter(Boolean);
+        const hashtagsLine = [...lines].reverse().find((l) => /^#\w/.test(l)) || null;
+        const snapshotLabel = formatTimestamp();
+
+        const updatePayload: Record<string, unknown> = {
+          tweet_text: tweetText,
+          tweet_composed_at: new Date().toISOString(),
+          ai_snippet: stats.aiSnippet || null,
+          health_grade: stats.healthGrade || null,
+          health_score: stats.healthScore || null,
+          health_label: stats.timesPosted <= 1 ? 'King!!' : null,
+          real_holders: stats.realHolders ?? null,
+          total_wallets: stats.totalHolders ?? null,
+          whales_count: stats.whaleCount ?? null,
+          serious_count: stats.seriousCount ?? null,
+          retail_count: stats.activeCount ?? null,
+          dust_count: stats.dustCount ?? null,
+          dust_pct: stats.dustPercentage ?? null,
+          snapshot_label: snapshotLabel,
+          hashtags_line: hashtagsLine,
+          posted_handle: 'HoldersIntel',
+        };
 
         // Auto-fetch DexScreener banner the first time we compose this row
         // (or when caller explicitly asks to refresh).
         if (!item.dex_banner_url || force_refresh === true) {
           try {
             const banner = await fetchDexBanner(item.token_mint);
-            if (banner.url) updatePayload.dex_banner_url = banner.url;
+            if (banner.url) {
+              updatePayload.dex_banner_url = banner.url;
+            }
           } catch (e) {
             console.warn(`[compose-preview] banner fetch failed for ${item.token_mint}: ${(e as Error).message}`);
           }
         }
+
+        // Stamp banner_used_url = decorated if present else dex banner
+        updatePayload.banner_used_url =
+          (updatePayload.dex_banner_url as string | undefined) ??
+          item.dex_banner_url ??
+          null;
 
         // Fresh DexScreener snapshot so the admin sees current mcap & 1h
         // volume on regenerate — for posting-decision context only, NOT
