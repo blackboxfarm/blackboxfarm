@@ -123,6 +123,18 @@ export function BackfillReview() {
 
   useEffect(() => { loadBatch(); loadCounts(); }, [loadBatch, loadCounts]);
 
+  // Auto-fetch on first load if queue is empty so the user never sees a dead screen.
+  const [autoTried, setAutoTried] = useState(false);
+  useEffect(() => {
+    if (autoTried) return;
+    if (loading || generating) return;
+    if (batch.length === 0 && counts.pending === 0) {
+      setAutoTried(true);
+      generateFromTG();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batch.length, counts.pending, loading, generating, autoTried]);
+
   async function generateFromTG() {
     setGenerating(true);
     try {
