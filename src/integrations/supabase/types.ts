@@ -7765,6 +7765,74 @@ export type Database = {
         }
         Relationships: []
       }
+      holders_intel_backfill_proposals: {
+        Row: {
+          after_json: Json
+          applied_at: string | null
+          archive_id: string
+          before_json: Json
+          created_at: string
+          id: string
+          match_diff_hours: number | null
+          patch_json: Json
+          reverted_at: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          tg_message_date: string
+          tg_message_id: number
+          tg_raw_text: string | null
+          token_mint: string
+          updated_at: string
+        }
+        Insert: {
+          after_json: Json
+          applied_at?: string | null
+          archive_id: string
+          before_json: Json
+          created_at?: string
+          id?: string
+          match_diff_hours?: number | null
+          patch_json: Json
+          reverted_at?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          tg_message_date: string
+          tg_message_id: number
+          tg_raw_text?: string | null
+          token_mint: string
+          updated_at?: string
+        }
+        Update: {
+          after_json?: Json
+          applied_at?: string | null
+          archive_id?: string
+          before_json?: Json
+          created_at?: string
+          id?: string
+          match_diff_hours?: number | null
+          patch_json?: Json
+          reverted_at?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          tg_message_date?: string
+          tg_message_id?: number
+          tg_raw_text?: string | null
+          token_mint?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "holders_intel_backfill_proposals_archive_id_fkey"
+            columns: ["archive_id"]
+            isOneToOne: false
+            referencedRelation: "holders_intel_post_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       holders_intel_config: {
         Row: {
           key: string
