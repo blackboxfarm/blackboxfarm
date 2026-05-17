@@ -241,6 +241,15 @@ export function AllstarMintAlerts() {
                         >
                           {alert.alert_level}
                         </Badge>
+                        {(alert as any).is_suppressed && (
+                          <Badge
+                            variant="outline"
+                            className="ml-1 text-[9px] border-amber-500/60 text-amber-300 bg-amber-500/10"
+                            title={`Kept in queue but NOT broadcast to Telegram. Reason: ${(alert as any).suppressed_reason || 'suppressed'}`}
+                          >
+                            🛑 Not Announced — {((alert as any).suppressed_reason || 'suppressed').toString().toUpperCase()}
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-start gap-2 max-w-[320px]">
