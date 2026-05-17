@@ -127,6 +127,8 @@ async function birdeyeResolveCreator(
   apiKey: string,
   supabase: any,
 ): Promise<{ creator: string | null; status: number; durationMs: number; error: string | null }> {
+  // BIRDEYE_SUSPENDED: temporarily disabled by user request. Remove this block to re-enable.
+  return { creator: null, status: 0, durationMs: 0, error: 'birdeye_suspended' };
   // INFRA blocklist — Birdeye `data.owner` returns the mint-authority owner,
   // which for Pump.fun-suffixed mints is the launchpad program wallet, not the
   // real human creator. Any wallet here is observed on >=30 unrelated tokens.
