@@ -5,14 +5,33 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Bell, ExternalLink, RefreshCw, Check, Copy, MessageSquare } from 'lucide-react';
+import { Bell, ExternalLink, RefreshCw, Check, Copy, MessageSquare, Twitter, Send, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { Switch } from '@/components/ui/switch';
 
+function formatAge(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 48) return `${h}h ${m % 60}m ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ${h % 24}h ago`;
+}
+
 export function AllstarMintAlerts() {
   const [smsEnabled, setSmsEnabled] = React.useState<boolean>(false);
   const [smsLoaded, setSmsLoaded] = React.useState(false);
+  const [nowTick, setNowTick] = React.useState(() => Date.now());
+
+  // Re-tick every 30s so "mint age" stays live without a refetch
+  React.useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   React.useEffect(() => {
     (async () => {
@@ -50,6 +69,26 @@ export function AllstarMintAlerts() {
         .limit(100);
       if (error) throw error;
       return data || [];
+    },
+  });
+
+  // Enrich rows with live pump.fun MINT metadata (name, symbol, image, socials, true created_timestamp)
+  const mintsToEnrich = React.useMemo(() => {
+    return (alerts || []).slice(0, 25).map((a: any) => a.token_mint).filter(Boolean);
+  }, [alerts]);
+
+  const { data: metaMap } = useQuery({
+    queryKey: ['mint-alert-token-meta', mintsToEnrich.join(',')],
+    enabled: mintsToEnrich.length > 0,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke('token-metadata-batch', {
+        body: { mints: mintsToEnrich },
+      });
+      if (error) throw error;
+      const out: Record<string, any> = {};
+      for (const t of (data?.tokens || [])) out[t.mint] = t;
+      return out;
     },
   });
 
@@ -115,12 +154,12 @@ export function AllstarMintAlerts() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-12">⚠️</TableHead>
-                <TableHead>Token</TableHead>
+                <TableHead>Token (from MINT)</TableHead>
                 <TableHead>Token Mint</TableHead>
                 <TableHead>Creator Wallet</TableHead>
                 <TableHead>Tier</TableHead>
                 <TableHead>Launchpad</TableHead>
-                <TableHead>Mint Age</TableHead>
+                <TableHead>Mint Age (live)</TableHead>
                 <TableHead>Detected</TableHead>
                 <TableHead className="w-16">Ack</TableHead>
               </TableRow>
@@ -137,6 +176,19 @@ export function AllstarMintAlerts() {
               ) : (
                 (alerts || []).map((alert) => {
                   const metadata = (alert.metadata || {}) as Record<string, any>;
+                  const meta = metaMap?.[alert.token_mint] || {};
+                  const name = meta.name || alert.token_name || 'UNKNOWN';
+                  const symbol = meta.symbol || alert.token_symbol || 'UNKNOWN';
+                  const image = meta.image as string | undefined;
+                  const description = meta.description as string | undefined;
+                  const twitter = meta.twitter as string | null | undefined;
+                  const telegram = meta.telegram as string | null | undefined;
+                  const website = meta.website as string | null | undefined;
+                  // Live age from real on-chain mint timestamp (frozen "mint_age" string is ignored).
+                  const mintTsMs =
+                    meta.createdTimestampMs ??
+                    (metadata?.mint_timestamp ? new Date(metadata.mint_timestamp).getTime() : null);
+                  const liveAge = mintTsMs ? formatAge(nowTick - mintTsMs) : '—';
                   return (
                     <TableRow key={alert.id} className={`text-xs ${alert.is_acknowledged ? 'opacity-50' : ''}`}>
                       <TableCell>
@@ -145,9 +197,44 @@ export function AllstarMintAlerts() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-semibold">{alert.token_symbol || 'UNKNOWN'}</span>
-                          <span className="text-[10px] text-muted-foreground">{alert.token_name || '-'}</span>
+                        <div className="flex items-start gap-2 max-w-[320px]">
+                          {image ? (
+                            <img
+                              src={image}
+                              alt={symbol}
+                              loading="lazy"
+                              className="h-10 w-10 rounded object-cover border border-border/40 shrink-0"
+                              onError={(e) => ((e.currentTarget.style.display = 'none'))}
+                            />
+                          ) : (
+                            <div className="h-10 w-10 rounded bg-muted/40 border border-border/40 shrink-0" />
+                          )}
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-semibold truncate">${symbol}</span>
+                            <span className="text-[10px] text-muted-foreground truncate">{name}</span>
+                            {description && (
+                              <span className="text-[10px] text-muted-foreground/80 line-clamp-2">{description}</span>
+                            )}
+                            {(twitter || telegram || website) && (
+                              <div className="flex items-center gap-2 mt-1">
+                                {twitter && (
+                                  <a href={twitter} target="_blank" rel="noopener noreferrer" title={twitter} className="text-sky-400 hover:text-sky-300">
+                                    <Twitter className="h-3 w-3" />
+                                  </a>
+                                )}
+                                {telegram && (
+                                  <a href={telegram} target="_blank" rel="noopener noreferrer" title={telegram} className="text-cyan-400 hover:text-cyan-300">
+                                    <Send className="h-3 w-3" />
+                                  </a>
+                                )}
+                                {website && (
+                                  <a href={website} target="_blank" rel="noopener noreferrer" title={website} className="text-emerald-400 hover:text-emerald-300">
+                                    <Globe className="h-3 w-3" />
+                                  </a>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -182,8 +269,8 @@ export function AllstarMintAlerts() {
                         <span className="text-muted-foreground">{alert.launchpad || '-'}</span>
                       </TableCell>
                       <TableCell>
-                        <span className="text-muted-foreground">
-                          {metadata?.mint_age || (metadata?.verified_onchain ? '✅ Verified' : '-')}
+                        <span className="text-foreground/90" title={mintTsMs ? new Date(mintTsMs).toISOString() : 'no mint timestamp'}>
+                          {liveAge}
                         </span>
                       </TableCell>
                       <TableCell className="text-muted-foreground text-[10px]">
