@@ -16,6 +16,11 @@ interface TokenInfo {
   symbol?: string;
   image?: string;
   createdAt?: string;
+  createdTimestampMs?: number;
+  description?: string;
+  twitter?: string | null;
+  telegram?: string | null;
+  website?: string | null;
   marketCap?: number;
   launchpad?: string;
 }
@@ -29,6 +34,11 @@ async function fetchPumpFunData(mint: string): Promise<Partial<TokenInfo>> {
       symbol: data.symbol,
       image: data.image_uri,
       createdAt: data.created_timestamp ? new Date(data.created_timestamp).toISOString() : undefined,
+      createdTimestampMs: data.created_timestamp || undefined,
+      description: data.description || undefined,
+      twitter: data.twitter || null,
+      telegram: data.telegram || null,
+      website: data.website || null,
       marketCap: data.usd_market_cap,
       launchpad: 'pump.fun'
     };
