@@ -2,6 +2,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getHeliusRpcUrl, redactHeliusSecrets } from '../_shared/helius-client.ts';
 import { sendAdminSms } from '../_shared/sms-notify.ts';
+import { buildRichMintAlert } from '../_shared/mint-alert-format.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -244,13 +245,50 @@ Deno.serve(withRunLog('family-mint-monitor', async (req) => {
             .from('wallet_families').select('allstar_id, seed_wallet, family_name')
             .eq('id', item.family_id).single();
 
+          // ═══ Build rich alert (also detects Mayhem) ═══
+          let allstarCtx: any = null;
+          if (familyData?.allstar_id) {
+            const { data: ar } = await supabase
+              .from('allstar_dev_registry')
+              .select('best_tier, best_token_symbol, best_token_mint, best_mcap_achieved, twitter_handle, total_wallet_family_size, kyc_root_wallet')
+              .eq('id', familyData.allstar_id)
+              .maybeSingle();
+            allstarCtx = ar;
+          }
+          const richAlert = await buildRichMintAlert(supabase, {
+            tokenMint: det.mintAddress,
+            creatorWallet: item.wallet_address,
+            launchpad: det.launchpad || null,
+            eventLabel: det.eventType.replace(/_/g, ' ').toLowerCase(),
+            mintTimestampMs: det.timestamp ? new Date(det.timestamp).getTime() : null,
+            dev: {
+              tier: allstarCtx?.best_tier ?? null,
+              bestTokenSymbol: allstarCtx?.best_token_symbol ?? null,
+              bestTokenMint: allstarCtx?.best_token_mint ?? null,
+              bestMcap: allstarCtx?.best_mcap_achieved ?? null,
+              twitterHandle: allstarCtx?.twitter_handle ?? null,
+              familySize: allstarCtx?.total_wallet_family_size ?? null,
+              kycRoot: allstarCtx?.kyc_root_wallet ?? null,
+              familyName: familyData?.family_name ?? null,
+            },
+            alertLevel: det.eventType === 'DIRECT_DEV_MINT' ? 'critical' : 'high',
+            callerName: 'family-mint-monitor',
+          });
+
           // ═══ CROSS-FEED: allstar_mint_alerts ═══
           if (familyData?.allstar_id) {
             await supabase.from('allstar_mint_alerts').insert({
               allstar_id: familyData.allstar_id, creator_wallet: familyData.seed_wallet,
               detecting_wallet: item.wallet_address, token_mint: det.mintAddress,
               launchpad: det.launchpad, alert_level: det.eventType === 'DIRECT_DEV_MINT' ? 'critical' : 'high',
-              metadata: { source: 'family_mint_monitor', event_type: det.eventType },
+              is_suppressed: richAlert.isMayhem,
+              suppressed_reason: richAlert.isMayhem ? 'mayhem' : null,
+              metadata: {
+                source: 'family_mint_monitor',
+                event_type: det.eventType,
+                mint_timestamp: det.timestamp || null,
+                is_mayhem: richAlert.isMayhem,
+              },
             });
 
             // ═══ SMS hop: 1 per allstar dev per 6h, only if flag enabled ═══
@@ -360,12 +398,16 @@ Deno.serve(withRunLog('family-mint-monitor', async (req) => {
 
           try {
             const { sendMintAlert } = await import('../_shared/mint-alert-notify.ts');
-            await sendMintAlert(supabase, {
-              tokenMint: det.mintAddress,
-              blackboxMessage: tgMintMessage,
-              drrickMessage: drrickFamilyMsg,
-              sourceFunction: 'family-mint-monitor',
-            });
+            if (richAlert.isMayhem) {
+              console.log(`[FamilyMintMonitor] 🛑 MAYHEM suppression — alert kept in queue but NOT announced for ${det.mintAddress.slice(0,8)}`);
+            } else {
+              await sendMintAlert(supabase, {
+                tokenMint: det.mintAddress,
+                blackboxMessage: richAlert.blackboxMessage,
+                drrickMessage: richAlert.drrickMessage,
+                sourceFunction: 'family-mint-monitor',
+              });
+            }
           } catch (tgErr) {
             console.warn('[FamilyMintMonitor] mint-alert notify failed:', tgErr);
           }
