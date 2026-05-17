@@ -1848,8 +1848,20 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                 ruleId: null
               };
 
-          // Generate AI interpretation
-          const aiResult = await generateAIInterpretation(messageText, addresses, keywordResult, tokenData, ruleResult);
+          // Generate AI interpretation — gated to cut Lovable AI spend.
+          // Skip AI entirely when:
+          //   - no CA was found in the message (nothing actionable), OR
+          //   - no matched keywords AND no high-conviction signal AND rule decided skip/no_action
+          // The rule engine already produced a deterministic decision in those cases.
+          const shouldRunAI =
+            addresses.length > 0 &&
+            (keywordResult.matchedKeywords.length > 0 ||
+              keywordResult.hasHighConviction ||
+              (ruleResult.decision !== 'skip' && ruleResult.decision !== 'no_action'));
+
+          const aiResult = shouldRunAI
+            ? await generateAIInterpretation(messageText, addresses, keywordResult, tokenData, ruleResult)
+            : fallbackInterpretation(messageText, addresses, keywordResult, tokenData, ruleResult);
 
           // ============================================================================
           // SIGNAL CLASSIFICATION (INSIDER WALLET TRACKING analysis)
