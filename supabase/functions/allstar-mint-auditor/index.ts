@@ -507,6 +507,25 @@ async function createAllstarAlert(
     callerName: 'allstar-mint-auditor',
   });
 
+  // ═══ Dev-Exit suppression check (after Mayhem, before broadcast) ═══
+  // Skip for legend tiers (T6+) — they always announce.
+  const { checkDevExit, SUPPRESS_DEV_EXIT_BELOW_TIER } = await import('../_shared/dev-exit-check.ts');
+  let devExit: { exited: boolean; reason: 'DEV_DUMPED' | 'DEV_EXITED' | null; balancePct: number | null } =
+    { exited: false, reason: null, balancePct: null };
+  if (!richAlert.isMayhem && (allstar.best_tier ?? 0) < SUPPRESS_DEV_EXIT_BELOW_TIER) {
+    devExit = await checkDevExit({
+      tokenMint: mintAddr,
+      devWallet: hit.creatorWallet,
+      mintTimestampMs: hit.mintTimestamp ? hit.mintTimestamp * 1000 : null,
+    });
+  }
+  const finalSuppressed = richAlert.isMayhem || devExit.exited;
+  const finalSuppressedReason = richAlert.isMayhem
+    ? 'mayhem'
+    : devExit.reason
+      ? devExit.reason.toLowerCase()
+      : null;
+
   await assertDbWrite(
     supabase.from('allstar_mint_alerts').insert({
     allstar_id: allstar.id,
@@ -521,8 +540,9 @@ async function createAllstarAlert(
     allstar_best_mcap: allstar.best_mcap_achieved,
     launchpad,
     alert_level: alertLevel,
-    is_suppressed: richAlert.isMayhem,
-    suppressed_reason: richAlert.isMayhem ? 'mayhem' : null,
+    is_suppressed: finalSuppressed,
+    suppressed_reason: finalSuppressedReason,
+    dev_balance_pct_at_alert: devExit.balancePct,
     metadata: {
       twitter_handle: allstar.twitter_handle,
       kyc_root: allstar.kyc_root_wallet,
@@ -533,6 +553,9 @@ async function createAllstarAlert(
       mint_age: hit.mintAge,
       verified_onchain: !!hit.mintTimestamp,
       is_mayhem: richAlert.isMayhem,
+      dev_exited: devExit.exited,
+      dev_exit_reason: devExit.reason,
+      dev_balance_pct: devExit.balancePct,
     },
     }).select('id'),
     'allstar_mint_alerts',
@@ -663,6 +686,8 @@ async function createAllstarAlert(
     const { sendMintAlert } = await import('../_shared/mint-alert-notify.ts');
     if (richAlert.isMayhem) {
       console.log(`[allstar] 🛑 MAYHEM suppression — alert kept in queue but NOT announced for ${mintAddr.slice(0,8)}`);
+    } else if (devExit.exited) {
+      console.log(`[allstar] 🛑 ${devExit.reason} suppression (dev holds ${devExit.balancePct?.toFixed(2)}%) — not announced for ${mintAddr.slice(0,8)}`);
     } else {
       await sendMintAlert(supabase, {
         tokenMint: mintAddr,
