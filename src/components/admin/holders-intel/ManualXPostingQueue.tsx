@@ -88,6 +88,8 @@ export function ManualXPostingQueue() {
   const [autopsying, setAutopsying] = useState<Record<string, boolean>>({});
   const [decorating, setDecorating] = useState<Record<string, boolean>>({});
   const [regenerating, setRegenerating] = useState<Record<string, boolean>>({});
+  const [manualMint, setManualMint] = useState("");
+  const [adding, setAdding] = useState(false);
   const [snapshots, setSnapshots] = useState<Record<string, {
     mcap: number | null;
     vol1h: number | null;
@@ -372,6 +374,54 @@ export function ManualXPostingQueue() {
     return { posted, skipped };
   }, [history]);
 
+  const addManualToken = useCallback(async () => {
+    const mint = manualMint.trim();
+    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) {
+      toast({ title: "Invalid mint", description: "Paste a valid Solana token address.", variant: "destructive" });
+      return;
+    }
+    setAdding(true);
+    try {
+      // If already in queue, just (re)compose
+      const { data: existing } = await supabase
+        .from("holders_intel_post_queue")
+        .select("id, manual_status, tweet_text")
+        .eq("token_mint", mint)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      let id = existing?.id as string | undefined;
+      if (existing && existing.manual_status === "pending") {
+        toast({ title: "Already pending", description: "Token is already in the queue. Recomposing…" });
+      } else {
+        const { data: userRes } = await supabase.auth.getUser();
+        const { data: inserted, error } = await supabase
+          .from("holders_intel_post_queue")
+          .insert({
+            token_mint: mint,
+            scheduled_at: new Date().toISOString(),
+            status: "pending",
+            manual_status: "pending",
+            trigger_source: "manual_admin",
+            trigger_comment: userRes?.user?.email || "manual add",
+          })
+          .select("id")
+          .single();
+        if (error) throw error;
+        id = inserted!.id;
+        toast({ title: "Added to queue", description: "Composing tweet…" });
+      }
+      if (id) await composeOne(id);
+      setManualMint("");
+      await load();
+    } catch (e: any) {
+      toast({ title: "Add failed", description: e?.message || String(e), variant: "destructive" });
+    } finally {
+      setAdding(false);
+    }
+  }, [manualMint, toast, composeOne, load]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -429,6 +479,22 @@ export function ManualXPostingQueue() {
 
       {/* Search + pagination controls */}
       <div className="flex flex-wrap items-center gap-2">
+        <form
+          onSubmit={(e) => { e.preventDefault(); addManualToken(); }}
+          className="flex items-center gap-1"
+        >
+          <Input
+            value={manualMint}
+            onChange={(e) => setManualMint(e.target.value)}
+            placeholder="Paste token mint to add manually…"
+            className="w-80 h-8"
+          />
+          <Button type="submit" size="sm" variant="default" disabled={adding || !manualMint.trim()}>
+            {adding ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : <Wand2 className="h-4 w-4 mr-1" />}
+            Add & Compose
+          </Button>
+        </form>
+
         <form
           onSubmit={(e) => { e.preventDefault(); setSearch(searchInput.trim()); }}
           className="flex items-center gap-1"
