@@ -62,6 +62,7 @@ export function AllstarMintAlerts() {
 
   const { data: alerts, isLoading, refetch } = useQuery({
     queryKey: ['allstar-mint-alerts'],
+    refetchInterval: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('allstar_mint_alerts')
@@ -72,6 +73,46 @@ export function AllstarMintAlerts() {
       return data || [];
     },
   });
+
+  // Aftercare verdicts for the alerts currently in view
+  const alertIds = React.useMemo(() => (alerts || []).map((a: any) => a.id), [alerts]);
+  const { data: watchMap } = useQuery({
+    queryKey: ['allstar-alert-watch', alertIds.join(',')],
+    enabled: alertIds.length > 0,
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('allstar_alert_watch')
+        .select('alert_id, verdict, verdict_score, last_check_at, current_mcap, baseline_mcap')
+        .in('alert_id', alertIds);
+      if (error) throw error;
+      const map: Record<string, any> = {};
+      for (const w of data || []) map[(w as any).alert_id] = w;
+      return map;
+    },
+  });
+
+  const renderAftercare = (alertId: string) => {
+    const w = watchMap?.[alertId];
+    if (!w) return <span className="text-[10px] text-muted-foreground">—</span>;
+    const map: Record<string, { label: string; cls: string }> = {
+      reinforcing: { label: '🟢 Strengthening', cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
+      exit:        { label: '🔴 Get Out',        cls: 'bg-red-500/20 text-red-300 border-red-500/30' },
+      cooling:     { label: '⚪ Cooling',        cls: 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' },
+      pending:     { label: '⏳ Watching',       cls: 'bg-sky-500/20 text-sky-300 border-sky-500/30' },
+      expired:     { label: 'Expired',           cls: 'bg-muted text-muted-foreground border-border/40' },
+      graduated:   { label: '⭐ Graduated',      cls: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' },
+    };
+    const cfg = map[w.verdict] || map.pending;
+    const score = w.verdict_score != null ? ` ${w.verdict_score > 0 ? '+' : ''}${w.verdict_score}` : '';
+    const ago = w.last_check_at ? formatAge(Date.now() - new Date(w.last_check_at).getTime()) : 'never';
+    return (
+      <div className="flex flex-col gap-0.5" title={`Last check: ${ago}`}>
+        <Badge className={`text-[9px] ${cfg.cls}`}>{cfg.label}{score}</Badge>
+        <span className="text-[9px] text-muted-foreground">{ago}</span>
+      </div>
+    );
+  };
 
   // Enrich rows with live pump.fun MINT metadata (name, symbol, image, socials, true created_timestamp)
   const mintsToEnrich = React.useMemo(() => {
@@ -161,6 +202,7 @@ export function AllstarMintAlerts() {
                 <TableHead>Tier</TableHead>
                 <TableHead>Launchpad</TableHead>
                 <TableHead>Mint Age (live)</TableHead>
+                <TableHead>Aftercare</TableHead>
                 <TableHead>Detected</TableHead>
                 <TableHead className="w-16">Ack</TableHead>
               </TableRow>
@@ -168,11 +210,11 @@ export function AllstarMintAlerts() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Loading...</TableCell>
+                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Loading...</TableCell>
                 </TableRow>
               ) : (alerts || []).length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No mint alerts yet</TableCell>
+                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No mint alerts yet</TableCell>
                 </TableRow>
               ) : (
                 (alerts || []).map((alert) => {
@@ -295,6 +337,7 @@ export function AllstarMintAlerts() {
                           {liveAge}
                         </span>
                       </TableCell>
+                      <TableCell>{renderAftercare(alert.id)}</TableCell>
                       <TableCell className="text-muted-foreground text-[10px]">
                         {format(new Date(alert.created_at), 'MMM d HH:mm')}
                       </TableCell>

@@ -548,6 +548,128 @@ export type Database = {
         }
         Relationships: []
       }
+      allstar_alert_watch: {
+        Row: {
+          alert_id: string
+          allstar_id: string | null
+          allstar_tier: number | null
+          baseline_captured_at: string
+          baseline_holder_count: number | null
+          baseline_liquidity: number | null
+          baseline_mcap: number | null
+          baseline_price: number | null
+          baseline_volume_24h: number | null
+          check_count: number
+          close_reason: string | null
+          closed_at: string | null
+          created_at: string
+          creator_wallet: string | null
+          current_holder_count: number | null
+          current_liquidity: number | null
+          current_mcap: number | null
+          current_price: number | null
+          current_volume_24h: number | null
+          decay_stage: string
+          dissent_score: number | null
+          enrolled_at: string
+          exit_alert_sent_at: string | null
+          expires_at: string
+          history: Json
+          id: string
+          last_check_at: string | null
+          last_realert_at: string | null
+          next_check_at: string
+          reinforce_alerts_sent: number
+          token_mint: string
+          updated_at: string
+          verdict: Database["public"]["Enums"]["aftercare_verdict"]
+          verdict_reasons: Json | null
+          verdict_score: number | null
+        }
+        Insert: {
+          alert_id: string
+          allstar_id?: string | null
+          allstar_tier?: number | null
+          baseline_captured_at?: string
+          baseline_holder_count?: number | null
+          baseline_liquidity?: number | null
+          baseline_mcap?: number | null
+          baseline_price?: number | null
+          baseline_volume_24h?: number | null
+          check_count?: number
+          close_reason?: string | null
+          closed_at?: string | null
+          created_at?: string
+          creator_wallet?: string | null
+          current_holder_count?: number | null
+          current_liquidity?: number | null
+          current_mcap?: number | null
+          current_price?: number | null
+          current_volume_24h?: number | null
+          decay_stage?: string
+          dissent_score?: number | null
+          enrolled_at?: string
+          exit_alert_sent_at?: string | null
+          expires_at?: string
+          history?: Json
+          id?: string
+          last_check_at?: string | null
+          last_realert_at?: string | null
+          next_check_at?: string
+          reinforce_alerts_sent?: number
+          token_mint: string
+          updated_at?: string
+          verdict?: Database["public"]["Enums"]["aftercare_verdict"]
+          verdict_reasons?: Json | null
+          verdict_score?: number | null
+        }
+        Update: {
+          alert_id?: string
+          allstar_id?: string | null
+          allstar_tier?: number | null
+          baseline_captured_at?: string
+          baseline_holder_count?: number | null
+          baseline_liquidity?: number | null
+          baseline_mcap?: number | null
+          baseline_price?: number | null
+          baseline_volume_24h?: number | null
+          check_count?: number
+          close_reason?: string | null
+          closed_at?: string | null
+          created_at?: string
+          creator_wallet?: string | null
+          current_holder_count?: number | null
+          current_liquidity?: number | null
+          current_mcap?: number | null
+          current_price?: number | null
+          current_volume_24h?: number | null
+          decay_stage?: string
+          dissent_score?: number | null
+          enrolled_at?: string
+          exit_alert_sent_at?: string | null
+          expires_at?: string
+          history?: Json
+          id?: string
+          last_check_at?: string | null
+          last_realert_at?: string | null
+          next_check_at?: string
+          reinforce_alerts_sent?: number
+          token_mint?: string
+          updated_at?: string
+          verdict?: Database["public"]["Enums"]["aftercare_verdict"]
+          verdict_reasons?: Json | null
+          verdict_score?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "allstar_alert_watch_alert_id_fkey"
+            columns: ["alert_id"]
+            isOneToOne: false
+            referencedRelation: "allstar_mint_alerts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       allstar_dev_registry: {
         Row: {
           audit_count: number | null
@@ -22954,6 +23076,13 @@ export type Database = {
       }
     }
     Enums: {
+      aftercare_verdict:
+        | "pending"
+        | "reinforcing"
+        | "cooling"
+        | "exit"
+        | "graduated"
+        | "expired"
       ai_access_level: "summary" | "analysis" | "overview" | "full" | "api"
       app_role: "super_admin" | "admin" | "moderator" | "user"
       bot_guardrail_severity: "soft" | "hard" | "critical"
@@ -23124,6 +23253,14 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      aftercare_verdict: [
+        "pending",
+        "reinforcing",
+        "cooling",
+        "exit",
+        "graduated",
+        "expired",
+      ],
       ai_access_level: ["summary", "analysis", "overview", "full", "api"],
       app_role: ["super_admin", "admin", "moderator", "user"],
       bot_guardrail_severity: ["soft", "hard", "critical"],
