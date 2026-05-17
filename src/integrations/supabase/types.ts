@@ -771,6 +771,7 @@ export type Database = {
           created_at: string
           creator_wallet: string
           detecting_wallet: string | null
+          dev_balance_pct_at_alert: number | null
           developer_id: string | null
           id: string
           is_acknowledged: boolean | null
@@ -793,6 +794,7 @@ export type Database = {
           created_at?: string
           creator_wallet: string
           detecting_wallet?: string | null
+          dev_balance_pct_at_alert?: number | null
           developer_id?: string | null
           id?: string
           is_acknowledged?: boolean | null
@@ -815,6 +817,7 @@ export type Database = {
           created_at?: string
           creator_wallet?: string
           detecting_wallet?: string | null
+          dev_balance_pct_at_alert?: number | null
           developer_id?: string | null
           id?: string
           is_acknowledged?: boolean | null
