@@ -774,8 +774,10 @@ export type Database = {
           developer_id: string | null
           id: string
           is_acknowledged: boolean | null
+          is_suppressed: boolean
           launchpad: string | null
           metadata: Json | null
+          suppressed_reason: string | null
           tg_broadcasted_at: string | null
           token_mint: string
           token_name: string | null
@@ -794,8 +796,10 @@ export type Database = {
           developer_id?: string | null
           id?: string
           is_acknowledged?: boolean | null
+          is_suppressed?: boolean
           launchpad?: string | null
           metadata?: Json | null
+          suppressed_reason?: string | null
           tg_broadcasted_at?: string | null
           token_mint: string
           token_name?: string | null
@@ -814,8 +818,10 @@ export type Database = {
           developer_id?: string | null
           id?: string
           is_acknowledged?: boolean | null
+          is_suppressed?: boolean
           launchpad?: string | null
           metadata?: Json | null
+          suppressed_reason?: string | null
           tg_broadcasted_at?: string | null
           token_mint?: string
           token_name?: string | null
