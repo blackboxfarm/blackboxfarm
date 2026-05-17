@@ -321,6 +321,18 @@ export function ManualXPostingQueue() {
   const markPosted = async (row: QueueRow) => {
     const url = (pastedUrl[row.id] || "").trim();
     const { data: userRes } = await supabase.auth.getUser();
+    // Free the unique-archived-mint slot: demote any prior posted_manual row
+    // for the same token_mint so the partial unique index doesn't collide.
+    const { error: demoteErr } = await supabase
+      .from("holders_intel_post_queue")
+      .update({ manual_status: "posted_manual_superseded" })
+      .eq("token_mint", row.token_mint)
+      .eq("manual_status", "posted_manual")
+      .neq("id", row.id);
+    if (demoteErr) {
+      toast({ title: "Update failed", description: demoteErr.message, variant: "destructive" });
+      return;
+    }
     const { error } = await supabase
       .from("holders_intel_post_queue")
       .update({
