@@ -230,7 +230,12 @@ Deno.serve(withRunLog('autopsy-writer', async (req) => {
 
   const results: Array<{ candidate_id: string; slug?: string; status: string; error?: string }> = [];
 
-  for (const c of candidates) {
+  // Heavy work (AI gen, image overlay, scrapes) frequently exceeds the 150s
+  // edge-function idle timeout. Run the per-candidate loop in the background
+  // via EdgeRuntime.waitUntil and return immediately. Callers that need the
+  // slug should poll `autopsy_reports` by `token_mint` / `candidate_id`.
+  const runWork = async () => {
+    for (const c of candidates) {
     try {
       // Mark as analyzing
       await assertUpdate(
@@ -1079,6 +1084,24 @@ Write the full markdown now. No preamble, no code fence — start with "# Token 
       results.push({ candidate_id: c.id, status: 'failed', error: e.message });
     }
   }
+  };
+
+  // @ts-ignore - EdgeRuntime is provided by Supabase edge-runtime
+  if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) {
+    // @ts-ignore
+    EdgeRuntime.waitUntil(runWork());
+    return new Response(
+      JSON.stringify({
+        success: true,
+        queued: true,
+        candidates: candidates.map((c: any) => ({ id: c.id, token_mint: c.token_mint })),
+      }),
+      { status: 202, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  }
+
+  // Fallback (local/dev): run inline
+  await runWork();
 
   return new Response(JSON.stringify({ success: true, results }), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
