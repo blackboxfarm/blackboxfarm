@@ -109,6 +109,18 @@ export function DevProfileCard({ wallet, open, onOpenChange }: Props) {
                       {data.careerStats.archetype && (
                         <Badge variant="outline" className="text-[10px]">{data.careerStats.archetype}</Badge>
                       )}
+                      {data.kol?.isKol && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] gap-1 bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
+                          title={`Matched via ${data.kol.matchedVia || 'wallet'}${data.kol.matchedWallet && data.kol.matchedWallet !== data.wallet ? ` (${shortAddr(data.kol.matchedWallet)})` : ''}`}
+                        >
+                          <Crown className="h-3 w-3" />
+                          Recognized KOL
+                          {data.kol.rank ? <span className="opacity-80">#{data.kol.rank}</span> : null}
+                          {data.kol.tier ? <span className="opacity-80">· {data.kol.tier}</span> : null}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 </div>

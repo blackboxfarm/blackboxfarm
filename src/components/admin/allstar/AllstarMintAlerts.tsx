@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Bell, ExternalLink, RefreshCw, Check, Copy, MessageSquare, Twitter, Send, Globe } from 'lucide-react';
+import { Bell, ExternalLink, RefreshCw, Check, Copy, MessageSquare, Twitter, Send, Globe, Crown } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { Switch } from '@/components/ui/switch';
@@ -303,20 +303,33 @@ export function AllstarMintAlerts() {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-0.5">
-                          <DevProfileCardTrigger wallet={alert.creator_wallet}>
-                            <code className="text-[10px] font-mono underline decoration-dotted decoration-amber-500/40 hover:decoration-amber-400">
+                          <div className="flex items-center gap-1">
+                            <code className="text-[10px] font-mono">
                               {alert.creator_wallet.slice(0, 6)}...{alert.creator_wallet.slice(-4)}
                             </code>
-                          </DevProfileCardTrigger>
+                            <DevProfileCardTrigger wallet={alert.creator_wallet} className="inline-flex">
+                              <span
+                                title="Open Developer Profile Card"
+                                className="inline-flex items-center justify-center h-4 w-4 rounded bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 hover:text-amber-200"
+                              >
+                                <Crown className="h-2.5 w-2.5" />
+                              </span>
+                            </DevProfileCardTrigger>
+                          </div>
                           {metadata?.twitter_handle && (
-                            <a
-                              href={`https://x.com/${metadata.twitter_handle}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[10px] text-sky-400 hover:text-sky-300"
-                            >
-                              @{metadata.twitter_handle}
-                            </a>
+                            <div className="flex items-center gap-1">
+                              <a
+                                href={`https://x.com/${metadata.twitter_handle}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] text-sky-400 hover:text-sky-300"
+                              >
+                                @{metadata.twitter_handle}
+                              </a>
+                              <DevProfileCardTrigger wallet={alert.creator_wallet} className="inline-flex">
+                                <Crown className="h-3 w-3 text-amber-400 hover:text-amber-300" />
+                              </DevProfileCardTrigger>
+                            </div>
                           )}
                         </div>
                       </TableCell>
