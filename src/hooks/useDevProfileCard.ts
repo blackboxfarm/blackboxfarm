@@ -66,6 +66,19 @@ export interface DevProfileDossier {
     linkedX: string | null;
   }>;
   kolscan: { handle: string; url: string } | null;
+  kol: {
+    isKol: boolean;
+    source: string | null;
+    handle: string | null;
+    displayName: string | null;
+    tier: string | null;
+    rank: number | null;
+    trustScore: number | null;
+    weeklyScore: number | null;
+    followers: number | null;
+    matchedVia: 'wallet' | 'family' | 'handle' | null;
+    matchedWallet: string | null;
+  };
   meta: {
     firstSeenAt: string | null;
     lastActivityAt: string | null;
