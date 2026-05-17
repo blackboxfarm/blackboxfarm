@@ -91,20 +91,36 @@ export async function getXProfile(
       followers: typeof p.followers === 'number' ? p.followers : null,
     };
 
-    // 3. Cache write
+    // 3. Cache write — UPDATE if registry row exists for this handle.
+    // INSERT path is skipped because x_account_registry.x_user_id is NOT
+    // NULL (no synthetic id is safe to invent here); the registry is
+    // seeded elsewhere from real X user IDs.
     try {
-      await supabase
+      const { data: existing } = await supabase
         .from('x_account_registry')
-        .upsert(
-          {
-            current_handle: handle,
+        .select('x_user_id')
+        .ilike('current_handle', handle)
+        .maybeSingle();
+      if (existing?.x_user_id) {
+        await supabase
+          .from('x_account_registry')
+          .update({
             display_name: out.displayName,
             followers_count: out.followers,
             followers_fetched_at: new Date().toISOString(),
             last_seen_at: new Date().toISOString(),
-          },
-          { onConflict: 'current_handle' },
-        );
+          })
+          .eq('x_user_id', existing.x_user_id);
+      } else if (p.id) {
+        // First-time insert using real X user id from Apify response.
+        await supabase.from('x_account_registry').insert({
+          x_user_id: String(p.id),
+          current_handle: handle,
+          display_name: out.displayName,
+          followers_count: out.followers,
+          followers_fetched_at: new Date().toISOString(),
+        });
+      }
     } catch (e) {
       console.warn('[x-profile-lookup] cache write failed:', e);
     }
