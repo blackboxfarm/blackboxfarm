@@ -192,7 +192,10 @@ export function AllstarMintAlerts() {
                   return (
                     <TableRow key={alert.id} className={`text-xs ${alert.is_acknowledged ? 'opacity-50' : ''}`}>
                       <TableCell>
-                        <Badge className={`text-[9px] ${alertLevelColor(alert.alert_level)}`}>
+                        <Badge
+                          className={`text-[9px] ${alertLevelColor(alert.alert_level)}`}
+                          title="Alert level is derived from the developer's tier (T-rating): T6+ = Critical, T4–5 = High, T2–3 = Medium. Higher tier = larger proven launches in this dev's history."
+                        >
                           {alert.alert_level}
                         </Badge>
                       </TableCell>
@@ -256,9 +259,21 @@ export function AllstarMintAlerts() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <code className="text-[10px] font-mono">
-                          {alert.creator_wallet.slice(0, 6)}...{alert.creator_wallet.slice(-4)}
-                        </code>
+                        <div className="flex flex-col gap-0.5">
+                          <code className="text-[10px] font-mono">
+                            {alert.creator_wallet.slice(0, 6)}...{alert.creator_wallet.slice(-4)}
+                          </code>
+                          {metadata?.twitter_handle && (
+                            <a
+                              href={`https://x.com/${metadata.twitter_handle}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[10px] text-sky-400 hover:text-sky-300"
+                            >
+                              @{metadata.twitter_handle}
+                            </a>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         {alert.allstar_tier ? (
