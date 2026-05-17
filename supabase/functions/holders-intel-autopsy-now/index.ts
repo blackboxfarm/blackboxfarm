@@ -74,31 +74,44 @@ Deno.serve(async (req) => {
       .update({ status: "pending" })
       .eq("id", candidateId);
 
-    // 3. Invoke autopsy-writer (await)
+    // 3. Kick off autopsy-writer (now returns 202 immediately and runs in background)
     const writerRes = await fetch(`${supabaseUrl}/functions/v1/autopsy-writer`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
       body: JSON.stringify({ candidate_id: candidateId }),
     });
-    const writerJson = await writerRes.json().catch(() => ({}));
-    if (!writerRes.ok) {
-      throw new Error(`autopsy-writer ${writerRes.status}: ${JSON.stringify(writerJson).slice(0, 300)}`);
+    if (!writerRes.ok && writerRes.status !== 202) {
+      const t = await writerRes.text().catch(() => "");
+      throw new Error(`autopsy-writer ${writerRes.status}: ${t.slice(0, 300)}`);
     }
-    const writerResult = (writerJson?.results || [])[0] || writerJson;
-    let slug: string | null = writerResult?.slug ?? null;
+    await writerRes.text().catch(() => "");
 
-    // Fallback: read latest report for this candidate
-    if (!slug) {
+    // Poll autopsy_reports for the slug (writer runs in background, up to ~120s)
+    let slug: string | null = null;
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < 120_000) {
       const { data: rep } = await supabase
         .from("autopsy_reports")
-        .select("slug")
+        .select("slug, created_at")
         .eq("token_mint", tokenMint)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
-      slug = (rep?.slug as string | null) ?? null;
+      if (rep?.slug) { slug = rep.slug as string; break; }
+
+      // Bail early if writer marked the candidate as failed
+      const { data: cand } = await supabase
+        .from("autopsy_candidates")
+        .select("status, status_reason")
+        .eq("id", candidateId)
+        .maybeSingle();
+      if (cand?.status === "failed") {
+        throw new Error(`autopsy-writer failed: ${cand.status_reason ?? "unknown"}`);
+      }
+
+      await new Promise((r) => setTimeout(r, 3000));
     }
-    if (!slug) throw new Error("autopsy-writer returned no slug");
+    if (!slug) throw new Error("autopsy-writer timed out (no slug after 120s)");
 
     // 4. Force-approve report
     await supabase
