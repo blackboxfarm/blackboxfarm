@@ -275,19 +275,41 @@ Deno.serve(withRunLog('family-mint-monitor', async (req) => {
             callerName: 'family-mint-monitor',
           });
 
+          // ═══ Dev-Exit suppression check (after Mayhem, before broadcast) ═══
+          const { checkDevExit, SUPPRESS_DEV_EXIT_BELOW_TIER } = await import('../_shared/dev-exit-check.ts');
+          let devExit: { exited: boolean; reason: 'DEV_DUMPED' | 'DEV_EXITED' | null; balancePct: number | null } =
+            { exited: false, reason: null, balancePct: null };
+          if (!richAlert.isMayhem && (allstarCtx?.best_tier ?? 0) < SUPPRESS_DEV_EXIT_BELOW_TIER) {
+            devExit = await checkDevExit({
+              tokenMint: det.mintAddress,
+              devWallet: item.wallet_address,
+              mintTimestampMs: det.timestamp ? new Date(det.timestamp).getTime() : null,
+            });
+          }
+          const finalSuppressed = richAlert.isMayhem || devExit.exited;
+          const finalSuppressedReason = richAlert.isMayhem
+            ? 'mayhem'
+            : devExit.reason
+              ? devExit.reason.toLowerCase()
+              : null;
+
           // ═══ CROSS-FEED: allstar_mint_alerts ═══
           if (familyData?.allstar_id) {
             await supabase.from('allstar_mint_alerts').insert({
               allstar_id: familyData.allstar_id, creator_wallet: familyData.seed_wallet,
               detecting_wallet: item.wallet_address, token_mint: det.mintAddress,
               launchpad: det.launchpad, alert_level: det.eventType === 'DIRECT_DEV_MINT' ? 'critical' : 'high',
-              is_suppressed: richAlert.isMayhem,
-              suppressed_reason: richAlert.isMayhem ? 'mayhem' : null,
+              is_suppressed: finalSuppressed,
+              suppressed_reason: finalSuppressedReason,
+              dev_balance_pct_at_alert: devExit.balancePct,
               metadata: {
                 source: 'family_mint_monitor',
                 event_type: det.eventType,
                 mint_timestamp: det.timestamp || null,
                 is_mayhem: richAlert.isMayhem,
+                dev_exited: devExit.exited,
+                dev_exit_reason: devExit.reason,
+                dev_balance_pct: devExit.balancePct,
               },
             });
 
@@ -400,6 +422,8 @@ Deno.serve(withRunLog('family-mint-monitor', async (req) => {
             const { sendMintAlert } = await import('../_shared/mint-alert-notify.ts');
             if (richAlert.isMayhem) {
               console.log(`[FamilyMintMonitor] 🛑 MAYHEM suppression — alert kept in queue but NOT announced for ${det.mintAddress.slice(0,8)}`);
+            } else if (devExit.exited) {
+              console.log(`[FamilyMintMonitor] 🛑 ${devExit.reason} suppression (dev holds ${devExit.balancePct?.toFixed(2)}%) — not announced for ${det.mintAddress.slice(0,8)}`);
             } else {
               await sendMintAlert(supabase, {
                 tokenMint: det.mintAddress,
