@@ -4999,6 +4999,8 @@ export type Database = {
           is_serial_spammer: boolean | null
           is_test_launcher: boolean | null
           known_aliases: string[] | null
+          kolscan_checked_at: string | null
+          kolscan_handle: string | null
           last_activity_at: string | null
           last_analyzed_at: string | null
           last_fantasy_loss_at: string | null
@@ -5054,6 +5056,8 @@ export type Database = {
           is_serial_spammer?: boolean | null
           is_test_launcher?: boolean | null
           known_aliases?: string[] | null
+          kolscan_checked_at?: string | null
+          kolscan_handle?: string | null
           last_activity_at?: string | null
           last_analyzed_at?: string | null
           last_fantasy_loss_at?: string | null
@@ -5109,6 +5113,8 @@ export type Database = {
           is_serial_spammer?: boolean | null
           is_test_launcher?: boolean | null
           known_aliases?: string[] | null
+          kolscan_checked_at?: string | null
+          kolscan_handle?: string | null
           last_activity_at?: string | null
           last_analyzed_at?: string | null
           last_fantasy_loss_at?: string | null
