@@ -341,8 +341,8 @@ Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
               await supabase.from('wallet_family_poll_queue').insert({
                 wallet_address: fw,
                 family_id: newFamily.id,
-                priority: 'P2',
-                poll_interval_sec: 900,
+                priority: tier >= 5 ? 'P1' : 'P2',
+                poll_interval_sec: tier >= 5 ? 300 : 900,
                 next_poll_at: new Date().toISOString(),
               }).catch(() => {});
             }
