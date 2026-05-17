@@ -104,6 +104,77 @@ function processTemplate(template: string, data: any): string {
   return sanitizeForTwitter(normalized);
 }
 
+/**
+ * Generate a single-sentence analytical AI snippet via Lovable AI Gateway.
+ * Returns null on any failure (fail-open — the card just skips the line).
+ */
+async function generateAiSnippet(stats: any, report: any): Promise<string | null> {
+  const apiKey = Deno.env.get('LOVABLE_API_KEY');
+  if (!apiKey) return null;
+
+  const facts = {
+    ticker: stats.symbol,
+    name: stats.name,
+    healthGrade: stats.healthGrade,
+    healthScore: stats.healthScore,
+    totalWallets: stats.totalHolders,
+    realHolders: stats.realHolders,
+    dustPct: stats.dustPercentage,
+    whales: stats.whaleCount,
+    serious: stats.seriousCount,
+    retail: stats.activeCount,
+    riskSignal: stats.risk,
+    riskDetail: stats.riskDetail,
+    top10Pct: report?.distributionStats?.top10Percentage ?? null,
+    devTrustLevel: report?.devReputation?.trustLevel ?? null,
+  };
+
+  const system = `You write a single analytical sentence about a Solana token's holder distribution for the @HoldersIntel X account.
+RULES (strict):
+- Output EXACTLY one sentence, max 140 characters.
+- Plain analytical voice. No hype, no shilling, no emojis, no hashtags, no $TICKER cashtags, no @mentions, no URLs.
+- Reference concrete distribution facts (real-holder ratio, dust %, whale concentration, top-10 %, or risk signal).
+- Do not say "the token" repeatedly; use the ticker name once at most without a $.
+- No quotation marks around the sentence.`;
+
+  try {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 12_000);
+    const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      signal: ctrl.signal,
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: `Facts:\n${JSON.stringify(facts)}` },
+        ],
+      }),
+    });
+    clearTimeout(timeout);
+    if (!res.ok) {
+      console.warn(`[compose-preview] ai_snippet gateway ${res.status}`);
+      return null;
+    }
+    const data = await res.json();
+    let text: string = data?.choices?.[0]?.message?.content?.trim() || '';
+    if (!text) return null;
+    // Strip wrapping quotes, hashtags, $cashtags, urls, emoji-ish leading chars
+    text = text.replace(/^["'`]+|["'`]+$/g, '').trim();
+    text = text.replace(/https?:\/\/\S+/g, '').trim();
+    text = text.replace(/[#$@]\w+/g, (m) => m.slice(1)).trim();
+    if (text.length > 200) text = text.slice(0, 197).replace(/\s+\S*$/, '') + '…';
+    return text || null;
+  } catch (e) {
+    console.warn(`[compose-preview] ai_snippet error: ${(e as Error).message}`);
+    return null;
+  }
+}
+
 async function fetchActiveTemplate(supabase: any): Promise<string> {
   const { data } = await supabase
     .from('holders_intel_templates')
@@ -135,7 +206,7 @@ Deno.serve(async (req) => {
 
     const { data: items, error: fetchErr } = await supabase
       .from('holders_intel_post_queue')
-      .select('id, token_mint, symbol, name, dex_banner_url')
+      .select('id, token_mint, symbol, name, dex_banner_url, ai_snippet')
       .in('id', ids);
 
     if (fetchErr) throw fetchErr;
@@ -189,6 +260,13 @@ Deno.serve(async (req) => {
         });
         stats.risk = risk.signal;
         stats.riskDetail = risk.detail;
+
+        // Generate AI snippet (cached unless force_refresh). Fail-open.
+        if (force_refresh === true || !item.ai_snippet) {
+          stats.aiSnippet = await generateAiSnippet(stats, report);
+        } else {
+          stats.aiSnippet = item.ai_snippet;
+        }
 
         const tweetText = processTemplate(tweetTemplate, stats);
 
