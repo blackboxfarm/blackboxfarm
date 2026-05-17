@@ -21805,6 +21805,8 @@ export type Database = {
           current_handle: string | null
           display_name: string | null
           first_seen_at: string | null
+          followers_count: number | null
+          followers_fetched_at: string | null
           handle_history: Json | null
           is_verified: boolean | null
           last_seen_at: string | null
@@ -21820,6 +21822,8 @@ export type Database = {
           current_handle?: string | null
           display_name?: string | null
           first_seen_at?: string | null
+          followers_count?: number | null
+          followers_fetched_at?: string | null
           handle_history?: Json | null
           is_verified?: boolean | null
           last_seen_at?: string | null
@@ -21835,6 +21839,8 @@ export type Database = {
           current_handle?: string | null
           display_name?: string | null
           first_seen_at?: string | null
+          followers_count?: number | null
+          followers_fetched_at?: string | null
           handle_history?: Json | null
           is_verified?: boolean | null
           last_seen_at?: string | null

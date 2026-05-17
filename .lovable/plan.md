@@ -1,43 +1,64 @@
-# Backfill Review — Side-by-Side Card Comparison
+## What you're seeing now
 
-## Problem
-Current Backfill Review shows a confusing field-level diff table. You want to **see** what changes — full @HoldersIntel card rendered twice (Before / After) so you can eyeball it like a real post.
-
-## What I'll build
-
-Replace the existing `BackfillReview.tsx` queue UI with a **batch reviewer** that pulls the next **5 pending proposals** and shows each as:
-
-```text
-┌──────────────── Proposal 1 of 5 ────────────────┐
-│  1a — BEFORE (current archive)                   │
-│  [full HoldersIntelTweetCard rendered]           │
-│                                                  │
-│  1b — AFTER (TG-parsed)                          │
-│  [full HoldersIntelTweetCard rendered]           │
-│                                                  │
-│  Changed fields: real_holders, dust_pct, grade   │
-│  [✅ Approve]  [❌ Reject]                       │
-│  Feedback: [______________________________]      │
-└──────────────────────────────────────────────────┘
+**DM message today:**
+```
+🚀 ALLSTAR MINT: $ UNKNOWN
+T8 dev @cb_doge
+Best: $ 7 → $3.1M
+⏰ Minted: 32m ago
 ```
 
-Stacked vertically — 5 of these per page. Sticky header shows progress (`2/5 reviewed`) and a final **Apply Approved** button.
+**The "Critical" column with the ⚠️ triangle** is the alert level. It is derived from the dev's tier (T-rating), nothing else:
+- T6+ → `critical`
+- T4–5 → `high`
+- T2–3 → `medium`
 
-## Technical details
+So T8 dev = critical. The badge label is unclear and has no tooltip — users have to guess what "critical" means.
 
-1. **`BackfillReview.tsx`** — rewrite:
-   - Fetch `holders_intel_backfill_proposals` where `status='pending'` limit 5, order oldest first
-   - For each row, build two `ArchiveRow` objects (before from `before_json`, after = before merged with `after_json`) and render `<HoldersIntelTweetCard row={...} />` twice side-by-side (md:grid-cols-2, stacks on mobile)
-   - Auto-compute `changed_fields` list (highlighted chip row between cards)
-   - Per-card actions: Approve (status='accepted'), Reject (status='rejected', optional `reviewer_feedback` text)
-   - Bottom bar: "Apply N Approved to Archive" (calls existing apply path), "Load Next 5", counts of accepted/rejected/pending in current batch
+## What to change
 
-2. **Migration** — add `reviewer_feedback text` column to `holders_intel_backfill_proposals` so rejection reasons feed back into parser tuning.
+### 1. Enrich the DrRick DM (and BlackBox group post) with real dev context
 
-3. **No changes** to the edge function, parser, or archive write path — only the review UX.
+Pull live data when an alert fires and produce a message like:
 
-## Out of scope
-- Parser improvements (separate pass after we see what users reject)
-- Bulk-accept-all (kept but de-emphasized; per-item is the point)
+```
+🚀 ALLSTAR MINT — $ NEWTICK
 
-Reply **Plan Approved** to proceed.
+👤 cb_doge (Display Name) — 1.8M followers
+🏆 Best prior launch: $ 7 → $3.1M ATH (Mar 12, 2026)
+
+🆕 New mint: $ NEWTICK (Token Name)
+⏰ Minted: 32m ago  •  Launchpad: pump.fun
+
+Pump:        https://pump.fun/<mint>
+DexScreener: https://dexscreener.com/solana/<mint>
+Solscan:     https://solscan.io/token/<mint>
+```
+
+Data sources:
+- **Display name + followers** → `twitter-profile-enricher`-style Apify lookup (one call per alert, rare event). Cache result on `x_account_registry` so repeat alerts for the same dev don't burn Apify credits.
+- **Best token ATH + date** → `proven_dev_tokens` joined by `allstar.best_token_mint` → `market_cap_ath` + `ath_timestamp` (fallback to `mint_timestamp`).
+
+### 2. Make the alert level column self-explanatory in the UI
+
+In `AllstarMintAlerts.tsx`:
+- Wrap the `alert_level` badge in a `<Tooltip>` that says: *"Critical = T6+ dev (proven launches ≥ $1M). High = T4–5. Medium = T2–3. Higher tier = bigger track record."*
+- Add the dev's `@handle` + cached follower count under the existing dev column so the table itself shows the same context as the DM.
+
+### 3. Schema (tiny additive migration)
+
+Add to `x_account_registry`:
+- `followers_count BIGINT`
+- `followers_fetched_at TIMESTAMPTZ`
+
+Used only as a cache. No RLS changes (table is admin-read).
+
+### Files touched
+
+- `supabase/migrations/<new>.sql` — add 2 cache columns
+- `supabase/functions/_shared/x-profile-lookup.ts` *(new)* — cached Apify-backed `getXProfile(handle)` returning `{displayName, followers}`
+- `supabase/functions/allstar-mint-auditor/index.ts` — call `getXProfile` + read `proven_dev_tokens` for best-token date, rewrite `dmMessage` and `tgMessage`
+- `supabase/functions/family-mint-monitor/index.ts` — same enrichment for the family-mint path
+- `src/components/admin/allstar/AllstarMintAlerts.tsx` — tooltip on the alert-level badge + show dev handle/followers in row
+
+Reply **Plan Approved** and I'll ship it.
