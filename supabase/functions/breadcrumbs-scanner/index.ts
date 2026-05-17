@@ -40,7 +40,8 @@ const platformAdapters: PlatformAdapter[] = [
   { key: 'bagsfm', type: 'api', priority: 95, apiEndpoint: 'https://bags.fm/{MINT}' }, // Will scrape public page
   { key: 'coingecko', type: 'api', priority: 90, apiEndpoint: 'https://api.coingecko.com/api/v3/coins/solana/contract/{MINT}' },
   { key: 'dexscreener', type: 'api', priority: 85, apiEndpoint: 'https://api.dexscreener.com/latest/dex/tokens/{MINT}' },
-  { key: 'birdeye', type: 'api', priority: 80, apiEndpoint: 'https://public-api.birdeye.so/public/token_overview?address={MINT}' },
+  // BIRDEYE_SUSPENDED: temporarily disabled by user request. Uncomment to re-enable.
+  // { key: 'birdeye', type: 'api', priority: 80, apiEndpoint: 'https://public-api.birdeye.so/public/token_overview?address={MINT}' },
   { key: 'solscan_scrape', type: 'scrape', priority: 55, url: 'https://solscan.io/token/{MINT}' }, // fallback only
   { key: 'geckoterminal', type: 'scrape', priority: 70, url: 'https://www.geckoterminal.com/solana/tokens/{MINT}' },
   { key: 'jupiterterminaldotcom', type: 'scrape', priority: 65, url: 'https://terminal.jup.ag/swap/SOL-{MINT}' },

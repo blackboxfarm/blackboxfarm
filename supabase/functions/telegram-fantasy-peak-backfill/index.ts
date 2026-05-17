@@ -31,8 +31,9 @@ interface DexScreenerResponse {
 
 async function fetchHistoricalPeak(tokenMint: string, entryDate: string): Promise<{ peakPrice: number | null; peakAt: string | null }> {
   try {
-    // Try Birdeye first for historical data
-    const birdeyeKey = Deno.env.get('BIRDEYE_API_KEY');
+    // BIRDEYE_SUSPENDED: temporarily disabled by user request. Set to true to re-enable.
+    const BIRDEYE_ENABLED = false;
+    const birdeyeKey = BIRDEYE_ENABLED ? Deno.env.get('BIRDEYE_API_KEY') : null;
     if (birdeyeKey) {
       const entryTime = new Date(entryDate).getTime() / 1000;
       const now = Math.floor(Date.now() / 1000);

@@ -133,6 +133,8 @@ async function geckoterminalAth(mint: string): Promise<number | null> {
  * to creation. Uses ~30 CU; only call when worth it.
  */
 async function birdeyeAth(mint: string, sinceUnix: number): Promise<number | null> {
+  // BIRDEYE_SUSPENDED: temporarily disabled by user request. Remove this line to re-enable.
+  return null;
   const key = Deno.env.get('BIRDEYE_API_KEY');
   if (!key) return null;
   const now = Math.floor(Date.now() / 1000);

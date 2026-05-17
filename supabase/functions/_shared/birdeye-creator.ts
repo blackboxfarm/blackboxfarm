@@ -10,6 +10,8 @@ export async function birdeyeResolveCreator(
   fnName: string,
   supabase?: any,
 ): Promise<string | null> {
+  // BIRDEYE_SUSPENDED: temporarily disabled by user request. Remove this block to re-enable.
+  return null;
   const key = Deno.env.get('BIRDEYE_API_KEY');
   if (!key) return null;
 
