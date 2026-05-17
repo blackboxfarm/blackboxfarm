@@ -661,12 +661,16 @@ async function createAllstarAlert(
     ].join('\n');
 
     const { sendMintAlert } = await import('../_shared/mint-alert-notify.ts');
-    await sendMintAlert(supabase, {
-      tokenMint: mintAddr,
-      blackboxMessage: tgMessage,
-      drrickMessage: dmMessage,
-      sourceFunction: 'allstar-mint-auditor',
-    });
+    if (richAlert.isMayhem) {
+      console.log(`[allstar] 🛑 MAYHEM suppression — alert kept in queue but NOT announced for ${mintAddr.slice(0,8)}`);
+    } else {
+      await sendMintAlert(supabase, {
+        tokenMint: mintAddr,
+        blackboxMessage: richAlert.blackboxMessage,
+        drrickMessage: richAlert.drrickMessage,
+        sourceFunction: 'allstar-mint-auditor',
+      });
+    }
   } catch (e) {
     console.warn('[allstar] mint-alert notify failed:', e);
   }
