@@ -96,17 +96,35 @@ export function AllstarRegistry() {
 
   const { data: devs, isLoading, refetch } = useQuery({
     queryKey: ['allstar-registry'],
+    refetchInterval: 60_000,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('allstar_dev_registry')
-        .select('*')
-        .order('best_tier', { ascending: false })
-        .order('best_mcap_achieved', { ascending: false })
-        .limit(5000);
-      if (error) throw error;
-      return data || [];
+      // Page past PostgREST's 1000-row default cap so the full registry is loaded.
+      const PAGE = 1000;
+      const all: any[] = [];
+      for (let from = 0; from < 20_000; from += PAGE) {
+        const { data, error } = await supabase
+          .from('allstar_dev_registry')
+          .select('*')
+          .order('best_tier', { ascending: false })
+          .order('best_mcap_achieved', { ascending: false })
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        all.push(...data);
+        if (data.length < PAGE) break;
+      }
+      return all;
     },
   });
+
+  // Realtime: any insert/update on the registry triggers an immediate refetch.
+  React.useEffect(() => {
+    const channel = supabase
+      .channel('allstar-registry-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'allstar_dev_registry' }, () => refetch())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [refetch]);
 
   // True total (independent of fetch limit) so the title isn't capped
   const { data: totalCount } = useQuery({
@@ -172,11 +190,11 @@ export function AllstarRegistry() {
                     className="gap-1 border-primary/50 text-primary hover:bg-primary/10"
                   >
                     {backfilling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-                    Backfill (lifecycle ATH)
+                    Force backfill (lifecycle ATH)
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs">
-                  Scans token_lifecycle for ANY signal (ath_alltime, first_24h_ath, ath_24h, mcap, fdv) ≥ $100k and promotes their creators. Also seeds wallet_families + poll queue.
+                  Manual override — this now runs nightly at 3am UTC automatically. Scans token_lifecycle for ANY signal (ath_alltime, first_24h_ath, ath_24h, mcap, fdv) ≥ $100k and promotes their creators.
                 </TooltipContent>
               </Tooltip>
               <Tooltip>
@@ -189,11 +207,11 @@ export function AllstarRegistry() {
                     className="gap-1 border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/10"
                   >
                     {wideBackfilling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-                    Rebuild from Full History
+                    Force deep rebuild
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs">
-                  Full sweep: token_lifecycle (any ATH/mcap signal) + proven_dev_tokens (732 rows) + dev_wallet_reputation (legitimate builders). Expected jump from ~216 → 600+. Also seeds families and poll queue so family-mint-monitor begins watching every dev.
+                  Manual override — same job runs nightly at 3am UTC. Full sweep: token_lifecycle + proven_dev_tokens + dev_wallet_reputation. Also seeds families and poll queue.
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -209,7 +227,7 @@ export function AllstarRegistry() {
               className="gap-1"
             >
               <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} /> 
-              {refreshing ? 'Refreshing...' : 'Refresh'}
+              {refreshing ? 'Refreshing...' : 'Force re-poll'}
             </Button>
           </div>
         </div>
