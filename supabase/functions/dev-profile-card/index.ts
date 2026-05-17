@@ -19,46 +19,63 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
-const KOLSCAN_TTL_MS = 24 * 60 * 60 * 1000;
-
 function isBase58(s: string): boolean {
   return typeof s === 'string' && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s);
 }
 
-async function maybeFetchKolscan(
+/**
+ * Look up KOL status from the internal pumpfun_kol_registry. This registry
+ * is maintained by `kol-registry-sync` / `pumpfun-kol-registry` on a 24h
+ * cadence and is sourced from kolscan.io's leaderboard — so we never have
+ * to scrape kolscan HTML at request time.
+ *
+ * Match priority:
+ *   1) the dev wallet itself
+ *   2) any wallet in the dev's family (linked/family wallets)
+ *   3) the dev's X handle (after stripping @)
+ */
+async function lookupKol(
   supabase: ReturnType<typeof createClient>,
-  wallet: string,
-  existingHandle: string | null,
-  checkedAt: string | null,
-): Promise<string | null> {
-  const fresh = checkedAt && (Date.now() - new Date(checkedAt).getTime() < KOLSCAN_TTL_MS);
-  if (fresh) return existingHandle;
+  devWallet: string,
+  familyWallets: string[],
+  handleCandidates: string[],
+): Promise<any | null> {
+  const select =
+    'wallet_address, twitter_handle, twitter_followers, kolscan_rank, kolscan_last_rank, kolscan_weekly_score, display_name, kol_tier, trust_score, source, is_active';
 
-  try {
-    const r = await fetch(`https://kolscan.io/account/${wallet}`, {
-      method: 'GET',
-      headers: { 'user-agent': 'Mozilla/5.0 BlackBoxFarmBot/1.0' },
-      signal: AbortSignal.timeout(6000),
-    });
-    let handle: string | null = null;
-    if (r.ok) {
-      const html = await r.text();
-      // KOLscan profile pages embed the handle in <title> like
-      // "Cupsey | KolScan" or in a <h1>.  Best-effort regex.
-      const titleMatch = html.match(/<title>([^<|]+?)\s*\|\s*KolScan<\/title>/i);
-      const h1Match = html.match(/<h1[^>]*>\s*([^<]{1,40})\s*<\/h1>/i);
-      const candidate = (titleMatch?.[1] || h1Match?.[1] || '').trim();
-      if (candidate && !/not\s+found|404/i.test(candidate)) handle = candidate;
-    }
-    // Persist (also writes a null + checked_at so we don't re-scrape constantly)
-    await supabase
-      .from('dev_wallet_reputation')
-      .update({ kolscan_handle: handle, kolscan_checked_at: new Date().toISOString() })
-      .eq('wallet_address', wallet);
-    return handle;
-  } catch (_e) {
-    return existingHandle;
+  // 1) direct wallet match
+  const { data: direct } = await supabase
+    .from('pumpfun_kol_registry')
+    .select(select)
+    .eq('wallet_address', devWallet)
+    .maybeSingle();
+  if (direct) return { ...direct, matchedVia: 'wallet', matchedWallet: devWallet };
+
+  // 2) family wallet match
+  const fam = (familyWallets || []).filter((w) => w && w !== devWallet);
+  if (fam.length) {
+    const { data: famHit } = await supabase
+      .from('pumpfun_kol_registry')
+      .select(select)
+      .in('wallet_address', fam.slice(0, 50))
+      .order('kolscan_rank', { ascending: true, nullsFirst: false })
+      .limit(1)
+      .maybeSingle();
+    if (famHit) return { ...famHit, matchedVia: 'family', matchedWallet: (famHit as any).wallet_address };
   }
+
+  // 3) handle match
+  const clean = Array.from(new Set(handleCandidates.map((h) => String(h || '').replace(/^@/, '').trim()).filter(Boolean)));
+  if (clean.length) {
+    const { data: handleHit } = await supabase
+      .from('pumpfun_kol_registry')
+      .select(select)
+      .ilike('twitter_handle', clean[0])
+      .maybeSingle();
+    if (handleHit) return { ...handleHit, matchedVia: 'handle', matchedWallet: (handleHit as any).wallet_address };
+  }
+
+  return null;
 }
 
 function verdict(rep: any, allstar: any, topTokens: any[]): string {
@@ -134,11 +151,14 @@ Deno.serve(async (req) => {
       xProfile = xp || null;
     }
 
-    // KOLscan enrich (best-effort, fail-open)
-    let kolscanHandle: string | null = rep?.kolscan_handle ?? null;
-    if (rep) {
-      kolscanHandle = await maybeFetchKolscan(supabase, wallet, rep.kolscan_handle ?? null, rep.kolscan_checked_at ?? null);
-    }
+    // KOL enrichment — internal pumpfun_kol_registry (no live scraping).
+    const familyWallets: string[] = [
+      ...(allstar?.family_wallets || []),
+      ...((rep?.linked_wallets as string[] | undefined) || []),
+    ];
+    const kolRow = await lookupKol(supabase, wallet, familyWallets, handleCandidates);
+    const kolscanHandle: string | null =
+      kolRow?.twitter_handle || kolRow?.display_name || rep?.kolscan_handle || null;
 
     const dossier = {
       wallet,
@@ -218,8 +238,21 @@ Deno.serve(async (req) => {
       })),
       kolscan: kolscanHandle ? {
         handle: kolscanHandle,
-        url: `https://kolscan.io/account/${wallet}`,
+        url: `https://kolscan.io/account/${kolRow?.matchedWallet || wallet}`,
       } : null,
+      kol: {
+        isKol: !!kolRow,
+        source: kolRow?.source ?? null,
+        handle: kolRow?.twitter_handle ?? null,
+        displayName: kolRow?.display_name ?? null,
+        tier: kolRow?.kol_tier ?? null,
+        rank: kolRow?.kolscan_rank ?? kolRow?.kolscan_last_rank ?? null,
+        trustScore: kolRow?.trust_score ?? null,
+        weeklyScore: kolRow?.kolscan_weekly_score ?? null,
+        followers: kolRow?.twitter_followers ?? null,
+        matchedVia: kolRow?.matchedVia ?? null,
+        matchedWallet: kolRow?.matchedWallet ?? null,
+      },
       meta: {
         firstSeenAt: rep?.first_seen_at ?? null,
         lastActivityAt: rep?.last_activity_at ?? null,
