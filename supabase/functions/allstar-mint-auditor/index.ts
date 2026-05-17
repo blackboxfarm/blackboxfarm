@@ -5,6 +5,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
 import { sendAdminSms } from '../_shared/sms-notify.ts';
 import { assertDbWrite } from '../_shared/db-assert.ts';
+import { buildRichMintAlert } from '../_shared/mint-alert-format.ts';
 enableHeliusTracking('allstar-mint-auditor');
 
 const corsHeaders = {
@@ -484,6 +485,28 @@ async function createAllstarAlert(
 
   // Insert alert record with verified mint timestamp
   const mintDate = new Date(hit.mintTimestamp * 1000);
+
+  // Build rich alert (also detects Mayhem launches that must NOT broadcast)
+  const richAlert = await buildRichMintAlert(supabase, {
+    tokenMint: mintAddr,
+    creatorWallet: hit.creatorWallet,
+    launchpad,
+    eventLabel: null,
+    mintTimestampMs: hit.mintTimestamp ? hit.mintTimestamp * 1000 : null,
+    dev: {
+      tier: allstar.best_tier ?? null,
+      bestTokenSymbol: allstar.best_token_symbol ?? null,
+      bestTokenMint: allstar.best_token_mint ?? null,
+      bestMcap: allstar.best_mcap_achieved ?? null,
+      twitterHandle: allstar.twitter_handle ?? null,
+      familySize: allstar.total_wallet_family_size ?? null,
+      kycRoot: allstar.kyc_root_wallet ?? null,
+      familyName: null,
+    },
+    alertLevel,
+    callerName: 'allstar-mint-auditor',
+  });
+
   await assertDbWrite(
     supabase.from('allstar_mint_alerts').insert({
     allstar_id: allstar.id,
@@ -498,6 +521,8 @@ async function createAllstarAlert(
     allstar_best_mcap: allstar.best_mcap_achieved,
     launchpad,
     alert_level: alertLevel,
+    is_suppressed: richAlert.isMayhem,
+    suppressed_reason: richAlert.isMayhem ? 'mayhem' : null,
     metadata: {
       twitter_handle: allstar.twitter_handle,
       kyc_root: allstar.kyc_root_wallet,
@@ -507,6 +532,7 @@ async function createAllstarAlert(
       mint_timestamp: mintDate.toISOString(),
       mint_age: hit.mintAge,
       verified_onchain: !!hit.mintTimestamp,
+      is_mayhem: richAlert.isMayhem,
     },
     }).select('id'),
     'allstar_mint_alerts',
