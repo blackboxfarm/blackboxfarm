@@ -542,10 +542,57 @@ async function createAllstarAlert(
   // CHANNELS 1+2: BlackBox group + DrRick DM (unified, deduped)
   // ──────────────────────────────────────────────
   try {
+    // Enrich: live X profile (display_name + followers) and prior best-token ATH date.
+    let devDisplayName: string | null = null;
+    let devFollowersLabel = '';
+    if (allstar.twitter_handle) {
+      try {
+        const { getXProfile, formatFollowers } = await import('../_shared/x-profile-lookup.ts');
+        const prof = await getXProfile(supabase, allstar.twitter_handle);
+        if (prof) {
+          devDisplayName = prof.displayName;
+          if (prof.followers && prof.followers > 0) {
+            devFollowersLabel = `${formatFollowers(prof.followers)} followers`;
+          }
+        }
+      } catch (e) {
+        console.warn('[allstar] x-profile-lookup failed:', e);
+      }
+    }
+
+    let bestAthDateLabel = '';
+    if (allstar.best_token_mint) {
+      try {
+        const { data: bt } = await supabase
+          .from('proven_dev_tokens')
+          .select('ath_timestamp, mint_timestamp')
+          .eq('token_mint', allstar.best_token_mint)
+          .maybeSingle();
+        const ts = bt?.ath_timestamp || bt?.mint_timestamp;
+        if (ts) {
+          bestAthDateLabel = new Date(ts).toLocaleDateString('en-US', {
+            month: 'short', day: 'numeric', year: 'numeric',
+          });
+        }
+      } catch (e) {
+        console.warn('[allstar] proven-token date lookup failed:', e);
+      }
+    }
+
+    const devLine = devDisplayName
+      ? `👤 ${devDisplayName} (${devHandle})${devFollowersLabel ? ` — ${devFollowersLabel}` : ''}`
+      : `👤 ${devHandle}${devFollowersLabel ? ` — ${devFollowersLabel}` : ''}`;
+    const bestLine = bestAthDateLabel
+      ? `🏆 Best prior: $ ${allstar.best_token_symbol} → ${mcapLabel} ATH (${bestAthDateLabel})`
+      : `🏆 Best prior: $ ${allstar.best_token_symbol} → ${mcapLabel} ATH`;
+
     const tgMessage = [
       `🚀🌟 **A+ ALLSTAR DEV MINT ALERT** 🌟🚀`,
       ``,
       `${tierStars} **Tier ${allstar.best_tier} Developer**`,
+      ``,
+      devLine,
+      bestLine,
       ``,
       `**Token:** $ ${ticker} (${tokenName})`,
       `**Mint:** \`${shortMint}\``,
@@ -572,14 +619,19 @@ async function createAllstarAlert(
     ].filter(Boolean).join('\n');
 
     const dmMessage = [
-      `🚀 ALLSTAR MINT: $ ${ticker}`,
-      `T${allstar.best_tier} dev ${devHandle}`,
-      `Best: $ ${allstar.best_token_symbol} → ${mcapLabel}`,
-      `⏰ Minted: ${hit.mintAge}`,
+      `🚀 ALLSTAR MINT — $ ${ticker}`,
+      ``,
+      devLine,
+      bestLine,
+      ``,
+      `🆕 New mint: $ ${ticker} (${tokenName})`,
+      `⏰ Minted: ${hit.mintAge}  •  Launchpad: ${launchpad}`,
+      `🏷️ Tier: T${allstar.best_tier} (${alertLevel.toUpperCase()})`,
       ``,
       `Pump: ${pumpUrl}`,
       `Padre: ${padreUrl}`,
       `DexScreener: ${dexUrl}`,
+      `Solscan: ${solscanUrl}`,
     ].join('\n');
 
     const { sendMintAlert } = await import('../_shared/mint-alert-notify.ts');
