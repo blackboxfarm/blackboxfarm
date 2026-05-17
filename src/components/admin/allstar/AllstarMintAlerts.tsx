@@ -9,6 +9,7 @@ import { Bell, ExternalLink, RefreshCw, Check, Copy, MessageSquare, Twitter, Sen
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { Switch } from '@/components/ui/switch';
+import { DevProfileCardTrigger } from '@/components/dev-profile/DevProfileCardTrigger';
 
 function formatAge(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return '—';
@@ -260,9 +261,11 @@ export function AllstarMintAlerts() {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-0.5">
-                          <code className="text-[10px] font-mono">
-                            {alert.creator_wallet.slice(0, 6)}...{alert.creator_wallet.slice(-4)}
-                          </code>
+                          <DevProfileCardTrigger wallet={alert.creator_wallet}>
+                            <code className="text-[10px] font-mono underline decoration-dotted decoration-amber-500/40 hover:decoration-amber-400">
+                              {alert.creator_wallet.slice(0, 6)}...{alert.creator_wallet.slice(-4)}
+                            </code>
+                          </DevProfileCardTrigger>
                           {metadata?.twitter_handle && (
                             <a
                               href={`https://x.com/${metadata.twitter_handle}`}
@@ -277,7 +280,11 @@ export function AllstarMintAlerts() {
                       </TableCell>
                       <TableCell>
                         {alert.allstar_tier ? (
-                          <span className="font-bold text-yellow-400">T{alert.allstar_tier}</span>
+                          <DevProfileCardTrigger wallet={alert.creator_wallet}>
+                            <span className="font-bold text-yellow-400 underline decoration-dotted decoration-yellow-500/40 hover:decoration-yellow-400">
+                              T{alert.allstar_tier}
+                            </span>
+                          </DevProfileCardTrigger>
                         ) : '-'}
                       </TableCell>
                       <TableCell>
