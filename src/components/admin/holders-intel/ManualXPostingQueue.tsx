@@ -300,24 +300,42 @@ export function ManualXPostingQueue() {
 
   // Cross-origin <a download> is ignored by browsers — fetch as blob and force download.
   const downloadFile = async (url: string, filename: string) => {
-    try {
-      // Many CDNs (DexScreener, etc.) block CORS — route through our edge proxy
-      // which adds Content-Disposition: attachment and CORS headers.
-      const proxyUrl = `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/proxy-image-download?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
-      const res = await fetch(proxyUrl);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
+    const proxyUrl = `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/proxy-image-download?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
+    const triggerBlobDownload = (blob: Blob, name: string) => {
       const objUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = objUrl;
-      a.download = filename;
+      a.download = name;
+      a.rel = "noopener";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
+    };
+    // Try proxy first (handles CORS + forces attachment + jpeg)
+    try {
+      const res = await fetch(proxyUrl, { cache: "no-store" });
+      if (res.ok) {
+        const blob = await res.blob();
+        const cd = res.headers.get("content-disposition") || "";
+        const m = cd.match(/filename="([^"]+)"/i);
+        triggerBlobDownload(blob, m?.[1] || filename);
+        return;
+      }
+    } catch { /* fall through */ }
+    // Fallback: direct CORS fetch (some CDNs allow it)
+    try {
+      const res = await fetch(url, { mode: "cors", cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      triggerBlobDownload(blob, filename);
+      return;
     } catch (e: any) {
-      toast({ title: "Download failed", description: e?.message || "Could not fetch image", variant: "destructive" });
-      window.open(url, "_blank", "noopener,noreferrer");
+      toast({
+        title: "Download failed",
+        description: e?.message || "Could not fetch image. Right-click the preview to save.",
+        variant: "destructive",
+      });
     }
   };
 
