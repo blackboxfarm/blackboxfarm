@@ -26,6 +26,7 @@ import {
   type RawPost,
 } from '../_shared/vulture-classify.ts';
 import {
+import { meteredAiFetch } from '../_shared/ai-meter.ts';
   buildDissentPrompt,
   computeDissentScore,
   preflagDissent,
@@ -219,7 +220,7 @@ async function scrapeDevTimelineLastPostAt(handle: string, apifyKey: string, fnN
 async function callGemini(systemPrompt: string, userPrompt: string): Promise<any> {
   const apiKey = Deno.env.get('LOVABLE_API_KEY');
   if (!apiKey) throw new Error('LOVABLE_API_KEY missing');
-  const res = await fetch(LOVABLE_AI_URL, {
+  const res = await meteredAiFetch("autopsy-community-sweep", LOVABLE_AI_URL, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({

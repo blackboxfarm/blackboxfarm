@@ -16,6 +16,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
+import { meteredAiFetch } from '../_shared/ai-meter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -118,7 +119,7 @@ Deno.serve(withRunLog('ai-token-pattern-matcher', async (req) => {
     const prompt = buildPrompt(currentData, currentFeatures, topMatches, outcomeCounts);
 
     // Step 7: Call Gemini via Lovable AI Gateway with tool calling for structured output
-    const aiResp = await fetch(AI_GATEWAY, {
+    const aiResp = await meteredAiFetch("ai-token-pattern-matcher", AI_GATEWAY, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${LOVABLE_API_KEY}`,

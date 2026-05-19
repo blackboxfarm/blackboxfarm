@@ -17,6 +17,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { withRunLog } from '../_shared/run-logger.ts';
 import { assertDbWrite } from '../_shared/db-assert.ts';
+import { meteredAiFetch } from '../_shared/ai-meter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -43,7 +44,7 @@ function extractText(payload: any): string {
 async function callGemini(prompt: string): Promise<any> {
   const apiKey = Deno.env.get('LOVABLE_API_KEY');
   if (!apiKey) throw new Error('LOVABLE_API_KEY missing');
-  const res = await fetch(LOVABLE_AI_URL, {
+  const res = await meteredAiFetch("autopsy-evidence-interpret", LOVABLE_AI_URL, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({

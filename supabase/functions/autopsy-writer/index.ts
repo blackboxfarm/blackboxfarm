@@ -26,6 +26,7 @@ import { classifyDeath, DEATH_TAXONOMY, shouldAutoPublish, type DeathCauseId } f
 import { enrichCandidate, backfillDexBoostsLive } from '../_shared/autopsy-enrich.ts';
 import { buildDevDossier } from '../_shared/autopsy-dev-context.ts';
 import { checkXAccountStatus, extractXHandle } from '../_shared/autopsy-x-status.ts';
+import { meteredAiFetch } from '../_shared/ai-meter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -172,7 +173,7 @@ const BANNED_PHRASES_HIGH_SOCIAL = [
 async function callAI(prompt: string, systemPrompt: string): Promise<string> {
   const apiKey = Deno.env.get('LOVABLE_API_KEY');
   if (!apiKey) throw new Error('LOVABLE_API_KEY not configured');
-  const res = await fetch(LOVABLE_AI_URL, {
+  const res = await meteredAiFetch("autopsy-writer", LOVABLE_AI_URL, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
