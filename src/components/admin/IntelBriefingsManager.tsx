@@ -38,6 +38,7 @@ import { format } from 'date-fns';
 import { ExposureCell } from './publications/ExposureCell';
 import { ExposurePanel } from './publications/ExposurePanel';
 import type { PublicationLite } from './publications/exposure-shared';
+import { ArticleExportDialog } from '@/components/intel/ArticleExportDialog';
 
 interface Briefing {
   id: string;
@@ -1029,6 +1030,7 @@ function IntelBriefingsArticlesManager() {
                       <Button size="sm" variant="ghost" onClick={() => openEditor(b)}>
                         <Edit2 className="h-3.5 w-3.5" />
                       </Button>
+                      <ArticleExportDialog contentMd={b.content_md || ''} title={b.title} />
                       {b.is_published && (
                         <Button size="sm" variant="ghost" asChild>
                           <a href={`/intel/briefing/${b.slug}`} target="_blank" rel="noreferrer">
