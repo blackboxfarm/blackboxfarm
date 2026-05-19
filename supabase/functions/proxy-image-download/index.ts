@@ -19,6 +19,9 @@ Deno.serve(async (req) => {
     try {
       const t = new URL(target);
       t.searchParams.delete("format");
+      // Primary: wsrv.nl image proxy — guarantees JPEG output regardless of source format.
+      const stripped = t.toString().replace(/^https?:\/\//, "");
+      candidates.push(`https://wsrv.nl/?url=${encodeURIComponent(stripped)}&output=jpg&q=92`);
       candidates.push(t.toString());
       // fallback: explicit format=jpg
       const jpg = new URL(t.toString());
@@ -27,6 +30,7 @@ Deno.serve(async (req) => {
       // last resort: original untouched
       candidates.push(target);
     } catch {
+      candidates.push(`https://wsrv.nl/?url=${encodeURIComponent(target.replace(/^https?:\/\//, ""))}&output=jpg&q=92`);
       candidates.push(target);
     }
 
