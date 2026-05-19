@@ -1,39 +1,45 @@
-## Suspension Registry — Plan
+# Platform-Ready Article Export
 
-### 1. New table `feature_suspensions`
-Columns:
-- `id` uuid pk
-- `feature_key` text (e.g. `token-ai-interpreter`, `intel-xbot-posts`)
-- `scope` text (`edge_function` | `frontend_feature` | `cron` | `bot_command` | `other`)
-- `reason` text — your stated reason
-- `notes` text nullable — extra context
-- `suspended_at` timestamptz default now()
-- `suspended_by` uuid nullable (auth uid)
-- `lifted_at` timestamptz nullable
-- `lifted_by` uuid nullable
-- `status` text generated: `'active'` if `lifted_at IS NULL` else `'lifted'`
-- `related_toggle_table` text nullable (e.g. `function_toggles`, `intelligence_feature_flags`)
-- `related_toggle_key` text nullable (the row identifier to flip back on)
+## The root cause
 
-RLS: super_admin only (read/insert/update).
+Our articles are stored as **Markdown** (`content_md`). When you copy text off the rendered article page, the browser copies the *visible text* — which still includes things like `**bold**` because some inline markers leak through, and the structure (headings/lists/links) gets flattened. Medium, Substack, LinkedIn, Ghost, Beehiiv all accept **rich HTML paste** from the clipboard — if we put real HTML on the clipboard, they convert it to their native bold/H2/bullets/links automatically. No more manual cleanup per platform.
 
-### 2. New admin UI tab: **Suspensions** (under Utilities tab as a sub-section to avoid tab sprawl)
-Two panes:
-- **Active suspensions** — cards showing feature_key, reason, when, who; `Re-enable` button (which (a) marks `lifted_at`, (b) if `related_toggle_table` is set, flips that toggle back on automatically).
-- **History** — collapsed list of lifted suspensions, sortable by date.
-- **Add manual suspension** — small form for ad-hoc entries (so you can log anything I suspend in edge function code directly).
+## What you'll get
 
-### 3. Workflow going forward
-Whenever you ask me to suspend something, I will:
-1. Make the code/toggle change.
-2. INSERT into `feature_suspensions` with feature_key + reason + related_toggle pointer.
-3. Confirm "Logged in Suspensions registry."
+A new **"Export for Platform"** panel on every published article (visible only to super-admins) with one-click buttons:
 
-Re-enabling from the UI auto-flips the underlying toggle when possible; otherwise it just marks lifted and tells you which code path needs reverting.
+- **Copy for Medium** — rich HTML, Medium-friendly (H1 stripped because Medium uses the title field, images inlined as URLs).
+- **Copy for Substack** — rich HTML, keeps H2/H3, converts blockquotes to Substack pull-quote style.
+- **Copy for LinkedIn** — plain text with Unicode bold (𝗯𝗼𝗹𝗱) since LinkedIn strips HTML; links left as bare URLs.
+- **Copy for Ghost / Beehiiv / generic** — clean semantic HTML.
+- **Copy as Plain Text (no markdown)** — strips every `*`, `_`, `#`, `>` and list marker but keeps paragraph breaks; useful for Telegram/X long posts.
+- **Download as .docx** (optional, stretch) — for anywhere paste fails.
 
-### 4. Files
-- Migration: create table + RLS + indexes on `(status, suspended_at desc)`.
-- `src/components/admin/SuspensionsPanel.tsx` (new).
-- Wire into `UtilitiesTab.tsx` as a section (or new top-level tab if you prefer — say the word).
+Each button writes **both** `text/html` and `text/plain` to the clipboard using the `ClipboardItem` API, so the destination editor picks whichever it supports. A toast confirms "Copied for Medium — paste into the editor."
 
-Awaiting **Plan Approved**.
+## Where it appears
+
+1. **Public article page** `/intel/briefing/:slug` — floating bottom-right panel, super-admin only (same gate as the DeadTokens X-post button).
+2. **Admin → Intel Briefings → article row** — a "📋 Export" dropdown beside the existing Edit / Publish buttons so you can grab formats without opening the article.
+
+## Technical details
+
+- New util `src/lib/articleExport.ts`:
+  - `mdToHtml(md, preset)` — uses existing `react-markdown` pipeline isomorphically via `marked` (already a small dep we can add) to produce a clean HTML string. Presets: `medium`, `substack`, `linkedin`, `ghost`, `generic`, `plain`.
+  - `mdToUnicodeBold(md)` — strips markdown and replaces `**x**` with mathematical-bold Unicode for LinkedIn.
+  - `mdToPlain(md)` — strips every markdown marker, normalizes whitespace.
+  - `copyRich(html, plain)` — writes a `ClipboardItem` with both MIME types; falls back to `navigator.clipboard.writeText(plain)` on browsers without ClipboardItem.
+- New component `src/components/intel/ArticleExportPanel.tsx` — collapsible floating panel with the buttons + a small "preview" textarea showing the first 400 chars of the chosen format so you can sanity-check before pasting.
+- Wire it into:
+  - `src/pages/IntelBriefingArticle.tsx` (super-admin gated, same `useUserRoles().isSuperAdmin` pattern as the DeadTokens button).
+  - `src/components/admin/intel-briefings/...` (the row action menu — exact file to be located during build).
+- No DB changes. No edge-function changes. Pure frontend.
+- Preserves existing CrossPost / TLDR / DeadTokens buttons.
+
+## Out of scope (ask if you want them)
+
+- Auto-posting via API to Medium/Substack (their APIs are restricted/dying — manual paste is more reliable).
+- Per-platform image hosting (we keep using your existing image URLs; Medium re-uploads on paste).
+- Editing the source Markdown to change the stored format — your `content_md` stays the canonical source.
+
+Approve and I'll build it.
