@@ -12,6 +12,10 @@ interface TrendingToken {
   name: string;
   marketCap: number;
   priceChange24h: number;
+  volume24h: number;
+  liquidityUsd: number;
+  pairCreatedAt: string | null;
+  firstSeenAt: string | null;
 }
 
 // Toronto timezone offset (EST = -5, EDT = -4)
@@ -212,7 +216,7 @@ async function fetchTrendingTokens(): Promise<TrendingToken[]> {
     // Read from token_lifecycle table which dex-top-200 populates every 30 min
     const { data, error } = await supabase
       .from('token_lifecycle')
-      .select('token_mint, symbol, name, market_cap, fdv')
+      .select('token_mint, symbol, name, market_cap, fdv, volume_24h, liquidity_usd, pair_created_at, first_seen_at')
       .eq('is_currently_top_200', true)
       .order('last_top_200_rank', { ascending: true })
       .limit(200);
@@ -228,6 +232,10 @@ async function fetchTrendingTokens(): Promise<TrendingToken[]> {
       name: t.name || 'Unknown Token',
       marketCap: t.fdv || t.market_cap || 0,
       priceChange24h: 0,
+      volume24h: Number(t.volume_24h) || 0,
+      liquidityUsd: Number(t.liquidity_usd) || 0,
+      pairCreatedAt: t.pair_created_at || null,
+      firstSeenAt: t.first_seen_at || null,
     }));
     
     console.log(`[scheduler] Got ${tokens.length} cached trending tokens from DB`);
