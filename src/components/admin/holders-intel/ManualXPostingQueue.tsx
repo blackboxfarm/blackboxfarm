@@ -783,7 +783,7 @@ export function ManualXPostingQueue() {
                         </label>
                         <button
                           className="ml-auto text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-                          onClick={() => setSkipOpen(skipOpen === row.id ? null : row.id)}
+                          onClick={() => markSkipped(row)}
                         >
                           <SkipForward className="h-3 w-3" /> Skip
                         </button>
@@ -799,21 +799,6 @@ export function ManualXPostingQueue() {
                           />
                           <Button size="sm" onClick={() => markPosted(row)}>
                             <Check className="h-4 w-4 mr-1" /> Confirm posted
-                          </Button>
-                        </div>
-                      )}
-
-                      {skipOpen === row.id && (
-                        <div className="flex flex-wrap items-center gap-2 pl-6">
-                          <Textarea
-                            placeholder="Optional skip reason"
-                            value={skipReason[row.id] || ""}
-                            onChange={(e) => setSkipReason((p) => ({ ...p, [row.id]: e.target.value }))}
-                            rows={1}
-                            className="flex-1 min-w-[260px] text-xs"
-                          />
-                          <Button size="sm" variant="outline" onClick={() => markSkipped(row)}>
-                            Confirm skip
                           </Button>
                         </div>
                       )}
