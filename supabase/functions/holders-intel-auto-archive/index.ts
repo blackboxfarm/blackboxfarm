@@ -109,20 +109,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 3. Decorate banner (best-effort, expensive — failure is OK)
-    if (!current.decorated_banner_url && current.dex_banner_url) {
-      try {
-        const deco = await invokeJson(supabaseUrl, anonKey, "holders-intel-banner-decorate", { queue_id: queueId, regenerate: false });
-        if (deco?.decorated_banner_url) {
-          current.decorated_banner_url = deco.decorated_banner_url;
-          notes.push("decorated");
-        } else if (deco?.skipped) {
-          notes.push(`decorate_skipped:${deco.skipped}`);
-        }
-      } catch (e: any) {
-        notes.push(`decorate_failed:${e?.message || String(e)}`);
-      }
-    }
+    // [skipped — banners are manual-only] auto decorate disabled to preserve AI credits.
+    notes.push("decorate_skipped:manual-only");
 
     // 4. Promote to archive
     const tweetText = (current.tweet_text || "").trim() || buildFallbackText(current);
