@@ -171,20 +171,8 @@ Deno.serve(async (req) => {
           }
         }
 
-        if (decorated < decorateLimit && !current.decorated_banner_url) {
-          try {
-            const deco = await invokeJson(supabaseUrl, anonKey, "holders-intel-banner-decorate", { queue_id: current.id, regenerate: false });
-            if (deco?.decorated_banner_url) {
-              decorated++;
-              notes.push("decorated");
-              current.decorated_banner_url = deco.decorated_banner_url;
-            } else if (deco?.skipped) {
-              notes.push(String(deco.skipped));
-            }
-          } catch (e: any) {
-            notes.push(`decorate_failed:${e?.message || String(e)}`);
-          }
-        }
+        // [skipped — banners are manual-only] auto decorate disabled to preserve AI credits.
+        notes.push("decorate_skipped:manual-only");
 
         const tweetText = current.tweet_text?.trim() || buildFallbackText(current);
         const bannerUsed = current.decorated_banner_url || current.banner_used_url || current.dex_banner_url || null;

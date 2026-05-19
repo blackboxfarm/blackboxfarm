@@ -1020,39 +1020,8 @@ Write the full markdown now. No preamble, no code fence — start with "# Token 
         continue;
       }
 
-      const bannerPromise = fetch(
-        `${Deno.env.get('SUPABASE_URL')}/functions/v1/autopsy-banner-overlay`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-          },
-          body: JSON.stringify({
-            slug: drafted.slug,
-            token_mint: c.token_mint,
-            ticker,
-            report_id: drafted.id,
-            source_feed: c.source_feed ?? null,
-          }),
-        },
-      ).then(async (overlayRes) => {
-        if (!overlayRes.ok) {
-          console.warn(`[autopsy-writer] banner overlay non-OK ${overlayRes.status} for ${drafted.slug}`);
-          return;
-        }
-        const ovr = await overlayRes.json().catch(() => null);
-        if (ovr?.hero_image_url) console.log(`[autopsy-writer] banner ready: ${ovr.hero_image_url}`);
-      }).catch((bannerErr: any) => {
-        console.warn(`[autopsy-writer] banner overlay failed for ${drafted.slug}:`, bannerErr?.message);
-      });
-      try {
-        // @ts-ignore EdgeRuntime is provided by the Supabase edge runtime.
-        if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) {
-          // @ts-ignore
-          EdgeRuntime.waitUntil(bannerPromise);
-        }
-      } catch { /* ignore */ }
+      // [skipped — banners are manual-only] auto banner overlay disabled to preserve AI credits.
+      console.log(`[autopsy-writer] banner overlay skipped (manual-only) for ${drafted.slug}`);
 
       // Fire-and-forget Harm Score computation
       const harmPromise = fetch(

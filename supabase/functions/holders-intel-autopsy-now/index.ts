@@ -119,20 +119,9 @@ Deno.serve(async (req) => {
       .update({ status: "approved", published_at: new Date().toISOString() })
       .eq("slug", slug);
 
-    // 5. Re-run banner overlay (best-effort)
-    let bannerWarning: string | null = null;
-    try {
-      const bannerRes = await fetch(`${supabaseUrl}/functions/v1/autopsy-banner-overlay`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-        body: JSON.stringify({ slug, force: true }),
-      });
-      if (!bannerRes.ok) {
-        bannerWarning = `banner ${bannerRes.status}`;
-      }
-    } catch (e: any) {
-      bannerWarning = e?.message || String(e);
-    }
+    // [skipped — banners are manual-only] auto banner overlay disabled to preserve AI credits.
+    const bannerWarning: string | null = "skipped:manual-only";
+    console.log(`[holders-intel-autopsy-now] banner overlay skipped (manual-only) for ${slug}`);
 
     // Re-read hero image
     const { data: finalRep } = await supabase
