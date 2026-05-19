@@ -300,7 +300,6 @@ export function ManualXPostingQueue() {
 
   // Cross-origin <a download> is ignored by browsers — fetch as blob and force download.
   const downloadFile = async (url: string, filename: string) => {
-    const proxyUrl = `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/proxy-image-download?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
     const triggerBlobDownload = (blob: Blob, name: string) => {
       const objUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -312,7 +311,23 @@ export function ManualXPostingQueue() {
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
     };
-    // Try proxy first (handles CORS + forces attachment + jpeg)
+    // Supabase storage URLs support ?download=<filename> natively — no proxy needed.
+    try {
+      const u = new URL(url);
+      if (/supabase\.co$/i.test(u.hostname) && u.pathname.includes("/storage/v1/object/public/")) {
+        u.searchParams.set("download", filename);
+        const a = document.createElement("a");
+        a.href = u.toString();
+        a.download = filename;
+        a.rel = "noopener";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        return;
+      }
+    } catch { /* ignore */ }
+    // Try proxy for cross-origin CDNs (DexScreener etc.)
+    const proxyUrl = `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/proxy-image-download?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
     try {
       const res = await fetch(proxyUrl, { cache: "no-store" });
       const ctype = res.headers.get("content-type") || "";
