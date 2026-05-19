@@ -11,6 +11,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { Image, decode } from 'https://deno.land/x/imagescript@1.2.17/mod.ts';
 import { DEADTOKENS_AVATAR_B64 } from './avatar-b64.ts';
+import { rebrandImage } from '../_shared/exif-rebrand.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -77,6 +78,16 @@ function buildPill(w: number, h: number, color = 0x0a0a0aff): Image {
 
 async function stampOne(supabase: any, slug: string): Promise<string> {
   const path = `${slug}-autopsy-v2.jpg`;
+  // Pull ticker for branded EXIF
+  let ticker: string | null = null;
+  try {
+    const { data: rep } = await supabase
+      .from('autopsy_reports')
+      .select('ticker')
+      .eq('slug', slug)
+      .maybeSingle();
+    ticker = rep?.ticker ?? null;
+  } catch (_) { /* best-effort */ }
   // download existing banner
   const { data: blob, error: dlErr } = await supabase.storage.from(BUCKET).download(path);
   if (dlErr || !blob) throw new Error(`download ${path}: ${dlErr?.message || 'missing'}`);
@@ -111,9 +122,38 @@ async function stampOne(supabase: any, slug: string): Promise<string> {
   const y = banner.height - PILL_H - MARGIN;
   banner.composite(pill, x, y);
 
-  const outBytes = await banner.encodeJPEG(88);
+  const encodedBytes = await banner.encodeJPEG(88);
+
+  // ImageScript's encoder strips ALL metadata. Re-stamp BlackBox Autopsy EXIF
+  // before upload so Windows/macOS/Twitter see our copyright on the final file.
+  const year = new Date().getFullYear();
+  const tickerLabel = ticker ? `$${ticker}` : 'token';
+  const copyrightLines = [
+    `Copyright (c) ${year} BlackBox Farm — BlackBox Autopsy. All rights reserved.`,
+    `Subject: ${tickerLabel} forensic autopsy report — cause of death, harm score, evidence.`,
+    `Slogan: We Read The Mesh. Dead Tokens Don't Lie.`,
+    `Website: https://blackbox.farm`,
+    `Autopsy: https://blackbox.farm/autopsies/${slug}`,
+    `Telegram: https://t.me/Dead_Tokens`,
+    `X / Twitter: https://x.com/Dead_Tokens`,
+    `Source: BlackBox Farm Autopsy Intelligence Platform`,
+  ];
+  const { bytes: outBytes, mime: outMime } = rebrandImage(encodedBytes, 'image/jpeg', {
+    fields: {
+      imageDescription: `${tickerLabel} — BlackBox Autopsy decorated forensic banner with @Dead_Tokens signature.`,
+      software: 'BlackBox Farm Autopsy Banner Stamp',
+      artist: 'BlackBox Farm — BlackBox Autopsy',
+      copyright: `Copyright (c) ${year} BlackBox Farm — BlackBox Autopsy. All rights reserved. https://blackbox.farm`,
+      xpTitle: `BlackBox Autopsy — ${tickerLabel} Forensic Banner`,
+      xpSubject: `${tickerLabel} autopsy — cause of death, harm score, evidence`,
+      xpAuthor: 'BlackBox Farm — BlackBox Autopsy',
+      xpKeywords: `BlackBox Autopsy;Dead Tokens;BlackBox Farm;Solana;${tickerLabel};Forensics;Rug;Scam;Crypto`,
+      xpComment: copyrightLines.join(' | '),
+    },
+    copyrightLines,
+  });
   const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, outBytes, {
-    contentType: 'image/jpeg', upsert: true, cacheControl: '86400',
+    contentType: outMime || 'image/jpeg', upsert: true, cacheControl: '86400',
   });
   if (upErr) throw new Error(`upload ${path}: ${upErr.message}`);
   const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
