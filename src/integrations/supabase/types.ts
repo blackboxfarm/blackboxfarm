@@ -6518,6 +6518,54 @@ export type Database = {
         }
         Relationships: []
       }
+      feature_suspensions: {
+        Row: {
+          created_at: string
+          feature_key: string
+          id: string
+          lifted_at: string | null
+          lifted_by: string | null
+          notes: string | null
+          reason: string
+          related_toggle_key: string | null
+          related_toggle_table: string | null
+          scope: string
+          suspended_at: string
+          suspended_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          feature_key: string
+          id?: string
+          lifted_at?: string | null
+          lifted_by?: string | null
+          notes?: string | null
+          reason: string
+          related_toggle_key?: string | null
+          related_toggle_table?: string | null
+          scope?: string
+          suspended_at?: string
+          suspended_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          feature_key?: string
+          id?: string
+          lifted_at?: string | null
+          lifted_by?: string | null
+          notes?: string | null
+          reason?: string
+          related_toggle_key?: string | null
+          related_toggle_table?: string | null
+          scope?: string
+          suspended_at?: string
+          suspended_by?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       feature_usage_analytics: {
         Row: {
           created_at: string | null
