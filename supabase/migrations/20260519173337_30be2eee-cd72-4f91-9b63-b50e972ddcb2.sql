@@ -1,0 +1,1 @@
+DELETE FROM public.holders_intel_post_queue WHERE manual_status = 'pending' AND status = 'pending';

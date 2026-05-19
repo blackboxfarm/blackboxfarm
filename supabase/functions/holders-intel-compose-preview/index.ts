@@ -313,6 +313,23 @@ Deno.serve(async (req) => {
           item.dex_banner_url ??
           null;
 
+        // Quality gate: auto-skip dead-on-arrival tokens so they never reach the
+        // Manual X queue UI. Triggers when holders snapshot is junk:
+        //  - 0 real holders, OR
+        //  - dust_pct >= 95%, OR
+        //  - total wallets < 50
+        const realH = stats.realHolders ?? 0;
+        const dustP = stats.dustPercentage ?? 0;
+        const totalH = stats.totalHolders ?? 0;
+        const qualityFail =
+          realH === 0 || dustP >= 95 || totalH < 50;
+        if (qualityFail) {
+          updatePayload.manual_status = 'skipped_manual';
+          updatePayload.manual_skip_reason =
+            `quality_gate: real=${realH} dust=${dustP}% total=${totalH}`;
+          updatePayload.status = 'skipped';
+        }
+
         // Fresh DexScreener snapshot so the admin sees current mcap & 1h
         // volume on regenerate — for posting-decision context only, NOT
         // injected into the tweet template.
