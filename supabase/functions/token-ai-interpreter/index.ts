@@ -469,6 +469,35 @@ serve(withRunLog('token-ai-interpreter', async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // ─────────────────────────────────────────────────────────────────────
+    // TEMP_BYPASS_AI_SUSPENDED — graceful skip when AI interpretation is
+    // admin-suspended (e.g. waiting for AI credits / Lovable AI balance).
+    // Trip via env var AI_INTERPRETER_SUSPENDED=true, or by setting EVERY
+    // platform_health_mode row to use_ai=false. Returns 200 so morning
+    // report does NOT raise a CRITICAL alert. Remove/flip when restored.
+    // ─────────────────────────────────────────────────────────────────────
+    const envSuspended = (Deno.env.get("AI_INTERPRETER_SUSPENDED") || "").toLowerCase() === "true";
+    let dbSuspended = false;
+    if (!envSuspended) {
+      const { data: modes } = await supabase
+        .from("platform_health_mode")
+        .select("use_ai");
+      if (Array.isArray(modes) && modes.length > 0 && modes.every((m: any) => m?.use_ai === false)) {
+        dbSuspended = true;
+      }
+    }
+    if (envSuspended || dbSuspended) {
+      console.log(`[token-ai-interpreter] SKIPPED — AI interpretation suspended (${envSuspended ? 'env' : 'db'})`);
+      return new Response(
+        JSON.stringify({
+          skipped: true,
+          reason: envSuspended ? "ai_suspended_env" : "ai_suspended_db",
+          message: "Skipping AI Interpretation while Service is Admin Suspended",
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Check cache first (unless forceRefresh)
     if (!forceRefresh) {
       const { data: cached } = await supabase
@@ -721,9 +750,25 @@ serve(withRunLog('token-ai-interpreter', async (req) => {
         );
       }
       if (aiResponse.status === 402) {
+        // Graceful skip — credits exhausted is an EXPECTED admin state, not a
+        // runtime failure. Auto-suspend AI for holders_page so subsequent calls
+        // short-circuit at the top guard above until credits are restored.
+        try {
+          await supabase
+            .from("platform_health_mode")
+            .update({ use_ai: false })
+            .eq("medium", "holders_page");
+        } catch (e) {
+          console.warn("[token-ai-interpreter] failed to auto-suspend platform_health_mode:", e);
+        }
+        console.log("[token-ai-interpreter] SKIPPED — AI credits exhausted, auto-suspended platform_health_mode");
         return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({
+            skipped: true,
+            reason: "ai_credits_exhausted",
+            message: "Skipping AI Interpretation while Service is Admin Suspended",
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       throw new Error(`AI API error: ${aiResponse.status}`);
