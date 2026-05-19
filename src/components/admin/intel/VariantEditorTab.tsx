@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { toast } from '@/hooks/use-toast';
 import { Sparkles, Save, Copy, Check, Loader2, RefreshCw } from 'lucide-react';
+import { FileText } from 'lucide-react';
+import { ArticleExportDialog } from '@/components/intel/ArticleExportDialog';
 
 interface VariantEditorTabProps {
   briefingId: string;
@@ -167,6 +169,17 @@ export function VariantEditorTab({
                 {copied ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
                 {copied ? 'Copied' : 'Copy'}
               </Button>
+            )}
+            {content && (
+              <ArticleExportDialog
+                contentMd={content}
+                title={`${label} variant`}
+                trigger={
+                  <Button size="sm" variant="outline" title={`Export this ${label} variant for a platform`}>
+                    <FileText className="h-3 w-3 mr-1" /> Export
+                  </Button>
+                }
+              />
             )}
           </div>
         </div>
