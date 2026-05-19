@@ -154,7 +154,7 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
       <div className="border-b border-border bg-muted/30 relative">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between gap-2">
-            <nav className="flex items-center gap-1 overflow-x-auto py-1 scrollbar-hide flex-1 min-w-0">
+            <nav className="flex flex-wrap md:flex-nowrap items-center gap-0.5 md:gap-1 md:overflow-x-auto py-1 scrollbar-hide flex-1 min-w-0">
               {FINAL_NAV_ITEMS.map((item) => {
                 const isActive = location.pathname === item.path;
                 return (
@@ -162,7 +162,7 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
                     key={item.path}
                     to={item.path}
                     className={cn(
-                      "px-4 py-2.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors",
+                      "px-2 py-1.5 text-xs md:px-4 md:py-2.5 md:text-sm font-medium rounded-md whitespace-nowrap transition-colors",
                       isActive 
                         ? "bg-accent text-accent-foreground" 
                         : "bg-[hsl(270_25%_18%)] text-muted-foreground/80 hover:text-foreground hover:bg-[hsl(270_25%_24%)]"
@@ -176,9 +176,7 @@ export function SiteLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         {/* Mobile scroll hint arrow */}
-        <div className="absolute right-10 top-0 bottom-0 w-8 bg-gradient-to-l from-muted/80 to-transparent flex items-center justify-end pr-1 pointer-events-none md:hidden">
-          <ChevronRight className="h-4 w-4 text-[hsl(270_40%_55%)] animate-pulse" />
-        </div>
+        {/* (scroll hint removed — mobile nav now wraps to multiple rows) */}
       </div>
 
       {/* Abandoned Checkout Reminder */}
