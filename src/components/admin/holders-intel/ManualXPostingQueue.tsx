@@ -315,7 +315,8 @@ export function ManualXPostingQueue() {
     // Try proxy first (handles CORS + forces attachment + jpeg)
     try {
       const res = await fetch(proxyUrl, { cache: "no-store" });
-      if (res.ok) {
+      const ctype = res.headers.get("content-type") || "";
+      if (res.ok && !ctype.includes("application/json")) {
         const blob = await res.blob();
         const cd = res.headers.get("content-disposition") || "";
         const m = cd.match(/filename="([^"]+)"/i);
