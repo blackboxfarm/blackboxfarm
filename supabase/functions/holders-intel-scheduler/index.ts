@@ -12,6 +12,10 @@ interface TrendingToken {
   name: string;
   marketCap: number;
   priceChange24h: number;
+  volume24h: number;
+  liquidityUsd: number;
+  pairCreatedAt: string | null;
+  firstSeenAt: string | null;
 }
 
 // Toronto timezone offset (EST = -5, EDT = -4)
@@ -212,7 +216,7 @@ async function fetchTrendingTokens(): Promise<TrendingToken[]> {
     // Read from token_lifecycle table which dex-top-200 populates every 30 min
     const { data, error } = await supabase
       .from('token_lifecycle')
-      .select('token_mint, symbol, name, market_cap, fdv')
+      .select('token_mint, symbol, name, market_cap, fdv, volume_24h, liquidity_usd, pair_created_at, first_seen_at')
       .eq('is_currently_top_200', true)
       .order('last_top_200_rank', { ascending: true })
       .limit(200);
@@ -228,6 +232,10 @@ async function fetchTrendingTokens(): Promise<TrendingToken[]> {
       name: t.name || 'Unknown Token',
       marketCap: t.fdv || t.market_cap || 0,
       priceChange24h: 0,
+      volume24h: Number(t.volume_24h) || 0,
+      liquidityUsd: Number(t.liquidity_usd) || 0,
+      pairCreatedAt: t.pair_created_at || null,
+      firstSeenAt: t.first_seen_at || null,
     }));
     
     console.log(`[scheduler] Got ${tokens.length} cached trending tokens from DB`);
@@ -376,11 +384,14 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
       if (isJunkSymbol(t.symbol)) return false;
       if ((t.name || '').toLowerCase().includes('unknown token')) return false;
       if ((t.marketCap ?? 0) < 500) return false;
+      // Activity gate — reject low-volume / thin-liquidity tokens that produce dust snapshots
+      if ((t.volume24h ?? 0) < 50_000) return false;       // < $50k 24h vol = no real trading
+      if ((t.liquidityUsd ?? 0) < 20_000) return false;    // < $20k liq = unsafe / dust
       return true;
     });
     const junkRejected = preQualifiedCount - cleanTokens.length;
     if (junkRejected > 0) {
-      console.log(`[scheduler] 🚫 Rejected ${junkRejected} junk tokens (UNKNOWN symbol / mcap < $500)`);
+      console.log(`[scheduler] 🚫 Rejected ${junkRejected} junk tokens (UNKNOWN / mcap<$500 / vol<$50k / liq<$20k)`);
     }
 
     // Phase 3: demand-weighted ranking — boost tokens the public is actually
@@ -404,9 +415,17 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
       }
     }
 
-    // Sort: tokens with public demand bubble to the top (highest demand first),
-    // then ties fall back to the original DEX-trending order.
-    cleanTokens.sort((a, b) => (demandMap.get(b.mint) ?? 0) - (demandMap.get(a.mint) ?? 0));
+    // Sort: NEWEST → OLDEST (by pair_created_at, falling back to first_seen_at).
+    // Public demand acts as a secondary tiebreaker so trending newcomers still bubble.
+    const ageMs = (t: TrendingToken) => {
+      const d = t.pairCreatedAt || t.firstSeenAt;
+      return d ? new Date(d).getTime() : 0;
+    };
+    cleanTokens.sort((a, b) => {
+      const ageDiff = ageMs(b) - ageMs(a); // newer first
+      if (ageDiff !== 0) return ageDiff;
+      return (demandMap.get(b.mint) ?? 0) - (demandMap.get(a.mint) ?? 0);
+    });
 
     // CAP: Check current pending count — don't flood the queue beyond 50 pending
     const { count: currentPending } = await supabase
