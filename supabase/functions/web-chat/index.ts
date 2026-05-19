@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { meteredAiFetch } from '../_shared/ai-meter.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -742,7 +743,7 @@ serve(async (req) => {
     const estimatedPromptTokens = Math.ceil(promptText.length / 4);
     const aiCallStart = Date.now();
 
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiRes = await meteredAiFetch("web-chat", "https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,

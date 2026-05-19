@@ -2,6 +2,7 @@
 // Recomposes the hero via Gemini image-edit so Twitter/Facebook/LinkedIn previews
 // don't crop critical content from the 2:1 hero. Writes URL back to intel_briefings.
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { meteredAiFetch } from '../_shared/ai-meter.ts';
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -48,7 +49,7 @@ function dataUrlToBytes(dataUrl: string): { bytes: Uint8Array; mime: string } {
 async function generateSocialCard(heroUrl: string): Promise<{ bytes: Uint8Array; mime: string }> {
   const heroDataUrl = await fetchAsDataUrl(heroUrl);
 
-  const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const aiRes = await meteredAiFetch("generate-intel-social-card", "https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${LOVABLE_API_KEY}`,

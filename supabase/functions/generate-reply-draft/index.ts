@@ -1,5 +1,6 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
+import { meteredAiFetch } from '../_shared/ai-meter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -116,7 +117,7 @@ Detected contracts: ${detected_contracts?.map((c: string) => c.slice(0, 8) + '..
 
 Generate 3 reply variations with a "${tone || 'casual'}" tone.`;
 
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const aiResponse = await meteredAiFetch("generate-reply-draft", 'https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${LOVABLE_API_KEY}`,

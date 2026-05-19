@@ -6,6 +6,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { assertUpdate } from '../_shared/db-assert.ts';
+import { meteredAiFetch } from '../_shared/ai-meter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -86,7 +87,7 @@ async function aiTiebreak(rows: Array<{ id: string; ticker: string | null; signa
 Return one cause per token from this enum: skill_build, viral_meme, marketed_meme, community_collapse, inexperience_fail, slow_bleed, hard_rug, bundle_rug, dev_abandoned.
 Be conservative; prefer community_collapse or dev_abandoned over rug labels unless intent_classification clearly says rug.`;
 
-  const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+  const res = await meteredAiFetch("dev-token-outcome-classifier", 'https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
     headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({

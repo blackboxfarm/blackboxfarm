@@ -1,6 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { meteredAiFetch } from '../_shared/ai-meter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -56,7 +57,7 @@ serve(withRunLog('generate-paid-composite', async (req) => {
     console.log('Generating composite image:', { bannerUrl, badgeUrl: actualBadgeUrl, orderId });
 
     // Use Lovable AI to generate a composite image
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const aiResponse = await meteredAiFetch("generate-paid-composite", 'https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${lovableApiKey}`,
