@@ -352,7 +352,26 @@ async function auditAllstarFamily(
   const familyWallets: string[] = allstar.family_wallets || [allstar.master_wallet];
   const hits: MintHit[] = [];
 
+  // Fire-and-forget live-check logger. One row per family wallet processed.
+  const logCheck = (row: {
+    family_wallet: string;
+    source: string;
+    status: 'ok' | 'rate_limited' | 'error' | 'new_mint' | 'skip';
+    latency_ms?: number;
+    error_msg?: string;
+    mint_address?: string;
+  }) => {
+    try {
+      supabase.from('allstar_audit_check_log').insert({
+        master_wallet: allstar.master_wallet,
+        ...row,
+      }).then(() => {}, () => {});
+    } catch { /* never block audit on logging */ }
+  };
+
   for (const wallet of familyWallets.slice(0, 30)) {
+    const t0 = Date.now();
+    let walletHadHit = false;
     try {
       // 1. Pull recent signatures for this wallet
       const sigsRes = await fetch(rpcUrl, {
@@ -363,7 +382,16 @@ async function auditAllstarFamily(
         }),
         signal: AbortSignal.timeout(15000),
       });
-      if (!sigsRes.ok) continue;
+      if (!sigsRes.ok) {
+        logCheck({
+          family_wallet: wallet,
+          source: 'helius',
+          status: sigsRes.status === 429 ? 'rate_limited' : 'error',
+          latency_ms: Date.now() - t0,
+          error_msg: `getSignaturesForAddress HTTP ${sigsRes.status}`,
+        });
+        continue;
+      }
       const sigs = ((await sigsRes.json())?.result || []) as Array<{ signature: string; blockTime?: number }>;
 
       for (const sigInfo of sigs) {
@@ -437,12 +465,35 @@ async function auditAllstarFamily(
             mintTimestamp: blockTime,
             mintAge: formatMintAge(blockTime),
           });
+          walletHadHit = true;
+          logCheck({
+            family_wallet: wallet,
+            source: 'helius',
+            status: 'new_mint',
+            latency_ms: Date.now() - t0,
+            mint_address: tokenMint,
+          });
           console.log(`[allstar] ✅ VERIFIED MINT: ${tokenMint.slice(0,12)} by ${wallet.slice(0,8)} (launchpad=${launchpad}, sig=${sigInfo.signature.slice(0,12)})`);
         }
       }
 
       await new Promise(r => setTimeout(r, 150));
+      if (!walletHadHit) {
+        logCheck({
+          family_wallet: wallet,
+          source: 'helius',
+          status: 'ok',
+          latency_ms: Date.now() - t0,
+        });
+      }
     } catch (e) {
+      logCheck({
+        family_wallet: wallet,
+        source: 'helius',
+        status: 'error',
+        latency_ms: Date.now() - t0,
+        error_msg: (e as Error)?.message?.slice(0, 500) ?? String(e).slice(0, 500),
+      });
       console.warn(`[allstar] Error scanning ${wallet.slice(0, 8)}...:`, e);
     }
   }

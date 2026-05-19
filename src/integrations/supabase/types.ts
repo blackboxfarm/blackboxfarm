@@ -670,6 +670,42 @@ export type Database = {
           },
         ]
       }
+      allstar_audit_check_log: {
+        Row: {
+          error_msg: string | null
+          family_wallet: string | null
+          id: number
+          latency_ms: number | null
+          master_wallet: string
+          mint_address: string | null
+          source: string
+          status: string
+          ts: string
+        }
+        Insert: {
+          error_msg?: string | null
+          family_wallet?: string | null
+          id?: number
+          latency_ms?: number | null
+          master_wallet: string
+          mint_address?: string | null
+          source: string
+          status: string
+          ts?: string
+        }
+        Update: {
+          error_msg?: string | null
+          family_wallet?: string | null
+          id?: number
+          latency_ms?: number | null
+          master_wallet?: string
+          mint_address?: string | null
+          source?: string
+          status?: string
+          ts?: string
+        }
+        Relationships: []
+      }
       allstar_dev_registry: {
         Row: {
           audit_count: number | null
@@ -23024,6 +23060,7 @@ export type Database = {
         Returns: string
       }
       process_active_blackbox_commands: { Args: never; Returns: undefined }
+      prune_allstar_audit_check_log: { Args: never; Returns: undefined }
       prune_creator_fusion_audit: {
         Args: never
         Returns: {
