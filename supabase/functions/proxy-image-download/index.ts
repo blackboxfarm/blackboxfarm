@@ -24,7 +24,12 @@ Deno.serve(async (req) => {
     } catch { /* ignore */ }
     const upstream = await fetch(fetchUrl, {
       // Accept only formats X supports — avoid AVIF
-      headers: { accept: "image/jpeg,image/png,image/gif" },
+      headers: {
+        accept: "image/jpeg,image/png,image/gif",
+        "user-agent": "Mozilla/5.0 (compatible; HoldersIntelProxy/1.0)",
+        referer: new URL(fetchUrl).origin + "/",
+      },
+      redirect: "follow",
     });
     if (!upstream.ok || !upstream.body) {
       return new Response(`Upstream ${upstream.status}`, { status: 502, headers: corsHeaders });
