@@ -301,7 +301,10 @@ export function ManualXPostingQueue() {
   // Cross-origin <a download> is ignored by browsers — fetch as blob and force download.
   const downloadFile = async (url: string, filename: string) => {
     try {
-      const res = await fetch(url, { mode: "cors" });
+      // Many CDNs (DexScreener, etc.) block CORS — route through our edge proxy
+      // which adds Content-Disposition: attachment and CORS headers.
+      const proxyUrl = `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/proxy-image-download?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
+      const res = await fetch(proxyUrl);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
       const objUrl = URL.createObjectURL(blob);

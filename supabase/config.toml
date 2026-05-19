@@ -1,5 +1,8 @@
 project_id = "apxauapuusmgwbbzjgfl"
 
+[functions.proxy-image-download]
+verify_jwt = false
+
 [functions.first-24h-ath-sealer]
 verify_jwt = false
 
