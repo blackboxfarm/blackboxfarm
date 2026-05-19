@@ -326,25 +326,18 @@ export function ManualXPostingQueue() {
         return;
       }
     } catch { /* ignore */ }
-    // Try proxy for cross-origin CDNs (DexScreener etc.)
-    const proxyUrl = `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/proxy-image-download?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
+    // Cross-origin CDNs (DexScreener, etc.): route through wsrv.nl which
+    // forces JPEG output AND sends CORS headers, so we can fetch as a blob
+    // and trigger a real download (no new tab, guaranteed .jpg).
+    const jpgName = filename.toLowerCase().endsWith(".jpg") || filename.toLowerCase().endsWith(".jpeg")
+      ? filename
+      : `${filename.replace(/\.[^.]+$/, "")}.jpg`;
+    const wsrvUrl = `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=jpg&q=92`;
     try {
-      const res = await fetch(proxyUrl, { cache: "no-store" });
-      const ctype = res.headers.get("content-type") || "";
-      if (res.ok && !ctype.includes("application/json")) {
-        const blob = await res.blob();
-        const cd = res.headers.get("content-disposition") || "";
-        const m = cd.match(/filename="([^"]+)"/i);
-        triggerBlobDownload(blob, m?.[1] || filename);
-        return;
-      }
-    } catch { /* fall through */ }
-    // Fallback: direct CORS fetch (some CDNs allow it)
-    try {
-      const res = await fetch(url, { mode: "cors", cache: "no-store" });
+      const res = await fetch(wsrvUrl, { mode: "cors", cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
-      triggerBlobDownload(blob, filename);
+      triggerBlobDownload(blob, jpgName);
       return;
     } catch (e: any) {
       toast({
