@@ -4,6 +4,7 @@ import { LazyLoader } from '@/components/ui/lazy-loader';
 import { HealthModeToggles } from '@/components/admin/HealthModeToggles';
 import { ServiceToggles } from '@/components/admin/ServiceToggles';
 import { IntelligenceFeatureToggles } from '@/components/admin/IntelligenceFeatureToggles';
+import { SuspensionsPanel } from '@/components/admin/SuspensionsPanel';
 import { ReputationBackfillPanel } from '@/components/admin/ReputationBackfillPanel';
 import { SocialLinksBackfillPanel } from '@/components/admin/SocialLinksBackfillPanel';
 import { VigilStatusPanel } from '@/components/admin/VigilStatusPanel';
@@ -29,6 +30,7 @@ export default function UtilitiesTab() {
   return (
     <div className="space-y-4">
       <GenealogyRetracePanel />
+      <SuspensionsPanel />
       <details className="rounded-md border border-border/50 bg-muted/20 p-2 group">
         <summary className="cursor-pointer text-sm font-semibold px-2 py-1 flex items-center justify-between">
           <span>🛠️ Maintenance · One-shot tools (Reputation Backfill)</span>
