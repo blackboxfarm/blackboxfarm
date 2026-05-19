@@ -13,26 +13,44 @@ Deno.serve(async (req) => {
     if (!target || !/^https?:\/\//i.test(target)) {
       return new Response("Missing or invalid url", { status: 400, headers: corsHeaders });
     }
-    // Force JPEG on DexScreener CDN (format=auto returns AVIF which X rejects)
-    let fetchUrl = target;
+    // Build candidate URLs. DexScreener CDN 500s on format=jpg, so try original first,
+    // then a png variant, then strip format entirely.
+    const candidates: string[] = [target];
     try {
       const t = new URL(target);
-      if (/(^|\.)dexscreener\.com$/i.test(t.hostname)) {
-        t.searchParams.set("format", "jpg");
-        fetchUrl = t.toString();
+      if (/(^|\.)dexscreener\.com$/i.test(t.hostname) && t.searchParams.has("format")) {
+        const noFmt = new URL(target);
+        noFmt.searchParams.delete("format");
+        candidates.push(noFmt.toString());
+        const pngFmt = new URL(target);
+        pngFmt.searchParams.set("format", "png");
+        candidates.push(pngFmt.toString());
       }
     } catch { /* ignore */ }
-    const upstream = await fetch(fetchUrl, {
-      // Accept only formats X supports — avoid AVIF
-      headers: {
-        accept: "image/jpeg,image/png,image/gif",
-        "user-agent": "Mozilla/5.0 (compatible; HoldersIntelProxy/1.0)",
-        referer: new URL(fetchUrl).origin + "/",
-      },
-      redirect: "follow",
-    });
-    if (!upstream.ok || !upstream.body) {
-      return new Response(`Upstream ${upstream.status}`, { status: 502, headers: corsHeaders });
+
+    const browserUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+    let upstream: Response | null = null;
+    let lastStatus = 0;
+    for (const cand of candidates) {
+      try {
+        const r = await fetch(cand, {
+          headers: {
+            accept: "image/avif,image/webp,image/png,image/jpeg,image/*,*/*;q=0.8",
+            "user-agent": browserUA,
+            referer: "https://dexscreener.com/",
+          },
+          redirect: "follow",
+        });
+        lastStatus = r.status;
+        if (r.ok && r.body) { upstream = r; break; }
+        try { await r.body?.cancel(); } catch { /* noop */ }
+      } catch (_) { /* try next */ }
+    }
+    if (!upstream) {
+      return new Response(
+        JSON.stringify({ error: "UPSTREAM_FAILED", status: lastStatus, fallback: true }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
     let ct = upstream.headers.get("content-type") || "image/jpeg";
     // If the CDN still returned AVIF/WebP, lie about the content-type only if filename forces jpg —
