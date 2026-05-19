@@ -20,6 +20,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 import { Image } from 'https://deno.land/x/imagescript@1.2.17/mod.ts';
+import { rebrandImage } from '../_shared/exif-rebrand.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -325,9 +326,38 @@ Deno.serve(withRunLog('autopsy-banner-overlay', async (req) => {
 
     // 3. Upload to bucket
     const base64 = editedDataUri.replace(/^data:image\/\w+;base64,/, '');
-    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const rawBytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+
+    // Strip Gemini-injected metadata and rebrand with BlackBox Autopsy EXIF
+    // so Windows/macOS/Twitter all see our copyright, not the model's.
+    const year = new Date().getFullYear();
+    const tickerLabel = ticker ? `$${ticker}` : 'token';
+    const copyrightLines = [
+      `Copyright (c) ${year} BlackBox Farm — BlackBox Autopsy. All rights reserved.`,
+      `Subject: ${tickerLabel} forensic autopsy report — cause of death, harm score, evidence.`,
+      `Slogan: We Read The Mesh. Dead Tokens Don't Lie.`,
+      `Website: https://blackbox.farm`,
+      `Autopsy: https://blackbox.farm/autopsies/${slug}`,
+      `Telegram: https://t.me/Dead_Tokens`,
+      `X / Twitter: https://x.com/Dead_Tokens`,
+      `Source: BlackBox Farm Autopsy Intelligence Platform`,
+    ];
+    const { bytes, mime: outMime } = rebrandImage(rawBytes, 'image/jpeg', {
+      fields: {
+        imageDescription: `${tickerLabel} — BlackBox Autopsy decorated forensic banner. Cause of death, harm score, and evidence trail by BlackBox Farm.`,
+        software: 'BlackBox Farm Autopsy Banner Overlay',
+        artist: 'BlackBox Farm — BlackBox Autopsy',
+        copyright: `Copyright (c) ${year} BlackBox Farm — BlackBox Autopsy. All rights reserved. https://blackbox.farm`,
+        xpTitle: `BlackBox Autopsy — ${tickerLabel} Forensic Banner`,
+        xpSubject: `${tickerLabel} autopsy — cause of death, harm score, evidence`,
+        xpAuthor: 'BlackBox Farm — BlackBox Autopsy',
+        xpKeywords: `BlackBox Autopsy;Dead Tokens;BlackBox Farm;Solana;${tickerLabel};Forensics;Rug;Scam;Crypto`,
+        xpComment: copyrightLines.join(' | '),
+      },
+      copyrightLines,
+    });
     const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, bytes, {
-      contentType: 'image/jpeg', upsert: true, cacheControl: '86400',
+      contentType: outMime || 'image/jpeg', upsert: true, cacheControl: '86400',
     });
     if (upErr) throw new Error(`storage upload: ${upErr.message}`);
     const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
