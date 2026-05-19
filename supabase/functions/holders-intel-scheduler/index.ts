@@ -365,15 +365,33 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
     
     const qualifiedTokens = newTokens.filter(t => !establishedMints.has(t.mint));
     
+    // Quality gate (pre-queue): reject UNKNOWN symbol / Unknown Token / mcap < $500
+    // These never produce useful holder snapshots and only clog the Manual X queue.
+    const isJunkSymbol = (s: string | null | undefined) => {
+      const v = (s || '').trim().toLowerCase();
+      return !v || v === 'unknown' || v === '?' || v === 'unknown token';
+    };
+    const preQualifiedCount = qualifiedTokens.length;
+    const cleanTokens = qualifiedTokens.filter(t => {
+      if (isJunkSymbol(t.symbol)) return false;
+      if ((t.name || '').toLowerCase().includes('unknown token')) return false;
+      if ((t.marketCap ?? 0) < 500) return false;
+      return true;
+    });
+    const junkRejected = preQualifiedCount - cleanTokens.length;
+    if (junkRejected > 0) {
+      console.log(`[scheduler] 🚫 Rejected ${junkRejected} junk tokens (UNKNOWN symbol / mcap < $500)`);
+    }
+
     // Phase 3: demand-weighted ranking — boost tokens the public is actually
     // querying right now via /holders, /bubblemap, or the Telegram bot.
     let demandMap = new Map<string, number>();
-    if (qualifiedTokens.length > 0) {
+    if (cleanTokens.length > 0) {
       try {
         const { data: demandRows } = await supabase
           .from('holders_intel_demand_24h')
           .select('token_mint, demand_score_24h')
-          .in('token_mint', qualifiedTokens.map(t => t.mint));
+          .in('token_mint', cleanTokens.map(t => t.mint));
         for (const r of (demandRows || [])) {
           demandMap.set(r.token_mint, Number(r.demand_score_24h) || 0);
         }
@@ -388,7 +406,7 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
 
     // Sort: tokens with public demand bubble to the top (highest demand first),
     // then ties fall back to the original DEX-trending order.
-    qualifiedTokens.sort((a, b) => (demandMap.get(b.mint) ?? 0) - (demandMap.get(a.mint) ?? 0));
+    cleanTokens.sort((a, b) => (demandMap.get(b.mint) ?? 0) - (demandMap.get(a.mint) ?? 0));
 
     // CAP: Check current pending count — don't flood the queue beyond 50 pending
     const { count: currentPending } = await supabase
@@ -398,18 +416,19 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
     
     const pendingCount = currentPending || 0;
     const maxPending = 50;
-    const slotsAvailable = Math.max(0, maxPending - pendingCount);
-    
-    const cappedTokens = qualifiedTokens.slice(0, slotsAvailable);
-    
-    if (qualifiedTokens.length > slotsAvailable) {
-      console.log(`[scheduler] ⚠️ Queue cap: ${pendingCount} already pending, only adding ${slotsAvailable} of ${qualifiedTokens.length} qualified`);
+    const PER_RUN_CAP = 8; // Per-run cap to avoid 50-at-once dumps after a wipe
+    const slotsAvailable = Math.min(PER_RUN_CAP, Math.max(0, maxPending - pendingCount));
+
+    const cappedTokens = cleanTokens.slice(0, slotsAvailable);
+
+    if (cleanTokens.length > slotsAvailable) {
+      console.log(`[scheduler] ⚠️ Queue cap: ${pendingCount} pending, per-run cap ${PER_RUN_CAP}, adding ${slotsAvailable} of ${cleanTokens.length} clean`);
     }
     console.log(`[scheduler] Final tokens to queue: ${cappedTokens.length} (cap: ${slotsAvailable} slots available)`);
     
     // Insert seen tokens
-    if (qualifiedTokens.length > 0) {
-      const seenInserts = qualifiedTokens.map(t => ({
+    if (cleanTokens.length > 0) {
+      const seenInserts = cleanTokens.map(t => ({
         token_mint: t.mint,
         symbol: t.symbol,
         name: t.name,
