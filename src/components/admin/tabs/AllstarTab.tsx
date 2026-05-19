@@ -1,10 +1,11 @@
 import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Star, Bell, Plus, Activity, UserPlus, Network } from 'lucide-react';
+import { Star, Bell, Plus, Activity, UserPlus, Network, Terminal } from 'lucide-react';
 import { AllstarRegistry } from '../allstar/AllstarRegistry';
 import { AllstarMintAlerts } from '../allstar/AllstarMintAlerts';
 import { AllstarAddForm } from '../allstar/AllstarAddForm';
 import { AllstarAuditFeed } from '../allstar/AllstarAuditFeed';
+import { LiveCheckLog } from '../allstar/LiveCheckLog';
 import { MissingAdminPanel } from '../allstar/MissingAdminPanel';
 import { FamilyIntelTab } from '../allstar/FamilyIntelTab';
 
@@ -39,6 +40,10 @@ export default function AllstarTab() {
             <Activity className="h-4 w-4" />
             Audit Feed
           </TabsTrigger>
+          <TabsTrigger value="check-log" className="flex items-center gap-2">
+            <Terminal className="h-4 w-4" />
+            Live Check Log
+          </TabsTrigger>
           <TabsTrigger value="missing-admins" className="flex items-center gap-2">
             <UserPlus className="h-4 w-4" />
             Missing Admins
@@ -60,6 +65,9 @@ export default function AllstarTab() {
         </TabsContent>
         <TabsContent value="audit-feed">
           <AllstarAuditFeed />
+        </TabsContent>
+        <TabsContent value="check-log">
+          <LiveCheckLog />
         </TabsContent>
         <TabsContent value="missing-admins">
           <MissingAdminPanel />
