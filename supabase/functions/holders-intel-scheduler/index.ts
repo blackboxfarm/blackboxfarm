@@ -384,11 +384,14 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
       if (isJunkSymbol(t.symbol)) return false;
       if ((t.name || '').toLowerCase().includes('unknown token')) return false;
       if ((t.marketCap ?? 0) < 500) return false;
+      // Activity gate — reject low-volume / thin-liquidity tokens that produce dust snapshots
+      if ((t.volume24h ?? 0) < 50_000) return false;       // < $50k 24h vol = no real trading
+      if ((t.liquidityUsd ?? 0) < 20_000) return false;    // < $20k liq = unsafe / dust
       return true;
     });
     const junkRejected = preQualifiedCount - cleanTokens.length;
     if (junkRejected > 0) {
-      console.log(`[scheduler] 🚫 Rejected ${junkRejected} junk tokens (UNKNOWN symbol / mcap < $500)`);
+      console.log(`[scheduler] 🚫 Rejected ${junkRejected} junk tokens (UNKNOWN / mcap<$500 / vol<$50k / liq<$20k)`);
     }
 
     // Phase 3: demand-weighted ranking — boost tokens the public is actually
@@ -412,9 +415,17 @@ Deno.serve(withRunLog('holders-intel-scheduler', async (req) => {
       }
     }
 
-    // Sort: tokens with public demand bubble to the top (highest demand first),
-    // then ties fall back to the original DEX-trending order.
-    cleanTokens.sort((a, b) => (demandMap.get(b.mint) ?? 0) - (demandMap.get(a.mint) ?? 0));
+    // Sort: NEWEST → OLDEST (by pair_created_at, falling back to first_seen_at).
+    // Public demand acts as a secondary tiebreaker so trending newcomers still bubble.
+    const ageMs = (t: TrendingToken) => {
+      const d = t.pairCreatedAt || t.firstSeenAt;
+      return d ? new Date(d).getTime() : 0;
+    };
+    cleanTokens.sort((a, b) => {
+      const ageDiff = ageMs(b) - ageMs(a); // newer first
+      if (ageDiff !== 0) return ageDiff;
+      return (demandMap.get(b.mint) ?? 0) - (demandMap.get(a.mint) ?? 0);
+    });
 
     // CAP: Check current pending count — don't flood the queue beyond 50 pending
     const { count: currentPending } = await supabase
