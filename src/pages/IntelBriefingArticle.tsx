@@ -12,13 +12,10 @@ import { format } from 'date-fns';
 import { ArticleContent } from '@/components/intel/ArticleMarkdownRenderer';
 import { CrossPostStrip } from '@/components/intel/CrossPostStrip';
 import { TLDRButton } from '@/components/intel/TLDRButton';
-import { ArticleExportPanel } from '@/components/intel/ArticleExportPanel';
-import { useUserRoles } from '@/hooks/useUserRoles';
 
 export default function IntelBriefingArticle() {
   const { slug } = useParams<{ slug: string }>();
   const viewLogged = useRef(false);
-  const { isSuperAdmin } = useUserRoles();
 
   const { data: isPublic, isLoading: accessLoading } = useQuery({
     queryKey: ['intel-public-access'],
@@ -243,9 +240,6 @@ export default function IntelBriefingArticle() {
           )}
         </div>
       </article>
-      {isSuperAdmin && (
-        <ArticleExportPanel contentMd={article.content_md} title={article.title} />
-      )}
     </SiteLayout>
   );
 }
