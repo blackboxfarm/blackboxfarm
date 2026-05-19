@@ -99,7 +99,7 @@ export function HoldersIntelTweetCard({ row }: { row: ArchiveRow }) {
       {hasStructured ? (
         <div className="space-y-1 text-[15px] leading-[1.45] whitespace-pre-wrap break-words font-sans">
           <div>
-            🔬 HOLDER INTEL:{" "}
+            🔬 HOLDERS INTEL:{" "}
             <span className="text-sky-400">${symbol}</span>{" "}
             {name && name !== symbol ? name : ""}
           </div>
