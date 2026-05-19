@@ -1,6 +1,7 @@
 import { withRunLog } from '../_shared/run-logger.ts';
 import { smartScrape, smartSearch } from '../_shared/scraper-router.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { meteredAiFetch } from '../_shared/ai-meter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -185,7 +186,7 @@ Based on the ACTUAL SEARCH RESULTS above, provide:
 IMPORTANT: Only cite information that appears in the search results above. Use the actual URLs as sources.`;
 
     // Call the AI Gateway
-    const response = await fetch(AI_GATEWAY_URL, {
+    const response = await meteredAiFetch("social-predictor-ai", AI_GATEWAY_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${LOVABLE_API_KEY}`,

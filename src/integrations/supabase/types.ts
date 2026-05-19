@@ -305,6 +305,7 @@ export type Database = {
           completion_tokens: number | null
           cost_estimate_usd: number | null
           created_at: string
+          function_name: string | null
           id: string
           metadata: Json | null
           model: string
@@ -319,6 +320,7 @@ export type Database = {
           completion_tokens?: number | null
           cost_estimate_usd?: number | null
           created_at?: string
+          function_name?: string | null
           id?: string
           metadata?: Json | null
           model?: string
@@ -333,6 +335,7 @@ export type Database = {
           completion_tokens?: number | null
           cost_estimate_usd?: number | null
           created_at?: string
+          function_name?: string | null
           id?: string
           metadata?: Json | null
           model?: string

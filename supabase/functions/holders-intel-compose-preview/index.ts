@@ -2,6 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { assessNetworkRisk } from "../_shared/network-risk-assessment.ts";
 import { fetchDexBanner } from "../_shared/dexscreener-banner.ts";
 import { sanitizeForTwitter, sanitizeTickerForTwitter } from "../_shared/twitter-template-sanitizer.ts";
+import { meteredAiFetch } from '../_shared/ai-meter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -140,7 +141,7 @@ RULES (strict):
   try {
     const ctrl = new AbortController();
     const timeout = setTimeout(() => ctrl.abort(), 12_000);
-    const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const res = await meteredAiFetch("holders-intel-compose-preview", 'https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

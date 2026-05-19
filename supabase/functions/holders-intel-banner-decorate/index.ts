@@ -2,6 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.54.0";
 import { fetchDexBanner } from "../_shared/dexscreener-banner.ts";
 import { assertUpdate } from "../_shared/db-assert.ts";
 import { rebrandImage } from "../_shared/exif-rebrand.ts";
+import { meteredAiFetch } from '../_shared/ai-meter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -67,7 +68,7 @@ async function urlToDataUri(url: string): Promise<string> {
 async function callImageEdit(sourceDataUri: string, avatarDataUri: string, prompt: string): Promise<string> {
   const apiKey = Deno.env.get('LOVABLE_API_KEY');
   if (!apiKey) throw new Error('LOVABLE_API_KEY not configured');
-  const res = await fetch(LOVABLE_AI_URL, {
+  const res = await meteredAiFetch("holders-intel-banner-decorate", LOVABLE_AI_URL, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({

@@ -21,6 +21,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { isFunctionEnabled } from '../_shared/function-toggle.ts';
 import { Image } from 'https://deno.land/x/imagescript@1.2.17/mod.ts';
 import { rebrandImage } from '../_shared/exif-rebrand.ts';
+import { meteredAiFetch } from '../_shared/ai-meter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -176,7 +177,7 @@ async function loadAndMaybeLetterbox(srcUrl: string): Promise<{ dataUri: string;
 async function callImageEdit(sourceDataUri: string, prompt: string): Promise<string> {
   const apiKey = Deno.env.get('LOVABLE_API_KEY');
   if (!apiKey) throw new Error('LOVABLE_API_KEY not configured');
-  const res = await fetch(LOVABLE_AI_URL, {
+  const res = await meteredAiFetch("autopsy-banner-overlay", LOVABLE_AI_URL, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({

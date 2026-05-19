@@ -10,6 +10,7 @@ import { sanitizeTelegramInput, isInputSafeToProcess } from "../_shared/telegram
 import { obfuscateTicker } from "../_shared/ticker-obfuscator.ts";
 import { runBadActorCheck } from "../_shared/bad-actor-check.ts";
 import { xHandleReverseLookup, formatXLookupForTelegram } from "../_shared/x-handle-reverse-lookup.ts";
+import { meteredAiFetch } from '../_shared/ai-meter.ts';
 
 const BOT_TOKEN = Deno.env.get("TELEGRAM_HOLDERSINTEL_BOT_TOKEN")!;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
@@ -2197,7 +2198,7 @@ async function handleVerdict(chatId: number, telegramUserId: string, args: strin
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) throw new Error('No AI key');
 
-    const aiRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const aiRes = await meteredAiFetch("holdersintel-bot-webhook", 'https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${LOVABLE_API_KEY}`,
@@ -4145,7 +4146,7 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
     const estimatedPromptTokens = Math.ceil(promptText.length / 4);
     const aiCallStart = Date.now();
 
-    const aiRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const aiRes = await meteredAiFetch("holdersintel-bot-webhook", 'https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${LOVABLE_API_KEY}`,

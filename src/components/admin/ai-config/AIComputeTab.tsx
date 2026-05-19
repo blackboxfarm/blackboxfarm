@@ -18,6 +18,7 @@ interface ComputeRow {
   user_id: string | null;
   session_id: string | null;
   model: string;
+  function_name: string | null;
   prompt_tokens: number | null;
   completion_tokens: number | null;
   total_tokens: number | null;
@@ -111,6 +112,20 @@ export function AIComputeTab() {
       modelMap[r.model].cost += r.cost_estimate_usd || 0;
     });
 
+    // Function (edge function) breakdown — the real "who ate the credits" view
+    const fnMap: Record<string, { function_name: string; calls: number; tokens: number; cost: number; avgMs: number; msCount: number }> = {};
+    computeLogs.forEach(r => {
+      const k = r.function_name || '(unattributed)';
+      if (!fnMap[k]) fnMap[k] = { function_name: k, calls: 0, tokens: 0, cost: 0, avgMs: 0, msCount: 0 };
+      fnMap[k].calls++;
+      fnMap[k].tokens += r.total_tokens || 0;
+      fnMap[k].cost += r.cost_estimate_usd || 0;
+      if (r.response_time_ms) { fnMap[k].avgMs += r.response_time_ms; fnMap[k].msCount++; }
+    });
+    const functionData = Object.values(fnMap)
+      .map(f => ({ ...f, avgMs: f.msCount ? Math.round(f.avgMs / f.msCount) : 0 }))
+      .sort((a, b) => b.cost - a.cost);
+
     return {
       totalCost, totalTokens, avgResponseMs,
       totalCalls: computeLogs.length,
@@ -119,6 +134,7 @@ export function AIComputeTab() {
       webCost: webLogs.reduce((s, r) => s + (r.cost_estimate_usd || 0), 0),
       dailyData, accountData,
       modelData: Object.values(modelMap).sort((a, b) => b.calls - a.calls),
+      functionData,
       platformPie: [
         { name: 'Telegram', value: tgLogs.length, cost: tgLogs.reduce((s, r) => s + (r.cost_estimate_usd || 0), 0) },
         { name: 'Web', value: webLogs.length, cost: webLogs.reduce((s, r) => s + (r.cost_estimate_usd || 0), 0) },
@@ -236,6 +252,41 @@ export function AIComputeTab() {
                   <Line type="monotone" dataKey="cost" stroke="#F59E0B" strokeWidth={2} dot={{ r: 3 }} />
                 </LineChart>
               </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Function (edge function) breakdown — the real ledger */}
+          <Card className="border-amber-500/40">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-amber-400" /> AI Spend by Function ({stats.functionData.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="max-h-[400px] overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="sticky top-0 bg-card z-10">
+                      <TableHead>Function</TableHead>
+                      <TableHead className="text-right">Calls</TableHead>
+                      <TableHead className="text-right">Tokens</TableHead>
+                      <TableHead className="text-right">Avg ms</TableHead>
+                      <TableHead className="text-right">Cost</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {stats.functionData.map(f => (
+                      <TableRow key={f.function_name}>
+                        <TableCell className="font-mono text-xs">{f.function_name}</TableCell>
+                        <TableCell className="text-right">{f.calls.toLocaleString()}</TableCell>
+                        <TableCell className="text-right">{(f.tokens / 1000).toFixed(1)}k</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{f.avgMs}</TableCell>
+                        <TableCell className="text-right text-green-400 font-semibold">${f.cost.toFixed(4)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
 

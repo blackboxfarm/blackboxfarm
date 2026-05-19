@@ -1,6 +1,7 @@
 // On-demand version of channel-pair-analyzer; accepts pair_id + custom window
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { assertInsert } from '../_shared/db-assert.ts';
+import { meteredAiFetch } from '../_shared/ai-meter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -140,7 +141,7 @@ Deno.serve(async (req) => {
         sample_overlaps: leadOverlap.slice(0, 10),
       };
       try {
-        const aiRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        const aiRes = await meteredAiFetch("channel-pair-analyze-now", 'https://ai.gateway.lovable.dev/v1/chat/completions', {
           method: 'POST',
           headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({

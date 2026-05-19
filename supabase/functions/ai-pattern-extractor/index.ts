@@ -15,6 +15,7 @@ import { withRunLog } from '../_shared/run-logger.ts';
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2.54.0";
+import { meteredAiFetch } from '../_shared/ai-meter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -86,7 +87,7 @@ Deno.serve(withRunLog('ai-pattern-extractor', async (req) => {
       }).join('\n');
 
       try {
-        const aiResp = await fetch(AI_GATEWAY, {
+        const aiResp = await meteredAiFetch("ai-pattern-extractor", AI_GATEWAY, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${LOVABLE_API_KEY}`,

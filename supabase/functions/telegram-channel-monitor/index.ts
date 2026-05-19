@@ -5,6 +5,7 @@ import { validateStaleAlpha } from "../_shared/historical-price.ts";
 import { enableHeliusTracking } from '../_shared/helius-fetch-interceptor.ts';
 import { getHeliusApiKey, getHeliusRpcUrl } from '../_shared/helius-client.ts';
 import { fetchPumpFunCoin } from '../_shared/pumpfun-fetch.ts';
+import { meteredAiFetch } from '../_shared/ai-meter.ts';
 enableHeliusTracking('telegram-channel-monitor');
 
 const corsHeaders = {
@@ -1153,7 +1154,7 @@ async function generateAIInterpretation(
       `RULE DECISION: ${ruleResult.decision} | REASONING: ${ruleResult.reasoning}`,
     ].join('\n');
 
-    const aiRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const aiRes = await meteredAiFetch("telegram-channel-monitor", 'https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${LOVABLE_API_KEY}`,

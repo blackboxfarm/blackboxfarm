@@ -2,6 +2,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { assertInsert } from '../_shared/db-assert.ts';
 import { isFunctionEnabled } from '../_shared/function-toggle.ts';
+import { meteredAiFetch } from '../_shared/ai-meter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -134,7 +135,7 @@ async function analyzePair(
       sample_overlaps: leadOverlap.slice(0, 8),
     };
     try {
-      const aiRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      const aiRes = await meteredAiFetch("channel-pair-analyzer", 'https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
         headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({

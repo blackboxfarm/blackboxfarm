@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
+import { meteredAiFetch } from '../_shared/ai-meter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -32,7 +33,7 @@ async function aiVisionScan(b64: string, mime: string): Promise<{ ok: boolean; r
   const KEY = Deno.env.get('LOVABLE_API_KEY');
   if (!KEY) return { ok: true, reason: 'no_ai_key' }; // fail-open if not configured
   try {
-    const r = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const r = await meteredAiFetch("avatar-upload-scan", 'https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({

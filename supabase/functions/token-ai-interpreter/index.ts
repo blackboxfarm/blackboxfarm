@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { detectTokenPhase, type TokenPhase } from "../_shared/token-phase.ts";
 import { getPatternContext } from "../_shared/pattern-context.ts";
+import { meteredAiFetch } from '../_shared/ai-meter.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -722,7 +723,7 @@ serve(withRunLog('token-ai-interpreter', async (req) => {
 
     const userPrompt = `Analyze this token's holder structure and generate an interpretation:\n\n${JSON.stringify(metricsContext, null, 2)}${patternBlock ? '\n\n' + patternBlock : ''}`;
 
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiResponse = await meteredAiFetch("token-ai-interpreter", "https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
