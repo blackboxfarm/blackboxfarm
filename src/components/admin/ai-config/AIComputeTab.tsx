@@ -255,6 +255,41 @@ export function AIComputeTab() {
             </CardContent>
           </Card>
 
+          {/* Function (edge function) breakdown — the real ledger */}
+          <Card className="border-amber-500/40">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-amber-400" /> AI Spend by Function ({stats.functionData.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="max-h-[400px] overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="sticky top-0 bg-card z-10">
+                      <TableHead>Function</TableHead>
+                      <TableHead className="text-right">Calls</TableHead>
+                      <TableHead className="text-right">Tokens</TableHead>
+                      <TableHead className="text-right">Avg ms</TableHead>
+                      <TableHead className="text-right">Cost</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {stats.functionData.map(f => (
+                      <TableRow key={f.function_name}>
+                        <TableCell className="font-mono text-xs">{f.function_name}</TableCell>
+                        <TableCell className="text-right">{f.calls.toLocaleString()}</TableCell>
+                        <TableCell className="text-right">{(f.tokens / 1000).toFixed(1)}k</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{f.avgMs}</TableCell>
+                        <TableCell className="text-right text-green-400 font-semibold">${f.cost.toFixed(4)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Model breakdown */}
           <Card>
             <CardHeader className="pb-2">
