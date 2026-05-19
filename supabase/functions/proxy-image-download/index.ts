@@ -13,20 +13,26 @@ Deno.serve(async (req) => {
     if (!target || !/^https?:\/\//i.test(target)) {
       return new Response("Missing or invalid url", { status: 400, headers: corsHeaders });
     }
-    // Build candidate URLs. DexScreener CDN 500s on format=jpg, so try original first,
-    // then a png variant, then strip format entirely.
-    const candidates: string[] = [target];
+    // Force JPEG: strip any format param, only accept image/jpeg.
+    // DexScreener CDN honours the Accept header when format is absent.
+    const candidates: string[] = [];
     try {
       const t = new URL(target);
-      if (/(^|\.)dexscreener\.com$/i.test(t.hostname) && t.searchParams.has("format")) {
-        const noFmt = new URL(target);
-        noFmt.searchParams.delete("format");
-        candidates.push(noFmt.toString());
-        const pngFmt = new URL(target);
-        pngFmt.searchParams.set("format", "png");
-        candidates.push(pngFmt.toString());
-      }
-    } catch { /* ignore */ }
+      t.searchParams.delete("format");
+      // Primary: wsrv.nl image proxy — guarantees JPEG output regardless of source format.
+      const stripped = t.toString().replace(/^https?:\/\//, "");
+      candidates.push(`https://wsrv.nl/?url=${encodeURIComponent(stripped)}&output=jpg&q=92`);
+      candidates.push(t.toString());
+      // fallback: explicit format=jpg
+      const jpg = new URL(t.toString());
+      jpg.searchParams.set("format", "jpg");
+      candidates.push(jpg.toString());
+      // last resort: original untouched
+      candidates.push(target);
+    } catch {
+      candidates.push(`https://wsrv.nl/?url=${encodeURIComponent(target.replace(/^https?:\/\//, ""))}&output=jpg&q=92`);
+      candidates.push(target);
+    }
 
     const browserUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
     let upstream: Response | null = null;
@@ -35,14 +41,19 @@ Deno.serve(async (req) => {
       try {
         const r = await fetch(cand, {
           headers: {
-            accept: "image/avif,image/webp,image/png,image/jpeg,image/*,*/*;q=0.8",
+            accept: "image/jpeg",
             "user-agent": browserUA,
-            referer: "https://dexscreener.com/",
           },
           redirect: "follow",
         });
         lastStatus = r.status;
-        if (r.ok && r.body) { upstream = r; break; }
+        if (r.ok && r.body) {
+          const ct = (r.headers.get("content-type") || "").toLowerCase();
+          // Only accept jpeg; otherwise try next candidate
+          if (ct.includes("jpeg") || ct.includes("jpg")) { upstream = r; break; }
+          try { await r.body.cancel(); } catch { /* noop */ }
+          continue;
+        }
         try { await r.body?.cancel(); } catch { /* noop */ }
       } catch (_) { /* try next */ }
     }
@@ -52,19 +63,13 @@ Deno.serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
-    let ct = upstream.headers.get("content-type") || "image/jpeg";
-    // If the CDN still returned AVIF/WebP, lie about the content-type only if filename forces jpg —
-    // better: surface the real type but rename file so OS picks the right viewer.
     let safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
-    if (/avif/i.test(ct)) safeName = safeName.replace(/\.[a-z0-9]+$/i, "") + ".avif";
-    else if (/webp/i.test(ct)) safeName = safeName.replace(/\.[a-z0-9]+$/i, "") + ".webp";
-    else if (/png/i.test(ct)) safeName = safeName.replace(/\.[a-z0-9]+$/i, "") + ".png";
-    else safeName = safeName.replace(/\.[a-z0-9]+$/i, "") + ".jpg";
+    safeName = safeName.replace(/\.[a-z0-9]+$/i, "") + ".jpg";
     return new Response(upstream.body, {
       status: 200,
       headers: {
         ...corsHeaders,
-        "Content-Type": ct,
+        "Content-Type": "image/jpeg",
         "Content-Disposition": `attachment; filename="${safeName}"`,
         "Cache-Control": "public, max-age=300",
       },
