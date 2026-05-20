@@ -18302,6 +18302,42 @@ export type Database = {
         }
         Relationships: []
       }
+      token_cto_status: {
+        Row: {
+          admin_override: boolean
+          created_at: string
+          detected_at: string
+          id: string
+          is_cto: boolean
+          set_by: string | null
+          signals: Json
+          token_mint: string
+          updated_at: string
+        }
+        Insert: {
+          admin_override?: boolean
+          created_at?: string
+          detected_at?: string
+          id?: string
+          is_cto?: boolean
+          set_by?: string | null
+          signals?: Json
+          token_mint: string
+          updated_at?: string
+        }
+        Update: {
+          admin_override?: boolean
+          created_at?: string
+          detected_at?: string
+          id?: string
+          is_cto?: boolean
+          set_by?: string | null
+          signals?: Json
+          token_mint?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       token_dex_status_history: {
         Row: {
           active_boosts: number | null
@@ -19065,6 +19101,69 @@ export type Database = {
             referencedColumns: ["developer_id"]
           },
         ]
+      }
+      token_narrative_links: {
+        Row: {
+          added_by: string | null
+          created_at: string
+          editor_note: string | null
+          id: string
+          is_active: boolean
+          source_domain: string | null
+          title: string | null
+          token_mint: string
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          added_by?: string | null
+          created_at?: string
+          editor_note?: string | null
+          id?: string
+          is_active?: boolean
+          source_domain?: string | null
+          title?: string | null
+          token_mint: string
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          added_by?: string | null
+          created_at?: string
+          editor_note?: string | null
+          id?: string
+          is_active?: boolean
+          source_domain?: string | null
+          title?: string | null
+          token_mint?: string
+          updated_at?: string
+          url?: string
+        }
+        Relationships: []
+      }
+      token_optimistic_summary_cache: {
+        Row: {
+          expires_at: string
+          generated_at: string
+          id: string
+          summary: Json
+          token_mint: string
+        }
+        Insert: {
+          expires_at?: string
+          generated_at?: string
+          id?: string
+          summary: Json
+          token_mint: string
+        }
+        Update: {
+          expires_at?: string
+          generated_at?: string
+          id?: string
+          summary?: Json
+          token_mint?: string
+        }
+        Relationships: []
       }
       token_paid_orders: {
         Row: {
