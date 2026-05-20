@@ -1,20 +1,15 @@
-## Goal
-Stop the mobile top nav from horizontally scrolling. Wrap the tabs onto 2 rows and tighten padding on small screens. Desktop layout unchanged.
+## Remove "Manual PUSH" column from Funnel Feed Discoveries
 
-## Change (single file)
-`src/components/layout/SiteLayout.tsx` — the `<nav>` at line 157.
+The PUSH button bypasses the Manual X Post review queue and tweets directly to @HoldersIntel — exact opposite of the intended flow. The funnel already auto-feeds `holders_intel_post_queue` for human review. Killing the column.
 
-**Mobile (<md):**
-- Switch from `flex` + `overflow-x-auto` + `whitespace-nowrap` to `flex-wrap` (allows 2+ rows).
-- Reduce per-tab padding from `px-4 py-2.5` to `px-2 py-1.5` and `text-xs`.
-- Reduce gap from `gap-1` to `gap-0.5`.
-- Remove the scroll-hint `ChevronRight` overlay on mobile (no longer needed since nothing scrolls).
+### Changes
 
-**Desktop (md+):**
-- Keep current `md:px-4 md:py-2.5 md:text-sm md:flex-nowrap md:gap-1` behavior — same look as today.
+**`src/components/admin/funnel-feeds/FunnelFeedDiscoveries.tsx`**
+- Remove `<TableHead>Manual PUSH</TableHead>` and its `<TableCell>` (the PUSH button + spinner + posted timestamp).
+- Remove the `handleManualPush` function, the `pushing` / `pushedAt` state, and the now-unused imports (`Zap` icon, `fetchTemplate`, `processTemplate`, `TokenShareData`, holders-report invocation, `post-share-card-twitter` invocation, `holders_intel_templates` fetch).
+- Keep all other columns intact: Token, Mint, Source, Discovered, Mesh, Watchlist, X Post (status badge only), KILL, Padre.
 
-## Result
-On phones: tabs wrap to 2 (or 3 if very narrow) compact rows, no side-scroll, no arrow hint.
-On desktop: identical to today.
-
-No other files touched. Awaiting "Plan Approved".
+### Not touched
+- `post-share-card-twitter` edge function stays — used by other legitimate flows.
+- Funnel → `holders_intel_post_queue` auto-feed stays exactly as it is.
+- `xpost_status` column on `funnel_feed_discoveries` stays (still reflects queue state).

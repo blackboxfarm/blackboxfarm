@@ -3,9 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Zap, Skull, Undo2, ExternalLink } from "lucide-react";
+import { RefreshCw, Skull, Undo2, ExternalLink } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { fetchTemplate, processTemplate, type TokenShareData } from "@/lib/share-template";
 
 interface Discovery {
   id: string;
@@ -47,8 +46,6 @@ const torontoTime = (d?: Date) =>
 export function FunnelFeedDiscoveries() {
   const [discoveries, setDiscoveries] = useState<Discovery[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pushing, setPushing] = useState<Record<string, boolean>>({});
-  const [pushedAt, setPushedAt] = useState<Record<string, string>>({});
   const [killing, setKilling] = useState<Record<string, boolean>>({});
 
   const fetchDiscoveries = async () => {
@@ -63,94 +60,6 @@ export function FunnelFeedDiscoveries() {
   };
 
   useEffect(() => { fetchDiscoveries(); }, []);
-
-  const handlePush = async (d: Discovery) => {
-    setPushing(prev => ({ ...prev, [d.id]: true }));
-    try {
-      // 1. Fetch holder report
-      const { data: reportData, error: reportError } = await supabase.functions.invoke('bagless-holders-report', {
-        body: { tokenMint: d.token_mint },
-      });
-      if (reportError) throw reportError;
-      if (!reportData || !reportData.holders) throw new Error('No holder data returned');
-
-      const totalHolders = reportData.totalHolders || 0;
-      const dustCount = reportData.dustWallets ?? 0;
-      const dustPercentage = totalHolders > 0 ? parseFloat(((dustCount / totalHolders) * 100).toFixed(2)) : 0;
-
-      // 2. Fetch AI summary
-      let aiSummary = '';
-      let lifecycle = '';
-      try {
-        const { data: aiData } = await supabase.functions.invoke('token-ai-interpreter', {
-          body: { reportData, tokenMint: d.token_mint },
-        });
-        aiSummary = aiData?.interpretation?.abbreviated_summary ?? '';
-        lifecycle = aiData?.interpretation?.lifecycle?.stage ?? '';
-      } catch { /* non-blocking */ }
-
-      // 3. Fetch active template
-      const { data: activeRow } = await supabase
-        .from('holders_intel_templates')
-        .select('template_name')
-        .eq('is_active', true)
-        .single();
-      const activeTemplateName = (activeRow?.template_name as 'small' | 'large') || 'large';
-      const templateText = await fetchTemplate(activeTemplateName);
-
-      // 4. Build token data and render template
-      const tokenData: TokenShareData = {
-        ticker: reportData.tokenSymbol || reportData.symbol || d.token_symbol || 'UNKNOWN',
-        name: reportData.tokenName || reportData.name || d.token_name || 'Unknown Token',
-        tokenAddress: d.token_mint,
-        totalWallets: totalHolders,
-        realHolders: reportData.realWalletCount ?? 0,
-        dustCount,
-        dustPercentage,
-        whales: reportData.trueWhaleWallets ?? 0 + (reportData.babyWhaleWallets ?? 0) + (reportData.superBossWallets ?? 0) + (reportData.kingpinWallets ?? 0),
-        serious: reportData.bossWallets ?? 0,
-        realRetail: reportData.realWalletCount ?? 0,
-        casual: (reportData.smallWallets ?? 0) + (reportData.mediumWallets ?? 0) + (reportData.largeWallets ?? 0),
-        retail: (reportData.smallWallets ?? 0) + (reportData.mediumWallets ?? 0) + (reportData.largeWallets ?? 0),
-        healthGrade: reportData.stabilityGrade ?? 'N/A',
-        healthScore: reportData.stabilityScore ?? 0,
-        comment1: '-On the Radar-',
-        aiSummary,
-        aiOverview: '',
-        lifecycle,
-      };
-      const tweetText = processTemplate(templateText, tokenData);
-
-      // 5. Post directly to X via post-share-card-twitter
-      const { data: postResult, error: postError } = await supabase.functions.invoke('post-share-card-twitter', {
-        body: { tweetText, twitterHandle: 'HoldersIntel', manualOverride: true },
-      });
-      if (postError) throw postError;
-      if (postResult && !postResult.success && !postResult.paused) {
-        throw new Error(postResult.error || 'Failed to post tweet');
-      }
-
-      // 6. Update discovery status to posted
-      await supabase
-        .from('funnel_feed_discoveries')
-        .update({ xpost_status: 'posted', xpost_processed_at: new Date().toISOString() })
-        .eq('id', d.id);
-
-      const ts = torontoTime();
-      setPushedAt(prev => ({ ...prev, [d.id]: ts }));
-      setDiscoveries(prev => prev.map(item =>
-        item.id === d.id ? { ...item, xpost_status: 'posted', xpost_processed_at: new Date().toISOString() } : item
-      ));
-
-      const statusMsg = postResult?.paused ? 'Queued (X paused)' : 'Posted to X + TG';
-      toast({ title: 'Pushed!', description: `${d.token_symbol || d.token_mint.slice(0, 8)} — ${statusMsg}` });
-    } catch (err: any) {
-      console.error('Manual push failed:', err);
-      toast({ title: 'Push failed', description: err.message || 'Unknown error', variant: 'destructive' });
-    } finally {
-      setPushing(prev => ({ ...prev, [d.id]: false }));
-    }
-  };
 
   const handleKillToggle = async (d: Discovery) => {
     const isKilled = d.xpost_status === 'killed';
@@ -214,7 +123,6 @@ export function FunnelFeedDiscoveries() {
                 <TableHead compact>Mesh</TableHead>
                 <TableHead compact>Watchlist</TableHead>
                 <TableHead compact>X Post</TableHead>
-                <TableHead compact>Manual PUSH</TableHead>
                 <TableHead compact>KILL</TableHead>
                 <TableHead compact>Padre</TableHead>
               </TableRow>
@@ -222,10 +130,8 @@ export function FunnelFeedDiscoveries() {
             <TableBody>
               {discoveries.map(d => {
                 const isKilled = d.xpost_status === 'killed';
-                const isPosted = d.xpost_status === 'posted' || !!pushedAt[d.id];
-                const isPushing = pushing[d.id];
+                const isPosted = d.xpost_status === 'posted';
                 const isKilling = killing[d.id];
-                const postedTime = pushedAt[d.id] || (d.xpost_processed_at ? torontoTime(new Date(d.xpost_processed_at)) : null);
 
                 return (
                   <TableRow key={d.id} className={isKilled ? 'opacity-50' : ''}>
@@ -261,26 +167,6 @@ export function FunnelFeedDiscoveries() {
                       <Badge variant="outline" className={`text-xs ${statusColors[d.xpost_status] || ''}`}>
                         {d.xpost_status}
                       </Badge>
-                    </TableCell>
-                    {/* Manual PUSH */}
-                    <TableCell compact>
-                      {isPosted && postedTime ? (
-                        <span className="text-xs text-green-400">{postedTime}</span>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-6 px-2 text-xs"
-                          disabled={isPushing || isKilled}
-                          onClick={() => handlePush(d)}
-                        >
-                          {isPushing ? (
-                            <RefreshCw className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <><Zap className="h-3 w-3 mr-1" />PUSH</>
-                          )}
-                        </Button>
-                      )}
                     </TableCell>
                     {/* KILL / REVERSE */}
                     <TableCell compact>
