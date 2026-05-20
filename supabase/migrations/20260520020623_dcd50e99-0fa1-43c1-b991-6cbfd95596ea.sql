@@ -1,0 +1,1 @@
+update funnel_feed_sources set last_message_id = 32429 where id = '94a30f34-c711-4f9c-99cd-4db7f2bffc25';
