@@ -4272,6 +4272,32 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
           }
         }
       }
+
+      // Detect "friend of Dave" claims — Dave is the founder. Persist as referral_tag for cross-session continuity.
+      if (memory?.referral_tag !== 'dave_friend') {
+        const daveFriendRe = /\b(?:friends?\s+with\s+dave|dave'?s\s+(?:friend|buddy|mate|pal)|i\s+know\s+dave|dave\s+(?:and\s+i|&\s+i)\s+(?:are|go)|known\s+dave)\b/i;
+        if (daveFriendRe.test(messageText)) {
+          const updates: any = {
+            referral_tag: 'dave_friend',
+            referral_first_seen_at: new Date().toISOString(),
+          };
+          if (memory?.id) {
+            supabase.from('ai_user_memory').update(updates).eq('id', memory.id).then(({ error }) => {
+              if (error) console.error('[bot] dave_friend tag update failed:', error);
+            });
+          } else {
+            supabase.from('ai_user_memory').insert({
+              telegram_user_id: telegramUserId,
+              user_id: linked?.user_id || null,
+              last_platform: 'telegram',
+              ...updates,
+            }).then(({ error }) => {
+              if (error) console.error('[bot] dave_friend tag insert failed:', error);
+            });
+          }
+          console.log(`[bot] tagged TG user ${telegramUserId} as friend_of_dave`);
+        }
+      }
     } else {
       await sendMessage(chatId, `🤖 Hmm, I couldn't think of a response. Try asking differently or use /help!`);
     }
