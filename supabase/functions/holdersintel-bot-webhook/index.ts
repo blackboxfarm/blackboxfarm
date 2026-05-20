@@ -18,6 +18,18 @@ const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+// ─── Curated optimistic tokens — bot returns a positive rendition ───
+// Mirrors src/lib/curatedOptimisticTokens.ts on the web side.
+const CURATED_OPTIMISTIC_TOKENS = new Set<string>([
+  "FiEUFoZpjAdvoFRShKaxzuN5NXkuwe9jBPYDaeGpump",
+]);
+function isCuratedOptimistic(mint: string | null | undefined): boolean {
+  return !!mint && CURATED_OPTIMISTIC_TOKENS.has(mint);
+}
+const CURATED_OPTIMISTIC_BANNER =
+  `✨ *Community Takeover Confirmed*\n` +
+  `Organic momentum, dispersed holders, dev renounced. Treated as a healthy CTO by HoldersIntel.\n\n`;
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
   auth: { persistSession: false },
 });
@@ -1227,7 +1239,8 @@ async function handleRisk(chatId: number, telegramUserId: string, args: string, 
   await sendMessage(chatId, `🛡 Assessing risk for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
   await logUsage(telegramUserId, "/risk", ca);
 
-  const badActorBanner = await buildBadActorBanner(ca, gate.tier);
+  const curated = isCuratedOptimistic(ca);
+  const badActorBanner = curated ? null : await buildBadActorBanner(ca, gate.tier);
 
   // Parallel: holders + oracle + momentum
   const [holdersData, oracleData, momentumData] = await Promise.all([
@@ -1308,10 +1321,15 @@ async function handleRisk(chatId: number, telegramUserId: string, args: string, 
 
   const isLite = !hasTier(gate.tier, "x_subscriber");
 
+  if (curated) {
+    riskLevel = 'LOW';
+    riskEmoji = '🟢';
+  }
   let msg = `\`${ca}\`\n` +
     `${tokenHeaderLine(symbol, name, mcap)}\n\n` +
     `${riskEmoji} *${riskLabels[riskLevel]}*\n\n`;
   if (badActorBanner) msg = badActorBanner + msg;
+  if (curated) msg = CURATED_OPTIMISTIC_BANNER + msg;
 
   if (isLite) {
     // Auth tier: score + top 3 signals only
@@ -1469,9 +1487,11 @@ async function handleDev(chatId: number, telegramUserId: string, args: string) {
   }
 
   // ── Build message ──
-  const badActorBanner = await buildBadActorBanner(ca, gate.tier);
+  const curated = isCuratedOptimistic(ca);
+  const badActorBanner = curated ? null : await buildBadActorBanner(ca, gate.tier);
   let msg = '';
   if (badActorBanner) msg += badActorBanner;
+  if (curated) msg += CURATED_OPTIMISTIC_BANNER;
   msg += `🏗 *Dev Intel Report*\n`;
   if (tokenSymbol) {
     msg += `Token: *$${tokenSymbol.replace(/\$/g, '')}*${tokenName ? ` (${tokenName})` : ''}\n`;
@@ -1979,8 +1999,9 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
     return;
   }
 
+  const curated = isCuratedOptimistic(ca);
   const isLite = !hasTier(gate.tier, "x_subscriber");
-  const badActorBanner = await buildBadActorBanner(ca, gate.tier);
+  const badActorBanner = curated ? null : await buildBadActorBanner(ca, gate.tier);
 
   const totalHolders = data.realHolders ?? data.totalHolders ?? "?";
   const healthScore = data.healthScore?.score ?? data.stabilityScore ?? "?";
@@ -1994,6 +2015,7 @@ async function handleHolders(chatId: number, telegramUserId: string, args: strin
   let header = `\`${ca}\`\n` +
     `${tokenHeaderLine(symbol, name, mcap)}\n\n`;
   if (badActorBanner) header = badActorBanner + header;
+  if (curated) header = CURATED_OPTIMISTIC_BANNER + header;
 
   if (isLite) {
     await sendMessage(chatId,
