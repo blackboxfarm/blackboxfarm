@@ -18,6 +18,7 @@ import { ShareToXButton } from '@/components/ShareToXButton';
 import { Progress } from '@/components/ui/progress';
 import { useTokenMetadata } from '@/hooks/useTokenMetadata';
 import { AdBanner } from '@/components/AdBanner';
+import { isCuratedOptimistic } from '@/lib/curatedOptimisticTokens';
 import { TokenMetadataDisplay } from '@/components/token/TokenMetadataDisplay';
 import { PremiumFeatureGate } from '@/components/premium/PremiumFeatureGate';
 import { HolderMovementFeed } from '@/components/premium/HolderMovementFeed';
