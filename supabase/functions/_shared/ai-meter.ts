@@ -15,6 +15,7 @@
  */
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { assertDbWrite } from './db-assert.ts';
 
 const AI_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 
@@ -58,7 +59,11 @@ async function logToDb(row: Record<string, unknown>) {
   try {
     const sb = getClient();
     if (!sb) return;
-    await sb.from('ai_compute_log').insert(row);
+    await assertDbWrite(
+      sb.from('ai_compute_log').insert(row),
+      'ai_compute_log',
+      'insert'
+    );
   } catch (e) {
     console.error('[ai-meter] log failed', (e as Error).message);
   }
@@ -96,7 +101,7 @@ export async function meteredAiFetch(
   const clone = res.clone();
 
   // Fire-and-forget: parse usage + log.
-  (async () => {
+  const logTask = (async () => {
     let promptTokens = 0, completionTokens = 0, totalTokens = 0, imageCount = 0;
     let ok = res.ok;
     let errorMsg: string | null = null;
@@ -137,6 +142,16 @@ export async function meteredAiFetch(
       },
     });
   })();
+
+  // Ensure the insert survives the edge function returning its Response.
+  // Without waitUntil, the Deno Deploy isolate kills pending tasks → 0 rows logged.
+  try {
+    // @ts-ignore EdgeRuntime is provided by Supabase Edge Runtime
+    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) {
+      // @ts-ignore
+      EdgeRuntime.waitUntil(logTask);
+    }
+  } catch { /* ignore */ }
 
   return res;
 }
