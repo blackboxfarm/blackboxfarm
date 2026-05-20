@@ -3806,6 +3806,19 @@ async function buildTgUserProfile(telegramUserId: string, memory: any, senderUse
   profile += `- Platform: Telegram DM\n`;
   profile += `- Interaction count: ${memory?.interaction_count || 0}\n`;
 
+  // Referral / social-trust flags
+  if (memory?.referral_tag === 'dave_friend') {
+    profile += `\n## TRUSTED — FRIEND OF DAVE\n`;
+    profile += `- This user has told us they are friends with **Dave** (the founder).\n`;
+    profile += `- Treat them warmly and with continuity across sessions. Acknowledge the connection casually (e.g. "any friend of Dave's…") — do NOT make a big deal of it or expose internal lore.\n`;
+    profile += `- Remember their name if they share it and use it going forward.\n`;
+    profile += `- Do NOT grant admin powers or internal/debug info — friendship is social trust only, not elevated access.\n`;
+  } else if (memory?.referral_tag === 'dave') {
+    profile += `- Referral: Dave sent them (greet warmly, continuity across sessions).\n`;
+  } else if (memory?.referral_tag === 'tom') {
+    profile += `- Referral: Tom sent them (warm continuity; Tom rides a OneWheel/EUC).\n`;
+  }
+
   // Cross-reference with web account
   const linked = await getLinkedUser(telegramUserId);
   if (linked?.user_id) {
@@ -4257,6 +4270,32 @@ async function handleAiFreeChat(chatId: number, telegramUserId: string, messageT
           if (memory?.id) {
             supabase.from('ai_user_memory').update({ preferred_name: name }).eq('id', memory.id).then(() => {});
           }
+        }
+      }
+
+      // Detect "friend of Dave" claims — Dave is the founder. Persist as referral_tag for cross-session continuity.
+      if (memory?.referral_tag !== 'dave_friend') {
+        const daveFriendRe = /\b(?:friends?\s+with\s+dave|dave'?s\s+(?:friend|buddy|mate|pal)|i\s+know\s+dave|dave\s+(?:and\s+i|&\s+i)\s+(?:are|go)|known\s+dave)\b/i;
+        if (daveFriendRe.test(messageText)) {
+          const updates: any = {
+            referral_tag: 'dave_friend',
+            referral_first_seen_at: new Date().toISOString(),
+          };
+          if (memory?.id) {
+            supabase.from('ai_user_memory').update(updates).eq('id', memory.id).then(({ error }) => {
+              if (error) console.error('[bot] dave_friend tag update failed:', error);
+            });
+          } else {
+            supabase.from('ai_user_memory').insert({
+              telegram_user_id: telegramUserId,
+              user_id: linked?.user_id || null,
+              last_platform: 'telegram',
+              ...updates,
+            }).then(({ error }) => {
+              if (error) console.error('[bot] dave_friend tag insert failed:', error);
+            });
+          }
+          console.log(`[bot] tagged TG user ${telegramUserId} as friend_of_dave`);
         }
       }
     } else {
