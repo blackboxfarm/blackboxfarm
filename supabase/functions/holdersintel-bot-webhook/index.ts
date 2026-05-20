@@ -1239,7 +1239,8 @@ async function handleRisk(chatId: number, telegramUserId: string, args: string, 
   await sendMessage(chatId, `🛡 Assessing risk for \`${ca.slice(0, 8)}...${ca.slice(-6)}\`...`);
   await logUsage(telegramUserId, "/risk", ca);
 
-  const badActorBanner = await buildBadActorBanner(ca, gate.tier);
+  const curated = isCuratedOptimistic(ca);
+  const badActorBanner = curated ? null : await buildBadActorBanner(ca, gate.tier);
 
   // Parallel: holders + oracle + momentum
   const [holdersData, oracleData, momentumData] = await Promise.all([
@@ -1320,10 +1321,15 @@ async function handleRisk(chatId: number, telegramUserId: string, args: string, 
 
   const isLite = !hasTier(gate.tier, "x_subscriber");
 
+  if (curated) {
+    riskLevel = 'LOW';
+    riskEmoji = '🟢';
+  }
   let msg = `\`${ca}\`\n` +
     `${tokenHeaderLine(symbol, name, mcap)}\n\n` +
     `${riskEmoji} *${riskLabels[riskLevel]}*\n\n`;
   if (badActorBanner) msg = badActorBanner + msg;
+  if (curated) msg = CURATED_OPTIMISTIC_BANNER + msg;
 
   if (isLite) {
     // Auth tier: score + top 3 signals only
