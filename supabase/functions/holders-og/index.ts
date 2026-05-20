@@ -104,11 +104,25 @@ Deno.serve(withRunLog('holders-og', async (req) => {
         .select('decorated_banner_url, banner_used_url, dex_banner_url, symbol, created_at')
         .eq('token_mint', tokenParam)
         .order('created_at', { ascending: false })
-        .limit: 5 as any;
-      // (Note: PostgREST .limit chain — written as method)
+        .limit(10);
+
+      if (queueRows && queueRows.length > 0) {
+        // Prefer the most recent decorated banner; fall back to the most recent used/dex banner
+        const decorated = queueRows.find((r: any) => r.decorated_banner_url);
+        const used = queueRows.find((r: any) => r.banner_used_url || r.dex_banner_url);
+        const pick = decorated?.decorated_banner_url
+          || used?.banner_used_url
+          || used?.dex_banner_url
+          || null;
+        if (pick) {
+          ogImage = pick;
+          if (!tokenSymbol) tokenSymbol = (decorated?.symbol || used?.symbol || queueRows[0].symbol) ?? null;
+          isTokenSpecific = true;
+        }
+      }
     }
 
-    // PRIORITY 2: Check token_banners if no composite found
+    // PRIORITY 2: Check token_banners (manually curated banners)
     if (!isTokenSpecific && tokenParam) {
       const { data: tokenBanner } = await supabase
         .from('token_banners')
@@ -124,7 +138,23 @@ Deno.serve(withRunLog('holders-og', async (req) => {
       }
     }
 
-    // PRIORITY 2: Version param for promotional OG images
+    // PRIORITY 3: seen_tokens.banner_url / image_uri (original token art)
+    if (!isTokenSpecific && tokenParam) {
+      const { data: seen2 } = await supabase
+        .from('holders_intel_seen_tokens')
+        .select('banner_url, image_uri, symbol, name')
+        .eq('token_mint', tokenParam)
+        .single();
+      const pick = seen2?.banner_url || seen2?.image_uri || null;
+      if (pick) {
+        ogImage = pick;
+        if (!tokenSymbol) tokenSymbol = seen2?.symbol ?? null;
+        if (!tokenName) tokenName = seen2?.name ?? null;
+        isTokenSpecific = true;
+      }
+    }
+
+    // PRIORITY 4: Version param for promotional OG images
     if (!isTokenSpecific && versionParam) {
       const safeV = slugifyVersion(versionParam);
       if (safeV) {
@@ -141,7 +171,10 @@ Deno.serve(withRunLog('holders-og', async (req) => {
     // Determine OG image source for debug header
     let ogSource = 'default';
     if (isTokenSpecific && tokenParam) {
-      ogSource = ogImage.includes('composite') ? 'composite' : 'banner';
+      if (ogImage.includes('composite')) ogSource = 'composite';
+      else if (ogImage.includes('holders-intel-banners')) ogSource = 'decorated_queue';
+      else if (ogImage.includes('dexscreener')) ogSource = 'dex_banner';
+      else ogSource = 'banner';
     } else if (versionParam) {
       ogSource = 'versioned';
     }
