@@ -18,6 +18,18 @@ const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+// ─── Curated optimistic tokens — bot returns a positive rendition ───
+// Mirrors src/lib/curatedOptimisticTokens.ts on the web side.
+const CURATED_OPTIMISTIC_TOKENS = new Set<string>([
+  "FiEUFoZpjAdvoFRShKaxzuN5NXkuwe9jBPYDaeGpump",
+]);
+function isCuratedOptimistic(mint: string | null | undefined): boolean {
+  return !!mint && CURATED_OPTIMISTIC_TOKENS.has(mint);
+}
+const CURATED_OPTIMISTIC_BANNER =
+  `✨ *Community Takeover Confirmed*\n` +
+  `Organic momentum, dispersed holders, dev renounced. Treated as a healthy CTO by HoldersIntel.\n\n`;
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
   auth: { persistSession: false },
 });
