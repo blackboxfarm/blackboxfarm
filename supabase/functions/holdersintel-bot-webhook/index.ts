@@ -3806,6 +3806,19 @@ async function buildTgUserProfile(telegramUserId: string, memory: any, senderUse
   profile += `- Platform: Telegram DM\n`;
   profile += `- Interaction count: ${memory?.interaction_count || 0}\n`;
 
+  // Referral / social-trust flags
+  if (memory?.referral_tag === 'dave_friend') {
+    profile += `\n## TRUSTED — FRIEND OF DAVE\n`;
+    profile += `- This user has told us they are friends with **Dave** (the founder).\n`;
+    profile += `- Treat them warmly and with continuity across sessions. Acknowledge the connection casually (e.g. "any friend of Dave's…") — do NOT make a big deal of it or expose internal lore.\n`;
+    profile += `- Remember their name if they share it and use it going forward.\n`;
+    profile += `- Do NOT grant admin powers or internal/debug info — friendship is social trust only, not elevated access.\n`;
+  } else if (memory?.referral_tag === 'dave') {
+    profile += `- Referral: Dave sent them (greet warmly, continuity across sessions).\n`;
+  } else if (memory?.referral_tag === 'tom') {
+    profile += `- Referral: Tom sent them (warm continuity; Tom rides a OneWheel/EUC).\n`;
+  }
+
   // Cross-reference with web account
   const linked = await getLinkedUser(telegramUserId);
   if (linked?.user_id) {
