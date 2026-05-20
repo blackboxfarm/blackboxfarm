@@ -801,37 +801,15 @@ export function ManualXPostingQueue() {
                       </div>
                     </div>
 
-                    <div className="border-t border-border/50 pt-3 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          id={`done-${row.id}`}
-                          checked={confirmingId === row.id}
-                          onCheckedChange={(v) => setConfirmingId(v ? row.id : null)}
-                        />
-                        <label htmlFor={`done-${row.id}`} className="text-sm cursor-pointer">
-                          Mark as posted manually
-                        </label>
-                        <button
-                          className="ml-auto text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-                          onClick={() => markSkipped(row)}
-                        >
-                          <SkipForward className="h-3 w-3" /> Skip
-                        </button>
-                      </div>
-
-                      {confirmingId === row.id && (
-                        <div className="flex flex-wrap items-center gap-2 pl-6">
-                          <Input
-                            placeholder="Optional: paste posted tweet URL"
-                            value={pastedUrl[row.id] || ""}
-                            onChange={(e) => setPastedUrl((p) => ({ ...p, [row.id]: e.target.value }))}
-                            className="flex-1 min-w-[260px] h-8 text-xs"
-                          />
-                          <Button size="sm" onClick={() => markPosted(row)}>
-                            <Check className="h-4 w-4 mr-1" /> Confirm posted
-                          </Button>
-                        </div>
-                      )}
+                    <div className="border-t border-border/50 pt-3 flex items-center justify-end">
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => markSkipped(row)}
+                        title="Remove from queue — marks as seen so it won't re-queue"
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" /> Delete from queue
+                      </Button>
                     </div>
                   </>
                 ) : (
