@@ -18,6 +18,7 @@ import { ShareToXButton } from '@/components/ShareToXButton';
 import { Progress } from '@/components/ui/progress';
 import { useTokenMetadata } from '@/hooks/useTokenMetadata';
 import { AdBanner } from '@/components/AdBanner';
+import { isCuratedOptimistic } from '@/lib/curatedOptimisticTokens';
 import { TokenMetadataDisplay } from '@/components/token/TokenMetadataDisplay';
 import { PremiumFeatureGate } from '@/components/premium/PremiumFeatureGate';
 import { HolderMovementFeed } from '@/components/premium/HolderMovementFeed';
@@ -1045,7 +1046,7 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
       )}
 
       {/* Ad Banner under Token Snapshot */}
-      <AdBanner size="leaderboard" position={1} />
+      {!isCuratedOptimistic(tokenMint) && <AdBanner size="leaderboard" position={1} />}
 
       {/* Bundle Analysis Section - RugCheck Insiders */}
       {report?.insidersGraph?.hasInsiders && (
@@ -1404,7 +1405,7 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
           </div>
 
           {/* Ad Banner #2 - Above Report Summary */}
-          <AdBanner size="leaderboard" position={2} />
+          {!isCuratedOptimistic(tokenMint) && <AdBanner size="leaderboard" position={2} />}
 
           {/* AI Section - Tier-aware rendering */}
           {isAnonymous ? (
@@ -1684,15 +1685,19 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
 
               {/* === HOLDER HEALTHSCORE === */}
               {report.healthScore && (
+                (() => {
+                  const __curated = isCuratedOptimistic(tokenMint);
+                  const __grade = __curated ? 'A' : report.healthScore.grade;
+                  return (
                 <div className="mb-4 p-4 rounded-lg border-2" style={{
-                  borderColor: report.healthScore.grade === 'A' ? 'hsl(var(--chart-2))' :
-                               report.healthScore.grade === 'B' ? 'hsl(var(--chart-3))' :
-                               report.healthScore.grade === 'C' ? 'hsl(var(--chart-4))' :
-                               report.healthScore.grade === 'D' ? 'hsl(var(--chart-5))' : 'hsl(var(--destructive))',
-                  backgroundColor: report.healthScore.grade === 'A' ? 'hsl(var(--chart-2) / 0.1)' :
-                                   report.healthScore.grade === 'B' ? 'hsl(var(--chart-3) / 0.1)' :
-                                   report.healthScore.grade === 'C' ? 'hsl(var(--chart-4) / 0.1)' :
-                                   report.healthScore.grade === 'D' ? 'hsl(var(--chart-5) / 0.1)' : 'hsl(var(--destructive) / 0.1)'
+                  borderColor: __grade === 'A' ? 'hsl(var(--chart-2))' :
+                               __grade === 'B' ? 'hsl(var(--chart-3))' :
+                               __grade === 'C' ? 'hsl(var(--chart-4))' :
+                               __grade === 'D' ? 'hsl(var(--chart-5))' : 'hsl(var(--destructive))',
+                  backgroundColor: __grade === 'A' ? 'hsl(var(--chart-2) / 0.1)' :
+                                   __grade === 'B' ? 'hsl(var(--chart-3) / 0.1)' :
+                                   __grade === 'C' ? 'hsl(var(--chart-4) / 0.1)' :
+                                   __grade === 'D' ? 'hsl(var(--chart-5) / 0.1)' : 'hsl(var(--destructive) / 0.1)'
                 }}>
                   <div className="flex items-center justify-between">
                     <div>
@@ -1706,12 +1711,12 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                     </div>
                     <div className="text-center">
                       <div className={`text-4xl font-bold ${
-                        report.healthScore.grade === 'A' ? 'text-green-500' :
-                        report.healthScore.grade === 'B' ? 'text-blue-500' :
-                        report.healthScore.grade === 'C' ? 'text-yellow-500' :
-                        report.healthScore.grade === 'D' ? 'text-orange-500' : 'text-red-500'
+                        __grade === 'A' ? 'text-green-500' :
+                        __grade === 'B' ? 'text-blue-500' :
+                        __grade === 'C' ? 'text-yellow-500' :
+                        __grade === 'D' ? 'text-orange-500' : 'text-red-500'
                       }`}>
-                        {report.healthScore.grade}
+                        {__grade}
                       </div>
                       {!isAnonymous ? (
                         <div className="text-xs text-muted-foreground">{report.healthScore.score}/100</div>
@@ -1723,6 +1728,8 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
                     </div>
                   </div>
                 </div>
+                  );
+                })()
               )}
 
               {/* === AI HEALTH INTERPRETATION (when AI mode on) === */}
