@@ -262,12 +262,11 @@ Deno.serve(async (req) => {
         stats.risk = risk.signal;
         stats.riskDetail = risk.detail;
 
-        // Generate AI snippet (cached unless force_refresh). Fail-open.
-        if (force_refresh === true || !item.ai_snippet) {
-          stats.aiSnippet = await generateAiSnippet(stats, report);
-        } else {
-          stats.aiSnippet = item.ai_snippet;
-        }
+        // AI snippet generation DISABLED — Lovable AI credits exhausted.
+        // Tweet is composed from raw stats only; {ai_summary}/{ai_overview}
+        // template tokens render as empty strings. Re-enable by restoring
+        // the generateAiSnippet() call once credits are topped up.
+        stats.aiSnippet = item.ai_snippet || null;
 
         const tweetText = processTemplate(tweetTemplate, stats);
 
