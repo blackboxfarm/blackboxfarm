@@ -6,6 +6,9 @@ import { SiteLayout } from "@/components/layout/SiteLayout";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { AnalysisOverview } from "@/components/holders/AnalysisOverview";
 import { BadActorAlert } from "@/components/security/BadActorAlert";
+import { CTOBadge } from "@/components/holders/CTOBadge";
+import { NarrativeLinkCard } from "@/components/holders/NarrativeLinkCard";
+import { OptimisticAISummary } from "@/components/holders/OptimisticAISummary";
 
 export default function Holders() {
   const [tokenFromUrl, setTokenFromUrl] = useState<string>("");
@@ -40,6 +43,15 @@ export default function Holders() {
       <div className="mx-auto py-6 space-y-4 px-2 md:px-4 max-w-6xl" data-oracle-hint="Paste a token address — I'll walk you through the results" data-oracle-zone="holders-input">
         {alertMint && (
           <BadActorAlert tokenMint={alertMint} />
+        )}
+        {alertMint && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <CTOBadge tokenMint={alertMint} />
+            </div>
+            <OptimisticAISummary tokenMint={alertMint} />
+            <NarrativeLinkCard tokenMint={alertMint} />
+          </div>
         )}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="mb-4">
