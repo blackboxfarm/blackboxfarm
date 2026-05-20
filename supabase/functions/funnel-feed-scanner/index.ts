@@ -359,7 +359,7 @@ async function scrapeViaMTProto(supabase: any, source: FunnelSource): Promise<an
   
   const invokeBody: any = {
     action: 'fetch_recent_messages',
-    limit: 50,
+    limit: 200,
   };
 
   if (isNumeric) {
@@ -438,12 +438,12 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
   let skippedNonTokens = 0;
 
   for (const [mint, info] of discoveredTokens) {
-    // ── Validate this is actually a token mint, not a wallet/pool/program ──
-    const validation = await validateTokenMint(mint);
-    if (!validation.valid) {
+    // Trust channel-sourced CAs. Only filter infra/skip addresses.
+    if (isInfrastructureToken(mint)) {
       skippedNonTokens++;
       continue;
     }
+    const validation: { symbol?: string | null; name?: string | null } = {};
     // Check if already discovered from this source
     const { data: existing } = await supabase
       .from('funnel_feed_discoveries')
