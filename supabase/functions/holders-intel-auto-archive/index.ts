@@ -62,13 +62,17 @@ Deno.serve(async (req) => {
 
     const { data: row, error } = await supabase
       .from("holders_intel_post_queue")
-      .select("id, token_mint, symbol, name, tweet_text, dex_banner_url, decorated_banner_url, banner_used_url, manual_status")
+      .select("id, token_mint, symbol, name, tweet_text, dex_banner_url, decorated_banner_url, banner_used_url, manual_status, trigger_source")
       .eq("id", queueId)
       .maybeSingle();
     if (error) throw error;
     if (!row) return new Response(JSON.stringify({ skipped: "not_found" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     if (row.manual_status === "posted_manual") {
       return new Response(JSON.stringify({ skipped: "already_archived" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    // Manual admin adds must stay pending so the user can review/compose/post.
+    if (row.trigger_source === "manual_admin") {
+      return new Response(JSON.stringify({ skipped: "manual_admin_keep_pending" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const notes: string[] = [];
