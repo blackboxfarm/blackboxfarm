@@ -284,31 +284,11 @@ export async function detectVenue(
     console.log('[VenueDetect] bags.fm API check failed:', e);
   }
 
-  // ============================================
-  // STEP 3: Check bonk.fun API
-  // ============================================
-  try {
-    const bonkRes = await fetch(`https://api.bonk.fun/token/${tokenMint}`, {
-      headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(3000)
-    });
-
-    if (bonkRes.ok) {
-      const bonkData = await bonkRes.json();
-      if (bonkData && (bonkData.mint || bonkData.address)) {
-        const isGraduated = bonkData.graduated === true || bonkData.migrated === true;
-        if (!isGraduated && heliusApiKey) {
-          const curveCheck = await checkRaydiumLaunchlab(tokenMint, heliusApiKey);
-          if (curveCheck?.isOnCurve) {
-            return { venue: 'bonk_fun', isOnCurve: true };
-          }
-        }
-        return { venue: 'bonk_fun', isOnCurve: !isGraduated };
-      }
-    }
-  } catch (e) {
-    console.log('[VenueDetect] bonk.fun API check failed:', e);
-  }
+  // STEP 3 (bonk.fun API HTTP probe) removed from generic path:
+  // api.bonk.fun DNS is unreliable and was causing 30-60s hangs on every buy.
+  // BONK-suffix tokens still hit the dedicated branch above; non-BONK tokens
+  // fall through to on-chain Raydium Launchlab PDA check in Step 4 below,
+  // which is authoritative and fast.
 
   // ============================================
   // STEP 4: On-chain PDA checks (before DexScreener)
