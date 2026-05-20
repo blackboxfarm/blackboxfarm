@@ -64,27 +64,48 @@ Deno.serve(withRunLog('holders-og-image', async (req) => {
     if (tokenParam) {
       const { data: seenToken } = await supabase
         .from("holders_intel_seen_tokens")
-        .select("paid_composite_url, banner_url")
+        .select("paid_composite_url, banner_url, image_uri")
         .eq("token_mint", tokenParam)
         .maybeSingle();
 
       if (seenToken?.paid_composite_url) {
         ogImageUpstream = seenToken.paid_composite_url;
         ogSource = "composite";
-      } else if (seenToken?.banner_url) {
-        ogImageUpstream = seenToken.banner_url;
-        ogSource = "banner";
       } else {
-        const { data: tokenBanner } = await supabase
+        // Priority 1: Manual X-post queue decorated/used banner
+        const { data: queueRows } = await supabase
+          .from("holders_intel_post_queue")
+          .select("decorated_banner_url, banner_used_url, dex_banner_url, created_at")
+          .eq("token_mint", tokenParam)
+          .order("created_at", { ascending: false })
+          .limit(10);
+        const decorated = queueRows?.find((r: any) => r.decorated_banner_url);
+        const used = queueRows?.find((r: any) => r.banner_used_url || r.dex_banner_url);
+        const queuePick = decorated?.decorated_banner_url
+          || used?.banner_used_url
+          || used?.dex_banner_url
+          || null;
+        if (queuePick) {
+          ogImageUpstream = queuePick;
+          ogSource = decorated ? "decorated_queue" : "dex_banner";
+        } else {
+          const { data: tokenBanner } = await supabase
           .from("token_banners")
           .select("banner_url")
           .eq("token_address", tokenParam)
           .eq("is_active", true)
           .maybeSingle();
 
-        if (tokenBanner?.banner_url) {
-          ogImageUpstream = tokenBanner.banner_url;
-          ogSource = "banner";
+          if (tokenBanner?.banner_url) {
+            ogImageUpstream = tokenBanner.banner_url;
+            ogSource = "banner";
+          } else if (seenToken?.banner_url) {
+            ogImageUpstream = seenToken.banner_url;
+            ogSource = "banner";
+          } else if (seenToken?.image_uri) {
+            ogImageUpstream = seenToken.image_uri;
+            ogSource = "image_uri";
+          }
         }
       }
     }
