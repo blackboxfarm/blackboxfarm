@@ -82,17 +82,12 @@ Deno.serve(withRunLog('holders-og', async (req) => {
     if (tokenParam) {
       const { data: seenToken } = await supabase
         .from('holders_intel_seen_tokens')
-        .select('paid_composite_url, banner_url, symbol, name')
+        .select('paid_composite_url, banner_url, image_uri, symbol, name')
         .eq('token_mint', tokenParam)
         .single();
       
       if (seenToken?.paid_composite_url) {
         ogImage = seenToken.paid_composite_url;
-        tokenSymbol = seenToken.symbol;
-        tokenName = seenToken.name;
-        isTokenSpecific = true;
-      } else if (seenToken?.banner_url) {
-        ogImage = seenToken.banner_url;
         tokenSymbol = seenToken.symbol;
         tokenName = seenToken.name;
         isTokenSpecific = true;
@@ -102,7 +97,18 @@ Deno.serve(withRunLog('holders-og', async (req) => {
       }
     }
 
-    // PRIORITY 1: Check token_banners if no composite found
+    // PRIORITY 1: Check Manual X-post queue for a decorated/used banner for this token
+    if (!isTokenSpecific && tokenParam) {
+      const { data: queueRows } = await supabase
+        .from('holders_intel_post_queue')
+        .select('decorated_banner_url, banner_used_url, dex_banner_url, symbol, created_at')
+        .eq('token_mint', tokenParam)
+        .order('created_at', { ascending: false })
+        .limit: 5 as any;
+      // (Note: PostgREST .limit chain — written as method)
+    }
+
+    // PRIORITY 2: Check token_banners if no composite found
     if (!isTokenSpecific && tokenParam) {
       const { data: tokenBanner } = await supabase
         .from('token_banners')
