@@ -306,7 +306,15 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
   const { tokenData, fetchTokenMetadata } = useTokenMetadata();
   const { user } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const { tierInfo, meetsMinimumTier, isAnonymous, isPro } = useUserTier();
+  const tier = useUserTier();
+  const curatedOptimisticView = isCuratedOptimistic(tokenMint);
+  // For curated optimistic tokens, render the full subscriber/Pro view regardless of actual tier.
+  const tierInfo = curatedOptimisticView
+    ? { ...tier.tierInfo, tierKey: 'pro' as const, displayName: 'Pro' }
+    : tier.tierInfo;
+  const isAnonymous = curatedOptimisticView ? false : tier.isAnonymous;
+  const isPro = curatedOptimisticView ? true : tier.isPro;
+  const meetsMinimumTier = curatedOptimisticView ? ((_t: any) => true) : tier.meetsMinimumTier;
   // Background data collection - builds historical data for premium features
   useTokenDataCollection(
     report?.tokenMint || null,
