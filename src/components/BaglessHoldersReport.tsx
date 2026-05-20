@@ -1046,7 +1046,7 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
       )}
 
       {/* Ad Banner under Token Snapshot */}
-      <AdBanner size="leaderboard" position={1} />
+      {!isCuratedOptimistic(tokenMint) && <AdBanner size="leaderboard" position={1} />}
 
       {/* Bundle Analysis Section - RugCheck Insiders */}
       {report?.insidersGraph?.hasInsiders && (
@@ -1405,7 +1405,7 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
           </div>
 
           {/* Ad Banner #2 - Above Report Summary */}
-          <AdBanner size="leaderboard" position={2} />
+          {!isCuratedOptimistic(tokenMint) && <AdBanner size="leaderboard" position={2} />}
 
           {/* AI Section - Tier-aware rendering */}
           {isAnonymous ? (
