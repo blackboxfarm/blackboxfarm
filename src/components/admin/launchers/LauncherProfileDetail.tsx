@@ -26,14 +26,20 @@ export function LauncherProfileDetail({ profile }: { profile: LauncherProfile })
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 max-w-3xl">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">
             {profile.x_handle ? `@${profile.x_handle}` : profile.name}
             <span className="ml-2 text-xs text-muted-foreground font-normal">{profile.linked_wallets.length} wallets</span>
           </CardTitle>
-          <Button variant="outline" size="sm" onClick={respider} disabled={respidering}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={respider}
+            disabled={respidering}
+            title="Re-runs the wallet family discovery: re-queries dev_wallet_reputation + developer_tokens for this X handle / primary dev wallet, pulls any newly-linked sister wallets, and re-ranks them by most-active. Does not poll mints (the watcher cron does that every 3s)."
+          >
             <RefreshCw className={`h-3 w-3 mr-1 ${respidering ? "animate-spin" : ""}`} /> Re-spider
           </Button>
         </CardHeader>
@@ -43,11 +49,20 @@ export function LauncherProfileDetail({ profile }: { profile: LauncherProfile })
             {profile.kyc_root_wallet && <div><span className="text-muted-foreground">KYC root:</span> <span className="font-mono">{profile.kyc_root_wallet}</span></div>}
             <div className="text-muted-foreground">Last spidered: {profile.last_spidered_at ? new Date(profile.last_spidered_at).toLocaleString() : "never"}</div>
           </div>
-          <details className="mt-3">
-            <summary className="cursor-pointer text-xs text-muted-foreground">Linked wallets (ranked by recent activity)</summary>
+          <details className="mt-3" open>
+            <summary className="cursor-pointer text-xs text-muted-foreground">
+              Linked wallets — ranked by mints (most prolific + most recent first). Toggle off to skip polling.
+            </summary>
             <div className="mt-2 space-y-1 max-h-96 overflow-y-auto">
               {profile.linked_wallets.map((w, i) => (
-                <WalletMintsAccordion key={w} wallet={w} rank={i + 1} />
+                <WalletMintsAccordion
+                  key={w}
+                  wallet={w}
+                  rank={i + 1}
+                  profileId={profile.id}
+                  excluded={(profile.excluded_wallets || []).includes(w)}
+                  excludedWallets={profile.excluded_wallets || []}
+                />
               ))}
             </div>
           </details>
