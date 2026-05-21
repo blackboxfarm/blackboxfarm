@@ -1,0 +1,2 @@
+ALTER TABLE public.launcher_profiles ADD CONSTRAINT launcher_profiles_name_unique UNIQUE (name);
+ALTER TABLE public.launcher_trade_rules ADD CONSTRAINT launcher_trade_rules_profile_unique UNIQUE (launcher_profile_id);
