@@ -38,38 +38,48 @@ serve(async (req) => {
   const { mint, launcherProfileId } = body;
   if (!mint) return ok({ error: "missing mint" }, 400);
 
-  const dex = await fetchDexScreenerData(mint).catch(() => null);
+  const [dex, pump, solscan] = await Promise.all([
+    fetchDexScreenerData(mint).catch(() => null),
+    mint.endsWith("pump") ? fetchPumpFunCoin(mint, "launcher-token-enricher").catch(() => null) : Promise.resolve(null),
+    fetchSolscanFreeTokenMeta(mint).catch(() => null),
+  ]);
+  const dexPair = bestDexPair(dex, mint);
   const links = {
-    twitter: dex?.socials?.twitter || null,
-    telegram: dex?.socials?.telegram || null,
-    website: dex?.socials?.website || null,
+    twitter: dex?.socials?.twitter || cleanUrl(pump?.twitter, "twitter") || cleanUrl(solscan?.twitter, "twitter"),
+    telegram: dex?.socials?.telegram || cleanUrl(pump?.telegram, "telegram"),
+    website: dex?.socials?.website || cleanUrl(pump?.website) || cleanUrl(solscan?.website),
     priceUsd: dex?.priceUsd || null,
     foundAt: new Date().toISOString(),
   };
 
   // Persist token name/symbol/image so accordion rows stop showing "unknown".
-  const symbol = (dex as any)?.symbol || (dex as any)?.baseToken?.symbol || null;
-  const name = (dex as any)?.name || (dex as any)?.baseToken?.name || null;
-  const image = (dex as any)?.imageUrl || (dex as any)?.info?.imageUrl || null;
-  if (symbol || name || image) {
-    try {
-      await sb.from("token_metadata").upsert({
+  const symbol = pump?.symbol || dexPair?.baseToken?.symbol || solscan?.symbol || null;
+  const name = pump?.name || dexPair?.baseToken?.name || solscan?.name || null;
+  const image = pump?.image_uri || pump?.profile_image || dexPair?.info?.imageUrl || dexPair?.baseToken?.logoURI || solscan?.icon || null;
+  const description = pump?.description || null;
+  if (symbol || name || image || description) {
+    await assertUpsert(
+      sb.from("token_metadata").upsert({
         mint_address: mint,
-        symbol: symbol ?? undefined,
-        name: name ?? undefined,
-        logo_uri: image ?? undefined,
+        symbol: symbol ?? null,
+        name: name ?? null,
+        logo_uri: image ?? null,
+        description: description ?? null,
         updated_at: new Date().toISOString(),
-      }, { onConflict: "mint_address" });
-    } catch (e) { console.warn("[enricher] token_metadata upsert", (e as any)?.message); }
+      }, { onConflict: "mint_address" }).select(),
+      "token_metadata"
+    );
   }
   // Mirror onto launcher_mint_events row if present
   if (launcherProfileId) {
-    try {
-      await sb.from("launcher_mint_events")
-        .update({ symbol: symbol ?? undefined, name: name ?? undefined, metadata: { image, ...links } })
+    await assertUpdate(
+      sb.from("launcher_mint_events")
+        .update({ symbol: symbol ?? null, name: name ?? null, metadata: { image, ...links } })
         .eq("launcher_profile_id", launcherProfileId)
-        .eq("mint_address", mint);
-    } catch (e) { console.warn("[enricher] launcher_mint_events update", (e as any)?.message); }
+        .eq("mint_address", mint)
+        .select(),
+      "launcher_mint_events"
+    );
   }
 
   await assertUpsert(
