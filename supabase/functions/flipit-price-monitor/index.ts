@@ -567,6 +567,10 @@ serve(withRunLog('flipit-price-monitor', async (req) => {
       // ============================================
       // REGULAR (NON-SCALP) TARGET LOGIC
       // ============================================
+      if (position.source === "manual" && !position.is_scalp_position) {
+        console.log(`Position ${position.id} (${position.token_symbol}): Manual buy protected — auto-sell disabled`);
+        continue;
+      }
       
       // Skip auto-sell if target multiplier is disabled (0)
       if (position.target_multiplier === 0 || !position.target_multiplier) {
