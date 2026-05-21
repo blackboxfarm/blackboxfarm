@@ -105,7 +105,7 @@ serve(async (req) => {
         source: "launcher-enricher",
         is_current: true,
         discovered_at: new Date().toISOString(),
-      }, { onConflict: "token_mint,url" }).select(),
+      }, { onConflict: "token_mint,url,source" }).select(),
       "token_social_links"
     );
   }
