@@ -3,13 +3,33 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { fetchDexScreenerData } from "../_shared/dexscreener-api.ts";
-import { assertUpsert } from "../_shared/db-assert.ts";
+import { fetchPumpFunCoin } from "../_shared/pumpfun-fetch.ts";
+import { fetchSolscanFreeTokenMeta } from "../_shared/solscan-free.ts";
+import { assertUpdate, assertUpsert } from "../_shared/db-assert.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 const ok = (d: unknown, s = 200) => new Response(JSON.stringify(d), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+const bestDexPair = (dex: any, mint: string) => {
+  const pairs = Array.isArray(dex?.pairs) ? dex.pairs : [];
+  const solanaPairs = pairs.filter((p: any) => p?.chainId === "solana" && p?.baseToken?.address === mint);
+  const candidates = solanaPairs.length ? solanaPairs : pairs;
+  return candidates.reduce((best: any, p: any) => (p?.liquidity?.usd || 0) > (best?.liquidity?.usd || 0) ? p : best, candidates[0] || null);
+};
+
+const cleanUrl = (value: string | null | undefined, platform?: "twitter" | "telegram") => {
+  if (!value) return null;
+  const v = String(value).trim();
+  if (!v) return null;
+  if (/^https?:\/\//i.test(v)) return v;
+  const handle = v.replace(/^@/, "");
+  if (platform === "twitter") return `https://x.com/${handle}`;
+  if (platform === "telegram") return `https://t.me/${handle}`;
+  return v;
+};
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
