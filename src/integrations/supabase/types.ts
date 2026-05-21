@@ -9178,6 +9178,283 @@ export type Database = {
         }
         Relationships: []
       }
+      launcher_enrichment: {
+        Row: {
+          found_at: string
+          id: string
+          launcher_profile_id: string | null
+          links_found: Json
+          mint_address: string
+        }
+        Insert: {
+          found_at?: string
+          id?: string
+          launcher_profile_id?: string | null
+          links_found?: Json
+          mint_address: string
+        }
+        Update: {
+          found_at?: string
+          id?: string
+          launcher_profile_id?: string | null
+          links_found?: Json
+          mint_address?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launcher_enrichment_launcher_profile_id_fkey"
+            columns: ["launcher_profile_id"]
+            isOneToOne: false
+            referencedRelation: "launcher_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      launcher_global_kill_switch: {
+        Row: {
+          id: boolean
+          killed: boolean
+          reason: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          id?: boolean
+          killed?: boolean
+          reason?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          id?: boolean
+          killed?: boolean
+          reason?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      launcher_mint_events: {
+        Row: {
+          buy_amount_sol: number | null
+          buy_filled_at: string | null
+          buy_tx_sig: string | null
+          created_at: string
+          detected_at: string
+          dev_initial_buy_sol: number | null
+          dev_wallet_used: string | null
+          entry_mcap_usd: number | null
+          entry_price_usd: number | null
+          exit_mcap_usd: number | null
+          exit_price_usd: number | null
+          highest_mcap_usd: number | null
+          id: string
+          initial_mcap_usd: number | null
+          launcher_profile_id: string
+          metadata: Json
+          mint_address: string
+          multiple_realized: number | null
+          name: string | null
+          realized_pnl_sol: number | null
+          realized_pnl_usd: number | null
+          sell_filled_at: string | null
+          sell_tx_sig: string | null
+          skip_reason: string | null
+          status: string
+          symbol: string | null
+          updated_at: string
+        }
+        Insert: {
+          buy_amount_sol?: number | null
+          buy_filled_at?: string | null
+          buy_tx_sig?: string | null
+          created_at?: string
+          detected_at?: string
+          dev_initial_buy_sol?: number | null
+          dev_wallet_used?: string | null
+          entry_mcap_usd?: number | null
+          entry_price_usd?: number | null
+          exit_mcap_usd?: number | null
+          exit_price_usd?: number | null
+          highest_mcap_usd?: number | null
+          id?: string
+          initial_mcap_usd?: number | null
+          launcher_profile_id: string
+          metadata?: Json
+          mint_address: string
+          multiple_realized?: number | null
+          name?: string | null
+          realized_pnl_sol?: number | null
+          realized_pnl_usd?: number | null
+          sell_filled_at?: string | null
+          sell_tx_sig?: string | null
+          skip_reason?: string | null
+          status?: string
+          symbol?: string | null
+          updated_at?: string
+        }
+        Update: {
+          buy_amount_sol?: number | null
+          buy_filled_at?: string | null
+          buy_tx_sig?: string | null
+          created_at?: string
+          detected_at?: string
+          dev_initial_buy_sol?: number | null
+          dev_wallet_used?: string | null
+          entry_mcap_usd?: number | null
+          entry_price_usd?: number | null
+          exit_mcap_usd?: number | null
+          exit_price_usd?: number | null
+          highest_mcap_usd?: number | null
+          id?: string
+          initial_mcap_usd?: number | null
+          launcher_profile_id?: string
+          metadata?: Json
+          mint_address?: string
+          multiple_realized?: number | null
+          name?: string | null
+          realized_pnl_sol?: number | null
+          realized_pnl_usd?: number | null
+          sell_filled_at?: string | null
+          sell_tx_sig?: string | null
+          skip_reason?: string | null
+          status?: string
+          symbol?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launcher_mint_events_launcher_profile_id_fkey"
+            columns: ["launcher_profile_id"]
+            isOneToOne: false
+            referencedRelation: "launcher_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      launcher_profiles: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          kyc_root_wallet: string | null
+          last_spidered_at: string | null
+          linked_wallets: string[]
+          name: string
+          notes: string | null
+          primary_dev_wallet: string | null
+          spider_depth: number
+          updated_at: string
+          x_handle: string | null
+          x_user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          kyc_root_wallet?: string | null
+          last_spidered_at?: string | null
+          linked_wallets?: string[]
+          name: string
+          notes?: string | null
+          primary_dev_wallet?: string | null
+          spider_depth?: number
+          updated_at?: string
+          x_handle?: string | null
+          x_user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          kyc_root_wallet?: string | null
+          last_spidered_at?: string | null
+          linked_wallets?: string[]
+          name?: string
+          notes?: string | null
+          primary_dev_wallet?: string | null
+          spider_depth?: number
+          updated_at?: string
+          x_handle?: string | null
+          x_user_id?: string | null
+        }
+        Relationships: []
+      }
+      launcher_trade_rules: {
+        Row: {
+          buy_amount_sol: number
+          created_at: string
+          enabled: boolean
+          funding_wallet_id: string | null
+          id: string
+          jito_tip_lamports: number
+          launcher_profile_id: string
+          max_daily_spend_sol: number
+          max_hold_seconds: number
+          min_seconds_after_mint: number
+          mode: string
+          priority_fee_lamports: number
+          require_dev_buy_min_sol: number
+          slippage_bps: number
+          target_factor: number
+          updated_at: string
+        }
+        Insert: {
+          buy_amount_sol?: number
+          created_at?: string
+          enabled?: boolean
+          funding_wallet_id?: string | null
+          id?: string
+          jito_tip_lamports?: number
+          launcher_profile_id: string
+          max_daily_spend_sol?: number
+          max_hold_seconds?: number
+          min_seconds_after_mint?: number
+          mode?: string
+          priority_fee_lamports?: number
+          require_dev_buy_min_sol?: number
+          slippage_bps?: number
+          target_factor?: number
+          updated_at?: string
+        }
+        Update: {
+          buy_amount_sol?: number
+          created_at?: string
+          enabled?: boolean
+          funding_wallet_id?: string | null
+          id?: string
+          jito_tip_lamports?: number
+          launcher_profile_id?: string
+          max_daily_spend_sol?: number
+          max_hold_seconds?: number
+          min_seconds_after_mint?: number
+          mode?: string
+          priority_fee_lamports?: number
+          require_dev_buy_min_sol?: number
+          slippage_bps?: number
+          target_factor?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launcher_trade_rules_funding_wallet_id_fkey"
+            columns: ["funding_wallet_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_wallets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launcher_trade_rules_launcher_profile_id_fkey"
+            columns: ["launcher_profile_id"]
+            isOneToOne: true
+            referencedRelation: "launcher_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       launchpad_creator_profiles: {
         Row: {
           created_at: string | null
