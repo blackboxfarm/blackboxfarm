@@ -72,14 +72,15 @@ serve(async (req) => {
   }
   // Mirror onto launcher_mint_events row if present
   if (launcherProfileId) {
-    await assertUpdate(
+    const updated = await assertUpdate(
       sb.from("launcher_mint_events")
         .update({ symbol: symbol ?? null, name: name ?? null, metadata: { image, ...links } })
         .eq("launcher_profile_id", launcherProfileId)
         .eq("mint_address", mint)
-        .select(),
+        .select("id"),
       "launcher_mint_events"
     );
+    if (!Array.isArray(updated) || updated.length === 0) console.warn(`[enricher] no launcher_mint_events row matched ${mint}`);
   }
 
   await assertUpsert(
