@@ -42,11 +42,12 @@ serve(async (req) => {
   }
   // Mirror onto launcher_mint_events row if present
   if (launcherProfileId) {
-    await sb.from("launcher_mint_events")
-      .update({ symbol: symbol ?? undefined, name: name ?? undefined, metadata: { image, ...links } })
-      .eq("launcher_profile_id", launcherProfileId)
-      .eq("mint_address", mint)
-      .catch(() => {});
+    try {
+      await sb.from("launcher_mint_events")
+        .update({ symbol: symbol ?? undefined, name: name ?? undefined, metadata: { image, ...links } })
+        .eq("launcher_profile_id", launcherProfileId)
+        .eq("mint_address", mint);
+    } catch (e) { console.warn("[enricher] launcher_mint_events update", (e as any)?.message); }
   }
 
   await assertUpsert(
