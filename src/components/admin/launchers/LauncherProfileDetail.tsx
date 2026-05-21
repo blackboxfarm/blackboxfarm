@@ -8,6 +8,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { RefreshCw } from "lucide-react";
+import { WalletMintsAccordion } from "./WalletMintsAccordion";
 
 export function LauncherProfileDetail({ profile }: { profile: LauncherProfile }) {
   const [respidering, setRespidering] = useState(false);
@@ -44,11 +45,9 @@ export function LauncherProfileDetail({ profile }: { profile: LauncherProfile })
           </div>
           <details className="mt-3">
             <summary className="cursor-pointer text-xs text-muted-foreground">Linked wallets (ranked by recent activity)</summary>
-            <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-1 max-h-64 overflow-y-auto text-[11px] font-mono">
+            <div className="mt-2 space-y-1 max-h-96 overflow-y-auto">
               {profile.linked_wallets.map((w, i) => (
-                <div key={w} className="px-2 py-1 rounded bg-muted/40">
-                  <span className="text-muted-foreground mr-2">#{i + 1}</span>{w}
-                </div>
+                <WalletMintsAccordion key={w} wallet={w} rank={i + 1} />
               ))}
             </div>
           </details>
