@@ -1,46 +1,159 @@
+# Launchers Tab — Dev Mint Sniper
 
-## What I'll build
+A new admin tab to track active token launchers (devs), spider their wallet families, detect mints in near-real-time, and execute configurable auto-buy / auto-sell using the flipit wallet. First profile: **@pumpfun711** ($FU, $UU, $PU, etc).
 
-### 1. Featured CTO badge (real signals)
-- New table `token_cto_status` (token_mint, is_cto, signals jsonb, detected_at, admin_override bool, set_by).
-- Signals are pulled from data we already have: dev wallet renounced / inactive >7d, community wallet formed, social handover (handle changed from launchpad default), holder dispersion improving.
-- On `/holders` and `/bubblemap`: gold "CTO — Community Takeover" badge with hover popover listing the *actual* signals + timestamps.
-- Admin can force `is_cto=true` for FiEUFo…pump via the Super Admin → Token Curation panel (new small panel).
+## 1. Resolution & seeding (@pumpfun711)
 
-### 2. Narrative Link (editor note)
-- New table `token_narrative_links` (token_mint, url, title, source_domain, editor_note, added_by, added_at).
-- Renders on `/holders` as a bordered card:
-  - Label: **"Editor Note — context, not financial advice"**
-  - Source domain shown explicitly (e.g. `baptistnews.com`)
-  - Title + 1-paragraph editor note + outbound link with `rel="noopener nofollow"`
-- For FiEUFo…pump I'll seed the Baptist News URL with an editor note that frames the AI-encyclical narrative as cultural backdrop (no price claims, no "buy now").
+Before any UI work, resolve @pumpfun711 against existing data:
+- `x_account_registry` → x_user_id, handle history, followers
+- `creator_profiles` / `dev_wallet_reputation` → all linked dev wallets, KYC root, sister wallets
+- `proven_dev_tokens` → every $ticker he has launched, ATH mcap, mint dates
+- Rank his wallets by **most recent activity** (last mint timestamp DESC, then mint count DESC) so the top of the list is "the wallet he is currently minting from"
 
-### 3. Optimistic-but-honest AI summary
-- New edge function `token-optimistic-summary` (separate from existing `token-ai-interpreter` so we don't pollute the neutral one).
-- Inputs: live DexScreener metrics, holder distribution, dev reputation, CTO signals, attached narrative link content (fetched + summarized).
-- System prompt rules (hard guardrails — non-negotiable):
-  - **Tone:** opportunity-leaning, plain-English, energetic when metrics are genuinely positive; sober when they aren't.
-  - **Never** says "buy", "FOMO in", "get in early", "moon", "guaranteed", or gives price targets.
-  - **Never** fabricates a holder mix or changes numbers. Solscan totals must reconcile.
-  - **Always** ends with one-line risk note + "Not financial advice."
-  - May weave the narrative-link story in as *cultural/thematic context* (e.g. "launching into a week where mainstream press is covering AI + faith — the kind of tailwind a community-driven ticker can ride"), clearly framed as narrative not fundamentals.
-- Renders with a small fireworks/sparkle motion flourish (framer-motion: animated star particles around the heading) when the summary loads, only when CTO badge is active — so the celebratory treatment is earned, not universal.
+Output: a confirmed dossier we anchor the first Launcher Profile to.
 
-### 4. Seed data for FiEUFoZpjAdvoFRShKaxzuN5NXkuwe9jBPYDaeGpump
-- Insert `token_cto_status` row with `admin_override=true` (you flagged it as CTO).
-- Insert `token_narrative_links` row with the Baptist News URL.
-- Pre-warm the optimistic summary cache so it's instant on first /holders view.
+## 2. Data model (new tables)
 
-### What I will NOT do (holding the line)
-- No hand-picked / manipulated holder mix. The bubblemap and holder table stay sourced from on-chain. If the real distribution is good, the AI will say so enthusiastically; if it's not, it'll stay quiet on that point rather than lie.
-- No "urging FOMO" language. The energy comes from genuine signal + narrative framing, not from synthetic urgency.
-- No removing "Not financial advice" or the source-domain disclosure on the editor note.
+**`launcher_profiles`** — one row per tracked dev
+- name (display label, e.g. "pumpfun711")
+- x_handle, x_user_id
+- primary_dev_wallet
+- linked_wallets (text[]) — spidered family
+- kyc_root_wallet
+- spider_depth (default 3), last_spidered_at
+- is_active (bool), notes
+- created_by (admin user_id)
 
-### Files
-- New migration: `token_cto_status`, `token_narrative_links` (+ RLS: public read, admin write).
-- New edge fn: `supabase/functions/token-optimistic-summary/index.ts` (uses `meteredAiFetch`, `assertDbWrite`).
-- New components: `CTOBadge.tsx`, `NarrativeLinkCard.tsx`, `OptimisticAISummary.tsx` (with sparkle motion).
-- Wire into `src/pages/Holders.tsx` above the report.
-- Small admin panel `TokenCurationTab.tsx` under Super Admin for future tokens.
+**`launcher_trade_rules`** — per-profile master settings
+- launcher_profile_id (FK)
+- mode: `limit_order` (matches existing Limit Order Mode pattern)
+- buy_amount_sol (numeric, e.g. 0.01)
+- slippage_bps (int, e.g. 1500 = 15%)
+- priority_fee_lamports (gas) + jito_tip_lamports
+- target_factor (numeric, e.g. 3.0 → sell at 3× entry mcap)
+- max_hold_seconds (safety auto-exit)
+- max_daily_spend_sol (kill switch)
+- min_seconds_after_mint (e.g. 4) — wait window before snipe
+- require_dev_buy_min_sol (e.g. only fire if dev himself bought ≥ X SOL)
+- funding_wallet_id → **flipit wallet**
+- enabled (bool)
 
-Reply **Plan Approved** and I'll ship it.
+**`launcher_mint_events`** — detection + execution log
+- launcher_profile_id, mint_address, detected_at, dev_wallet_used
+- dev_initial_buy_sol, initial_mcap_usd
+- buy_tx_sig, buy_filled_at, buy_amount_sol, entry_mcap_usd
+- sell_tx_sig, sell_filled_at, exit_mcap_usd, realized_pnl_sol
+- status: detected → bought → holding → sold | skipped | failed
+- skip_reason (e.g. "daily cap hit", "dev buy below threshold")
+
+**`launcher_enrichment`** — async link/social findings post-mint
+- mint_address, links_found (jsonb: x, tg, website, etc), found_at
+
+RLS: super-admin only.
+
+## 3. Mint detection pipeline
+
+Reuse existing **Predictive Mint Detection** (polling, ~2–5s latency, per the Predictive Mint Detection memory):
+- New cron: `launcher-mint-watcher` runs every 3s
+- For each enabled `launcher_profiles`, polls Helius `getSignaturesForAddress` on each `linked_wallets` entry
+- Detects pump.fun `create` instruction → extract mint address, dev's initial buy SOL, initial mcap
+- Insert into `launcher_mint_events` with status `detected`
+- Triggers `launcher-snipe-executor`
+
+Wallet list is capped (top 20 most-recent-active per profile) to stay inside Helius credits budget.
+
+## 4. Auto-buy executor
+
+Edge function `launcher-snipe-executor`:
+- Reads rule for the profile
+- Wait `min_seconds_after_mint` (default 4s)
+- Pre-trade guards: daily cap, dev buy threshold, enabled flag, slippage cap, flipit wallet balance
+- Build pump.fun buy tx with `buy_amount_sol`, slippage, priority fee, jito tip — sign with flipit wallet keypair (server-side AES-256-GCM, per Wallet Key Protection memory)
+- Record `entry_mcap_usd`, `buy_tx_sig`
+- Fail-open on guard failures (warn, don't block) — per Security Guards Policy memory
+
+## 5. Auto-sell monitor
+
+Edge function `launcher-position-monitor` (cron every 5s while any `holding` rows exist):
+- For each holding: fetch current mcap via DexScreener cache (per DexScreener Pipeline memory) or pump.fun bonding curve fallback (per Pump Fun Price Accuracy memory)
+- If `current_mcap >= entry_mcap × target_factor` → execute sell, record `exit_mcap_usd`, `realized_pnl_sol`
+- If `max_hold_seconds` exceeded → force exit
+- Never use stale (>10s) prices, never hardcode SOL/USD (per Core memory)
+
+## 6. Post-mint enrichment (parallel, non-blocking)
+
+Edge function `launcher-token-enricher` fires when a mint is detected:
+- Scrape token's pump.fun page + any provided links for X handle, TG, website
+- Write to `launcher_enrichment` + cross-link into `token_social_links` and the dev's existing dossier (per Developer Profile Doxing memory — never throw away enrichment signals)
+
+## 7. UI — `Launchers` tab in BlackBoxTab
+
+New tab between Bundle Analysis and Security. Components:
+
+### Profile list (left rail)
+- All `launcher_profiles`, sorted by last detected mint
+- Each shows: avatar/handle, primary wallet (truncated), enabled toggle, today's P&L
+- "+ Add Launcher" button → modal accepting **X handle OR dev wallet OR token mint** → spider job populates linked_wallets, kyc_root, dossier
+
+### Profile detail (main pane)
+Three sub-sections:
+
+**(a) Identity & Wallets** — dossier view: handle history, X followers, KYC root, all linked wallets ranked by recent activity (most recent mint timestamp first). Schematic view (xyflow + dagre, matching existing bubble-map Schematic mode) of the wallet family.
+
+**(b) Trade Rules** — form matching the screenshot style:
+- Buy Amount (SOL) input (default 0.01)
+- Slippage % input
+- Priority Fee (lamports)
+- Jito Tip (lamports)
+- Target Factor input (default 2.0 — sells at 2× per user)
+- Min seconds after mint (default 4)
+- Min dev buy (SOL) to qualify
+- Max daily spend (SOL)
+- Max hold (seconds)
+- Funding wallet: **flipit** (fixed for v1)
+- Enabled toggle + "DISABLE ALL" kill switch (matches Intelligence Feature Flags pattern)
+
+**(c) Mint Timeline** — real-time table of `launcher_mint_events`: detected_at, mint, ticker, dev buy SOL, entry mcap, status badge, current mcap, multiple (×), exit mcap, P&L. Realtime via supabase channel. Click row → token dossier + bubble map.
+
+### Seed data
+First profile auto-created for @pumpfun711 using step-1 resolution.
+
+## 8. Safety & guardrails
+
+- Fail-open on all pre-trade guards (warn, never block) per memory
+- Every DB write uses `assertDbWrite` per Zero Tolerance Silent Fails memory
+- Flipit private key never leaves server, AES-256-GCM only
+- Kill switch in DB so admin can stop all sniping globally without redeploy
+- Per-profile `max_daily_spend_sol` enforced before each buy
+
+## Technical notes
+
+```text
+detect (3s poll) ──► launcher_mint_events.detected
+                       │
+                       ├─► wait min_seconds_after_mint
+                       ├─► guards (daily cap, dev buy, balance)
+                       ├─► flipit buy → status=holding
+                       │
+                       └─► launcher-token-enricher (parallel, non-blocking)
+
+position-monitor (5s) ──► mcap >= entry × target_factor
+                            └─► flipit sell → status=sold, P&L recorded
+```
+
+Files to add:
+- migration: 4 new tables + RLS (super-admin only)
+- `supabase/functions/launcher-mint-watcher/index.ts` (cron)
+- `supabase/functions/launcher-snipe-executor/index.ts`
+- `supabase/functions/launcher-position-monitor/index.ts` (cron)
+- `supabase/functions/launcher-token-enricher/index.ts`
+- `supabase/functions/launcher-profile-spider/index.ts` (used by "+ Add Launcher")
+- `src/components/admin/launchers/LaunchersTab.tsx`
+- `src/components/admin/launchers/LauncherProfileList.tsx`
+- `src/components/admin/launchers/LauncherProfileDetail.tsx`
+- `src/components/admin/launchers/LauncherTradeRulesForm.tsx`
+- `src/components/admin/launchers/LauncherMintTimeline.tsx`
+- `src/components/admin/launchers/AddLauncherDialog.tsx`
+- `src/hooks/useLauncherProfiles.ts`
+- Wire new tab into `BlackBoxTab.tsx`
+- Save memory: `mem://features/launchers/dev-mint-sniper`
