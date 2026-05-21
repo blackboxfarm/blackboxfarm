@@ -96,8 +96,8 @@ serve(async (req) => {
   // Also feed token_social_links so the dossier picks them up
   for (const [platform, handleOrUrl] of [["twitter", links.twitter], ["telegram", links.telegram], ["website", links.website]] as const) {
     if (!handleOrUrl) continue;
-    try {
-      await sb.from("token_social_links").upsert({
+    await assertUpsert(
+      sb.from("token_social_links").upsert({
         token_mint: mint,
         platform,
         url: handleOrUrl,
@@ -105,9 +105,10 @@ serve(async (req) => {
         source: "launcher-enricher",
         is_current: true,
         discovered_at: new Date().toISOString(),
-      }, { onConflict: "token_mint,url" });
-    } catch {}
+      }, { onConflict: "token_mint,url" }).select(),
+      "token_social_links"
+    );
   }
 
-  return ok({ ok: true, links });
+  return ok({ ok: true, token: { mint, symbol, name, image, description }, links });
 });
