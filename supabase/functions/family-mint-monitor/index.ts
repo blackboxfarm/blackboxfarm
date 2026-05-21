@@ -295,9 +295,45 @@ Deno.serve(withRunLog('family-mint-monitor', async (req) => {
 
           // ═══ CROSS-FEED: allstar_mint_alerts ═══
           if (familyData?.allstar_id) {
+            // ── Pre-enrich from mesh DB so the row is never empty ──
+            let preName: string | null = null;
+            let preSymbol: string | null = null;
+            try {
+              const { data: cachedMeta } = await supabase
+                .from('token_metadata')
+                .select('name, symbol')
+                .eq('mint_address', det.mintAddress)
+                .maybeSingle();
+              preName = (cachedMeta as any)?.name ?? null;
+              preSymbol = (cachedMeta as any)?.symbol ?? null;
+            } catch { /* non-fatal */ }
+            // If cache miss, do a single fast Pump.fun fetch (no DexScreener fallback here to keep it quick).
+            if (!preName || !preSymbol) {
+              try {
+                const { fetchPumpFunCoin } = await import('../_shared/pumpfun-fetch.ts');
+                const pf = await fetchPumpFunCoin(det.mintAddress, 'family-mint-monitor');
+                if (pf?.name) preName = pf.name;
+                if (pf?.symbol) preSymbol = pf.symbol;
+                if (pf && (pf.name || pf.symbol || pf.image_uri)) {
+                  await supabase.from('token_metadata').upsert({
+                    mint_address: det.mintAddress,
+                    name: pf.name ?? null,
+                    symbol: pf.symbol ?? null,
+                    logo_uri: pf.image_uri ?? null,
+                    description: pf.description ?? null,
+                    updated_at: new Date().toISOString(),
+                  }, { onConflict: 'mint_address' });
+                }
+              } catch (e) {
+                console.warn('[family-mint-monitor] pre-enrich failed:', (e as Error).message);
+              }
+            }
+
             await supabase.from('allstar_mint_alerts').insert({
               allstar_id: familyData.allstar_id, creator_wallet: familyData.seed_wallet,
               detecting_wallet: item.wallet_address, token_mint: det.mintAddress,
+              token_name: preName,
+              token_symbol: preSymbol,
               launchpad: det.launchpad, alert_level: det.eventType === 'DIRECT_DEV_MINT' ? 'critical' : 'high',
               is_suppressed: finalSuppressed,
               suppressed_reason: finalSuppressedReason,
