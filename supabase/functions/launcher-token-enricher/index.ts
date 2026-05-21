@@ -32,21 +32,24 @@ serve(async (req) => {
   const name = (dex as any)?.name || (dex as any)?.baseToken?.name || null;
   const image = (dex as any)?.imageUrl || (dex as any)?.info?.imageUrl || null;
   if (symbol || name || image) {
-    await sb.from("token_metadata").upsert({
-      mint_address: mint,
-      symbol: symbol ?? undefined,
-      name: name ?? undefined,
-      logo_uri: image ?? undefined,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "mint_address" }).catch((e) => console.warn("[enricher] token_metadata upsert", e?.message));
+    try {
+      await sb.from("token_metadata").upsert({
+        mint_address: mint,
+        symbol: symbol ?? undefined,
+        name: name ?? undefined,
+        logo_uri: image ?? undefined,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "mint_address" });
+    } catch (e) { console.warn("[enricher] token_metadata upsert", (e as any)?.message); }
   }
   // Mirror onto launcher_mint_events row if present
   if (launcherProfileId) {
-    await sb.from("launcher_mint_events")
-      .update({ symbol: symbol ?? undefined, name: name ?? undefined, metadata: { image, ...links } })
-      .eq("launcher_profile_id", launcherProfileId)
-      .eq("mint_address", mint)
-      .catch(() => {});
+    try {
+      await sb.from("launcher_mint_events")
+        .update({ symbol: symbol ?? undefined, name: name ?? undefined, metadata: { image, ...links } })
+        .eq("launcher_profile_id", launcherProfileId)
+        .eq("mint_address", mint);
+    } catch (e) { console.warn("[enricher] launcher_mint_events update", (e as any)?.message); }
   }
 
   await assertUpsert(
@@ -62,15 +65,17 @@ serve(async (req) => {
   // Also feed token_social_links so the dossier picks them up
   for (const [platform, handleOrUrl] of [["twitter", links.twitter], ["telegram", links.telegram], ["website", links.website]] as const) {
     if (!handleOrUrl) continue;
-    await sb.from("token_social_links").upsert({
-      token_mint: mint,
-      platform,
-      url: handleOrUrl,
-      extracted_handle: platform === "website" ? null : String(handleOrUrl).replace(/^@/, "").replace(/^https?:\/\/(t\.me\/|x\.com\/|twitter\.com\/)/i, ""),
-      source: "launcher-enricher",
-      is_current: true,
-      discovered_at: new Date().toISOString(),
-    }, { onConflict: "token_mint,url" }).catch(() => {});
+    try {
+      await sb.from("token_social_links").upsert({
+        token_mint: mint,
+        platform,
+        url: handleOrUrl,
+        extracted_handle: platform === "website" ? null : String(handleOrUrl).replace(/^@/, "").replace(/^https?:\/\/(t\.me\/|x\.com\/|twitter\.com\/)/i, ""),
+        source: "launcher-enricher",
+        is_current: true,
+        discovered_at: new Date().toISOString(),
+      }, { onConflict: "token_mint,url" });
+    } catch {}
   }
 
   return ok({ ok: true, links });
