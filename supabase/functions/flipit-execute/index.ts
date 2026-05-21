@@ -1334,7 +1334,29 @@ serve(withRunLog('flipit-execute', async (req) => {
                 console.log("Solscan verified:", buyData);
                 
                 const verifiedBuyAmountUsd = buyData.solSpent * solPrice;
-                const verifiedBuyPriceUsd = verifiedBuyAmountUsd / buyData.tokensReceived;
+                let verifiedTokensReceived = buyData.tokensReceived;
+                let verifiedBuyPriceUsd = verifiedBuyAmountUsd / verifiedTokensReceived;
+
+                // SAFETY: Some Solscan/token-decimal payloads report quantity 1000x too high
+                // (seen on non-pump launchpads), which makes entry price 1000x too low and
+                // can falsely trip take-profit monitors. Normalize against the fresh market
+                // price used for the buy before writing any verified quantity/price.
+                const marketRatio = currentPrice > 0 && verifiedBuyPriceUsd > 0
+                  ? currentPrice / verifiedBuyPriceUsd
+                  : 1;
+                const decimalScale = [1000, 1_000_000, 1_000_000_000].find((scale) => {
+                  const normalizedPrice = verifiedBuyPriceUsd * scale;
+                  const ratio = currentPrice > 0 && normalizedPrice > 0
+                    ? Math.max(currentPrice / normalizedPrice, normalizedPrice / currentPrice)
+                    : Infinity;
+                  return ratio < 5;
+                });
+
+                if (marketRatio > 100 && decimalScale) {
+                  console.warn(`SOLSCAN_DECIMAL_NORMALIZED: tokens ${verifiedTokensReceived} / ${decimalScale}, price $${verifiedBuyPriceUsd} → $${verifiedBuyPriceUsd * decimalScale}`);
+                  verifiedTokensReceived = verifiedTokensReceived / decimalScale;
+                  verifiedBuyPriceUsd = verifiedBuyPriceUsd * decimalScale;
+                }
                 
                 // SANITY CHECK: Don't overwrite with bad data if deviation is too large
                 const quotedSolSpent = buyAmountSol;
@@ -1350,7 +1372,7 @@ serve(withRunLog('flipit-execute', async (req) => {
                 }
                 
                 await supabase.from("flip_positions").update({
-                  quantity_tokens: buyData.tokensReceived,
+                  quantity_tokens: verifiedTokensReceived,
                   buy_amount_sol: buyData.solSpent,
                   buy_amount_usd: verifiedBuyAmountUsd,
                   buy_price_usd: verifiedBuyPriceUsd,
@@ -1362,7 +1384,7 @@ serve(withRunLog('flipit-execute', async (req) => {
                   entry_verified_at: new Date().toISOString(),
                 }).eq("id", position.id);
                 
-                console.log(`Entry verified: ${buyData.tokensReceived} tokens for ${buyData.solSpent} SOL = $${verifiedBuyPriceUsd.toFixed(10)}/token`);
+                console.log(`Entry verified: ${verifiedTokensReceived} tokens for ${buyData.solSpent} SOL = $${verifiedBuyPriceUsd.toFixed(10)}/token`);
               } else if (attempt < maxAttempts) {
                 console.warn(`Solscan verification attempt ${attempt} failed, retrying...`);
                 verifyEntry(attempt + 1);
