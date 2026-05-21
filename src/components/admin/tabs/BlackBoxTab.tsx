@@ -15,13 +15,15 @@ const SecurityActivityDashboard = lazy(() => import("@/components/admin/Security
 const WalletBundleReport = lazy(() => import("@/components/admin/WalletBundleReport").then(m => ({ default: m.WalletBundleReport })));
 const FotobombApp = lazy(() => import("@/components/admin/FotobombApp"));
 const MasterWalletsDashboard = lazy(() => import("@/components/admin/MasterWalletsDashboard").then(m => ({ default: m.MasterWalletsDashboard })));
+const LaunchersTab = lazy(() => import("@/components/admin/launchers/LaunchersTab"));
 
 export default function BlackBoxTab() {
-  const [activeSubTab, setActiveSubTab] = useState("bundle-analysis");
+  const [activeSubTab, setActiveSubTab] = useState("launchers");
 
   return (
     <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
       <TabsList className="flex flex-wrap gap-1">
+        <TabsTrigger value="launchers">🚀 Launchers</TabsTrigger>
         <TabsTrigger value="bundle-analysis">🕵️ Bundle Analysis</TabsTrigger>
         <TabsTrigger value="security">🛡️ Security Dashboard</TabsTrigger>
         <TabsTrigger value="security-activity">🔐 Security Activity</TabsTrigger>
@@ -36,6 +38,9 @@ export default function BlackBoxTab() {
         <TabsTrigger value="wallet-recovery">🔑 Master Wallets</TabsTrigger>
       </TabsList>
 
+      <TabsContent value="launchers">
+        {activeSubTab === "launchers" && <Suspense fallback={<LazyLoader />}><LaunchersTab /></Suspense>}
+      </TabsContent>
       <TabsContent value="bundle-analysis">
         {activeSubTab === "bundle-analysis" && <Suspense fallback={<LazyLoader />}><WalletBundleReport /></Suspense>}
       </TabsContent>
