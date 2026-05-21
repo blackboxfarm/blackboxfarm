@@ -27,17 +27,16 @@ serve(async (req) => {
     if (!rule) continue;
     try {
       const pr = await resolvePrice(h.mint_address, { heliusApiKey: heliusKey });
-      const curPrice = pr?.priceUsd;
-      const curMcap = pr?.marketCapUsd;
-      if (!curPrice || !curMcap) continue;
-
-      const entryMcap = Number(h.entry_mcap_usd || 0);
+      const curPrice = pr?.price;
+      if (!curPrice) continue;
+      // Use price multiple — supply is constant so price multiple == mcap multiple
+      const entryPrice = Number(h.entry_price_usd || 0);
       const target = Number(rule.target_factor || 2);
       const heldSecs = (Date.now() - new Date(h.buy_filled_at || h.detected_at).getTime()) / 1000;
-      const hitTarget = entryMcap > 0 && curMcap >= entryMcap * target;
+      const hitTarget = entryPrice > 0 && curPrice >= entryPrice * target;
       const forceExit = heldSecs > Number(rule.max_hold_seconds || 3600);
-
-      // Update high-water and unrealized state regardless
+      // Approximate mcap = price * 1B (pump.fun standard supply)
+      const curMcap = curPrice * 1_000_000_000;
       const newHigh = Math.max(Number(h.highest_mcap_usd || 0), curMcap);
       await sb.from("launcher_mint_events").update({ highest_mcap_usd: newHigh }).eq("id", h.id);
 
@@ -59,7 +58,7 @@ serve(async (req) => {
       const sig = exec?.signature || exec?.txSignature || exec?.signatures?.[0] || null;
       const exitPrice = curPrice;
       const exitMcap = curMcap;
-      const multiple = entryMcap > 0 ? curMcap / entryMcap : null;
+      const multiple = entryPrice > 0 ? curPrice / entryPrice : null;
       await assertUpdate(
         sb.from("launcher_mint_events").update({
           status: sig ? "sold" : "failed",
