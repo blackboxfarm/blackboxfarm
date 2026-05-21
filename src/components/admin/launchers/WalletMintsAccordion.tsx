@@ -45,7 +45,17 @@ export function WalletMintsAccordion({
     e.preventDefault();
     setRefreshing(mint);
     try {
-      await invokeTokenEnricher({ mint, launcherProfileId: profileId });
+      const result = await invokeTokenEnricher({ mint, launcherProfileId: profileId });
+      if (result?.token) {
+        qc.setQueryData(["wallet-mints", wallet], (rows: any[] | undefined) =>
+          (rows || []).map((row) => row.mint_address === mint ? {
+            ...row,
+            symbol: result.token.symbol ?? row.symbol,
+            name: result.token.name ?? row.name,
+            image: result.token.image ?? row.image,
+          } : row)
+        );
+      }
       await refetch();
       qc.invalidateQueries({ queryKey: ["launcher-mint-events", profileId] });
       toast({ title: "Refreshed", description: mint.slice(0, 8) + "…" });
