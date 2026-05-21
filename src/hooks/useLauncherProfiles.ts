@@ -176,3 +176,82 @@ export async function invokeSpider(input: { xHandle?: string; devWallet?: string
   if (error) throw error;
   return data;
 }
+
+export interface WalletMint {
+  mint_address: string;
+  symbol: string | null;
+  name: string | null;
+  image: string | null;
+  mint_date: string | null;
+  source: "developer_tokens" | "launcher_mint_events";
+}
+
+export function useWalletMints(wallet?: string) {
+  return useQuery({
+    queryKey: ["wallet-mints", wallet],
+    enabled: !!wallet,
+    queryFn: async (): Promise<WalletMint[]> => {
+      const w = wallet!;
+      const [devTokensRes, launcherRes] = await Promise.all([
+        (supabase.from("developer_tokens" as any) as any)
+          .select("token_mint, launch_date")
+          .eq("creator_wallet", w)
+          .order("launch_date", { ascending: false })
+          .limit(100),
+        (supabase.from("launcher_mint_events" as any) as any)
+          .select("mint_address, symbol, name, detected_at, metadata")
+          .eq("dev_wallet_used", w)
+          .order("detected_at", { ascending: false })
+          .limit(100),
+      ]);
+
+      const map = new Map<string, WalletMint>();
+      for (const r of (devTokensRes.data || []) as any[]) {
+        if (!r.token_mint) continue;
+        map.set(r.token_mint, {
+          mint_address: r.token_mint,
+          symbol: null,
+          name: null,
+          image: null,
+          mint_date: r.launch_date,
+          source: "developer_tokens",
+        });
+      }
+      for (const r of (launcherRes.data || []) as any[]) {
+        if (!r.mint_address) continue;
+        const prev = map.get(r.mint_address);
+        map.set(r.mint_address, {
+          mint_address: r.mint_address,
+          symbol: r.symbol ?? prev?.symbol ?? null,
+          name: r.name ?? prev?.name ?? null,
+          image: (r.metadata?.image as string) ?? prev?.image ?? null,
+          mint_date: prev?.mint_date ?? r.detected_at,
+          source: prev?.source ?? "launcher_mint_events",
+        });
+      }
+
+      const mints = Array.from(map.keys());
+      if (mints.length) {
+        const { data: metas } = await (supabase.from("token_metadata" as any) as any)
+          .select("mint_address, symbol, name, logo_uri")
+          .in("mint_address", mints);
+        for (const m of (metas || []) as any[]) {
+          const existing = map.get(m.mint_address);
+          if (!existing) continue;
+          map.set(m.mint_address, {
+            ...existing,
+            symbol: existing.symbol || m.symbol,
+            name: existing.name || m.name,
+            image: existing.image || m.logo_uri,
+          });
+        }
+      }
+
+      return Array.from(map.values()).sort((a, b) => {
+        const ad = a.mint_date ? new Date(a.mint_date).getTime() : 0;
+        const bd = b.mint_date ? new Date(b.mint_date).getTime() : 0;
+        return bd - ad;
+      });
+    },
+  });
+}
