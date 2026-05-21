@@ -63,24 +63,41 @@ serve(async (req) => {
     for (const t of (tokens || [])) if (t.dev_wallet) family.add(t.dev_wallet);
   }
 
-  // Rank family by recent activity
+  // Rank family by real mint activity (most recent + most prolific first).
+  // Sources: developer_tokens (creator_wallet, launch_date) + launcher_mint_events for THIS profile.
   const familyArr = Array.from(family);
-  const { data: act } = await sb.from("dev_wallet_reputation")
-    .select("wallet_address, last_activity_at, total_tokens_launched")
-    .in("wallet_address", familyArr);
   const actMap: Record<string, { ts: number; n: number }> = {};
-  for (const r of (act || [])) {
-    actMap[r.wallet_address] = {
-      ts: r.last_activity_at ? new Date(r.last_activity_at).getTime() : 0,
-      n: Number(r.total_tokens_launched || 0),
-    };
+  for (const w of familyArr) actMap[w] = { ts: 0, n: 0 };
+
+  if (familyArr.length) {
+    const { data: devTok } = await sb.from("developer_tokens")
+      .select("creator_wallet, launch_date")
+      .in("creator_wallet", familyArr);
+    for (const r of (devTok || []) as any[]) {
+      const m = actMap[r.creator_wallet];
+      if (!m) continue;
+      m.n += 1;
+      const t = r.launch_date ? new Date(r.launch_date).getTime() : 0;
+      if (t > m.ts) m.ts = t;
+    }
+    // also reputation as a tie-breaker
+    const { data: rep } = await sb.from("dev_wallet_reputation")
+      .select("wallet_address, last_activity_at, total_tokens_launched")
+      .in("wallet_address", familyArr);
+    for (const r of (rep || []) as any[]) {
+      const m = actMap[r.wallet_address]; if (!m) continue;
+      const t = r.last_activity_at ? new Date(r.last_activity_at).getTime() : 0;
+      if (t > m.ts) m.ts = t;
+      m.n = Math.max(m.n, Number(r.total_tokens_launched || 0));
+    }
   }
   familyArr.sort((a, b) => {
-    const A = actMap[a] || { ts: 0, n: 0 };
-    const B = actMap[b] || { ts: 0, n: 0 };
-    return (B.ts - A.ts) || (B.n - A.n);
+    const A = actMap[a]; const B = actMap[b];
+    return (B.n - A.n) || (B.ts - A.ts);
   });
   const linked = familyArr.slice(0, 50);
+  // Primary dev = most active wallet (unless explicitly provided)
+  const computedPrimary = devWallet || linked[0] || primaryDev || null;
 
   // 3) Upsert profile
   const name = resolvedHandle || primaryDev?.slice(0, 8) || tokenMint?.slice(0, 8) || "unnamed";
@@ -88,7 +105,7 @@ serve(async (req) => {
     name,
     x_handle: resolvedHandle,
     x_user_id: xUserId,
-    primary_dev_wallet: primaryDev || linked[0] || null,
+    primary_dev_wallet: computedPrimary,
     linked_wallets: linked,
     last_spidered_at: new Date().toISOString(),
   };

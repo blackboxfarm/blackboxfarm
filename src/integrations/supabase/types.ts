@@ -9336,6 +9336,7 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string | null
+          excluded_wallets: string[]
           id: string
           is_active: boolean
           kyc_root_wallet: string | null
@@ -9352,6 +9353,7 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by?: string | null
+          excluded_wallets?: string[]
           id?: string
           is_active?: boolean
           kyc_root_wallet?: string | null
@@ -9368,6 +9370,7 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string | null
+          excluded_wallets?: string[]
           id?: string
           is_active?: boolean
           kyc_root_wallet?: string | null

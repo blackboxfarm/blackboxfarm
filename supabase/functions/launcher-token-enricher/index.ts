@@ -27,6 +27,28 @@ serve(async (req) => {
     foundAt: new Date().toISOString(),
   };
 
+  // Persist token name/symbol/image so accordion rows stop showing "unknown".
+  const symbol = (dex as any)?.symbol || (dex as any)?.baseToken?.symbol || null;
+  const name = (dex as any)?.name || (dex as any)?.baseToken?.name || null;
+  const image = (dex as any)?.imageUrl || (dex as any)?.info?.imageUrl || null;
+  if (symbol || name || image) {
+    await sb.from("token_metadata").upsert({
+      mint_address: mint,
+      symbol: symbol ?? undefined,
+      name: name ?? undefined,
+      logo_uri: image ?? undefined,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "mint_address" }).catch((e) => console.warn("[enricher] token_metadata upsert", e?.message));
+  }
+  // Mirror onto launcher_mint_events row if present
+  if (launcherProfileId) {
+    await sb.from("launcher_mint_events")
+      .update({ symbol: symbol ?? undefined, name: name ?? undefined, metadata: { image, ...links } })
+      .eq("launcher_profile_id", launcherProfileId)
+      .eq("mint_address", mint)
+      .catch(() => {});
+  }
+
   await assertUpsert(
     sb.from("launcher_enrichment").upsert({
       mint_address: mint,

@@ -8,6 +8,7 @@ export interface LauncherProfile {
   x_user_id: string | null;
   primary_dev_wallet: string | null;
   linked_wallets: string[];
+  excluded_wallets: string[];
   kyc_root_wallet: string | null;
   is_active: boolean;
   last_spidered_at: string | null;
@@ -175,6 +176,27 @@ export async function invokeSpider(input: { xHandle?: string; devWallet?: string
   const { data, error } = await supabase.functions.invoke("launcher-profile-spider", { body: input });
   if (error) throw error;
   return data;
+}
+
+export async function invokeTokenEnricher(input: { mint: string; launcherProfileId?: string }) {
+  const { data, error } = await supabase.functions.invoke("launcher-token-enricher", { body: input });
+  if (error) throw error;
+  return data;
+}
+
+export function useToggleExcludedWallet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ profileId, wallet, excluded, current }: { profileId: string; wallet: string; excluded: boolean; current: string[] }) => {
+      const set = new Set(current || []);
+      if (excluded) set.add(wallet); else set.delete(wallet);
+      const { error } = await (supabase.from("launcher_profiles" as any) as any)
+        .update({ excluded_wallets: Array.from(set) })
+        .eq("id", profileId);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["launcher-profiles"] }),
+  });
 }
 
 export interface WalletMint {

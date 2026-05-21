@@ -65,17 +65,18 @@ serve(async (req) => {
   // Active profiles + rules
   const { data: profiles, error: pErr } = await sb
     .from("launcher_profiles")
-    .select("id, name, linked_wallets, primary_dev_wallet, launcher_trade_rules(enabled, min_seconds_after_mint)")
+    .select("id, name, linked_wallets, primary_dev_wallet, excluded_wallets, launcher_trade_rules(enabled, min_seconds_after_mint)")
     .eq("is_active", true);
   if (pErr) return ok({ error: pErr.message }, 500);
 
   const detected: any[] = [];
   for (const profile of (profiles || [])) {
     const rule = (profile as any).launcher_trade_rules?.[0] || (profile as any).launcher_trade_rules;
+    const excluded = new Set<string>(((profile as any).excluded_wallets || []) as string[]);
     const wallets: string[] = Array.from(new Set([
       ...(profile.linked_wallets || []),
       profile.primary_dev_wallet,
-    ].filter(Boolean))).slice(0, 20); // cap
+    ].filter(Boolean))).filter((w) => !excluded.has(w as string)).slice(0, 20); // cap
 
     for (const w of wallets) {
       try {
