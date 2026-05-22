@@ -55,11 +55,18 @@ export function LauncherTradeRulesForm({ profileId }: { profileId: string }) {
           <Select value={form.funding_wallet_id ?? ""} onValueChange={(v) => patch("funding_wallet_id", v as any)}>
             <SelectTrigger><SelectValue placeholder="Select wallet" /></SelectTrigger>
             <SelectContent>
-              {(wallets || []).map((w: any) => (
-                <SelectItem key={w.id} value={w.id}>
-                  {w.nickname || w.pubkey.slice(0, 8)} — {Number(w.sol_balance || 0).toFixed(3)} SOL
-                </SelectItem>
-              ))}
+              {(() => {
+                const FLIPIT = "FRtWhqNbTjRVm71pCpQaM45f39zRq9C9k9AUqj1hAnG5";
+                const list = (wallets || []) as any[];
+                const flipit = list.find((w) => w.pubkey === FLIPIT);
+                const rest = list.filter((w) => w.pubkey !== FLIPIT);
+                const ordered = flipit ? [flipit, ...rest] : rest;
+                return ordered.map((w: any) => (
+                  <SelectItem key={w.id} value={w.id}>
+                    {w.pubkey === FLIPIT ? "flipit" : (w.nickname || w.pubkey.slice(0, 8))} — {Number(w.sol_balance || 0).toFixed(3)} SOL
+                  </SelectItem>
+                ));
+              })()}
             </SelectContent>
           </Select>
         </div>
