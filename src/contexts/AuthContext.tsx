@@ -63,11 +63,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     );
 
     // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+      })
+      .catch((err) => {
+        console.error('[Auth] getSession failed:', err);
+      })
+      .finally(() => setLoading(false));
+
+    // Safety watchdog — if auth bootstrap stalls (network blip, token refresh
+    // failure), force loading=false so gated routes (Super Admin etc.) render
+    // instead of hanging on a spinner forever. The auth listener will still
+    // update session/user state if/when the network recovers.
+    const watchdog = setTimeout(() => {
+      setLoading((prev) => {
+        if (prev) console.warn('[Auth] bootstrap watchdog fired — forcing loading=false');
+        return false;
+      });
+    }, 5000);
 
     // Detect OAuth error params in URL (from failed provider callbacks)
     const detectOAuthErrors = () => {
@@ -99,7 +114,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     detectOAuthErrors();
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(watchdog);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signUp = async (email: string, password: string, redirectUrl?: string) => {
