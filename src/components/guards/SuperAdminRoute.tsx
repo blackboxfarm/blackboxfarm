@@ -3,6 +3,7 @@ import { Navigate } from "react-router-dom";
 import { useUserRoles } from "@/hooks/useUserRoles";
 import { useAuth } from "@/hooks/useAuth";
 import { PageLoader } from "@/components/ui/lazy-loader";
+import { usePreviewSuperAdmin } from "@/hooks/usePreviewSuperAdmin";
 
 interface SuperAdminRouteProps {
   children: React.ReactNode;
@@ -11,6 +12,10 @@ interface SuperAdminRouteProps {
 export const SuperAdminRoute: React.FC<SuperAdminRouteProps> = ({ children }) => {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const { isSuperAdmin, isLoading: rolesLoading } = useUserRoles();
+  const isPreviewAdmin = usePreviewSuperAdmin();
+
+  // Preview bypass: render immediately on Lovable preview domains regardless of Supabase auth state.
+  if (isPreviewAdmin) return <>{children}</>;
 
   // Wait for both auth and roles to finish loading
   if (authLoading || rolesLoading) {

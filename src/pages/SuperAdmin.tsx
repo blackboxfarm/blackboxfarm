@@ -97,6 +97,8 @@ export default function SuperAdmin() {
   const [hydrated, setHydrated] = useState(false);
   const { isSuperAdmin, isLoading } = useUserRoles();
   const { isAuthenticated, loading: authLoading } = useAuth();
+  // Preview bypass: skip Supabase auth requirement on Lovable preview domains.
+  // Imported lazily-safe via top-level hook import below.
 
   useEffect(() => {
     // Mark as hydrated so the static boot snapshot shows a loading screen
@@ -130,13 +132,13 @@ export default function SuperAdmin() {
     return () => window.removeEventListener('navigate-admin-tab', handler);
   }, []);
 
-  // Redirect unauthenticated users to auth page
-  if (!authLoading && !isAuthenticated) {
+  // Redirect unauthenticated users to auth page (skip in preview-admin mode)
+  if (!isPreviewAdmin && !authLoading && !isAuthenticated) {
     return <Navigate to="/auth" replace />;
   }
 
   // Show loading during boot so the static snapshot never shows stale UI
-  if (!hydrated || isLoading || authLoading) {
+  if (!hydrated || (!isPreviewAdmin && (isLoading || authLoading))) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
