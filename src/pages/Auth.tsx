@@ -11,10 +11,19 @@ import { FarmBanner } from '@/components/FarmBanner';
 import { AuthButton } from '@/components/auth/AuthButton';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { usePreviewSuperAdmin } from '@/hooks/usePreviewSuperAdmin';
 
 export default function AuthPage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const isPreviewAdmin = usePreviewSuperAdmin();
+
+  // Preview bypass: if running on Lovable preview, skip /auth entirely.
+  useEffect(() => {
+    if (isPreviewAdmin) {
+      navigate('/super-admin', { replace: true });
+    }
+  }, [isPreviewAdmin, navigate]);
 
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authModalTab, setAuthModalTab] = useState<'signin' | 'signup'>('signin');
