@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUserRoles } from "@/hooks/useUserRoles";
 import { useAuth } from "@/hooks/useAuth";
+import { usePreviewSuperAdmin } from "@/hooks/usePreviewSuperAdmin";
 import { AlertTriangle } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -97,8 +98,7 @@ export default function SuperAdmin() {
   const [hydrated, setHydrated] = useState(false);
   const { isSuperAdmin, isLoading } = useUserRoles();
   const { isAuthenticated, loading: authLoading } = useAuth();
-  // Preview bypass: skip Supabase auth requirement on Lovable preview domains.
-  // Imported lazily-safe via top-level hook import below.
+  const isPreviewAdmin = usePreviewSuperAdmin();
 
   useEffect(() => {
     // Mark as hydrated so the static boot snapshot shows a loading screen
