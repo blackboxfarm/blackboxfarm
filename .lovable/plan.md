@@ -1,100 +1,102 @@
-## Goal
+## BlackBox Bot-Reply Aggregator
 
-Package the HoldersIntel TG/chat-bot patterns into a single drop-in **skill pack** the other project's AI can read and execute against. New project gets its own Supabase, own tables, own content — no coupling back to this DB.
+Reuse HoldersIntel as a single bot operating in three context-aware modes, mirroring the SolanaAlphaKR (Korean funnel) scraping approach for ingestion.
 
-Bot persona on the new site: **Priest Confessional / Fortune Teller**. User types a confession → AI classifies it → AI picks the best-matching penance from a pre-written DB list → optional light AI rewrite for tone.
-
-## What gets produced (in THIS project, for export)
-
-A single folder `/mnt/documents/confessional-bot-skill/` containing:
-
-```
-confessional-bot-skill/
-├── SKILL.md                       # The AI's onboarding doc
-├── README-for-human.md            # What to paste where
-├── references/
-│   ├── 01-architecture.md         # Edge function ↔ DB ↔ frontend flow
-│   ├── 02-db-schema.sql           # Tables + RLS + seed inserts
-│   ├── 03-ai-classifier-prompt.md # System prompt + tool-call schema for sin classification
-│   ├── 04-penance-selection.md    # How AI maps classification → penance row
-│   ├── 05-persona-and-tone.md     # Voice rules (priest gravitas, no hellfire)
-│   ├── 06-tg-bot-patterns.md      # Lessons from HoldersIntel: input sanitizer, brevity, referral memory, OTP linking
-│   ├── 07-rate-limits-and-tiers.md# Anon vs free vs paid limits (HoldersIntel pattern)
-│   └── 08-safety-guardrails.md    # Self-harm detection → bypass penance, show resource
-├── code-templates/
-│   ├── edge-confess.ts            # /confess edge function (AI-judged penance)
-│   ├── edge-tg-webhook.ts         # Telegram webhook handler skeleton
-│   ├── ConfessionalChat.tsx       # React mini chat widget
-│   └── useConfessional.ts         # Frontend hook
-└── seed-data/
-    └── penances.csv               # ~50 starter penances tagged by sin category
-```
-
-## Architecture (documented in SKILL.md)
+### Flow
 
 ```text
-User types confession
-        │
-        ▼
-[Edge: /confess]
-  1. Sanitize input (TG sanitizer pattern, length cap)
-  2. Rate-limit check (session + IP)
-  3. AI classify  → tool-call returns { category, severity, themes[] }
-  4. SELECT FROM penances WHERE category=? AND severity<=? ORDER BY random() LIMIT 3
-  5. AI pick best of 3 + light rewrite in priest voice
-  6. Log to confessions table (hashed, no PII)
-        │
-        ▼
-Return { penance_text, category, severity }
+[Insiders Channel]                  ← MTProto listener (same as SolanaAlphaKR)
+       │  new message → regex CA
+       ▼
+[blackbox_aggregator_runs] row      ← creates harvest job (status: pending)
+       │
+       ▼
+[BlackBox Group]                    ← HoldersIntel posts CA (and only CA)
+       │  Trojan / BonkBot / GMGN / Photon / RickBot / Maestro auto-reply
+       ▼
+[MTProto reply harvester]           ← 30s window, captures every bot reply
+       │  also captures edited messages (bots edit-in-place)
+       ▼
+[blackbox_bot_replies] table        ← raw text + bot_name + edit history
+       │
+       ▼
+[aggregator-compose edge fn]        ← parses each bot, merges fields,
+       │                              adds HoldersIntel native intel
+       │                              (dev rep, KYC root, sister wallets,
+       │                               prior tickers/ATH, mesh)
+       ▼
+[Your Private Output Channel]       ← single templated digest message
 ```
 
-## DB schema (new project's Supabase)
+### Three HoldersIntel modes
 
-- `penances` — id, category (enum: pride/greed/lust/envy/wrath/sloth/gluttony/vanity/fomo/other), severity (1-5), text, weight, active
-- `confessions` — id, session_id, category, severity, penance_id, created_at (no raw confession text stored by default; opt-in flag)
-- `confessional_sessions` — session_id, fingerprint, message_count, referral_tag (Dave/Tom pattern reused)
-- RLS: anon can INSERT confessions + SELECT own session; only service role reads penances mgmt
+| Context | Behavior |
+|---|---|
+| Normal DM / group | Current behavior (unchanged) |
+| **BlackBox group** (by chat_id) | Silent mode — only pastes CA when aggregator job fires, never auto-replies, never runs `/holders` chatter |
+| **Output channel** (by chat_id) | Publisher only — posts templated digest, no commands accepted |
 
-## Persona rules (encoded in 05-persona-and-tone.md)
+Mode is decided per-message by checking `chat_id` against `blackbox_channel_config` table (you set the three IDs once in admin).
 
-- Priest behind a screen, calm, never judgmental
-- Penance feels symbolic, never punitive or harmful
-- No religious-specific dogma — universal moral language
-- Hard guardrail: self-harm/abuse keywords → skip penance, return crisis resource
+### Database (new)
 
-## Patterns lifted from HoldersIntel (documented, not copy-pasted)
+- `blackbox_channel_config` — `role` ('insiders_source' | 'blackbox_group' | 'output_channel'), `chat_id`, `enabled`
+- `blackbox_aggregator_runs` — `token_mint`, `source_message_id`, `posted_at`, `harvest_until`, `status`, `digest_message_id`
+- `blackbox_bot_replies` — `run_id`, `bot_username`, `raw_text`, `parsed_jsonb`, `received_at`, `edited_at`
 
-| HoldersIntel pattern | Reused as |
-| --- | --- |
-| Telegram Input Sanitizer | Strip control chars + cap length on confessions |
-| Dave/Tom Referral Tracking | "Father X sent me" → tag session, warmth on return |
-| Tiered Access | anon 3/day, free 10/day, paid unlimited |
-| AI Configuration table (Personality/Knowledge/Guardrails) | New project's admin can tune voice without code |
-| Lovable AI Gateway + tool-calls | Classifier returns structured JSON, not free text |
-| `assertDbWrite` zero-tolerance pattern | Recommended for confession logs |
+### Edge functions (new)
 
-## What you do with the folder
+1. `blackbox-insiders-listener` — runs off the same MTProto pipeline as SolanaAlphaKR, filters for new CAs, creates a run, has HoldersIntel post the CA into BlackBox group
+2. `blackbox-reply-harvester` — MTProto listener on BlackBox group, writes every reply (and edit) to `blackbox_bot_replies` until `harvest_until` passes
+3. `blackbox-aggregator-compose` — runs at `harvest_until`: parses each bot via per-bot parser registry, layers in HoldersIntel native intel, posts digest to output channel
 
-1. I generate everything into `/mnt/documents/confessional-bot-skill/` and hand you a zip.
-2. In the new Lovable project, open chat and say: *"Read every file in this folder and treat SKILL.md as your build brief. Start with the DB migration, then the edge function, then the React widget."*
-3. Drop the folder contents into that project (drag into chat or paste contents file-by-file).
-4. The new AI runs migrations, deploys edge functions, builds the UI — all self-contained on its own Supabase.
+### Per-bot parser registry
 
-## Why this beats "just dump it"
+`_shared/blackbox-parsers/` — one file per bot (`trojan.ts`, `bonkbot.ts`, `gmgn.ts`, `photon.ts`, `rickbot.ts`, `maestro.ts`). Each exports `{ matches(username), parse(text) → fields }`. Fields normalized to a shared shape: `price`, `mcap`, `liquidity`, `volume`, `buy_tax`, `sell_tax`, `top10_pct`, `lp_locked`, `mint_authority`, `freeze_authority`, `holders`, `age`, etc. Unknown fields fall through into `extras` so nothing is lost.
 
-- A raw dump = the other AI guesses what's important and rebuilds inconsistently.
-- A skill pack = onboarding doc + schema + prompts + code templates, in the exact shape skills expect, so the AI implements it in one pass with no architectural drift.
+### Digest template (kitchen-sink, prunable)
 
-## What I will NOT do here
+Per your direction — render **everything** we have, organized in collapsible sections so you can prune later:
 
-- No changes to this (HoldersIntel) project's code or DB.
-- No live link between the two projects.
-- No copying of HoldersIntel-specific tables (allstars, dev reputation, etc.) — only the *patterns*.
+```
+🧬 $SYMBOL — <name>
+CA: <mint>  ·  age <X>  ·  mcap $<X>
 
-## Deliverable
+━━━ HOLDERSINTEL NATIVE ━━━
+Dev: <wallet>  ·  Rep: <score>  ·  KYC root: <CEX>
+Prior tickers: $A ($120k ATH), $B ($45k ATH)
+Sister wallets: 3  ·  Mesh size: 12
+Verdict: <auto GO/CAUTION/AVOID line>
 
-A single downloadable folder you can drag into the other project's chat. Total size small (~30-50 KB of markdown + code templates + CSV seed).
+━━━ MARKET (consensus across bots) ━━━
+Price: $X (Trojan/GMGN agree, BonkBot stale)
+LP: $X locked  ·  Tax B/S: X/Y%
+Top 10: X%  ·  Holders: N
 
----
+━━━ PER-BOT RAW ━━━
+🤖 Trojan: <key fields>
+🤖 GMGN:   <key fields>
+🤖 BonkBot:<key fields>
+🤖 Photon: <key fields>
+🤖 RickBot:<key fields>
+🤖 Maestro:<key fields>
 
-Reply **Plan Approved** and I'll generate the skill pack in `/mnt/documents/confessional-bot-skill/` and give you the artifact links.
+━━━ SOCIALS ━━━
+X · TG · Web · Discord (from token_social_links)
+```
+
+Cross-bot disagreement (e.g. price drift, tax mismatch) is surfaced explicitly so you can spot bot bugs / stale data at a glance.
+
+### Technical notes
+
+- Reuses existing MTProto infra (same as SolanaAlphaKR scraper) — no new bot, no new auth
+- HoldersIntel chat-id routing layer added to its existing webhook handler — cheap, additive
+- 30s harvest window is configurable per-run via `blackbox_aggregator_runs.harvest_until`
+- Edit-in-place is handled (Photon/Trojan update their own messages with fresh prices); we keep the latest edit and timestamp it
+- All bot replies stored raw forever → re-parse retroactively if a parser improves
+- No changes to current HoldersIntel DM/group behavior
+
+### Out of scope (for this round)
+
+- Auto-buy / auto-snipe off the digest — read-only intel pipeline
+- UI dashboard for runs — DB + Telegram channel only (we can add later)

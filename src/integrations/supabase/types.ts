@@ -2752,6 +2752,116 @@ export type Database = {
         }
         Relationships: []
       }
+      blackbox_aggregator_runs: {
+        Row: {
+          ca_post_message_id: number | null
+          ca_posted_at: string | null
+          created_at: string
+          digest_jsonb: Json | null
+          digest_message_id: number | null
+          digest_text: string | null
+          error_message: string | null
+          harvest_until: string
+          id: string
+          posted_at: string
+          replies_collected: number
+          source_chat_id: number
+          source_message_id: number | null
+          source_raw_text: string | null
+          status: string
+          token_mint: string
+          updated_at: string
+        }
+        Insert: {
+          ca_post_message_id?: number | null
+          ca_posted_at?: string | null
+          created_at?: string
+          digest_jsonb?: Json | null
+          digest_message_id?: number | null
+          digest_text?: string | null
+          error_message?: string | null
+          harvest_until: string
+          id?: string
+          posted_at?: string
+          replies_collected?: number
+          source_chat_id: number
+          source_message_id?: number | null
+          source_raw_text?: string | null
+          status?: string
+          token_mint: string
+          updated_at?: string
+        }
+        Update: {
+          ca_post_message_id?: number | null
+          ca_posted_at?: string | null
+          created_at?: string
+          digest_jsonb?: Json | null
+          digest_message_id?: number | null
+          digest_text?: string | null
+          error_message?: string | null
+          harvest_until?: string
+          id?: string
+          posted_at?: string
+          replies_collected?: number
+          source_chat_id?: number
+          source_message_id?: number | null
+          source_raw_text?: string | null
+          status?: string
+          token_mint?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      blackbox_bot_replies: {
+        Row: {
+          bot_user_id: number | null
+          bot_username: string | null
+          edit_count: number
+          edited_at: string | null
+          id: string
+          message_id: number
+          parsed_jsonb: Json | null
+          parser_used: string | null
+          raw_text: string
+          received_at: string
+          run_id: string
+        }
+        Insert: {
+          bot_user_id?: number | null
+          bot_username?: string | null
+          edit_count?: number
+          edited_at?: string | null
+          id?: string
+          message_id: number
+          parsed_jsonb?: Json | null
+          parser_used?: string | null
+          raw_text: string
+          received_at?: string
+          run_id: string
+        }
+        Update: {
+          bot_user_id?: number | null
+          bot_username?: string | null
+          edit_count?: number
+          edited_at?: string | null
+          id?: string
+          message_id?: number
+          parsed_jsonb?: Json | null
+          parser_used?: string | null
+          raw_text?: string
+          received_at?: string
+          run_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blackbox_bot_replies_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_aggregator_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       blackbox_campaigns: {
         Row: {
           created_at: string | null
@@ -2779,6 +2889,39 @@ export type Database = {
           token_address?: string
           updated_at?: string | null
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      blackbox_channel_config: {
+        Row: {
+          chat_id: number
+          created_at: string
+          enabled: boolean
+          id: string
+          label: string | null
+          notes: string | null
+          role: string
+          updated_at: string
+        }
+        Insert: {
+          chat_id: number
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          label?: string | null
+          notes?: string | null
+          role: string
+          updated_at?: string
+        }
+        Update: {
+          chat_id?: number
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          label?: string | null
+          notes?: string | null
+          role?: string
+          updated_at?: string
         }
         Relationships: []
       }

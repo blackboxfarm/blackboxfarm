@@ -4585,6 +4585,27 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
     const username = message.from.username || null;
     const messageId = message.message_id;
 
+    // ─── BlackBox Aggregator silent-mode router ───
+    // In the configured BlackBox group, HoldersIntel must NOT auto-respond to
+    // anything — the blackbox-tick function is the only thing that posts in
+    // there (a bare CA). Trader-bot replies and chatter are picked up via
+    // MTProto, not this webhook. Same idea for the output channel: only the
+    // aggregator publishes there; user commands are ignored.
+    try {
+      const { data: bbCfg } = await supabase
+        .from('blackbox_channel_config')
+        .select('role')
+        .eq('chat_id', chatId)
+        .eq('enabled', true)
+        .maybeSingle();
+      if (bbCfg?.role === 'blackbox_group' || bbCfg?.role === 'output_channel') {
+        console.log(`[bot] silent-mode (blackbox ${bbCfg.role}) chat:${chatId} — skipping`);
+        return new Response("OK");
+      }
+    } catch (e) {
+      console.warn('[bot] blackbox config lookup failed:', e);
+    }
+
     // === SECOND-LAYER INPUT SANITIZATION ===
     const sanitized = sanitizeTelegramInput(message.text);
     const command = sanitized.command;
