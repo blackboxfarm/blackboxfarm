@@ -212,6 +212,23 @@ serve(async (req) => {
         if (!error) saved++;
       }
 
+      // Passive parser-sample capture — dump verbatim copies of every reply
+      // into blackbox_parser_samples so the parser-discovery harness has a
+      // growing corpus from real Insiders runs (not just manual probes).
+      try {
+        await supabase.functions.invoke('blackbox-parser-probe', {
+          body: {
+            action: 'ingest',
+            token_mint: run.token_mint,
+            posted_at: run.ca_posted_at || run.posted_at,
+            probe_run_id: run.id,
+            messages: repliesRaw,
+          },
+        });
+      } catch (e: any) {
+        console.error('[blackbox-tick] passive sample dump failed', e?.message);
+      }
+
       // Pull HoldersIntel native intel
       const { data: native } = await supabase
         .from('telegram_insider_token_lifecycle')
