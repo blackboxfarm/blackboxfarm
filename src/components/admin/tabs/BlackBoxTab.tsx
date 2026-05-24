@@ -16,6 +16,7 @@ const WalletBundleReport = lazy(() => import("@/components/admin/WalletBundleRep
 const FotobombApp = lazy(() => import("@/components/admin/FotobombApp"));
 const MasterWalletsDashboard = lazy(() => import("@/components/admin/MasterWalletsDashboard").then(m => ({ default: m.MasterWalletsDashboard })));
 const LaunchersTab = lazy(() => import("@/components/admin/launchers/LaunchersTab"));
+const BlackBoxParserSamples = lazy(() => import("@/components/admin/blackbox/BlackBoxParserSamples"));
 
 export default function BlackBoxTab() {
   const [activeSubTab, setActiveSubTab] = useState("launchers");
@@ -24,6 +25,7 @@ export default function BlackBoxTab() {
     <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
       <TabsList className="flex flex-wrap gap-1">
         <TabsTrigger value="launchers">🚀 Launchers</TabsTrigger>
+        <TabsTrigger value="parser-probe">🔬 Parser Probe</TabsTrigger>
         <TabsTrigger value="bundle-analysis">🕵️ Bundle Analysis</TabsTrigger>
         <TabsTrigger value="security">🛡️ Security Dashboard</TabsTrigger>
         <TabsTrigger value="security-activity">🔐 Security Activity</TabsTrigger>
@@ -40,6 +42,9 @@ export default function BlackBoxTab() {
 
       <TabsContent value="launchers">
         {activeSubTab === "launchers" && <Suspense fallback={<LazyLoader />}><LaunchersTab /></Suspense>}
+      </TabsContent>
+      <TabsContent value="parser-probe">
+        {activeSubTab === "parser-probe" && <Suspense fallback={<LazyLoader />}><BlackBoxParserSamples /></Suspense>}
       </TabsContent>
       <TabsContent value="bundle-analysis">
         {activeSubTab === "bundle-analysis" && <Suspense fallback={<LazyLoader />}><WalletBundleReport /></Suspense>}

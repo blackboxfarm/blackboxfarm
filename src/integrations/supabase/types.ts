@@ -3114,6 +3114,72 @@ export type Database = {
         }
         Relationships: []
       }
+      blackbox_parser_samples: {
+        Row: {
+          bot_display_name: string | null
+          bot_user_id: number | null
+          bot_username: string | null
+          caption: string | null
+          created_at: string
+          edited_at: string | null
+          has_photo: boolean
+          id: string
+          inline_buttons_jsonb: Json | null
+          message_id: number
+          parser_attempt_jsonb: Json | null
+          parser_used: string | null
+          posted_at: string
+          probe_run_id: string | null
+          raw_entities_jsonb: Json | null
+          raw_text: string
+          received_at: string
+          source: string
+          token_mint: string
+        }
+        Insert: {
+          bot_display_name?: string | null
+          bot_user_id?: number | null
+          bot_username?: string | null
+          caption?: string | null
+          created_at?: string
+          edited_at?: string | null
+          has_photo?: boolean
+          id?: string
+          inline_buttons_jsonb?: Json | null
+          message_id: number
+          parser_attempt_jsonb?: Json | null
+          parser_used?: string | null
+          posted_at?: string
+          probe_run_id?: string | null
+          raw_entities_jsonb?: Json | null
+          raw_text?: string
+          received_at?: string
+          source?: string
+          token_mint: string
+        }
+        Update: {
+          bot_display_name?: string | null
+          bot_user_id?: number | null
+          bot_username?: string | null
+          caption?: string | null
+          created_at?: string
+          edited_at?: string | null
+          has_photo?: boolean
+          id?: string
+          inline_buttons_jsonb?: Json | null
+          message_id?: number
+          parser_attempt_jsonb?: Json | null
+          parser_used?: string | null
+          posted_at?: string
+          probe_run_id?: string | null
+          raw_entities_jsonb?: Json | null
+          raw_text?: string
+          received_at?: string
+          source?: string
+          token_mint?: string
+        }
+        Relationships: []
+      }
       blackbox_transactions: {
         Row: {
           amount_sol: number
