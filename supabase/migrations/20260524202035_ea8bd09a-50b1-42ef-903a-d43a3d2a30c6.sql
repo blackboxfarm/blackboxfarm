@@ -1,0 +1,2 @@
+INSERT INTO telegram_channel_calls (channel_id, channel_name, message_id, token_mint, raw_message, message_timestamp, status)
+VALUES ('-1003694579312', 'Insiders', (EXTRACT(EPOCH FROM now())::bigint), '33eum82LaAhtv5YkUq1BdwEviSErH5CnFxqVNLT5pump', 'manual test injection from admin', now(), 'pending');
