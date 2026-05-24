@@ -45,12 +45,27 @@ async function ingestMessages(
 ): Promise<number> {
   const { token_mint, posted_at, messages, source, probe_run_id } = args;
   const sinceMs = new Date(posted_at).getTime();
+  const nowMs = Date.now();
+  const toIso = (v: any): string | null => {
+    if (v === null || v === undefined) return null;
+    let ms: number;
+    if (typeof v === 'number') {
+      // Normalize: seconds → ms; microseconds → ms
+      ms = v < 1e12 ? v * 1000 : v > 1e14 ? Math.floor(v / 1000) : v;
+    } else {
+      ms = new Date(v).getTime();
+    }
+    if (!isFinite(ms)) return null;
+    // Clamp absurd timestamps (year > 9999) — Postgres timestamptz rejects them
+    if (ms > nowMs + 365 * 86400 * 1000 || ms < 0) return null;
+    return new Date(ms).toISOString();
+  };
   let saved = 0;
   for (const m of messages) {
-    const d = typeof m.date === 'number'
-      ? (m.date < 1e12 ? m.date * 1000 : m.date)
-      : new Date(m.date).getTime();
-    if (!isFinite(d) || d < sinceMs) continue;
+    const receivedIso = toIso(m.date);
+    if (!receivedIso) continue;
+    const d = new Date(receivedIso).getTime();
+    if (d < sinceMs - 60_000) continue;
     const text = m.text || m.message || '';
     if (!text || !text.includes(token_mint)) continue;
     const username: string | null = m.callerUsername || m.fromUsername || null;
@@ -71,10 +86,8 @@ async function ingestMessages(
       inline_buttons_jsonb: m.replyMarkup || m.reply_markup || null,
       has_photo: !!m.hasPhoto,
       caption: m.caption || null,
-      received_at: new Date(d).toISOString(),
-      edited_at: m.editDate
-        ? new Date((m.editDate < 1e12 ? m.editDate * 1000 : m.editDate)).toISOString()
-        : null,
+      received_at: receivedIso,
+      edited_at: toIso(m.editDate),
       parser_used: parser,
       parser_attempt_jsonb: fields,
     };
