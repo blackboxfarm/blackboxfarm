@@ -33,6 +33,27 @@ async function sendViaHoldersIntel(chatId: number, text: string): Promise<number
   return j.result?.message_id ?? null;
 }
 
+// Post via MTProto (user account) — looks human to other bots so Phanes/Trojan/
+// Rick/GMGN actually reply. Bot-sourced messages get ignored by most trader
+// bots as anti-spam. Used ONLY for bait CA posts into blackbox_group.
+async function sendViaMTProto(
+  supabase: ReturnType<typeof createClient>,
+  chatId: number,
+  text: string,
+): Promise<number | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke('telegram-mtproto-auth', {
+      body: { action: 'send_message', chatId, message: text },
+    });
+    if (error) { console.error('[blackbox-tick] MTProto invoke error', error); return null; }
+    if (!data?.success) { console.error('[blackbox-tick] MTProto send failed', data); return null; }
+    return data.messageId ?? null;
+  } catch (e) {
+    console.error('[blackbox-tick] MTProto exception', e);
+    return null;
+  }
+}
+
 function fmtMoney(n: number | null | undefined): string {
   if (n == null || !isFinite(n)) return '—';
   if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
@@ -157,8 +178,10 @@ serve(async (req) => {
         .single();
       if (insErr || !run) { summary.errors.push(`run insert: ${insErr?.message}`); continue; }
 
-      // Post the bare CA into BlackBox group so the bots auto-reply
-      const postedId = await sendViaHoldersIntel(Number(blackboxChat), call.token_mint);
+      // Post the bare CA into BlackBox group via MTProto (as user account).
+      // Other trader bots (Phanes/Trojan/Rick/GMGN) ignore messages from bots
+      // as anti-spam — posting as a human is what triggers their auto-replies.
+      const postedId = await sendViaMTProto(supabase, Number(blackboxChat), call.token_mint);
       await supabase.from('blackbox_aggregator_runs').update({
         ca_posted_at: new Date().toISOString(),
         ca_post_message_id: postedId,
