@@ -178,10 +178,10 @@ serve(async (req) => {
         .single();
       if (insErr || !run) { summary.errors.push(`run insert: ${insErr?.message}`); continue; }
 
-      // Post the bare CA into BlackBox group via MTProto (as user account).
-      // Other trader bots (Phanes/Trojan/Rick/GMGN) ignore messages from bots
-      // as anti-spam — posting as a human is what triggers their auto-replies.
-      const postedId = await sendViaMTProto(supabase, Number(blackboxChat), call.token_mint);
+      // Post the bare CA into BlackBox group via HoldersIntel bot (reverted
+      // from MTProto — MTProto user account "HoldersIntel" was being treated
+      // as a bot lookalike by trader bots and ignored).
+      const postedId = await sendViaHoldersIntel(Number(blackboxChat), call.token_mint);
       await supabase.from('blackbox_aggregator_runs').update({
         ca_posted_at: new Date().toISOString(),
         ca_post_message_id: postedId,
