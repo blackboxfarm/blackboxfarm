@@ -54,11 +54,81 @@ async function sendViaMTProto(
   }
 }
 
-function composeBlackboxTriggerPost(tokenMint: string): string {
-  // Bare CA only — matches the working HoldersIntel post format that already
-  // triggers Trojan/Phanes/GMGN/etc. Any extra text, markdown, or URL makes
-  // it look bot-formatted and the trader bots ignore it.
-  return tokenMint;
+function generateAsciiBar(pct: number): string {
+  const filled = Math.round((Math.max(0, Math.min(100, pct)) / 100) * 10);
+  return '▌'.repeat(filled).padEnd(10, ' ');
+}
+
+// Post the FULL Holders Report (same format as BaglessHoldersReport.tsx ->
+// admin-notify). The bare-CA variant did NOT trigger trader bots; the full
+// report format DOES (confirmed in production). We fetch the live report,
+// build the message, and broadcast via admin-notify so it goes out from the
+// HoldersIntel bot exactly like the working flow.
+async function postFullHoldersReport(
+  supabase: ReturnType<typeof createClient>,
+  tokenMint: string,
+): Promise<boolean> {
+  try {
+    const { data: report, error: reportErr } = await supabase.functions.invoke(
+      'bagless-holders-report',
+      { body: { tokenMint } },
+    );
+    if (reportErr || !report) {
+      console.error('[blackbox-tick] bagless-holders-report failed', reportErr);
+      return false;
+    }
+
+    const symbol = (report.symbol || report.tokenSymbol || '???').toString().toUpperCase();
+    const totalHolders = Number(report.totalHolders || 0);
+    const realHolders = Number(report.realHolders ?? totalHolders);
+    const healthGrade = report.stabilityGrade || report.healthScore?.grade || 'N/A';
+
+    const whaleCount = report.simpleTiers?.whales?.count || 0;
+    const seriousCount = report.simpleTiers?.serious?.count || 0;
+    const retailCount = report.simpleTiers?.retail?.count || 0;
+    const dustCount = report.simpleTiers?.dust?.count ?? report.dustWallets ?? 0;
+
+    const pct = (n: number) => totalHolders > 0 ? Math.round((n / totalHolders) * 100) : 0;
+    const whalePct = pct(whaleCount);
+    const seriousPct = pct(seriousCount);
+    const retailPct = pct(retailCount);
+    const dustPct = pct(dustCount);
+
+    const message = `📊 *Holders Report Generated*\n\n` +
+      `🪙 *${symbol}*\n` +
+      `├ Total: ${totalHolders.toLocaleString()}\n` +
+      `├ Real: ${realHolders.toLocaleString()}\n` +
+      `└ Grade: ${healthGrade}\n\n` +
+      `📈 Distribution\n` +
+      `\`Whales  ${generateAsciiBar(whalePct)} ${whalePct.toString().padStart(2)}%\`\n` +
+      `\`Serious ${generateAsciiBar(seriousPct)} ${seriousPct.toString().padStart(2)}%\`\n` +
+      `\`Retail  ${generateAsciiBar(retailPct)} ${retailPct.toString().padStart(2)}%\`\n` +
+      `\`Dust    ${generateAsciiBar(dustPct)} ${dustPct.toString().padStart(2)}%\`\n\n` +
+      `🔗 blackbox.farm/holders?token=${tokenMint}`;
+
+    const { error: notifyErr } = await supabase.functions.invoke('admin-notify', {
+      body: {
+        type: 'holder_report',
+        title: `Holders Report: ${symbol}`,
+        message,
+        metadata: {
+          tokenMint,
+          totalHolders,
+          realHolders,
+          healthGrade,
+        },
+        channels: ['telegram'],
+      },
+    });
+    if (notifyErr) {
+      console.error('[blackbox-tick] admin-notify failed', notifyErr);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error('[blackbox-tick] postFullHoldersReport exception', e);
+    return false;
+  }
 }
 
 function fmtMoney(n: number | null | undefined): string {
