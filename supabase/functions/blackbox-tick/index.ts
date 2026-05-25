@@ -56,9 +56,11 @@ async function sendViaMTProto(
 
 function composeBlackboxTriggerPost(tokenMint: string): string {
   return [
-    '📊 Holders Report Generated',
+    '📊 *Holders Report Generated*',
     '',
-    `🔗 https://blackbox.farm/holders?token=${tokenMint}`,
+    `🪙 CA: \`${tokenMint}\``,
+    '',
+    `🔗 blackbox.farm/holders?token=${tokenMint}`,
   ].join('\n');
 }
 
