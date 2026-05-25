@@ -55,13 +55,10 @@ async function sendViaMTProto(
 }
 
 function composeBlackboxTriggerPost(tokenMint: string): string {
-  return [
-    '📊 *Holders Report Generated*',
-    '',
-    `🪙 CA: \`${tokenMint}\``,
-    '',
-    `🔗 blackbox.farm/holders?token=${tokenMint}`,
-  ].join('\n');
+  // Bare CA only — matches the working HoldersIntel post format that already
+  // triggers Trojan/Phanes/GMGN/etc. Any extra text, markdown, or URL makes
+  // it look bot-formatted and the trader bots ignore it.
+  return tokenMint;
 }
 
 function fmtMoney(n: number | null | undefined): string {
