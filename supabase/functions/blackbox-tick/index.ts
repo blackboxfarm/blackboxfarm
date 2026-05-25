@@ -33,6 +33,27 @@ async function sendViaHoldersIntel(chatId: number, text: string): Promise<number
   return j.result?.message_id ?? null;
 }
 
+// Post via MTProto (user account) — looks human to other bots so Phanes/Trojan/
+// Rick/GMGN actually reply. Bot-sourced messages get ignored by most trader
+// bots as anti-spam. Used ONLY for bait CA posts into blackbox_group.
+async function sendViaMTProto(
+  supabase: ReturnType<typeof createClient>,
+  chatId: number,
+  text: string,
+): Promise<number | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke('telegram-mtproto-auth', {
+      body: { action: 'send_message', chatId, message: text },
+    });
+    if (error) { console.error('[blackbox-tick] MTProto invoke error', error); return null; }
+    if (!data?.success) { console.error('[blackbox-tick] MTProto send failed', data); return null; }
+    return data.messageId ?? null;
+  } catch (e) {
+    console.error('[blackbox-tick] MTProto exception', e);
+    return null;
+  }
+}
+
 function fmtMoney(n: number | null | undefined): string {
   if (n == null || !isFinite(n)) return '—';
   if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
