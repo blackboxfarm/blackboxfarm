@@ -17,7 +17,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const HARVEST_WINDOW_SEC = 30;
+const HARVEST_WINDOW_SEC = 90;
 const SOLANA_RE = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
 
 async function sendViaHoldersIntel(chatId: number, text: string): Promise<number | null> {
@@ -220,8 +220,14 @@ serve(async (req) => {
       });
       const msgs: any[] = mt?.messages || [];
       const sinceMs = new Date(run.ca_posted_at || run.posted_at).getTime();
+      const ownPostId = Number(run.ca_post_message_id || 0);
       const repliesRaw = msgs.filter(m => {
         const d = typeof m.date === 'number' ? (m.date < 1e12 ? m.date * 1000 : m.date) : new Date(m.date).getTime();
+        const mid = Number(m.messageId || m.id || 0);
+        const uname = (m.callerUsername || m.fromUsername || '').toLowerCase();
+        // Skip our own bait post (by message_id) and any echo from HoldersIntel itself.
+        if (ownPostId && mid === ownPostId) return false;
+        if (uname === 'holdersintel_bot') return false;
         return d >= sinceMs && (m.text || '').includes(run.token_mint);
       });
 
