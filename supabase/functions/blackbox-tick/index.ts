@@ -54,6 +54,14 @@ async function sendViaMTProto(
   }
 }
 
+function composeBlackboxTriggerPost(tokenMint: string): string {
+  return [
+    '📊 Holders Report Generated',
+    '',
+    `🔗 https://blackbox.farm/holders?token=${tokenMint}`,
+  ].join('\n');
+}
+
 function fmtMoney(n: number | null | undefined): string {
   if (n == null || !isFinite(n)) return '—';
   if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
@@ -178,14 +186,10 @@ serve(async (req) => {
         .single();
       if (insErr || !run) { summary.errors.push(`run insert: ${insErr?.message}`); continue; }
 
-      // Post via MTProto (user account) using the EXACT raw_message from
-      // the insiders source. Trader bots (Phanes, Rick, Trojan, GMGN)
-      // ignore messages sent by other bots as anti-spam — they only reply
-      // to messages coming from real user accounts. This mirrors how the
-      // working insiders system posts and gets 1-2-3 bot replies.
-      const postText = (call.raw_message && call.raw_message.includes(call.token_mint))
-        ? call.raw_message.slice(0, 3900)
-        : `${call.raw_message || ''}\n\n${call.token_mint}`.slice(0, 3900);
+      // Post via MTProto using the same Holders Report formula that already
+      // triggers trader bots in the working flow: report headline + holders URL.
+      // Do NOT send raw insider text here.
+      const postText = composeBlackboxTriggerPost(call.token_mint);
       let postedId = await sendViaMTProto(supabase, Number(blackboxChat), postText);
       if (!postedId) {
         // Fallback to HoldersIntel bot if MTProto unavailable; bots likely
