@@ -255,22 +255,15 @@ serve(async (req) => {
         .single();
       if (insErr || !run) { summary.errors.push(`run insert: ${insErr?.message}`); continue; }
 
-      // Post via MTProto using the same Holders Report formula that already
-      // triggers trader bots in the working flow: report headline + holders URL.
-      // Do NOT send raw insider text here.
-      const postText = composeBlackboxTriggerPost(call.token_mint);
-      let postedId = await sendViaMTProto(supabase, Number(blackboxChat), postText);
-      if (!postedId) {
-        // Fallback to HoldersIntel bot if MTProto unavailable; bots likely
-        // won't reply but at least the CA hits the group.
-        console.warn('[blackbox-tick] MTProto post failed, falling back to bot send');
-        postedId = await sendViaHoldersIntel(Number(blackboxChat), postText);
-      }
+      // Post the FULL Holders Report (same format used by the working manual
+      // flow). This is what actually triggers Trojan/Phanes/GMGN/etc. — the
+      // bare CA variant gets ignored.
+      const ok = await postFullHoldersReport(supabase, call.token_mint);
       await supabase.from('blackbox_aggregator_runs').update({
         ca_posted_at: new Date().toISOString(),
-        ca_post_message_id: postedId,
-        status: postedId ? 'harvesting' : 'failed',
-        error_message: postedId ? null : 'CA post to BlackBox group failed',
+        ca_post_message_id: null,
+        status: ok ? 'harvesting' : 'failed',
+        error_message: ok ? null : 'Holders Report post to BlackBox group failed',
       }).eq('id', run.id);
       summary.created++;
     }
