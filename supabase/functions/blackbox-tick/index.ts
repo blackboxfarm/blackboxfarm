@@ -178,15 +178,21 @@ serve(async (req) => {
         .single();
       if (insErr || !run) { summary.errors.push(`run insert: ${insErr?.message}`); continue; }
 
-      // Post the FULL original insiders message (Holders Report format) into
-      // BlackBox group via HoldersIntel bot. Trader bots (Phanes, Rick,
-      // Trojan, GMGN) ignore bare CA-only pastes as spam — they only react
-      // to rich messages that look like a real call. The raw_message already
-      // contains the CA so all parsers/scrapers still pick it up.
+      // Post via MTProto (user account) using the EXACT raw_message from
+      // the insiders source. Trader bots (Phanes, Rick, Trojan, GMGN)
+      // ignore messages sent by other bots as anti-spam — they only reply
+      // to messages coming from real user accounts. This mirrors how the
+      // working insiders system posts and gets 1-2-3 bot replies.
       const postText = (call.raw_message && call.raw_message.includes(call.token_mint))
         ? call.raw_message.slice(0, 3900)
         : `${call.raw_message || ''}\n\n${call.token_mint}`.slice(0, 3900);
-      const postedId = await sendViaHoldersIntel(Number(blackboxChat), postText);
+      let postedId = await sendViaMTProto(supabase, Number(blackboxChat), postText);
+      if (!postedId) {
+        // Fallback to HoldersIntel bot if MTProto unavailable; bots likely
+        // won't reply but at least the CA hits the group.
+        console.warn('[blackbox-tick] MTProto post failed, falling back to bot send');
+        postedId = await sendViaHoldersIntel(Number(blackboxChat), postText);
+      }
       await supabase.from('blackbox_aggregator_runs').update({
         ca_posted_at: new Date().toISOString(),
         ca_post_message_id: postedId,
