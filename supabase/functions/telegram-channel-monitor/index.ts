@@ -1603,14 +1603,7 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
       const channelUsername = config.channel_username;
       const channelType = config.channel_type || 'channel';
 
-      // TEMP_BYPASS_TG_AUDIT_SUSPENDED: Insiders channel access is suspended until Nov 21.
-      // Skip any config whose channel_id is in this set, regardless of is_active flag.
-      // Remove this block (and the SUSPENDED_CHANNEL_IDS const below) to restore monitoring.
-      const SUSPENDED_CHANNEL_IDS = new Set<string>(['-1003694579312']);
-      if (channelId && SUSPENDED_CHANNEL_IDS.has(String(channelId))) {
-        console.log(`[telegram-channel-monitor] TEMP_BYPASS_TG_AUDIT_SUSPENDED: skipping ${config.channel_name || channelId} (suspended until service restored)`);
-        continue;
-      }
+      // (Insiders channel suspension lifted — was TEMP_BYPASS_TG_AUDIT_SUSPENDED.)
 
       const isFantasyMode = config.fantasy_mode ?? true;
       const tradingMode = config.trading_mode || 'simple';
