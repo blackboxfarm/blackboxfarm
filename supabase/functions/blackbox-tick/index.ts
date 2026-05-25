@@ -178,10 +178,15 @@ serve(async (req) => {
         .single();
       if (insErr || !run) { summary.errors.push(`run insert: ${insErr?.message}`); continue; }
 
-      // Post the bare CA into BlackBox group via HoldersIntel bot (reverted
-      // from MTProto — MTProto user account "HoldersIntel" was being treated
-      // as a bot lookalike by trader bots and ignored).
-      const postedId = await sendViaHoldersIntel(Number(blackboxChat), call.token_mint);
+      // Post the FULL original insiders message (Holders Report format) into
+      // BlackBox group via HoldersIntel bot. Trader bots (Phanes, Rick,
+      // Trojan, GMGN) ignore bare CA-only pastes as spam — they only react
+      // to rich messages that look like a real call. The raw_message already
+      // contains the CA so all parsers/scrapers still pick it up.
+      const postText = (call.raw_message && call.raw_message.includes(call.token_mint))
+        ? call.raw_message.slice(0, 3900)
+        : `${call.raw_message || ''}\n\n${call.token_mint}`.slice(0, 3900);
+      const postedId = await sendViaHoldersIntel(Number(blackboxChat), postText);
       await supabase.from('blackbox_aggregator_runs').update({
         ca_posted_at: new Date().toISOString(),
         ca_post_message_id: postedId,
