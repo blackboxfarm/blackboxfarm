@@ -54,11 +54,81 @@ async function sendViaMTProto(
   }
 }
 
-function composeBlackboxTriggerPost(tokenMint: string): string {
-  // Bare CA only — matches the working HoldersIntel post format that already
-  // triggers Trojan/Phanes/GMGN/etc. Any extra text, markdown, or URL makes
-  // it look bot-formatted and the trader bots ignore it.
-  return tokenMint;
+function generateAsciiBar(pct: number): string {
+  const filled = Math.round((Math.max(0, Math.min(100, pct)) / 100) * 10);
+  return '▌'.repeat(filled).padEnd(10, ' ');
+}
+
+// Post the FULL Holders Report (same format as BaglessHoldersReport.tsx ->
+// admin-notify). The bare-CA variant did NOT trigger trader bots; the full
+// report format DOES (confirmed in production). We fetch the live report,
+// build the message, and broadcast via admin-notify so it goes out from the
+// HoldersIntel bot exactly like the working flow.
+async function postFullHoldersReport(
+  supabase: ReturnType<typeof createClient>,
+  tokenMint: string,
+): Promise<boolean> {
+  try {
+    const { data: report, error: reportErr } = await supabase.functions.invoke(
+      'bagless-holders-report',
+      { body: { tokenMint } },
+    );
+    if (reportErr || !report) {
+      console.error('[blackbox-tick] bagless-holders-report failed', reportErr);
+      return false;
+    }
+
+    const symbol = (report.symbol || report.tokenSymbol || '???').toString().toUpperCase();
+    const totalHolders = Number(report.totalHolders || 0);
+    const realHolders = Number(report.realHolders ?? totalHolders);
+    const healthGrade = report.stabilityGrade || report.healthScore?.grade || 'N/A';
+
+    const whaleCount = report.simpleTiers?.whales?.count || 0;
+    const seriousCount = report.simpleTiers?.serious?.count || 0;
+    const retailCount = report.simpleTiers?.retail?.count || 0;
+    const dustCount = report.simpleTiers?.dust?.count ?? report.dustWallets ?? 0;
+
+    const pct = (n: number) => totalHolders > 0 ? Math.round((n / totalHolders) * 100) : 0;
+    const whalePct = pct(whaleCount);
+    const seriousPct = pct(seriousCount);
+    const retailPct = pct(retailCount);
+    const dustPct = pct(dustCount);
+
+    const message = `📊 *Holders Report Generated*\n\n` +
+      `🪙 *${symbol}*\n` +
+      `├ Total: ${totalHolders.toLocaleString()}\n` +
+      `├ Real: ${realHolders.toLocaleString()}\n` +
+      `└ Grade: ${healthGrade}\n\n` +
+      `📈 Distribution\n` +
+      `\`Whales  ${generateAsciiBar(whalePct)} ${whalePct.toString().padStart(2)}%\`\n` +
+      `\`Serious ${generateAsciiBar(seriousPct)} ${seriousPct.toString().padStart(2)}%\`\n` +
+      `\`Retail  ${generateAsciiBar(retailPct)} ${retailPct.toString().padStart(2)}%\`\n` +
+      `\`Dust    ${generateAsciiBar(dustPct)} ${dustPct.toString().padStart(2)}%\`\n\n` +
+      `🔗 blackbox.farm/holders?token=${tokenMint}`;
+
+    const { error: notifyErr } = await supabase.functions.invoke('admin-notify', {
+      body: {
+        type: 'holder_report',
+        title: `Holders Report: ${symbol}`,
+        message,
+        metadata: {
+          tokenMint,
+          totalHolders,
+          realHolders,
+          healthGrade,
+        },
+        channels: ['telegram'],
+      },
+    });
+    if (notifyErr) {
+      console.error('[blackbox-tick] admin-notify failed', notifyErr);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error('[blackbox-tick] postFullHoldersReport exception', e);
+    return false;
+  }
 }
 
 function fmtMoney(n: number | null | undefined): string {
@@ -185,22 +255,15 @@ serve(async (req) => {
         .single();
       if (insErr || !run) { summary.errors.push(`run insert: ${insErr?.message}`); continue; }
 
-      // Post via MTProto using the same Holders Report formula that already
-      // triggers trader bots in the working flow: report headline + holders URL.
-      // Do NOT send raw insider text here.
-      const postText = composeBlackboxTriggerPost(call.token_mint);
-      let postedId = await sendViaMTProto(supabase, Number(blackboxChat), postText);
-      if (!postedId) {
-        // Fallback to HoldersIntel bot if MTProto unavailable; bots likely
-        // won't reply but at least the CA hits the group.
-        console.warn('[blackbox-tick] MTProto post failed, falling back to bot send');
-        postedId = await sendViaHoldersIntel(Number(blackboxChat), postText);
-      }
+      // Post the FULL Holders Report (same format used by the working manual
+      // flow). This is what actually triggers Trojan/Phanes/GMGN/etc. — the
+      // bare CA variant gets ignored.
+      const ok = await postFullHoldersReport(supabase, call.token_mint);
       await supabase.from('blackbox_aggregator_runs').update({
         ca_posted_at: new Date().toISOString(),
-        ca_post_message_id: postedId,
-        status: postedId ? 'harvesting' : 'failed',
-        error_message: postedId ? null : 'CA post to BlackBox group failed',
+        ca_post_message_id: null,
+        status: ok ? 'harvesting' : 'failed',
+        error_message: ok ? null : 'Holders Report post to BlackBox group failed',
       }).eq('id', run.id);
       summary.created++;
     }
