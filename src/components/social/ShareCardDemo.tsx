@@ -729,6 +729,52 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                 </div>
               )}
 
+              {name === 'no_lube' && (
+                <div className="p-3 bg-card/60 border border-border rounded-lg space-y-3">
+                  <Label className="font-medium">Compose for a token</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Paste token address (mint)..."
+                      value={noLubeMint}
+                      onChange={(e) => setNoLubeMint(e.target.value)}
+                      className="font-mono text-sm"
+                    />
+                    <Button
+                      onClick={handleComposeNoLube}
+                      disabled={isComposingNoLube || !noLubeMint.trim()}
+                    >
+                      {isComposingNoLube
+                        ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Composing…</>
+                        : <>Compose</>}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Pulls from DB cache (&lt; 2 min old) → DexScreener → Solscan v2 Pro → Helius.
+                    Anything missing renders as —.
+                  </p>
+                  {noLubeSources && (
+                    <div className="flex flex-wrap gap-1 text-[10px]">
+                      {Object.entries(noLubeSources).map(([k, v]) => (
+                        <Badge key={k} variant="outline" className="text-[10px]">
+                          {k}: {v}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  {noLubeComposed && (
+                    <Button
+                      className="w-full bg-pink-600 hover:bg-pink-700"
+                      onClick={handlePushNoLube}
+                      disabled={isPushingNoLube}
+                    >
+                      {isPushingNoLube
+                        ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Pushing…</>
+                        : <><Send className="h-4 w-4 mr-1" />Push to No Lube</>}
+                    </Button>
+                  )}
+                </div>
+              )}
+
               {name.startsWith('x_advert_') && (
                 <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                   <Label className="font-medium text-amber-300">📣 X/Twitter Advert {name.replace('x_advert_', '')}</Label>
