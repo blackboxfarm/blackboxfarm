@@ -296,19 +296,21 @@ Stop guessing. Start analyzing.
 
 Join the smart money 👉 blackbox.farm`,
 
-  no_lube: `🐸 *$\{ticker}*
+  no_lube: `{verdictIcon} *$\{ticker}*
 
 ━━━━━━━━━━━━
 
-🟢 Momentum: {momentum}
-🟡 Risk: {risk}
-⚡ Verdict: {verdict}
+{momentumIcon} Momentum: {momentum}
+{riskIcon} Risk: {risk}
+{verdictIcon} Verdict: {verdict}
 
 💰 *Market*
 MC: {mc} ({mcChange})
 VOL: {vol24h}
 LP: {lp}
 Age: {age}
+Minted: {mintTime}
+{bondingState}
 
 🧠 *Holder Health*
 Top 10: {top10}
