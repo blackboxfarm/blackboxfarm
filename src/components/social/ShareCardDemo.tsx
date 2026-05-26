@@ -796,16 +796,61 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                     </div>
                   )}
                   {noLubeComposed && (
-                    <Button
-                      className="w-full bg-pink-600 hover:bg-pink-700"
-                      onClick={handlePushNoLube}
-                      disabled={isPushingNoLube}
-                    >
-                      {isPushingNoLube
-                        ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Pushing…</>
-                        : <><Send className="h-4 w-4 mr-1" />Push to No Lube</>}
-                    </Button>
+                    <>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge
+                          variant="outline"
+                          className={
+                            noLubeVerdictClass === 'healthy' ? 'border-green-500 text-green-400' :
+                            noLubeVerdictClass === 'crazy' ? 'border-orange-500 text-orange-400' :
+                            noLubeVerdictClass === 'dead' ? 'border-red-500 text-red-400' : ''
+                          }
+                        >
+                          {noLubeVerdictClass === 'healthy' && '✅ Healthy'}
+                          {noLubeVerdictClass === 'crazy' && '🤯 Crazy Anomaly'}
+                          {noLubeVerdictClass === 'dead' && '☠️ Dead'}
+                        </Badge>
+                        {noLubeBlockReason && (
+                          <span className="text-xs text-muted-foreground">{noLubeBlockReason}</span>
+                        )}
+                      </div>
+                      <Button
+                        className="w-full bg-pink-600 hover:bg-pink-700"
+                        onClick={handlePushNoLube}
+                        disabled={isPushingNoLube || !noLubeEligible}
+                        title={!noLubeEligible ? (noLubeBlockReason || 'Blocked') : 'Push to No Lube'}
+                      >
+                        {isPushingNoLube
+                          ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Pushing…</>
+                          : !noLubeEligible
+                            ? <>⛔ Blocked — {noLubeBlockReason}</>
+                            : <><Send className="h-4 w-4 mr-1" />Push to No Lube</>}
+                      </Button>
+                    </>
                   )}
+                  {/* Recent post log */}
+                  <details className="mt-2 rounded border border-border bg-background/40">
+                    <summary className="cursor-pointer px-2 py-1 text-xs text-muted-foreground">
+                      📋 Recent post log ({noLubeLog.length})
+                    </summary>
+                    <div className="max-h-64 overflow-auto text-[11px] font-mono">
+                      {noLubeLog.length === 0 && <div className="p-2 text-muted-foreground">No entries yet.</div>}
+                      {noLubeLog.map((row) => (
+                        <div key={row.id} className="flex items-center gap-2 border-t border-border/50 px-2 py-1">
+                          <span className="w-4">
+                            {row.posted ? '✅' : row.verdict_class === 'crazy' ? '🤯' : row.verdict_class === 'dead' ? '☠️' : '⛔'}
+                          </span>
+                          <span className="w-12 truncate">{row.ticker || '—'}</span>
+                          <span className="w-20 truncate text-muted-foreground">{row.token_mint?.slice(0, 8)}…</span>
+                          <span className="w-14">{row.verdict_class}</span>
+                          <span className="flex-1 truncate text-muted-foreground">
+                            {row.posted ? 'posted' : (row.block_reason || '')}
+                          </span>
+                          <span className="text-muted-foreground">{new Date(row.composed_at).toLocaleTimeString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
                 </div>
               )}
 
