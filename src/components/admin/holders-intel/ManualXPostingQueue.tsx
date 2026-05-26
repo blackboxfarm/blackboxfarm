@@ -491,6 +491,13 @@ export function ManualXPostingQueue() {
 
   return (
     <div className="space-y-4">
+      {AI_API_SUSPENDED && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+          ⏸️ <strong>AI &amp; API resources suspended in this section.</strong> Compose, Regenerate,
+          Autopsy, Banner Decoration and Batch Archive are paused. Review existing rows, copy, and
+          mark posted manually.
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">📮 Manual X Posting Queue</h2>
@@ -517,11 +524,15 @@ export function ManualXPostingQueue() {
             <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          <Button onClick={composeMissing} size="sm" variant="default" disabled={loading || rows.every((r) => !!r.tweet_text)}>
+          <Button onClick={composeMissing} size="sm" variant="default" disabled={AI_API_SUSPENDED || loading || rows.every((r) => !!r.tweet_text)}>
             <Wand2 className="h-4 w-4 mr-1" /> Compose all missing
           </Button>
           <Button
             onClick={async () => {
+              if (AI_API_SUSPENDED) {
+                toast({ title: "Batch archive suspended", description: "Paused in manual mode." });
+                return;
+              }
               if (!confirm(`Post ${Math.min(pendingTotal, 50)} pending tokens to the Archive page (fetch banner + decorate + publish)?`)) return;
               setLoading(true);
               const { data, error } = await supabase.functions.invoke("holders-intel-archive-batch", {
@@ -537,7 +548,7 @@ export function ManualXPostingQueue() {
             }}
             size="sm"
             variant="default"
-            disabled={loading || pendingTotal === 0}
+            disabled={AI_API_SUSPENDED || loading || pendingTotal === 0}
           >
             <Archive className="h-4 w-4 mr-1" /> Post 50 to Archive
           </Button>
