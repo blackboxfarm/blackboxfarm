@@ -567,7 +567,7 @@ export function ManualXPostingQueue() {
             placeholder="Paste token mint to add manually…"
             className="w-80 h-8"
           />
-          <Button type="submit" size="sm" variant="default" disabled={adding || !manualMint.trim()}>
+          <Button type="submit" size="sm" variant="default" disabled={AI_API_SUSPENDED || adding || !manualMint.trim()}>
             {adding ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : <Wand2 className="h-4 w-4 mr-1" />}
             Add & Compose
           </Button>
