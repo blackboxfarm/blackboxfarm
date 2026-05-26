@@ -40,6 +40,18 @@ export interface NormalizedBotFields {
   age_text?: string | null;
   age_minutes?: number | null;
 
+  // ATH + freshness
+  ath_usd?: number | null;
+  ath_drawdown_pct?: number | null;
+  ath_age_text?: string | null;
+  fresh_wallets_pct?: number | null;
+  dev_sold?: boolean | null;
+
+  // Socials / links
+  twitter_url?: string | null;
+  telegram_url?: string | null;
+  website_url?: string | null;
+
   // Anything we don't have a slot for
   extras?: Record<string, string>;
 }
