@@ -852,7 +852,9 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                     )}
                   </Label>
                   <div className="p-3 bg-muted/50 rounded-lg border text-sm whitespace-pre-wrap min-h-[300px]">
-                    {processTemplate(templates[name], tokenData)}
+                    {name === 'no_lube' && noLubeComposed
+                      ? noLubeComposed
+                      : processTemplate(templates[name], tokenData)}
                   </div>
                 </div>
               </div>
