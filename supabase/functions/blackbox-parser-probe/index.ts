@@ -19,19 +19,25 @@ const corsHeaders = {
 
 const HARVEST_WINDOW_MS = 30_000;
 
-// Post via HoldersIntel bot (reverted from MTProto — user-account post was
-// being treated as a bot lookalike and ignored by trader bots).
-async function sendViaHoldersIntel(chatId: number, text: string): Promise<number | null> {
-  const token = Deno.env.get("TELEGRAM_HOLDERSINTEL_BOT_TOKEN");
-  if (!token) { console.error("[parser-probe] no HoldersIntel token"); return null; }
-  const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true }),
-  });
-  const j = await r.json();
-  if (!r.ok || !j.ok) { console.error("[parser-probe] sendMessage failed", j); return null; }
-  return j.result?.message_id ?? null;
+// Post via MTProto (system_reset user account) in Markdown — trader bots
+// (Trojan/Phanes/GMGN/Rick) ignore bot-sourced messages as anti-spam, so the
+// bait CA MUST go through the user account to actually elicit replies.
+async function sendViaMTProto(
+  supabase: ReturnType<typeof createClient>,
+  chatId: number,
+  text: string,
+): Promise<number | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke('telegram-mtproto-auth', {
+      body: { action: 'send_message', chatId, message: text, parseMode: 'Markdown' },
+    });
+    if (error) { console.error('[parser-probe] MTProto invoke error', error); return null; }
+    if (!data?.success) { console.error('[parser-probe] MTProto send failed', data); return null; }
+    return data.messageId ?? null;
+  } catch (e) {
+    console.error('[parser-probe] MTProto exception', e);
+    return null;
+  }
 }
 
 /** Persist a single raw bot message as a sample row. */
@@ -198,7 +204,8 @@ serve(async (req) => {
       }
 
       const postedAt = new Date().toISOString();
-      const postedId = await sendViaHoldersIntel(Number(blackboxChat), mint);
+      // Bait CA wrapped in backticks so Markdown renders it as monospace/copyable.
+      const postedId = await sendViaMTProto(supabase, Number(blackboxChat), `\`${mint}\``);
       if (!postedId) {
         return new Response(JSON.stringify({ ok: false, error: 'CA post failed' }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
