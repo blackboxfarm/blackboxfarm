@@ -23,14 +23,27 @@ const SOLANA_RE = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
 async function sendViaHoldersIntel(chatId: number, text: string): Promise<number | null> {
   const token = Deno.env.get("TELEGRAM_HOLDERSINTEL_BOT_TOKEN");
   if (!token) { console.error("[blackbox-tick] no HoldersIntel token"); return null; }
-  const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown', disable_web_page_preview: true }),
-  });
-  const j = await r.json();
-  if (!r.ok || !j.ok) { console.error("[blackbox-tick] sendMessage failed", j); return null; }
-  return j.result?.message_id ?? null;
+  // Try HTML first (digest is composed in HTML). On any 400 parse error, retry
+  // as plain text so we NEVER drop a digest silently.
+  const post = async (body: Record<string, unknown>) => {
+    const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return { ok: r.ok, json: await r.json() };
+  };
+  const first = await post({ chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true });
+  if (first.ok && first.json.ok) return first.json.result?.message_id ?? null;
+  console.error("[blackbox-tick] sendMessage HTML failed, retrying plain", first.json, { snippet: text.slice(0, 600) });
+  // Strip tags for plain fallback
+  const plain = text.replace(/<a [^>]*href="([^"]+)"[^>]*>([^<]*)<\/a>/g, '$2 ($1)')
+                    .replace(/<\/?(b|i|u|s|code|pre)>/g, '')
+                    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const second = await post({ chat_id: chatId, text: plain, disable_web_page_preview: true });
+  if (second.ok && second.json.ok) return second.json.result?.message_id ?? null;
+  console.error("[blackbox-tick] sendMessage plain fallback failed", second.json);
+  return null;
 }
 
 // Post via MTProto (user account) — looks human to other bots so Phanes/Trojan/
@@ -285,39 +298,42 @@ function composeDigest(args: {
   const socialsUrl = twitter || tgUrl || web || `https://blackbox.farm/holders?token=${mint}#socials`;
 
   const lines: string[] = [];
-  lines.push(`🐸 *$${symbol}*`);
+  const esc = (v: unknown) => String(v ?? '—')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const eUrl = (u: string) => String(u).replace(/"/g, '%22').replace(/</g, '%3C').replace(/>/g, '%3E');
+  lines.push(`🐸 <b>$${esc(symbol)}</b>`);
   lines.push('━━━━━━━━━━━━');
-  lines.push(`🟢 *Momentum:* ${momentum.replace(/^[^ ]+ /, '')}`);
-  lines.push(`🟡 *Risk:* ${risk.replace(/^[^ ]+ /, '')}`);
-  lines.push(`⚡ *Verdict:* ${verdict}`);
+  lines.push(`🟢 <b>Momentum:</b> ${esc(momentum.replace(/^[^ ]+ /, ''))}`);
+  lines.push(`🟡 <b>Risk:</b> ${esc(risk.replace(/^[^ ]+ /, ''))}`);
+  lines.push(`⚡ <b>Verdict:</b> ${esc(verdict)}`);
   lines.push('');
-  lines.push('💰 *Market*');
-  lines.push(`MC: ${fmtMoney(mc)}${fmtChange(ch24)}`);
-  lines.push(`VOL: ${fmtMoney(vol24)}`);
-  lines.push(`LP: ${fmtMoney(liq)}`);
-  lines.push(`Age: ${ageText || '—'}`);
+  lines.push('💰 <b>Market</b>');
+  lines.push(`MC: ${esc(fmtMoney(mc))}${esc(fmtChange(ch24))}`);
+  lines.push(`VOL: ${esc(fmtMoney(vol24))}`);
+  lines.push(`LP: ${esc(fmtMoney(liq))}`);
+  lines.push(`Age: ${esc(ageText || '—')}`);
   lines.push('');
-  lines.push('🧠 *Holder Health*');
-  lines.push(`Top 10: ${fmtPct(top10)}`);
-  lines.push(`Fresh Wallets: ${fmtPct(fresh)}`);
-  lines.push(`Wallet Spread: ${walletSpread}`);
-  lines.push(`Bundled Risk: ${bundledRisk}`);
+  lines.push('🧠 <b>Holder Health</b>');
+  lines.push(`Top 10: ${esc(fmtPct(top10))}`);
+  lines.push(`Fresh Wallets: ${esc(fmtPct(fresh))}`);
+  lines.push(`Wallet Spread: ${esc(walletSpread)}`);
+  lines.push(`Bundled Risk: ${esc(bundledRisk)}`);
   lines.push('');
-  lines.push('🤖 *BlackBox AI*');
-  for (const b of aiBullets.slice(0, 4)) lines.push(`• ${b}`);
+  lines.push('🤖 <b>BlackBox AI</b>');
+  for (const b of aiBullets.slice(0, 4)) lines.push(`• ${esc(b)}`);
   lines.push('');
-  lines.push('🕵️ *Developer Intel*');
-  lines.push(`Funded By: ${fundedBy}`);
-  lines.push(`Past Launches: ${pastLaunches}`);
-  lines.push(`Rugs: ${rugs}`);
-  lines.push(`Reputation: ${devRep}`);
+  lines.push('🕵️ <b>Developer Intel</b>');
+  lines.push(`Funded By: ${esc(fundedBy)}`);
+  lines.push(`Past Launches: ${esc(pastLaunches)}`);
+  lines.push(`Rugs: ${esc(rugs)}`);
+  lines.push(`Reputation: ${esc(devRep)}`);
   lines.push('');
-  lines.push(`*BLACKBOX SCORE: ${score}/100*`);
+  lines.push(`<b>BLACKBOX SCORE: ${score}/100</b>`);
   lines.push('');
-  lines.push(`[📈 Chart](${chartUrl}) · [🐋 BubbleMap](${bubbleUrl}) · [🧠 Full Intel](${intelUrl})`);
-  lines.push(`[💰 Buy](${buyUrl}) · [⚠️ Scan History](${scanUrl}) · [🌐 Socials](${socialsUrl})`);
+  lines.push(`<a href="${eUrl(chartUrl)}">📈 Chart</a> · <a href="${eUrl(bubbleUrl)}">🐋 BubbleMap</a> · <a href="${eUrl(intelUrl)}">🧠 Full Intel</a>`);
+  lines.push(`<a href="${eUrl(buyUrl)}">💰 Buy</a> · <a href="${eUrl(scanUrl)}">⚠️ Scan History</a> · <a href="${eUrl(socialsUrl)}">🌐 Socials</a>`);
   lines.push('');
-  lines.push(`CA: \`${mint}\``);
+  lines.push(`CA: <code>${esc(mint)}</code>`);
   return lines.join('\n').slice(0, 4000);
 }
 
