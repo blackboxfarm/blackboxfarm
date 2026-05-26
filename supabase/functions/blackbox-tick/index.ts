@@ -23,14 +23,27 @@ const SOLANA_RE = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
 async function sendViaHoldersIntel(chatId: number, text: string): Promise<number | null> {
   const token = Deno.env.get("TELEGRAM_HOLDERSINTEL_BOT_TOKEN");
   if (!token) { console.error("[blackbox-tick] no HoldersIntel token"); return null; }
-  const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown', disable_web_page_preview: true }),
-  });
-  const j = await r.json();
-  if (!r.ok || !j.ok) { console.error("[blackbox-tick] sendMessage failed", j); return null; }
-  return j.result?.message_id ?? null;
+  // Try HTML first (digest is composed in HTML). On any 400 parse error, retry
+  // as plain text so we NEVER drop a digest silently.
+  const post = async (body: Record<string, unknown>) => {
+    const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return { ok: r.ok, json: await r.json() };
+  };
+  const first = await post({ chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true });
+  if (first.ok && first.json.ok) return first.json.result?.message_id ?? null;
+  console.error("[blackbox-tick] sendMessage HTML failed, retrying plain", first.json, { snippet: text.slice(0, 600) });
+  // Strip tags for plain fallback
+  const plain = text.replace(/<a [^>]*href="([^"]+)"[^>]*>([^<]*)<\/a>/g, '$2 ($1)')
+                    .replace(/<\/?(b|i|u|s|code|pre)>/g, '')
+                    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const second = await post({ chat_id: chatId, text: plain, disable_web_page_preview: true });
+  if (second.ok && second.json.ok) return second.json.result?.message_id ?? null;
+  console.error("[blackbox-tick] sendMessage plain fallback failed", second.json);
+  return null;
 }
 
 // Post via MTProto (user account) — looks human to other bots so Phanes/Trojan/
