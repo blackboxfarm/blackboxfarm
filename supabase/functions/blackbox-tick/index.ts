@@ -43,7 +43,7 @@ async function sendViaMTProto(
 ): Promise<number | null> {
   try {
     const { data, error } = await supabase.functions.invoke('telegram-mtproto-auth', {
-      body: { action: 'send_message', chatId, message: text },
+      body: { action: 'send_message', chatId, message: text, parseMode: 'markdown' },
     });
     if (error) { console.error('[blackbox-tick] MTProto invoke error', error); return null; }
     if (!data?.success) { console.error('[blackbox-tick] MTProto send failed', data); return null; }
