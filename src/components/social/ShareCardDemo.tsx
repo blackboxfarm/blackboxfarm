@@ -670,6 +670,17 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                 </div>
               )}
 
+              {name === 'no_lube' && (
+                <div className="p-3 bg-pink-500/10 border border-pink-500/30 rounded-lg">
+                  <Label className="font-medium text-pink-300">🐸 No Lube Channel Post</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Posted to the No Lube channel after we bait a CA and harvest the trader-bot replies.
+                    One consensus block per metric — Telegram Markdown (*bold*, \`code\`). Variables below
+                    cover everything we scrape from HoldersIntel + Phanes + Rick + BlackBox AI.
+                  </p>
+                </div>
+              )}
+
               {name.startsWith('x_advert_') && (
                 <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                   <Label className="font-medium text-amber-300">📣 X/Twitter Advert {name.replace('x_advert_', '')}</Label>
