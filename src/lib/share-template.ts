@@ -295,6 +295,43 @@ Stop guessing. Start analyzing.
 🔮 Developer reputation checks
 
 Join the smart money 👉 blackbox.farm`,
+
+  no_lube: `🐸 *$\{ticker}*
+
+━━━━━━━━━━━━
+
+🟢 Momentum: {momentum}
+🟡 Risk: {risk}
+⚡ Verdict: {verdict}
+
+💰 *Market*
+MC: {mc} ({mcChange})
+VOL: {vol24h}
+LP: {lp}
+Age: {age}
+
+🧠 *Holder Health*
+Top 10: {top10}
+Fresh Wallets: {freshWallets}
+Wallet Spread: {walletSpread}
+Bundled Risk: {bundledRisk}
+
+🤖 *BlackBox AI*
+• {aiBullet1}
+• {aiBullet2}
+• {aiBullet3}
+• {aiBullet4}
+
+🕵️ *Developer Intel*
+Funded By: {fundedBy}
+Past Launches: {pastLaunches}
+Rugs: {rugs}
+Reputation: {devReputation}
+
+*BLACKBOX SCORE: {blackboxScore}/100*
+
+[📈 Chart]({chartUrl}) · [🐋 BubbleMap]({bubbleMapUrl}) · [🧠 Full Intel]({intelUrl})
+[💰 Buy]({buyUrl}) · [⚠️ Scan History]({scanHistoryUrl}) · [🌐 Socials]({socialsUrl})`,
 };
 
 // Legacy default for backwards compatibility
