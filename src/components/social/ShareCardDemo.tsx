@@ -109,6 +109,13 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
   const [granularTiers, setGranularTiers] = useState<GranularTierCounts | null>(null);
   const [aiMeta, setAiMeta] = useState<{ aiSummary: string; aiOverview: string; lifecycle: string } | null>(null);
 
+  // No Lube manual compose state
+  const [noLubeMint, setNoLubeMint] = useState('');
+  const [isComposingNoLube, setIsComposingNoLube] = useState(false);
+  const [noLubeComposed, setNoLubeComposed] = useState<string | null>(null);
+  const [noLubeSources, setNoLubeSources] = useState<Record<string, string> | null>(null);
+  const [isPushingNoLube, setIsPushingNoLube] = useState(false);
+
   // Intel XBot status
   const [cronStatus, setCronStatus] = useState<CronStatus>({
     schedulersActive: 0,
@@ -436,6 +443,47 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     window.open(twitterUrl, '_blank', 'width=550,height=420');
   };
 
+  const handleComposeNoLube = async () => {
+    const mint = noLubeMint.trim();
+    if (!mint) { toast.error('Enter a token address'); return; }
+    setIsComposingNoLube(true);
+    setNoLubeComposed(null);
+    setNoLubeSources(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('no-lube-compose', {
+        body: { mint },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || 'compose failed');
+      setNoLubeComposed(data.text);
+      setNoLubeSources(data.sources || {});
+      toast.success('Composed — review and Push when ready');
+    } catch (err: any) {
+      console.error('compose error', err);
+      toast.error(err.message || 'Failed to compose');
+    } finally {
+      setIsComposingNoLube(false);
+    }
+  };
+
+  const handlePushNoLube = async () => {
+    if (!noLubeComposed) return;
+    setIsPushingNoLube(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('no-lube-push', {
+        body: { text: noLubeComposed },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error?.description || data?.error || 'push failed');
+      toast.success(`Posted to No Lube (msg ${data.message_id})`);
+    } catch (err: any) {
+      console.error('push error', err);
+      toast.error(typeof err.message === 'string' ? err.message : 'Failed to push');
+    } finally {
+      setIsPushingNoLube(false);
+    }
+  };
+
   const copyTemplate = (name: TemplateName) => {
     navigator.clipboard.writeText(processTemplate(templates[name], tokenData));
     toast.success('Tweet text copied!');
@@ -681,6 +729,52 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                 </div>
               )}
 
+              {name === 'no_lube' && (
+                <div className="p-3 bg-card/60 border border-border rounded-lg space-y-3">
+                  <Label className="font-medium">Compose for a token</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Paste token address (mint)..."
+                      value={noLubeMint}
+                      onChange={(e) => setNoLubeMint(e.target.value)}
+                      className="font-mono text-sm"
+                    />
+                    <Button
+                      onClick={handleComposeNoLube}
+                      disabled={isComposingNoLube || !noLubeMint.trim()}
+                    >
+                      {isComposingNoLube
+                        ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Composing…</>
+                        : <>Compose</>}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Pulls from DB cache (&lt; 2 min old) → DexScreener → Solscan v2 Pro → Helius.
+                    Anything missing renders as —.
+                  </p>
+                  {noLubeSources && (
+                    <div className="flex flex-wrap gap-1 text-[10px]">
+                      {Object.entries(noLubeSources).map(([k, v]) => (
+                        <Badge key={k} variant="outline" className="text-[10px]">
+                          {k}: {v}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  {noLubeComposed && (
+                    <Button
+                      className="w-full bg-pink-600 hover:bg-pink-700"
+                      onClick={handlePushNoLube}
+                      disabled={isPushingNoLube}
+                    >
+                      {isPushingNoLube
+                        ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Pushing…</>
+                        : <><Send className="h-4 w-4 mr-1" />Push to No Lube</>}
+                    </Button>
+                  )}
+                </div>
+              )}
+
               {name.startsWith('x_advert_') && (
                 <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                   <Label className="font-medium text-amber-300">📣 X/Twitter Advert {name.replace('x_advert_', '')}</Label>
@@ -758,7 +852,9 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                     )}
                   </Label>
                   <div className="p-3 bg-muted/50 rounded-lg border text-sm whitespace-pre-wrap min-h-[300px]">
-                    {processTemplate(templates[name], tokenData)}
+                    {name === 'no_lube' && noLubeComposed
+                      ? noLubeComposed
+                      : processTemplate(templates[name], tokenData)}
                   </div>
                 </div>
               </div>
