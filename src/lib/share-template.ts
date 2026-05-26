@@ -12,7 +12,7 @@ export const HOLDERS_SHARE_URL = (() => {
 })();
 
 // Template names
-export type TemplateName = 'small' | 'large' | 'shares' | 'tg_posted' | 'tg_search' | 'tg_public_post' | 'subscription' | 'bot_holders' | 'bot_holders_lite' | 'bot_momentum' | 'bot_verdict' | 'bot_verdict_lite' | 'bot_oracle' | 'bot_wallet' | 'x_advert_1' | 'x_advert_2' | 'x_advert_3' | 'x_advert_4' | 'tg_advert_1' | 'tg_advert_2' | 'tg_advert_3';
+export type TemplateName = 'small' | 'large' | 'shares' | 'tg_posted' | 'tg_search' | 'tg_public_post' | 'subscription' | 'bot_holders' | 'bot_holders_lite' | 'bot_momentum' | 'bot_verdict' | 'bot_verdict_lite' | 'bot_oracle' | 'bot_wallet' | 'x_advert_1' | 'x_advert_2' | 'x_advert_3' | 'x_advert_4' | 'tg_advert_1' | 'tg_advert_2' | 'tg_advert_3' | 'no_lube';
 
 // Bump this key to force reset of old templates in localStorage
 export const TEMPLATE_STORAGE_KEY = 'share-tweet-template-v3';
@@ -295,6 +295,43 @@ Stop guessing. Start analyzing.
 🔮 Developer reputation checks
 
 Join the smart money 👉 blackbox.farm`,
+
+  no_lube: `🐸 *$\{ticker}*
+
+━━━━━━━━━━━━
+
+🟢 Momentum: {momentum}
+🟡 Risk: {risk}
+⚡ Verdict: {verdict}
+
+💰 *Market*
+MC: {mc} ({mcChange})
+VOL: {vol24h}
+LP: {lp}
+Age: {age}
+
+🧠 *Holder Health*
+Top 10: {top10}
+Fresh Wallets: {freshWallets}
+Wallet Spread: {walletSpread}
+Bundled Risk: {bundledRisk}
+
+🤖 *BlackBox AI*
+• {aiBullet1}
+• {aiBullet2}
+• {aiBullet3}
+• {aiBullet4}
+
+🕵️ *Developer Intel*
+Funded By: {fundedBy}
+Past Launches: {pastLaunches}
+Rugs: {rugs}
+Reputation: {devReputation}
+
+*BLACKBOX SCORE: {blackboxScore}/100*
+
+[📈 Chart]({chartUrl}) · [🐋 BubbleMap]({bubbleMapUrl}) · [🧠 Full Intel]({intelUrl})
+[💰 Buy]({buyUrl}) · [⚠️ Scan History]({scanHistoryUrl}) · [🌐 Socials]({socialsUrl})`,
 };
 
 // Legacy default for backwards compatibility
@@ -339,6 +376,54 @@ export const TEMPLATE_VARIABLES = [
   { var: '{retailPct}', desc: 'Retail percentage number (TG)' },
   { var: '{tweetUrl}', desc: 'URL of the posted tweet (TG Posted)' },
   // TG Search (Holders Report Generated) uses the same variables as other templates
+  // ── No Lube channel post variables (BlackBox bot-reply consensus) ──
+  { var: '{momentum}', desc: 'No Lube — momentum label (🟢 Strong / 🟡 Moderate / 🔴 Fading)' },
+  { var: '{verdict}', desc: 'No Lube — verdict (BUY STRONG / BUY MEDIUM SHORT / WATCH / CAUTION / AVOID)' },
+  { var: '{blackboxScore}', desc: 'No Lube — BlackBox Score 0-100' },
+  { var: '{mc}', desc: 'No Lube — market cap (consensus across bots)' },
+  { var: '{mcChange}', desc: 'No Lube — market cap % change vs 24h' },
+  { var: '{fdv}', desc: 'No Lube — fully diluted valuation' },
+  { var: '{vol24h}', desc: 'No Lube — 24h volume' },
+  { var: '{vol1h}', desc: 'No Lube — 1h volume' },
+  { var: '{lp}', desc: 'No Lube — liquidity in USD' },
+  { var: '{age}', desc: 'No Lube — token age (e.g. 15h, 2d)' },
+  { var: '{price}', desc: 'No Lube — current price USD' },
+  { var: '{ath}', desc: 'No Lube — all-time high MC' },
+  { var: '{athDrawdown}', desc: 'No Lube — drawdown % from ATH' },
+  { var: '{totalHolders}', desc: 'No Lube — total holder count' },
+  { var: '{top10}', desc: 'No Lube — top 10 holder concentration %' },
+  { var: '{freshWallets}', desc: 'No Lube — fresh-wallet %' },
+  { var: '{walletSpread}', desc: 'No Lube — wallet-spread label (Healthy / Concentrated / Bundled)' },
+  { var: '{bundledRisk}', desc: 'No Lube — bundled-risk label (Low / Medium / High)' },
+  { var: '{snipersPct}', desc: 'No Lube — sniper %' },
+  { var: '{insidersPct}', desc: 'No Lube — insider %' },
+  { var: '{bundlersPct}', desc: 'No Lube — bundler %' },
+  { var: '{mintRevoked}', desc: 'No Lube — mint authority revoked ✅/❌' },
+  { var: '{freezeRevoked}', desc: 'No Lube — freeze authority revoked ✅/❌' },
+  { var: '{lpBurned}', desc: 'No Lube — LP burned ✅/❌' },
+  { var: '{buyTax}', desc: 'No Lube — buy tax %' },
+  { var: '{sellTax}', desc: 'No Lube — sell tax %' },
+  { var: '{devHoldings}', desc: 'No Lube — dev wallet holdings %' },
+  { var: '{devSold}', desc: 'No Lube — dev has sold yes/no' },
+  { var: '{aiBullet1}', desc: 'No Lube — BlackBox AI bullet 1' },
+  { var: '{aiBullet2}', desc: 'No Lube — BlackBox AI bullet 2' },
+  { var: '{aiBullet3}', desc: 'No Lube — BlackBox AI bullet 3' },
+  { var: '{aiBullet4}', desc: 'No Lube — BlackBox AI bullet 4' },
+  { var: '{fundedBy}', desc: 'No Lube — funded-by label (Binance, MEXC, fresh, etc.)' },
+  { var: '{pastLaunches}', desc: 'No Lube — dev prior launch count' },
+  { var: '{rugs}', desc: 'No Lube — dev rug count' },
+  { var: '{devReputation}', desc: 'No Lube — dev reputation grade (A/B+/B/C/D)' },
+  { var: '{kycRoot}', desc: 'No Lube — KYC root CEX' },
+  { var: '{priorTickers}', desc: 'No Lube — comma-list of dev prior tickers' },
+  { var: '{chartUrl}', desc: 'No Lube — DexScreener chart link' },
+  { var: '{bubbleMapUrl}', desc: 'No Lube — BubbleMap link' },
+  { var: '{intelUrl}', desc: 'No Lube — Full intel page link' },
+  { var: '{buyUrl}', desc: 'No Lube — quick-buy link' },
+  { var: '{scanHistoryUrl}', desc: 'No Lube — scan history link' },
+  { var: '{socialsUrl}', desc: 'No Lube — socials aggregator link' },
+  { var: '{twitterUrl}', desc: 'No Lube — token X/Twitter URL' },
+  { var: '{telegramUrl}', desc: 'No Lube — token Telegram URL' },
+  { var: '{websiteUrl}', desc: 'No Lube — token website URL' },
 ];
 
 export interface TokenShareData {

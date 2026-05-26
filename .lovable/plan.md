@@ -1,69 +1,57 @@
-## Goal
+## Three changes to Super Admin → Holders Intel
 
-After we drop a CA into BlackBox group, wait ~15s, scoop the 3 bot replies (HoldersIntel · Phanes · Rick), parse what each gave us, fuse it into ONE digest, post that digest to No Lube channel.
+### 1. Kill the "Backfill Review" panel
 
-## What's already wired (no change)
+`src/components/admin/tabs/HoldersIntelTab.tsx`
+- Remove the `🧪 Backfill Review` `TabsTrigger` and its lazy import + `<Suspense>` block.
+- Same removal inside `src/components/admin/holders-intel/TokenArchive.tsx` (it embeds `<BackfillReview />` under a "Backfill Review" inner tab).
+- Leave `BackfillReview.tsx` on disk for now (no deletion) so we can resurrect if needed — just unmount it from every tab tree.
 
-- Bait CA post via MTProto into BlackBox group — done.
-- Run row created in `blackbox_aggregator_runs` with `ca_post_message_id` + `ca_posted_at`.
-- Step 2 harvests messages since `ca_posted_at`, filters trader bots + replies-to-our-post + CA mentions, upserts each into `blackbox_bot_replies`.
-- `output_channel` in `blackbox_channel_config` already = `-1003973881943` (No Lube). Digest already posts there.
+### 2. Suspend AI / API calls in Manual X Posting Queue
 
-## Changes
+`src/components/admin/holders-intel/ManualXPostingQueue.tsx` — turn it into a pure review/copy/mark-posted surface. Suspend (comment-gate with a "Suspended" toast, do not delete) every button + auto-trigger that hits an edge function or AI:
 
-### 1. `supabase/functions/blackbox-tick/index.ts`
+- `composeOne` → button disabled, calls no-op'd
+- `composeMissing` ("Compose all missing")
+- `decorateBanner` (AI banner decorate)
+- `holders-intel-autopsy-now` trigger
+- Auto-refresh interval that re-invokes compose
+- Any "Post 50 to Archive" path that calls a backend cron
 
-- `HARVEST_WINDOW_SEC`: `90` → `15`.
-- Replace `composeDigest()` with a richer fuser that uses every field the parsers extract. New layout:
+The list/paginate/search/`mark-as-posted` flow stays live. A small amber banner at the top of the panel explains "AI compose & banner decoration suspended — manual mode only."
 
-```text
-🧬 $SYMBOL  ·  Name (if any)
-CA: <mint>
+### 3. New "No Lube" template tab
 
-━━━ MARKET (consensus across bots) ━━━
-Price $X  ·  MC $X  ·  FDV $X
-Liq $X  ·  Vol24h $X  ·  Vol1h $X
-5m ±%  ·  1h ±%  ·  24h ±%
-ATH $X (drawdown -%, age)
+Goal: same Telegram-Markdown editor UX as the existing "TG Report" (`tg_search`) tab, sitting one slot to the right of `📣 TG Ad3`.
 
-━━━ HOLDERS ━━━
-Total: N  ·  Top10: %
-Fresh wallets: %  ·  Avg age: …
-Dev holding: %  ·  Dev sold: yes/no
+#### Files
 
-━━━ SAFETY ━━━
-Mint ✅/❌  ·  Freeze ✅/❌  ·  LP burned ✅/❌
-Tax B/S: x/y%  ·  Snipers % · Insiders % · Bundlers %
+**`src/lib/share-template.ts`**
+- Add `'no_lube'` to the `TemplateName` union.
+- Add `no_lube` entry to `DEFAULT_TEMPLATES` using the post template you approved earlier (the `🐸 HOPPY` BlackBox-Score layout), with `{ticker}`, `{verdict}`, `{momentum}`, `{risk}`, `{mc}`, `{mcChange}`, `{vol24h}`, `{lp}`, `{age}`, `{top10}`, `{freshWallets}`, `{walletSpread}`, `{bundledRisk}`, `{aiBullet1..4}`, `{fundedBy}`, `{pastLaunches}`, `{rugs}`, `{devReputation}`, `{blackboxScore}`, `{chartUrl}`, `{bubbleMapUrl}`, `{intelUrl}`, `{buyUrl}`, `{scanHistoryUrl}`, `{socialsUrl}` etc.
+- Add the same keys to `TEMPLATE_VARIABLES` so the variable-chip grid at the bottom of the editor renders them.
 
-━━━ HOLDERSINTEL NATIVE ━━━
-Dev: <wallet>  ·  KYC root: <cex>
-Dev rep: N  ·  Prior tickers: …
+**`src/components/social/ShareCardDemo.tsx`**
+- Add `no_lube: false` to the `savedStatus` initializer.
+- Add `<TabsTrigger value="no_lube" className="text-xs">🐸 No Lube</TabsTrigger>` immediately after the TG Ad3 trigger.
+- Add `'no_lube'` to the array on the line `(['small', 'large', ... 'tg_advert_3'] as TemplateName[]).map(...)` so the editor + preview render for it.
+- No advert-specific config needed (`no_lube` is treated like `tg_search` — plain template + preview + variables, no `AdvertTemplateConfig` block).
 
-━━━ SOCIALS / LINKS ━━━
-X · TG · Web  (whichever the bots surfaced)
+#### Variable list shown at the bottom of the No Lube tab
 
-━━━ SOURCE BOTS ━━━
-🤖 @holdersintel_bot · @phanes_trading_bot · @ricktradingbot
-🔗 blackbox.farm/holders?token=<mint>
-```
+Grouped chips (rendered in the same `Available variables` row style as TG Report):
 
-- Consensus picker stays median-of-available; missing fields render `—`.
-- Add 4 new field extractors to `_shared/blackbox-parsers/generic.ts` (so Phanes/Rick parsers pick them up):
-  - `ath_usd`, `ath_drawdown_pct`, `dev_sold` (bool), `fresh_wallets_pct`.
-- HoldersIntel native pull stays as-is.
+- **Identity:** `{ticker}` `{name}` `{ca}`
+- **Verdict block:** `{momentum}` `{risk}` `{verdict}` `{blackboxScore}`
+- **Market:** `{price}` `{mc}` `{mcChange}` `{fdv}` `{vol24h}` `{vol1h}` `{lp}` `{age}` `{ath}` `{athDrawdown}`
+- **Holder Health:** `{totalHolders}` `{top10}` `{freshWallets}` `{walletSpread}` `{bundledRisk}` `{snipersPct}` `{insidersPct}` `{bundlersPct}`
+- **Safety:** `{mintRevoked}` `{freezeRevoked}` `{lpBurned}` `{buyTax}` `{sellTax}` `{devHoldings}` `{devSold}`
+- **BlackBox AI bullets:** `{aiBullet1}` `{aiBullet2}` `{aiBullet3}` `{aiBullet4}`
+- **Developer Intel:** `{fundedBy}` `{pastLaunches}` `{rugs}` `{devReputation}` `{kycRoot}` `{priorTickers}`
+- **Action URLs:** `{chartUrl}` `{bubbleMapUrl}` `{intelUrl}` `{buyUrl}` `{scanHistoryUrl}` `{socialsUrl}` `{twitterUrl}` `{telegramUrl}` `{websiteUrl}`
 
-### 2. No DB migration
+(Wiring these variables to real consensus values from `blackbox_bot_replies` is a follow-up — this plan only delivers the editor surface + variable catalog so the template can be authored and previewed with mock data, matching the TG Report tab pattern.)
 
-`output_channel` row already points to No Lube. No new targets table entry needed.
-
-## Out of scope
-
-- Phanes RATE-LIMIT cooldown logic — keep as-is.
-- 60s minimum bait spacing — keep.
-- 1 bait per tick — keep.
-- Full Holders Report (suspended) — stays suspended.
-
-## Files touched
-
-- `supabase/functions/blackbox-tick/index.ts` (window + composer)
-- `supabase/functions/_shared/blackbox-parsers/generic.ts` (extra fields)
+### Out of scope
+- No DB migration. `flipit_tweet_templates`/share template storage already supports arbitrary `template_type` strings.
+- No changes to `blackbox-tick` `composeDigest()` yet — once you lock the No Lube template text in this new tab, a follow-up loop will switch the tick composer to read it from DB instead of the hardcoded TS string.

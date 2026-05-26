@@ -99,6 +99,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     tg_advert_1: false,
     tg_advert_2: false,
     tg_advert_3: false,
+    no_lube: false,
   });
   
   const [tokenMint, setTokenMint] = useState('');
@@ -598,9 +599,10 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
             <TabsTrigger value="tg_advert_1" className="text-xs">📣 TG Ad1</TabsTrigger>
             <TabsTrigger value="tg_advert_2" className="text-xs">📣 TG Ad2</TabsTrigger>
             <TabsTrigger value="tg_advert_3" className="text-xs">📣 TG Ad3</TabsTrigger>
+            <TabsTrigger value="no_lube" className="text-xs">🐸 No Lube</TabsTrigger>
           </TabsList>
 
-          {(['small', 'large', 'subscription', 'shares', 'tg_posted', 'tg_public_post', 'tg_search', 'x_advert_1', 'x_advert_2', 'x_advert_3', 'x_advert_4', 'tg_advert_1', 'tg_advert_2', 'tg_advert_3'] as TemplateName[]).map((name) => (
+          {(['small', 'large', 'subscription', 'shares', 'tg_posted', 'tg_public_post', 'tg_search', 'x_advert_1', 'x_advert_2', 'x_advert_3', 'x_advert_4', 'tg_advert_1', 'tg_advert_2', 'tg_advert_3', 'no_lube'] as TemplateName[]).map((name) => (
             <TabsContent key={name} value={name} className="space-y-4">
               {/* Active toggle for small/large */}
               {(name === 'small' || name === 'large') && (
@@ -664,6 +666,17 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                   <p className="text-xs text-muted-foreground">
                     Sent to BlackBox Telegram group when a holders report is generated on /holders.
                     Uses Markdown formatting (*bold*, \`code\`).
+                  </p>
+                </div>
+              )}
+
+              {name === 'no_lube' && (
+                <div className="p-3 bg-pink-500/10 border border-pink-500/30 rounded-lg">
+                  <Label className="font-medium text-pink-300">🐸 No Lube Channel Post</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Posted to the No Lube channel after we bait a CA and harvest the trader-bot replies.
+                    One consensus block per metric — Telegram Markdown (*bold*, \`code\`). Variables below
+                    cover everything we scrape from HoldersIntel + Phanes + Rick + BlackBox AI.
                   </p>
                 </div>
               )}
