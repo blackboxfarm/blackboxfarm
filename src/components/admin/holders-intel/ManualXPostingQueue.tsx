@@ -38,6 +38,10 @@ interface QueueRow {
 
 const X_INTENT_URL = "https://x.com/intent/post";
 
+// Manual-only mode: every edge-function/AI call from this panel is suspended.
+// Re-enable by flipping this to false. The list/copy/mark-as-posted flow stays live.
+const AI_API_SUSPENDED = true;
+
 function shortMint(m: string) {
   return `${m.slice(0, 6)}…${m.slice(-4)}`;
 }
@@ -154,6 +158,10 @@ export function ManualXPostingQueue() {
   }, [autoRefresh, load]);
 
   const composeOne = useCallback(async (id: string): Promise<boolean> => {
+    if (AI_API_SUSPENDED) {
+      toast({ title: "Compose suspended", description: "AI compose is paused in manual mode." });
+      return false;
+    }
     setComposing((p) => ({ ...p, [id]: true }));
     try {
       const { data, error } = await supabase.functions.invoke("holders-intel-compose-preview", {
@@ -172,6 +180,10 @@ export function ManualXPostingQueue() {
   }, [toast]);
 
   const composeMissing = useCallback(async () => {
+    if (AI_API_SUSPENDED) {
+      toast({ title: "Compose suspended", description: "AI bulk compose is paused in manual mode." });
+      return;
+    }
     const missing = rows.filter((r) => !r.tweet_text).map((r) => r.id);
     if (missing.length === 0) return;
     toast({ title: `Composing ${missing.length} tweet${missing.length === 1 ? "" : "s"}…` });
@@ -189,6 +201,10 @@ export function ManualXPostingQueue() {
   }, [rows, toast, load]);
 
   const runAutopsy = useCallback(async (id: string) => {
+    if (AI_API_SUSPENDED) {
+      toast({ title: "Autopsy suspended", description: "AI autopsy is paused in manual mode." });
+      return;
+    }
     setAutopsying((p) => ({ ...p, [id]: true }));
     toast({ title: "⚰️ Generating autopsy…", description: "Full pipeline + banner — 30-60s." });
     try {
@@ -211,6 +227,10 @@ export function ManualXPostingQueue() {
   }, [toast, load]);
 
   const decorateBanner = useCallback(async (id: string, regenerate = false) => {
+    if (AI_API_SUSPENDED) {
+      toast({ title: "Banner decorate suspended", description: "AI banner decoration is paused in manual mode." });
+      return;
+    }
     setDecorating((p) => ({ ...p, [id]: true }));
     toast({ title: "🎨 Decorating banner…", description: "AI overlay — 15-30s." });
     try {
@@ -251,6 +271,10 @@ export function ManualXPostingQueue() {
   }, [toast, load]);
 
   const regeneratePost = useCallback(async (id: string) => {
+    if (AI_API_SUSPENDED) {
+      toast({ title: "Regenerate suspended", description: "AI regenerate is paused in manual mode." });
+      return;
+    }
     setRegenerating((p) => ({ ...p, [id]: true }));
     try {
       const { data, error } = await supabase.functions.invoke("holders-intel-compose-preview", {
@@ -281,6 +305,7 @@ export function ManualXPostingQueue() {
 
   // Auto-compose any missing on first load (one shot)
   useEffect(() => {
+    if (AI_API_SUSPENDED) { setAutoComposed(true); return; }
     if (loading || autoComposed || rows.length === 0) return;
     const missing = rows.filter((r) => !r.tweet_text);
     if (missing.length === 0) { setAutoComposed(true); return; }
