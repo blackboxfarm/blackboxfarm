@@ -52,6 +52,16 @@ async function ingestMessages(
   },
 ): Promise<number> {
   const { token_mint, posted_at, messages, source, probe_run_id } = args;
+  const TRADER_BOTS = new Set([
+    'trojan', 'helenus_trojanbot', 'menelaus_trojanbot', 'agamemnon_trojanbot',
+    'achilles_trojanbot', 'odysseus_trojanbot', 'paris_trojanbot', 'hector_trojanbot',
+    'nestor_trojanbot', 'diomedes_trojanbot', 'ajax_trojanbot',
+    'phanes_trading_bot', 'phanesbot', 'phanes_bot',
+    'gmgnsignalbot', 'gmgn_sol_bot', 'gmgn_bot',
+    'ricktradingbot', 'rick_bot',
+    'bonkbot', 'bonkbot_bot', 'maestro', 'maestrosniperbot', 'maestrobot',
+    'pepeboost', 'pepeboost_bot', 'photon_sol_bot', 'bullx_bot', 'bloomsolanabot',
+  ]);
   const sinceMs = new Date(posted_at).getTime();
   const nowMs = Date.now();
   const toIso = (v: any): string | null => {
@@ -74,9 +84,14 @@ async function ingestMessages(
     if (!receivedIso) continue;
     const d = new Date(receivedIso).getTime();
     if (d < sinceMs - 60_000) continue;
-    const text = m.text || m.message || '';
-    if (!text || !text.includes(token_mint)) continue;
+    const text = m.text || m.message || m.caption || '';
     const username: string | null = m.callerUsername || m.fromUsername || null;
+    const uname = (username || '').toLowerCase();
+    const isTraderBot = uname && (TRADER_BOTS.has(uname) || /(trojan|phanes|gmgn|rick|bonk|maestro|pepeboost|photon|bullx|bloom)/i.test(uname));
+    const mentionsCA = !!text && text.includes(token_mint);
+    // Accept reply if: mentions CA, OR is a known trader bot (even with empty text / photo caption),
+    // OR has a photo with caption mentioning CA.
+    if (!mentionsCA && !isTraderBot) continue;
     const userId: number | null = m.callerUserId || m.fromId || null;
     const display: string | null = m.callerName || m.fromName || null;
     const { parser, fields } = parseReply(username, text);
