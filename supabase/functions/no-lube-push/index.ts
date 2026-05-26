@@ -13,7 +13,7 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
-    const { text } = await req.json();
+    const { text, log_id, override } = await req.json();
     if (!text || typeof text !== 'string') {
       return new Response(JSON.stringify({ ok: false, error: 'text required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -31,6 +31,23 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
+
+    // Defense-in-depth: re-check eligibility from the log row.
+    if (log_id && !override) {
+      const { data: logRow } = await supabase
+        .from('no_lube_post_log')
+        .select('verdict_class, block_reason, posted')
+        .eq('id', log_id)
+        .maybeSingle();
+      if (logRow && logRow.verdict_class !== 'healthy') {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: `blocked: ${logRow.block_reason || logRow.verdict_class}`,
+          verdict_class: logRow.verdict_class,
+        }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
     const { data: cfg } = await supabase
       .from('blackbox_channel_config')
       .select('role, chat_id')
@@ -68,6 +85,19 @@ serve(async (req) => {
       return new Response(JSON.stringify({ ok: false, error: result.json }), {
         status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // Stamp posted=true on the log row
+    if (log_id) {
+      try {
+        await supabase.from('no_lube_post_log').update({
+          posted: true,
+          posted_at: new Date().toISOString(),
+          tg_message_id: result.json.result?.message_id ?? null,
+        }).eq('id', log_id);
+      } catch (e) {
+        console.error('[no-lube-push] log update failed', e);
+      }
     }
 
     return new Response(JSON.stringify({
