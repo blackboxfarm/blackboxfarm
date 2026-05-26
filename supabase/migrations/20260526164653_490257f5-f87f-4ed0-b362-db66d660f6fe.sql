@@ -1,0 +1,1 @@
+UPDATE blackbox_aggregator_runs SET status='harvesting', harvest_until=now() WHERE status='failed' AND digest_message_id IS NULL AND replies_collected > 0 AND created_at > now() - interval '2 hours';
