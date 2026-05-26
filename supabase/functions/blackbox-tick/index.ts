@@ -17,7 +17,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const HARVEST_WINDOW_SEC = 90;
+const HARVEST_WINDOW_SEC = 15;
 const SOLANA_RE = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
 
 async function sendViaHoldersIntel(chatId: number, text: string): Promise<number | null> {
@@ -150,48 +150,105 @@ function composeDigest(args: {
 }): string {
   const { mint, replies, native } = args;
   const symbol = replies.map(r => r.parsed_jsonb?.symbol).find(Boolean) || native?.symbol || '???';
+
   // Consensus picks: median of available numeric values from all bots
-  const pick = (k: string): number | null => {
+  const pickNum = (k: string): number | null => {
     const vals = replies.map(r => r.parsed_jsonb?.[k]).filter((v: any) => typeof v === 'number' && isFinite(v));
     if (!vals.length) return null;
     vals.sort((a: number, b: number) => a - b);
     return vals[Math.floor(vals.length / 2)];
   };
+  const pickFirst = <T,>(k: string): T | null => {
+    for (const r of replies) {
+      const v = r.parsed_jsonb?.[k];
+      if (v !== null && v !== undefined && v !== '') return v as T;
+    }
+    return null;
+  };
+  const pickBool = (k: string): boolean | null => {
+    const vals = replies.map(r => r.parsed_jsonb?.[k]).filter((v: any) => typeof v === 'boolean');
+    if (!vals.length) return null;
+    // Any true wins for safety flags; any true wins for dev_sold too.
+    return vals.some((v) => v === true);
+  };
+  const tf = (v: boolean | null) => v == null ? '—' : (v ? '✅' : '❌');
 
-  const mc = pick('market_cap_usd');
-  const liq = pick('liquidity_usd');
-  const vol = pick('volume_24h_usd');
-  const top10 = pick('top10_holders_pct');
-  const holders = pick('holders');
-  const buyTax = pick('buy_tax_pct');
-  const sellTax = pick('sell_tax_pct');
+  const price = pickNum('price_usd');
+  const mc = pickNum('market_cap_usd');
+  const fdv = pickNum('fdv_usd');
+  const liq = pickNum('liquidity_usd');
+  const vol24 = pickNum('volume_24h_usd');
+  const vol1h = pickNum('volume_1h_usd');
+  const ch5 = pickNum('price_change_5m_pct');
+  const ch1 = pickNum('price_change_1h_pct');
+  const ch24 = pickNum('price_change_24h_pct');
+  const ath = pickNum('ath_usd');
+  const athDd = pickNum('ath_drawdown_pct');
+  const athAge = pickFirst<string>('ath_age_text');
+  const holders = pickNum('holders');
+  const top10 = pickNum('top10_holders_pct');
+  const fresh = pickNum('fresh_wallets_pct');
+  const ageText = pickFirst<string>('age_text');
+  const devHold = pickNum('dev_holdings_pct');
+  const devSold = pickBool('dev_sold');
+  const buyTax = pickNum('buy_tax_pct');
+  const sellTax = pickNum('sell_tax_pct');
+  const snipers = pickNum('snipers_pct');
+  const insiders = pickNum('insiders_pct');
+  const bundlers = pickNum('bundlers_pct');
+  const mintRev = pickBool('mint_authority_revoked');
+  const freezeRev = pickBool('freeze_authority_revoked');
+  const lpBurn = pickBool('lp_burned');
+  const twitter = pickFirst<string>('twitter_url');
+  const tgUrl = pickFirst<string>('telegram_url');
+  const web = pickFirst<string>('website_url');
+
+  const fmtChange = (n: number | null) => n == null ? '—' : `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
 
   const lines: string[] = [];
-  lines.push(`🧬 $${symbol}`);
+  lines.push(`🧬 *$${symbol}*${ageText ? ` · ${ageText}` : ''}`);
   lines.push(`CA: \`${mint}\``);
+  lines.push('');
+  lines.push('━━━ MARKET (consensus) ━━━');
+  lines.push(`Price ${price != null ? '$' + price.toPrecision(4) : '—'} · MC ${fmtMoney(mc)} · FDV ${fmtMoney(fdv)}`);
+  lines.push(`Liq ${fmtMoney(liq)} · Vol24h ${fmtMoney(vol24)} · Vol1h ${fmtMoney(vol1h)}`);
+  lines.push(`5m ${fmtChange(ch5)} · 1h ${fmtChange(ch1)} · 24h ${fmtChange(ch24)}`);
+  if (ath != null) {
+    const ddTxt = athDd != null ? ` (${athDd.toFixed(0)}%${athAge ? ', ' + athAge : ''})` : '';
+    lines.push(`ATH ${fmtMoney(ath)}${ddTxt}`);
+  }
+  lines.push('');
+  lines.push('━━━ HOLDERS ━━━');
+  lines.push(`Total: ${holders ?? '—'} · Top10: ${fmtPct(top10)}`);
+  if (fresh != null) lines.push(`Fresh wallets: ${fmtPct(fresh)}`);
+  const devBits: string[] = [];
+  if (devHold != null) devBits.push(`hold ${fmtPct(devHold)}`);
+  if (devSold != null) devBits.push(`sold ${devSold ? 'yes' : 'no'}`);
+  if (devBits.length) lines.push(`Dev: ${devBits.join(' · ')}`);
+  lines.push('');
+  lines.push('━━━ SAFETY ━━━');
+  lines.push(`Mint ${tf(mintRev)} · Freeze ${tf(freezeRev)} · LP burn ${tf(lpBurn)}`);
+  if (buyTax != null || sellTax != null) lines.push(`Tax B/S: ${buyTax ?? '—'}/${sellTax ?? '—'}%`);
+  const distrBits: string[] = [];
+  if (snipers != null) distrBits.push(`Snipers ${fmtPct(snipers)}`);
+  if (insiders != null) distrBits.push(`Insiders ${fmtPct(insiders)}`);
+  if (bundlers != null) distrBits.push(`Bundlers ${fmtPct(bundlers)}`);
+  if (distrBits.length) lines.push(distrBits.join(' · '));
   lines.push('');
   lines.push('━━━ HOLDERSINTEL NATIVE ━━━');
   if (native?.creator_wallet) lines.push(`Dev: \`${native.creator_wallet}\``);
   if (native?.genealogy_kyc_root) lines.push(`KYC root: ${native.genealogy_kyc_root}`);
   if (native?.dev_reputation_score != null) lines.push(`Dev rep: ${native.dev_reputation_score}`);
   if (native?.prior_tickers?.length) lines.push(`Prior: ${native.prior_tickers.slice(0, 5).join(', ')}`);
+  const socialBits: string[] = [];
+  if (twitter) socialBits.push(`[X](${twitter})`);
+  if (tgUrl) socialBits.push(`[TG](${tgUrl})`);
+  if (web) socialBits.push(`[Web](${web})`);
+  if (socialBits.length) { lines.push(''); lines.push(`Socials: ${socialBits.join(' · ')}`); }
   lines.push('');
-  lines.push('━━━ MARKET (consensus) ━━━');
-  lines.push(`MC: ${fmtMoney(mc)} · Liq: ${fmtMoney(liq)} · Vol: ${fmtMoney(vol)}`);
-  lines.push(`Top10: ${fmtPct(top10)} · Holders: ${holders ?? '—'}`);
-  lines.push(`Tax B/S: ${buyTax ?? '—'}/${sellTax ?? '—'}%`);
-  lines.push('');
-  lines.push('━━━ PER-BOT RAW ━━━');
-  for (const r of replies) {
-    const f = r.parsed_jsonb || {};
-    const bits: string[] = [];
-    if (f.market_cap_usd) bits.push(`MC ${fmtMoney(f.market_cap_usd)}`);
-    if (f.liquidity_usd) bits.push(`Liq ${fmtMoney(f.liquidity_usd)}`);
-    if (f.buy_tax_pct != null) bits.push(`B/S ${f.buy_tax_pct}/${f.sell_tax_pct}%`);
-    if (f.top10_holders_pct != null) bits.push(`T10 ${fmtPct(f.top10_holders_pct)}`);
-    if (f.holders != null) bits.push(`${f.holders} hodl`);
-    lines.push(`🤖 @${r.bot_username || '?'}: ${bits.join(' · ') || '(no fields parsed)'}`);
-  }
+  const botList = replies.map(r => `@${r.bot_username || '?'}`).filter((v, i, a) => a.indexOf(v) === i);
+  if (botList.length) lines.push(`🤖 Sources: ${botList.join(' · ')}`);
+  lines.push(`🔗 blackbox.farm/holders?token=${mint}`);
   return lines.join('\n').slice(0, 4000);
 }
 

@@ -1,65 +1,69 @@
-## BlackBox Parser-Discovery Harness
+## Goal
 
-Goal: stop guessing bot reply formats. Capture real raw replies from Trojan/BonkBot/GMGN/Photon/RickBot/Maestro, then write parsers against verified samples.
+After we drop a CA into BlackBox group, wait ~15s, scoop the 3 bot replies (HoldersIntel · Phanes · Rick), parse what each gave us, fuse it into ONE digest, post that digest to No Lube channel.
 
-### Flow
+## What's already wired (no change)
+
+- Bait CA post via MTProto into BlackBox group — done.
+- Run row created in `blackbox_aggregator_runs` with `ca_post_message_id` + `ca_posted_at`.
+- Step 2 harvests messages since `ca_posted_at`, filters trader bots + replies-to-our-post + CA mentions, upserts each into `blackbox_bot_replies`.
+- `output_channel` in `blackbox_channel_config` already = `-1003973881943` (No Lube). Digest already posts there.
+
+## Changes
+
+### 1. `supabase/functions/blackbox-tick/index.ts`
+
+- `HARVEST_WINDOW_SEC`: `90` → `15`.
+- Replace `composeDigest()` with a richer fuser that uses every field the parsers extract. New layout:
 
 ```text
-[Manual button on /super-admin]   OR   [Real Insiders run fires]
-            │                                   │
-            └────────────┬──────────────────────┘
-                         ▼
-            HoldersIntel posts CA into BlackBox group
-                         │
-                         ▼
-            Wait 30s (probe_run.harvest_until)
-                         ▼
-            MTProto fetch messages since probe.posted_at
-                         ▼
-            For each reply: insert raw row into
-            blackbox_parser_samples (verbatim text + entities + buttons)
-                         ▼
-            Admin panel renders per-bot sample browser
-            (raw text · what generic parser caught · gaps)
-                         ▼
-            I write proper per-bot parsers off real text,
-            replace generic.ts shells one bot at a time
+🧬 $SYMBOL  ·  Name (if any)
+CA: <mint>
+
+━━━ MARKET (consensus across bots) ━━━
+Price $X  ·  MC $X  ·  FDV $X
+Liq $X  ·  Vol24h $X  ·  Vol1h $X
+5m ±%  ·  1h ±%  ·  24h ±%
+ATH $X (drawdown -%, age)
+
+━━━ HOLDERS ━━━
+Total: N  ·  Top10: %
+Fresh wallets: %  ·  Avg age: …
+Dev holding: %  ·  Dev sold: yes/no
+
+━━━ SAFETY ━━━
+Mint ✅/❌  ·  Freeze ✅/❌  ·  LP burned ✅/❌
+Tax B/S: x/y%  ·  Snipers % · Insiders % · Bundlers %
+
+━━━ HOLDERSINTEL NATIVE ━━━
+Dev: <wallet>  ·  KYC root: <cex>
+Dev rep: N  ·  Prior tickers: …
+
+━━━ SOCIALS / LINKS ━━━
+X · TG · Web  (whichever the bots surfaced)
+
+━━━ SOURCE BOTS ━━━
+🤖 @holdersintel_bot · @phanes_trading_bot · @ricktradingbot
+🔗 blackbox.farm/holders?token=<mint>
 ```
 
-### Database (new)
+- Consensus picker stays median-of-available; missing fields render `—`.
+- Add 4 new field extractors to `_shared/blackbox-parsers/generic.ts` (so Phanes/Rick parsers pick them up):
+  - `ath_usd`, `ath_drawdown_pct`, `dev_sold` (bool), `fresh_wallets_pct`.
+- HoldersIntel native pull stays as-is.
 
-`blackbox_parser_samples`
-- `id`, `probe_run_id` (nullable — links to aggregator run if captured passively)
-- `token_mint`, `posted_at`
-- `bot_username`, `bot_user_id`, `bot_display_name`
-- `raw_text` (verbatim, no normalization)
-- `raw_entities_jsonb` (Telegram entities — bold/links/code preserved)
-- `inline_buttons_jsonb` (Trojan/BonkBot reply keyboards)
-- `has_photo` bool, `caption` text
-- `received_at`, `edited_at` (captures edit-in-place)
-- `parser_attempt_jsonb` (what current generic parser extracted — for gap analysis)
+### 2. No DB migration
 
-### Edge function (new)
+`output_channel` row already points to No Lube. No new targets table entry needed.
 
-`blackbox-parser-probe`
-- Mode A (manual): trigger from admin button → picks latest unprocessed CA from `telegram_insider_token_lifecycle` → posts to BlackBox → 30s wait → harvest → write samples
-- Mode B (passive): wired into existing `blackbox-tick` aggregator composer — every real run also dumps raw replies into samples table (free corpus growth)
+## Out of scope
 
-### Admin UI (new, /super-admin)
+- Phanes RATE-LIMIT cooldown logic — keep as-is.
+- 60s minimum bait spacing — keep.
+- 1 bait per tick — keep.
+- Full Holders Report (suspended) — stays suspended.
 
-`BlackBoxParserSamples.tsx` panel:
-- "Probe Now" button (auto-picks latest Insiders CA)
-- Table grouped by `bot_username`: count of samples, last seen, last edit
-- Click bot → modal with raw text samples (most recent 10), entities pretty-printed, what current parser caught, missing fields highlighted
-- Export-as-fixture button (dumps a `.json` of N samples per bot → feeds a future parser test suite)
+## Files touched
 
-### Out of scope (this round)
-
-- Writing the actual new parsers — that's the NEXT step once we have ≥3 samples per bot
-- Replacing `generic.ts` — stays as fallback until per-bot parsers land
-- No changes to aggregator output template / digest channel
-
-### Manual prereqs (you, one-time)
-
-- Confirm `blackbox_channel_config` has the BlackBox group chat_id seeded (insiders_source + blackbox_group rows). If not, I add a tiny seed UI in the same admin panel.
-- MTProto session must be able to read BlackBox group messages (same auth path as SolanaAlphaKR).
+- `supabase/functions/blackbox-tick/index.ts` (window + composer)
+- `supabase/functions/_shared/blackbox-parsers/generic.ts` (extra fields)

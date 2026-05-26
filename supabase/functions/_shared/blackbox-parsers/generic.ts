@@ -43,6 +43,26 @@ function build(displayName: string, match: (u: string) => boolean): BotParser {
       if (bun) out.bundlers_pct = parsePct(bun[1]);
       const age = text.match(/(?:Age|Created)[:\s]*([\d.]+\s*[dhm](?:\s*[\d.]+\s*[dhm])*)/i);
       if (age) { out.age_text = age[1]; out.age_minutes = parseAgeMinutes(age[1]); }
+      // ATH (Phanes/Rick): "ATH $123K (-45%, 2h)" or "ATH: $123K"
+      const ath = text.match(/ATH[:\s]*\$?([\d.,]+\s*[kKmMbB]?)(?:\s*\(?\s*(-?[\d.]+\s*%)?[,\s]*([\d.]+\s*[dhm](?:\s*[\d.]+\s*[dhm])*)?\)?)?/i);
+      if (ath) {
+        out.ath_usd = parseMoney(ath[1]);
+        if (ath[2]) out.ath_drawdown_pct = parsePct(ath[2]);
+        if (ath[3]) out.ath_age_text = ath[3];
+      }
+      // Fresh wallets (Rick/HoldersIntel): "Fresh 12%" or "Fresh 1D 12%"
+      const fresh = text.match(/Fresh(?:\s*\d*\s*[dhDH])?[:\s]+([\d.]+\s*%)/i);
+      if (fresh) out.fresh_wallets_pct = parsePct(fresh[1]);
+      // Dev sold (Phanes/Rick): "Dev Sold" or "DEV ✅" or "Dev: Sold"
+      if (/dev\s*(?:has\s*)?sold|dev\s*sold|dev\s*[:\-]?\s*sold/i.test(text)) out.dev_sold = true;
+      else if (/dev\s*hold(?:ing|s)?|dev\s*[:\-]?\s*hold/i.test(text)) out.dev_sold = false;
+      // Socials
+      const tw = text.match(/https?:\/\/(?:x\.com|twitter\.com)\/[A-Za-z0-9_\/]+/i);
+      if (tw) out.twitter_url = tw[0];
+      const tg = text.match(/https?:\/\/t\.me\/[A-Za-z0-9_\/]+/i);
+      if (tg) out.telegram_url = tg[0];
+      const web = text.match(/https?:\/\/(?!x\.com|twitter\.com|t\.me|pump\.fun|dexscreener|birdeye|solscan|gmgn|axiom)[A-Za-z0-9.\-]+\.[A-Za-z]{2,}(?:\/[^\s)]*)?/i);
+      if (web) out.website_url = web[0];
       return out;
     },
   };
