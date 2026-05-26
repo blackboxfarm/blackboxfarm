@@ -393,8 +393,11 @@ serve(async (req) => {
       // username if stored in label. We pass chat_id as channelUsername; the
       // helper resolves both shapes.
       const channelIdent = String(blackboxChat);
+      // Tight harvest: only ~15s have passed since our bait, and trader bots
+      // reply within a handful of messages. Pull a small window and cut off
+      // anything at/before our own bait message_id — no need to scan 100.
       const { data: mt } = await supabase.functions.invoke('telegram-mtproto-auth', {
-        body: { action: 'fetch_recent_messages', channelUsername: channelIdent, limit: 100 },
+        body: { action: 'fetch_recent_messages', channelUsername: channelIdent, limit: 30 },
       });
       const msgs: any[] = mt?.messages || [];
       const sinceMs = new Date(run.ca_posted_at || run.posted_at).getTime();
@@ -415,6 +418,9 @@ serve(async (req) => {
         const uname = (m.callerUsername || m.fromUsername || '').toLowerCase();
         // Skip our own bait post (by message_id) and any echo from HoldersIntel itself.
         if (ownPostId && mid === ownPostId) return false;
+        // Hard floor: ignore anything older than our bait. Our previous bait
+        // (and every reply to it) lives below ownPostId — stop there.
+        if (ownPostId && mid < ownPostId) return false;
         if (uname === 'holdersintel_bot') return false;
         if (d < sinceMs) return false;
         const replyTo = Number(m.replyToMsgId || m.reply_to_msg_id || 0);
