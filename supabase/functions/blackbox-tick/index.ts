@@ -26,7 +26,7 @@ async function sendViaHoldersIntel(chatId: number, text: string): Promise<number
   const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true }),
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown', disable_web_page_preview: true }),
   });
   const j = await r.json();
   if (!r.ok || !j.ok) { console.error("[blackbox-tick] sendMessage failed", j); return null; }
