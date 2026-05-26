@@ -203,52 +203,121 @@ function composeDigest(args: {
   const tgUrl = pickFirst<string>('telegram_url');
   const web = pickFirst<string>('website_url');
 
-  const fmtChange = (n: number | null) => n == null ? '—' : `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
+  const fmtChange = (n: number | null) => n == null ? '' : ` (${n >= 0 ? '+' : ''}${n.toFixed(0)}%)`;
+
+  // ── Derived signals ──
+  // Momentum: weighted blend of 1h + 24h change
+  const momScore = (ch1 ?? 0) * 1.5 + (ch24 ?? 0);
+  const momentum =
+    momScore >= 30 ? '🟢 Strong' :
+    momScore >= 5  ? '🟡 Moderate' :
+    momScore <= -15 ? '🔴 Fading' : '⚪ Flat';
+
+  // Risk: concentration + safety flags + insiders/bundlers
+  let riskPts = 0;
+  if (top10 != null) { if (top10 > 35) riskPts += 2; else if (top10 > 20) riskPts += 1; }
+  if (insiders != null && insiders > 10) riskPts += 1;
+  if (bundlers != null && bundlers > 15) riskPts += 1;
+  if (mintRev === false) riskPts += 2;
+  if (freezeRev === false) riskPts += 2;
+  if (lpBurn === false) riskPts += 1;
+  if (native?.dev_reputation_score != null && native.dev_reputation_score < 40) riskPts += 1;
+  const risk =
+    riskPts >= 5 ? '🔴 High' :
+    riskPts >= 2 ? '🟡 Medium' : '🟢 Low';
+
+  // BLACKBOX SCORE (0-100)
+  let score = 50;
+  score += Math.max(-20, Math.min(20, momScore / 3));
+  score -= riskPts * 4;
+  if (liq != null && liq > 50_000) score += 5;
+  if (holders != null && holders > 500) score += 5;
+  if (fresh != null && fresh < 50) score += 3;
+  if (native?.dev_reputation_score != null) score += (native.dev_reputation_score - 50) / 10;
+  score = Math.max(0, Math.min(100, Math.round(score)));
+
+  // Verdict
+  const verdict =
+    score >= 75 ? 'BUY STRONG' :
+    score >= 60 ? 'BUY MEDIUM SHORT' :
+    score >= 45 ? 'WATCH' :
+    score >= 30 ? 'CAUTION' : 'AVOID';
+
+  // Holder qualitative
+  const walletSpread =
+    top10 == null ? '—' :
+    top10 < 20 ? 'Healthy' :
+    top10 < 35 ? 'Moderate' : 'Concentrated';
+  const bundledRisk =
+    bundlers == null ? '—' :
+    bundlers < 5 ? 'Low' :
+    bundlers < 15 ? 'Medium' : 'High';
+
+  // AI bullet observations (deterministic, from signals)
+  const aiBullets: string[] = [];
+  if (ch1 != null && ch1 > 5) aiBullets.push('Organic growth still active');
+  else if (ch1 != null && ch1 < -5) aiBullets.push('Momentum cooling on 1h');
+  if (devSold === false && devHold != null && devHold < 5) aiBullets.push('No whale exit detected');
+  else if (devSold === true) aiBullets.push('Dev has sold — watch supply');
+  if (top10 != null && top10 < 20) aiBullets.push('Holder structure stronger than average');
+  else if (top10 != null && top10 > 35) aiBullets.push('Top 10 concentration elevated');
+  if (ath != null && mc != null && mc < ath * 0.95) aiBullets.push(`Watching resistance at ${fmtMoney(ath)}`);
+  if (!aiBullets.length) aiBullets.push('Signals mixed — no strong directional read');
+
+  // Dev intel
+  const fundedBy = native?.genealogy_kyc_root || '—';
+  const pastLaunches = native?.prior_tickers?.length ?? (native?.total_prior_tokens ?? '—');
+  const rugs = native?.rugs_count ?? native?.dev_rugs ?? '—';
+  const devRep = native?.dev_trust_level || (
+    native?.dev_reputation_score != null
+      ? (native.dev_reputation_score >= 80 ? 'A' :
+         native.dev_reputation_score >= 65 ? 'B+' :
+         native.dev_reputation_score >= 50 ? 'B' :
+         native.dev_reputation_score >= 35 ? 'C' : 'D')
+      : '—');
+
+  // Links
+  const chartUrl   = `https://dexscreener.com/solana/${mint}`;
+  const bubbleUrl  = `https://blackbox.farm/bubblemap?token=${mint}`;
+  const intelUrl   = `https://blackbox.farm/holders?token=${mint}`;
+  const buyUrl     = `https://jup.ag/swap/SOL-${mint}`;
+  const scanUrl    = `https://blackbox.farm/holders?token=${mint}#scans`;
+  const socialsUrl = twitter || tgUrl || web || `https://blackbox.farm/holders?token=${mint}#socials`;
 
   const lines: string[] = [];
-  lines.push(`🧬 *$${symbol}*${ageText ? ` · ${ageText}` : ''}`);
+  lines.push(`🐸 *$${symbol}*`);
+  lines.push('━━━━━━━━━━━━');
+  lines.push(`🟢 *Momentum:* ${momentum.replace(/^[^ ]+ /, '')}`);
+  lines.push(`🟡 *Risk:* ${risk.replace(/^[^ ]+ /, '')}`);
+  lines.push(`⚡ *Verdict:* ${verdict}`);
+  lines.push('');
+  lines.push('💰 *Market*');
+  lines.push(`MC: ${fmtMoney(mc)}${fmtChange(ch24)}`);
+  lines.push(`VOL: ${fmtMoney(vol24)}`);
+  lines.push(`LP: ${fmtMoney(liq)}`);
+  lines.push(`Age: ${ageText || '—'}`);
+  lines.push('');
+  lines.push('🧠 *Holder Health*');
+  lines.push(`Top 10: ${fmtPct(top10)}`);
+  lines.push(`Fresh Wallets: ${fmtPct(fresh)}`);
+  lines.push(`Wallet Spread: ${walletSpread}`);
+  lines.push(`Bundled Risk: ${bundledRisk}`);
+  lines.push('');
+  lines.push('🤖 *BlackBox AI*');
+  for (const b of aiBullets.slice(0, 4)) lines.push(`• ${b}`);
+  lines.push('');
+  lines.push('🕵️ *Developer Intel*');
+  lines.push(`Funded By: ${fundedBy}`);
+  lines.push(`Past Launches: ${pastLaunches}`);
+  lines.push(`Rugs: ${rugs}`);
+  lines.push(`Reputation: ${devRep}`);
+  lines.push('');
+  lines.push(`*BLACKBOX SCORE: ${score}/100*`);
+  lines.push('');
+  lines.push(`[📈 Chart](${chartUrl}) · [🐋 BubbleMap](${bubbleUrl}) · [🧠 Full Intel](${intelUrl})`);
+  lines.push(`[💰 Buy](${buyUrl}) · [⚠️ Scan History](${scanUrl}) · [🌐 Socials](${socialsUrl})`);
+  lines.push('');
   lines.push(`CA: \`${mint}\``);
-  lines.push('');
-  lines.push('━━━ MARKET (consensus) ━━━');
-  lines.push(`Price ${price != null ? '$' + price.toPrecision(4) : '—'} · MC ${fmtMoney(mc)} · FDV ${fmtMoney(fdv)}`);
-  lines.push(`Liq ${fmtMoney(liq)} · Vol24h ${fmtMoney(vol24)} · Vol1h ${fmtMoney(vol1h)}`);
-  lines.push(`5m ${fmtChange(ch5)} · 1h ${fmtChange(ch1)} · 24h ${fmtChange(ch24)}`);
-  if (ath != null) {
-    const ddTxt = athDd != null ? ` (${athDd.toFixed(0)}%${athAge ? ', ' + athAge : ''})` : '';
-    lines.push(`ATH ${fmtMoney(ath)}${ddTxt}`);
-  }
-  lines.push('');
-  lines.push('━━━ HOLDERS ━━━');
-  lines.push(`Total: ${holders ?? '—'} · Top10: ${fmtPct(top10)}`);
-  if (fresh != null) lines.push(`Fresh wallets: ${fmtPct(fresh)}`);
-  const devBits: string[] = [];
-  if (devHold != null) devBits.push(`hold ${fmtPct(devHold)}`);
-  if (devSold != null) devBits.push(`sold ${devSold ? 'yes' : 'no'}`);
-  if (devBits.length) lines.push(`Dev: ${devBits.join(' · ')}`);
-  lines.push('');
-  lines.push('━━━ SAFETY ━━━');
-  lines.push(`Mint ${tf(mintRev)} · Freeze ${tf(freezeRev)} · LP burn ${tf(lpBurn)}`);
-  if (buyTax != null || sellTax != null) lines.push(`Tax B/S: ${buyTax ?? '—'}/${sellTax ?? '—'}%`);
-  const distrBits: string[] = [];
-  if (snipers != null) distrBits.push(`Snipers ${fmtPct(snipers)}`);
-  if (insiders != null) distrBits.push(`Insiders ${fmtPct(insiders)}`);
-  if (bundlers != null) distrBits.push(`Bundlers ${fmtPct(bundlers)}`);
-  if (distrBits.length) lines.push(distrBits.join(' · '));
-  lines.push('');
-  lines.push('━━━ HOLDERSINTEL NATIVE ━━━');
-  if (native?.creator_wallet) lines.push(`Dev: \`${native.creator_wallet}\``);
-  if (native?.genealogy_kyc_root) lines.push(`KYC root: ${native.genealogy_kyc_root}`);
-  if (native?.dev_reputation_score != null) lines.push(`Dev rep: ${native.dev_reputation_score}`);
-  if (native?.prior_tickers?.length) lines.push(`Prior: ${native.prior_tickers.slice(0, 5).join(', ')}`);
-  const socialBits: string[] = [];
-  if (twitter) socialBits.push(`[X](${twitter})`);
-  if (tgUrl) socialBits.push(`[TG](${tgUrl})`);
-  if (web) socialBits.push(`[Web](${web})`);
-  if (socialBits.length) { lines.push(''); lines.push(`Socials: ${socialBits.join(' · ')}`); }
-  lines.push('');
-  const botList = replies.map(r => `@${r.bot_username || '?'}`).filter((v, i, a) => a.indexOf(v) === i);
-  if (botList.length) lines.push(`🤖 Sources: ${botList.join(' · ')}`);
-  lines.push(`🔗 blackbox.farm/holders?token=${mint}`);
   return lines.join('\n').slice(0, 4000);
 }
 
