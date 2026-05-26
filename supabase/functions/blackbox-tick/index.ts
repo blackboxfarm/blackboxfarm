@@ -299,6 +299,16 @@ serve(async (req) => {
       const msgs: any[] = mt?.messages || [];
       const sinceMs = new Date(run.ca_posted_at || run.posted_at).getTime();
       const ownPostId = Number(run.ca_post_message_id || 0);
+      const TRADER_BOTS = new Set([
+        'trojan', 'helenus_trojanbot', 'menelaus_trojanbot', 'agamemnon_trojanbot',
+        'achilles_trojanbot', 'odysseus_trojanbot', 'paris_trojanbot', 'hector_trojanbot',
+        'nestor_trojanbot', 'diomedes_trojanbot', 'ajax_trojanbot',
+        'phanes_trading_bot', 'phanesbot', 'phanes_bot',
+        'gmgnsignalbot', 'gmgn_sol_bot', 'gmgn_bot',
+        'ricktradingbot', 'rick_bot',
+        'bonkbot', 'bonkbot_bot', 'maestro', 'maestrosniperbot', 'maestrobot',
+        'pepeboost', 'pepeboost_bot', 'photon_sol_bot', 'bullx_bot', 'bloomsolanabot',
+      ]);
       const repliesRaw = msgs.filter(m => {
         const d = typeof m.date === 'number' ? (m.date < 1e12 ? m.date * 1000 : m.date) : new Date(m.date).getTime();
         const mid = Number(m.messageId || m.id || 0);
@@ -306,18 +316,27 @@ serve(async (req) => {
         // Skip our own bait post (by message_id) and any echo from HoldersIntel itself.
         if (ownPostId && mid === ownPostId) return false;
         if (uname === 'holdersintel_bot') return false;
-        return d >= sinceMs && (m.text || '').includes(run.token_mint);
+        if (d < sinceMs) return false;
+        const replyTo = Number(m.replyToMsgId || m.reply_to_msg_id || 0);
+        const body = (m.text || m.message || m.caption || '');
+        // Capture if: reply points to our bait post, OR body mentions the CA, OR sender is a known trader bot.
+        if (ownPostId && replyTo === ownPostId) return true;
+        if (body.includes(run.token_mint)) return true;
+        if (uname && TRADER_BOTS.has(uname)) return true;
+        if (uname && /(trojan|phanes|gmgn|rick|bonk|maestro|pepeboost|photon|bullx|bloom)/i.test(uname)) return true;
+        return false;
       });
 
       let saved = 0;
       for (const m of repliesRaw) {
         const username = m.callerUsername || null;
-        const { parser, fields } = parseReply(username, m.text || '');
+        const body = m.text || m.message || m.caption || '';
+        const { parser, fields } = parseReply(username, body);
         const { error } = await supabase.from('blackbox_bot_replies').upsert({
           run_id: run.id,
           message_id: Number(m.messageId || m.id || 0),
           bot_username: username,
-          raw_text: m.text || '',
+          raw_text: body,
           parsed_jsonb: fields,
           parser_used: parser,
         }, { onConflict: 'run_id,message_id' });
