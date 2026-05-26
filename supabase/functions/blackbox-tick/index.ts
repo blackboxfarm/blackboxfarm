@@ -17,7 +17,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const HARVEST_WINDOW_SEC = 90;
+const HARVEST_WINDOW_SEC = 15;
 const SOLANA_RE = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
 
 async function sendViaHoldersIntel(chatId: number, text: string): Promise<number | null> {
