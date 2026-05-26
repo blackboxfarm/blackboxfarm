@@ -221,6 +221,45 @@ serve(async (req) => {
 
   // STEP 1: Pick up new CAs from insiders source
   try {
+    // Throttle 1: Phanes rate-limit cooldown. If any recent bot reply contains
+    // "RATE LIMIT EXCEEDED" or "Please wait N seconds", skip all bait posts
+    // until the cooldown window has passed (default 90s safety buffer).
+    const cooldownLookback = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data: recentReplies } = await supabase
+      .from('blackbox_bot_replies')
+      .select('raw_text, created_at')
+      .gte('created_at', cooldownLookback)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    let cooldownUntil = 0;
+    for (const r of (recentReplies || [])) {
+      const t = String(r.raw_text || '');
+      if (/RATE LIMIT EXCEEDED|Please wait\s+\d+\s*seconds?/i.test(t)) {
+        const m = t.match(/Please wait\s+(\d+)\s*seconds?/i);
+        const waitSec = m ? Math.max(60, Number(m[1])) : 90;
+        const ts = new Date(r.created_at).getTime() + waitSec * 1000;
+        if (ts > cooldownUntil) cooldownUntil = ts;
+      }
+    }
+    if (cooldownUntil > Date.now()) {
+      summary.errors.push(`phanes cooldown active until ${new Date(cooldownUntil).toISOString()}`);
+      // Skip step 1 entirely this tick.
+      throw new Error('__SKIP_STEP1_COOLDOWN__');
+    }
+
+    // Throttle 2: minimum 60s between bait posts globally.
+    const { data: lastRun } = await supabase
+      .from('blackbox_aggregator_runs')
+      .select('ca_posted_at')
+      .not('ca_posted_at', 'is', null)
+      .order('ca_posted_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const lastPostMs = lastRun?.ca_posted_at ? new Date(lastRun.ca_posted_at).getTime() : 0;
+    if (lastPostMs && Date.now() - lastPostMs < 60_000) {
+      throw new Error('__SKIP_STEP1_INTERVAL__');
+    }
+
     const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString(); // last 10min
     const { data: calls } = await supabase
       .from('telegram_channel_calls')
@@ -230,7 +269,10 @@ serve(async (req) => {
       .order('message_timestamp', { ascending: false })
       .limit(50);
 
+    // Hard cap: at most ONE bait post per tick.
+    let postedThisTick = 0;
     for (const call of (calls || [])) {
+      if (postedThisTick >= 1) break;
       // Skip if we already have a run for this (mint, source_message_id)
       const { data: existing } = await supabase
         .from('blackbox_aggregator_runs')
@@ -260,21 +302,22 @@ serve(async (req) => {
       //     auto-reply to. Sent in Markdown so the CA renders monospace.
       const baitText = `\`${call.token_mint}\``;
       const baitMsgId = await sendViaMTProto(supabase, Number(blackboxChat), baitText);
-      // 1b) Post the FULL Holders Report (human-readable, via HoldersIntel bot).
-      const ok = await postFullHoldersReport(supabase, call.token_mint);
+      // 1b) SUSPENDED — full Holders Report post disabled per ops directive to
+      //     stop hammering Phanes. Bare CA bait remains the only group post.
+      const ok = baitMsgId != null;
       await supabase.from('blackbox_aggregator_runs').update({
         ca_posted_at: new Date().toISOString(),
         ca_post_message_id: baitMsgId,
         status: ok ? 'harvesting' : 'failed',
-        error_message: ok ? null : 'Holders Report post to BlackBox group failed',
+        error_message: ok ? null : 'MTProto bait CA post to BlackBox group failed',
       }).eq('id', run.id);
       summary.created++;
-      // 1s spacing between back-to-back posts so multiple CAs in one tick
-      // don't slam the group at the same instant.
-      await new Promise((r) => setTimeout(r, 1000));
+      postedThisTick++;
     }
   } catch (e: any) {
-    summary.errors.push(`step1: ${e.message}`);
+    if (e?.message !== '__SKIP_STEP1_COOLDOWN__' && e?.message !== '__SKIP_STEP1_INTERVAL__') {
+      summary.errors.push(`step1: ${e.message}`);
+    }
   }
 
   // STEP 2: Harvest + compose for runs whose window has elapsed
