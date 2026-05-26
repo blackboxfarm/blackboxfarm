@@ -115,6 +115,11 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
   const [noLubeComposed, setNoLubeComposed] = useState<string | null>(null);
   const [noLubeSources, setNoLubeSources] = useState<Record<string, string> | null>(null);
   const [isPushingNoLube, setIsPushingNoLube] = useState(false);
+  const [noLubeEligible, setNoLubeEligible] = useState<boolean>(true);
+  const [noLubeVerdictClass, setNoLubeVerdictClass] = useState<string | null>(null);
+  const [noLubeBlockReason, setNoLubeBlockReason] = useState<string | null>(null);
+  const [noLubeLogId, setNoLubeLogId] = useState<string | null>(null);
+  const [noLubeLog, setNoLubeLog] = useState<any[]>([]);
 
   // Intel XBot status
   const [cronStatus, setCronStatus] = useState<CronStatus>({
@@ -449,6 +454,10 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     setIsComposingNoLube(true);
     setNoLubeComposed(null);
     setNoLubeSources(null);
+    setNoLubeEligible(true);
+    setNoLubeVerdictClass(null);
+    setNoLubeBlockReason(null);
+    setNoLubeLogId(null);
     try {
       const { data, error } = await supabase.functions.invoke('no-lube-compose', {
         body: { mint },
@@ -457,7 +466,16 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
       if (!data?.ok) throw new Error(data?.error || 'compose failed');
       setNoLubeComposed(data.text);
       setNoLubeSources(data.sources || {});
-      toast.success('Composed — review and Push when ready');
+      setNoLubeEligible(!!data.post_eligible);
+      setNoLubeVerdictClass(data.verdict_class || null);
+      setNoLubeBlockReason(data.block_reason || null);
+      setNoLubeLogId(data.log_id || null);
+      if (data.post_eligible) {
+        toast.success('Composed — review and Push when ready');
+      } else {
+        toast.warning(`Blocked: ${data.block_reason || data.verdict_class}`);
+      }
+      void loadNoLubeLog();
     } catch (err: any) {
       console.error('compose error', err);
       toast.error(err.message || 'Failed to compose');
@@ -471,11 +489,12 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     setIsPushingNoLube(true);
     try {
       const { data, error } = await supabase.functions.invoke('no-lube-push', {
-        body: { text: noLubeComposed },
+        body: { text: noLubeComposed, log_id: noLubeLogId },
       });
       if (error) throw error;
       if (!data?.ok) throw new Error(data?.error?.description || data?.error || 'push failed');
       toast.success(`Posted to No Lube (msg ${data.message_id})`);
+      void loadNoLubeLog();
     } catch (err: any) {
       console.error('push error', err);
       toast.error(typeof err.message === 'string' ? err.message : 'Failed to push');
@@ -483,6 +502,21 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
       setIsPushingNoLube(false);
     }
   };
+
+  const loadNoLubeLog = async () => {
+    try {
+      const { data } = await supabase
+        .from('no_lube_post_log' as any)
+        .select('id, token_mint, ticker, verdict_class, posted, block_reason, composed_at')
+        .order('composed_at', { ascending: false })
+        .limit(50);
+      setNoLubeLog(data || []);
+    } catch (e) {
+      console.error('load log', e);
+    }
+  };
+
+  useEffect(() => { void loadNoLubeLog(); }, []);
 
   const copyTemplate = (name: TemplateName) => {
     navigator.clipboard.writeText(processTemplate(templates[name], tokenData));
