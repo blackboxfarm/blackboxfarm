@@ -266,6 +266,9 @@ serve(async (req) => {
         error_message: ok ? null : 'Holders Report post to BlackBox group failed',
       }).eq('id', run.id);
       summary.created++;
+      // 1s spacing between back-to-back posts so multiple CAs in one tick
+      // don't slam the group at the same instant.
+      await new Promise((r) => setTimeout(r, 1000));
     }
   } catch (e: any) {
     summary.errors.push(`step1: ${e.message}`);
