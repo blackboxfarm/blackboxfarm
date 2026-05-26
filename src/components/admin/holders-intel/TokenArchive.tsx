@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/select";
 import { ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, RefreshCw, Search } from "lucide-react";
 import { HoldersIntelTweetCard, type ArchiveRow } from "./HoldersIntelTweetCard";
-import { BackfillReview } from "./BackfillReview";
 
 const PAGE_SIZES = [50, 100, 250, 500] as const;
 type PageSize = (typeof PAGE_SIZES)[number];
