@@ -419,12 +419,15 @@ serve(async (req) => {
         if (d < sinceMs) return false;
         const replyTo = Number(m.replyToMsgId || m.reply_to_msg_id || 0);
         const body = (m.text || m.message || m.caption || '');
-        // Capture if: reply points to our bait post, OR body mentions the CA, OR sender is a known trader bot.
-        if (ownPostId && replyTo === ownPostId) return true;
-        if (body.includes(run.token_mint)) return true;
-        if (uname && TRADER_BOTS.has(uname)) return true;
-        if (uname && /(trojan|phanes|gmgn|rick|bonk|maestro|pepeboost|photon|bullx|bloom)/i.test(uname)) return true;
-        return false;
+        // MUST be bound to OUR bait: either reply-to our post, or body mentions our CA.
+        // Trader-bot username alone is NOT enough — other people's CAs in the same 15s
+        // window get bot replies too, and we were vacuuming them all up.
+        const boundToUs = (ownPostId && replyTo === ownPostId) || body.includes(run.token_mint);
+        if (!boundToUs) return false;
+        // And the sender must be a trader bot (skip random user chatter quoting the CA).
+        const isTraderBot = (uname && TRADER_BOTS.has(uname)) ||
+          (uname && /(trojan|phanes|gmgn|rick|bonk|maestro|pepeboost|photon|bullx|bloom)/i.test(uname));
+        return isTraderBot;
       });
 
       let saved = 0;
