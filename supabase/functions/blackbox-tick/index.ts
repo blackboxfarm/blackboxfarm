@@ -255,13 +255,16 @@ serve(async (req) => {
         .single();
       if (insErr || !run) { summary.errors.push(`run insert: ${insErr?.message}`); continue; }
 
-      // Post the FULL Holders Report (same format used by the working manual
-      // flow). This is what actually triggers Trojan/Phanes/GMGN/etc. — the
-      // bare CA variant gets ignored.
+      // 1a) Post the bare CA via MTProto (as the system_reset user account).
+      //     This is the bait that trader bots (Trojan/Phanes/GMGN/Rick/etc.)
+      //     auto-reply to. Sent in Markdown so the CA renders monospace.
+      const baitText = `\`${call.token_mint}\``;
+      const baitMsgId = await sendViaMTProto(supabase, Number(blackboxChat), baitText);
+      // 1b) Post the FULL Holders Report (human-readable, via HoldersIntel bot).
       const ok = await postFullHoldersReport(supabase, call.token_mint);
       await supabase.from('blackbox_aggregator_runs').update({
         ca_posted_at: new Date().toISOString(),
-        ca_post_message_id: null,
+        ca_post_message_id: baitMsgId,
         status: ok ? 'harvesting' : 'failed',
         error_message: ok ? null : 'Holders Report post to BlackBox group failed',
       }).eq('id', run.id);
