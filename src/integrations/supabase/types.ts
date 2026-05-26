@@ -11364,6 +11364,66 @@ export type Database = {
         }
         Relationships: []
       }
+      no_lube_post_log: {
+        Row: {
+          age_minutes: number | null
+          block_reason: string | null
+          composed_at: string
+          composed_by: string | null
+          id: string
+          liq_usd: number | null
+          mcap: number | null
+          mint_time: string | null
+          posted: boolean
+          posted_at: string | null
+          price_change_24h: number | null
+          tg_message_id: number | null
+          ticker: string | null
+          token_mint: string
+          top10_pct: number | null
+          verdict_class: string
+          vol_24h: number | null
+        }
+        Insert: {
+          age_minutes?: number | null
+          block_reason?: string | null
+          composed_at?: string
+          composed_by?: string | null
+          id?: string
+          liq_usd?: number | null
+          mcap?: number | null
+          mint_time?: string | null
+          posted?: boolean
+          posted_at?: string | null
+          price_change_24h?: number | null
+          tg_message_id?: number | null
+          ticker?: string | null
+          token_mint: string
+          top10_pct?: number | null
+          verdict_class: string
+          vol_24h?: number | null
+        }
+        Update: {
+          age_minutes?: number | null
+          block_reason?: string | null
+          composed_at?: string
+          composed_by?: string | null
+          id?: string
+          liq_usd?: number | null
+          mcap?: number | null
+          mint_time?: string | null
+          posted?: boolean
+          posted_at?: string | null
+          price_change_24h?: number | null
+          tg_message_id?: number | null
+          ticker?: string | null
+          token_mint?: string
+          top10_pct?: number | null
+          verdict_class?: string
+          vol_24h?: number | null
+        }
+        Relationships: []
+      }
       notification_delivery_log: {
         Row: {
           channel: string
