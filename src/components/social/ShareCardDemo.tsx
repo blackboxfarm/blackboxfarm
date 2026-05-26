@@ -109,6 +109,13 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
   const [granularTiers, setGranularTiers] = useState<GranularTierCounts | null>(null);
   const [aiMeta, setAiMeta] = useState<{ aiSummary: string; aiOverview: string; lifecycle: string } | null>(null);
 
+  // No Lube manual compose state
+  const [noLubeMint, setNoLubeMint] = useState('');
+  const [isComposingNoLube, setIsComposingNoLube] = useState(false);
+  const [noLubeComposed, setNoLubeComposed] = useState<string | null>(null);
+  const [noLubeSources, setNoLubeSources] = useState<Record<string, string> | null>(null);
+  const [isPushingNoLube, setIsPushingNoLube] = useState(false);
+
   // Intel XBot status
   const [cronStatus, setCronStatus] = useState<CronStatus>({
     schedulersActive: 0,
