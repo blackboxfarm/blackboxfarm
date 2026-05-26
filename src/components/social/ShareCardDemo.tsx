@@ -443,6 +443,47 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     window.open(twitterUrl, '_blank', 'width=550,height=420');
   };
 
+  const handleComposeNoLube = async () => {
+    const mint = noLubeMint.trim();
+    if (!mint) { toast.error('Enter a token address'); return; }
+    setIsComposingNoLube(true);
+    setNoLubeComposed(null);
+    setNoLubeSources(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('no-lube-compose', {
+        body: { mint },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || 'compose failed');
+      setNoLubeComposed(data.text);
+      setNoLubeSources(data.sources || {});
+      toast.success('Composed — review and Push when ready');
+    } catch (err: any) {
+      console.error('compose error', err);
+      toast.error(err.message || 'Failed to compose');
+    } finally {
+      setIsComposingNoLube(false);
+    }
+  };
+
+  const handlePushNoLube = async () => {
+    if (!noLubeComposed) return;
+    setIsPushingNoLube(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('no-lube-push', {
+        body: { text: noLubeComposed },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error?.description || data?.error || 'push failed');
+      toast.success(`Posted to No Lube (msg ${data.message_id})`);
+    } catch (err: any) {
+      console.error('push error', err);
+      toast.error(typeof err.message === 'string' ? err.message : 'Failed to push');
+    } finally {
+      setIsPushingNoLube(false);
+    }
+  };
+
   const copyTemplate = (name: TemplateName) => {
     navigator.clipboard.writeText(processTemplate(templates[name], tokenData));
     toast.success('Tweet text copied!');
