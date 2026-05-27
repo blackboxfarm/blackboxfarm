@@ -261,12 +261,18 @@ function renderTemplate(tpl: string, vars: Record<string, string>): string {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
-    const { mint } = await req.json();
+    const { mint, channel: rawChannel } = await req.json();
     if (!mint || typeof mint !== 'string') {
       return new Response(JSON.stringify({ ok: false, error: 'mint required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+    const channel: 'default' | 'public' | 'private' =
+      rawChannel === 'public' || rawChannel === 'private' ? rawChannel : 'default';
+    const templateName =
+      channel === 'public' ? 'no_lube_public'
+      : channel === 'private' ? 'no_lube_private'
+      : 'no_lube';
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
@@ -275,13 +281,38 @@ serve(async (req) => {
 
     const sources: Record<string, string> = {};
 
-    // 1) Template
+    // 1) Template — per-channel
     const { data: tplRow } = await supabase
       .from('holders_intel_templates')
       .select('template_text')
-      .eq('template_name', 'no_lube')
+      .eq('template_name', templateName)
       .maybeSingle();
     const tpl = tplRow?.template_text || '🐸 *${ticker}*\n{momentum} · {risk} · {verdict}';
+
+    // 1b) Channel profile (language + socials for {vars})
+    let language = 'en';
+    let profileVars: Record<string, string> = {
+      profileXHandle: DASH,
+      profileInstagramHandle: DASH,
+      profileTiktokHandle: DASH,
+      profileChannelTitle: DASH,
+    };
+    if (channel !== 'default') {
+      const { data: prof } = await supabase
+        .from('no_lube_channel_profiles')
+        .select('*')
+        .eq('kind', channel)
+        .maybeSingle();
+      if (prof) {
+        language = prof.language || 'en';
+        profileVars = {
+          profileXHandle: prof.x_handle || DASH,
+          profileInstagramHandle: prof.instagram_handle || DASH,
+          profileTiktokHandle: prof.tiktok_handle || DASH,
+          profileChannelTitle: prof.telegram_chat_title || DASH,
+        };
+      }
+    }
 
     // 2) DB cache (token_rankings most recent within 2 min)
     let cached: any = null;
