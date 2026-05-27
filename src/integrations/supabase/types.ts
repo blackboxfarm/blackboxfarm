@@ -11364,8 +11364,61 @@ export type Database = {
         }
         Relationships: []
       }
+      no_lube_assets: {
+        Row: {
+          category: string
+          created_at: string
+          created_by: string | null
+          enabled: boolean
+          id: string
+          language: string | null
+          last_used_at: string | null
+          name: string
+          notes: string | null
+          public_url: string
+          storage_path: string
+          tags: string[]
+          updated_at: string
+          usage_count: number
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          created_by?: string | null
+          enabled?: boolean
+          id?: string
+          language?: string | null
+          last_used_at?: string | null
+          name: string
+          notes?: string | null
+          public_url: string
+          storage_path: string
+          tags?: string[]
+          updated_at?: string
+          usage_count?: number
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          enabled?: boolean
+          id?: string
+          language?: string | null
+          last_used_at?: string | null
+          name?: string
+          notes?: string | null
+          public_url?: string
+          storage_path?: string
+          tags?: string[]
+          updated_at?: string
+          usage_count?: number
+        }
+        Relationships: []
+      }
       no_lube_channel_profiles: {
         Row: {
+          access_purchase_url: string | null
+          cta_button_text: string | null
           instagram_handle: string | null
           kind: string
           language: string
@@ -11375,10 +11428,14 @@ export type Database = {
           telegram_chat_username: string | null
           telegram_link: string | null
           tiktok_handle: string | null
+          trade_bot_token_secret_name: string | null
+          trade_bot_username: string | null
           updated_at: string
           x_handle: string | null
         }
         Insert: {
+          access_purchase_url?: string | null
+          cta_button_text?: string | null
           instagram_handle?: string | null
           kind: string
           language?: string
@@ -11388,10 +11445,14 @@ export type Database = {
           telegram_chat_username?: string | null
           telegram_link?: string | null
           tiktok_handle?: string | null
+          trade_bot_token_secret_name?: string | null
+          trade_bot_username?: string | null
           updated_at?: string
           x_handle?: string | null
         }
         Update: {
+          access_purchase_url?: string | null
+          cta_button_text?: string | null
           instagram_handle?: string | null
           kind?: string
           language?: string
@@ -11401,6 +11462,8 @@ export type Database = {
           telegram_chat_username?: string | null
           telegram_link?: string | null
           tiktok_handle?: string | null
+          trade_bot_token_secret_name?: string | null
+          trade_bot_username?: string | null
           updated_at?: string
           x_handle?: string | null
         }
@@ -11437,6 +11500,8 @@ export type Database = {
           composed_at: string
           composed_by: string | null
           id: string
+          image_prompt: string | null
+          image_url: string | null
           last_mcap_at_post: number | null
           last_multiplier: number | null
           last_posted_at: string | null
@@ -11460,6 +11525,8 @@ export type Database = {
           composed_at?: string
           composed_by?: string | null
           id?: string
+          image_prompt?: string | null
+          image_url?: string | null
           last_mcap_at_post?: number | null
           last_multiplier?: number | null
           last_posted_at?: string | null
@@ -11483,6 +11550,8 @@ export type Database = {
           composed_at?: string
           composed_by?: string | null
           id?: string
+          image_prompt?: string | null
+          image_url?: string | null
           last_mcap_at_post?: number | null
           last_multiplier?: number | null
           last_posted_at?: string | null
