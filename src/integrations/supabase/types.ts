@@ -11369,9 +11369,11 @@ export type Database = {
           instagram_handle: string | null
           kind: string
           language: string
+          tab_nickname: string | null
           telegram_chat_id: string | null
           telegram_chat_title: string | null
           telegram_chat_username: string | null
+          telegram_link: string | null
           tiktok_handle: string | null
           updated_at: string
           x_handle: string | null
@@ -11380,9 +11382,11 @@ export type Database = {
           instagram_handle?: string | null
           kind: string
           language?: string
+          tab_nickname?: string | null
           telegram_chat_id?: string | null
           telegram_chat_title?: string | null
           telegram_chat_username?: string | null
+          telegram_link?: string | null
           tiktok_handle?: string | null
           updated_at?: string
           x_handle?: string | null
@@ -11391,12 +11395,35 @@ export type Database = {
           instagram_handle?: string | null
           kind?: string
           language?: string
+          tab_nickname?: string | null
           telegram_chat_id?: string | null
           telegram_chat_title?: string | null
           telegram_chat_username?: string | null
+          telegram_link?: string | null
           tiktok_handle?: string | null
           updated_at?: string
           x_handle?: string | null
+        }
+        Relationships: []
+      }
+      no_lube_global_profile: {
+        Row: {
+          id: string
+          language: string
+          style: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          language?: string
+          style?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          language?: string
+          style?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -11457,6 +11484,36 @@ export type Database = {
           top10_pct?: number | null
           verdict_class?: string
           vol_24h?: number | null
+        }
+        Relationships: []
+      }
+      no_lube_socials: {
+        Row: {
+          created_at: string
+          display_order: number
+          handle: string
+          id: string
+          password_ciphertext: string | null
+          platform: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_order?: number
+          handle?: string
+          id?: string
+          password_ciphertext?: string | null
+          platform: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_order?: number
+          handle?: string
+          id?: string
+          password_ciphertext?: string | null
+          platform?: string
+          updated_at?: string
         }
         Relationships: []
       }

@@ -30,6 +30,7 @@ import {
 } from '@/lib/share-template';
 import { HolderBreakdownPanel, type GranularTierCounts } from './HolderBreakdownPanel';
 import { NoLubeChannelPanel } from './NoLubeChannelPanel';
+import { NoLubeProfileHeader } from './NoLubeProfileHeader';
 
 interface CronStatus {
   schedulersActive: number;
@@ -122,7 +123,6 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
   const [noLubeVerdictClass, setNoLubeVerdictClass] = useState<string | null>(null);
   const [noLubeBlockReason, setNoLubeBlockReason] = useState<string | null>(null);
   const [noLubeLogId, setNoLubeLogId] = useState<string | null>(null);
-  const [noLubeLog, setNoLubeLog] = useState<any[]>([]);
 
   // Intel XBot status
   const [cronStatus, setCronStatus] = useState<CronStatus>({
@@ -478,7 +478,6 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
       } else {
         toast.warning(`Blocked: ${data.block_reason || data.verdict_class}`);
       }
-      void loadNoLubeLog();
     } catch (err: any) {
       console.error('compose error', err);
       toast.error(err.message || 'Failed to compose');
@@ -497,7 +496,6 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
       if (error) throw error;
       if (!data?.ok) throw new Error(data?.error?.description || data?.error || 'push failed');
       toast.success(`Posted to No Lube (msg ${data.message_id})`);
-      void loadNoLubeLog();
     } catch (err: any) {
       console.error('push error', err);
       toast.error(typeof err.message === 'string' ? err.message : 'Failed to push');
@@ -505,21 +503,6 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
       setIsPushingNoLube(false);
     }
   };
-
-  const loadNoLubeLog = async () => {
-    try {
-      const { data } = await supabase
-        .from('no_lube_post_log' as any)
-        .select('id, token_mint, ticker, verdict_class, posted, block_reason, composed_at')
-        .order('composed_at', { ascending: false })
-        .limit(50);
-      setNoLubeLog(data || []);
-    } catch (e) {
-      console.error('load log', e);
-    }
-  };
-
-  useEffect(() => { void loadNoLubeLog(); }, []);
 
   const copyTemplate = (name: TemplateName) => {
     navigator.clipboard.writeText(processTemplate(templates[name], tokenData));
@@ -691,13 +674,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
             <TabsContent key={name} value={name} className="space-y-4">
               {name === 'no_lube' ? (
                 <>
-                  <div className="p-3 bg-pink-500/10 border border-pink-500/30 rounded-lg">
-                    <Label className="font-medium text-pink-300">🐸 No Lube — Master / Public / Private</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Default is the master template. Public and Private have their own channel profile
-                      (Telegram chat ID, socials, language) and their own template + preview.
-                    </p>
-                  </div>
+                  <NoLubeProfileHeader />
                   <Tabs defaultValue="default" className="w-full">
                     <TabsList>
                       <TabsTrigger value="default">Default</TabsTrigger>

@@ -5,10 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Save, RotateCcw, Send, Copy, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { EmojiPickerPopover } from '@/components/admin/telegram/EmojiPickerPopover';
 import {
   DEFAULT_TEMPLATES,
   processTemplate,
@@ -34,14 +34,12 @@ export const NO_LUBE_LANGUAGES: { code: string; label: string }[] = [
 ];
 
 interface ChannelProfile {
-  kind: 'public' | 'private';
+  kind: 'default' | 'public' | 'private';
   telegram_chat_id: string | null;
   telegram_chat_title: string | null;
   telegram_chat_username: string | null;
-  x_handle: string | null;
-  instagram_handle: string | null;
-  tiktok_handle: string | null;
-  language: string;
+  tab_nickname: string | null;
+  telegram_link: string | null;
 }
 
 interface Props {
@@ -59,13 +57,12 @@ export function NoLubeChannelPanel({
   kind, templateName, templateText, onTemplateChange,
   onSaveTemplate, onResetTemplate, isSaving, previewData,
 }: Props) {
-  const isChannelTab = kind !== 'default';
-
-  // Per-channel profile (only for public/private tabs)
+  // Per-tab profile (nickname + telegram link) — applies to all 3 sub-tabs
   const [profile, setProfile] = useState<ChannelProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [resolvingChat, setResolvingChat] = useState(false);
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
   // Compose & push for THIS channel
   const [mint, setMint] = useState('');
@@ -78,7 +75,6 @@ export function NoLubeChannelPanel({
   const [logId, setLogId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isChannelTab) return;
     void loadProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind]);
@@ -94,14 +90,12 @@ export function NoLubeChannelPanel({
       if (error) throw error;
       setProfile(
         (data as ChannelProfile | null) ?? {
-          kind: kind as 'public' | 'private',
+          kind,
           telegram_chat_id: '',
           telegram_chat_title: '',
           telegram_chat_username: '',
-          x_handle: '',
-          instagram_handle: '',
-          tiktok_handle: '',
-          language: 'en',
+          tab_nickname: kind === 'default' ? 'Default' : kind === 'public' ? 'Public Channel' : 'Private Channel',
+          telegram_link: '',
         },
       );
     } catch (e: any) {
@@ -123,7 +117,7 @@ export function NoLubeChannelPanel({
           updated_at: new Date().toISOString(),
         }, { onConflict: 'kind' });
       if (error) throw error;
-      toast.success(`${kind === 'public' ? 'Public' : 'Private'} profile saved`);
+      toast.success('Tab profile saved');
     } catch (e: any) {
       toast.error(`Save failed: ${e.message}`);
     } finally {
@@ -201,116 +195,89 @@ export function NoLubeChannelPanel({
 
   const previewRendered = processTemplate(templateText, previewData);
 
+  const insertEmoji = (emoji: string) => {
+    const el = textareaRef.current;
+    if (!el) { onTemplateChange(templateText + emoji); return; }
+    const start = el.selectionStart ?? templateText.length;
+    const end = el.selectionEnd ?? templateText.length;
+    const next = templateText.slice(0, start) + emoji + templateText.slice(end);
+    onTemplateChange(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + emoji.length, start + emoji.length);
+    });
+  };
+
   return (
     <div className="space-y-4">
-      {/* Profile (Public & Private only) */}
-      {isChannelTab && (
-        <Card className="bg-pink-500/5 border-pink-500/30">
-          <CardContent className="pt-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-sm font-semibold text-pink-300">
-                  🐸 No Lube — {kind === 'public' ? 'Public' : 'Private'} Channel Profile
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Channel destination, socials, and language for posts pushed from this tab.
-                </p>
-              </div>
-              <Button size="sm" onClick={saveProfile} disabled={profileSaving || profileLoading}>
-                {profileSaving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
-                Save Profile
-              </Button>
+      {/* Per-tab profile: nickname + Telegram link + chat ID lookup */}
+      <Card className="bg-card/60 border-border">
+        <CardContent className="pt-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Tab settings
+            </Label>
+            <Button size="sm" variant="outline" onClick={saveProfile} disabled={profileSaving || profileLoading}>
+              {profileSaving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
+              Save Tab
+            </Button>
+          </div>
+          {profileLoading || !profile ? (
+            <div className="text-xs text-muted-foreground flex items-center gap-2">
+              <Loader2 className="h-3 w-3 animate-spin" /> Loading…
             </div>
-
-            {profileLoading || !profile ? (
-              <div className="text-xs text-muted-foreground flex items-center gap-2">
-                <Loader2 className="h-3 w-3 animate-spin" /> Loading profile…
-              </div>
-            ) : (
-              <>
-                {/* Socials row (top of profile, per spec) */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div>
-                    <Label className="text-xs">X / Twitter handle</Label>
-                    <Input
-                      placeholder="@HoldersIntel"
-                      value={profile.x_handle || ''}
-                      onChange={e => setProfile({ ...profile, x_handle: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Instagram handle</Label>
-                    <Input
-                      placeholder="@holdersintel"
-                      value={profile.instagram_handle || ''}
-                      onChange={e => setProfile({ ...profile, instagram_handle: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">TikTok handle</Label>
-                    <Input
-                      placeholder="@holdersintel"
-                      value={profile.tiktok_handle || ''}
-                      onChange={e => setProfile({ ...profile, tiktok_handle: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                {/* Channel ID + lookup */}
-                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
-                  <div>
-                    <Label className="text-xs">Telegram Channel ID</Label>
-                    <Input
-                      placeholder="-1001234567890 or @channelname"
-                      value={profile.telegram_chat_id || ''}
-                      onChange={e => setProfile({ ...profile, telegram_chat_id: e.target.value })}
-                      className="font-mono text-sm"
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <Button variant="outline" size="sm" onClick={resolveChannelName} disabled={resolvingChat}>
-                      {resolvingChat
-                        ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Fetching…</>
-                        : <><Search className="h-3 w-3 mr-1" />Fetch Name</>}
-                    </Button>
-                  </div>
-                </div>
-                {(profile.telegram_chat_title || profile.telegram_chat_username) && (
-                  <div className="flex items-center gap-2 text-xs">
-                    <Badge variant="outline" className="border-pink-500/50 text-pink-300">
-                      {profile.telegram_chat_title || '—'}
-                    </Badge>
-                    {profile.telegram_chat_username && (
-                      <span className="text-muted-foreground">@{profile.telegram_chat_username}</span>
-                    )}
-                  </div>
-                )}
-
-                {/* Language */}
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-xs">Post Language</Label>
-                  <Select
-                    value={profile.language || 'en'}
-                    onValueChange={v => setProfile({ ...profile, language: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {NO_LUBE_LANGUAGES.map(l => (
-                        <SelectItem key={l.code} value={l.code}>{l.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    Full re-render: labels and natural-language are translated; numbers, tickers, URLs, and emoji are preserved.
-                  </p>
+                  <Label className="text-xs">Tab nickname</Label>
+                  <Input
+                    value={profile.tab_nickname || ''}
+                    onChange={e => setProfile({ ...profile, tab_nickname: e.target.value })}
+                    placeholder="e.g. Insiders Lounge"
+                  />
                 </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
+                <div>
+                  <Label className="text-xs">Telegram channel link</Label>
+                  <Input
+                    value={profile.telegram_link || ''}
+                    onChange={e => setProfile({ ...profile, telegram_link: e.target.value })}
+                    placeholder="https://t.me/yourchannel"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
+                <div>
+                  <Label className="text-xs">Telegram Channel ID</Label>
+                  <Input
+                    placeholder="-1001234567890 or @channelname"
+                    value={profile.telegram_chat_id || ''}
+                    onChange={e => setProfile({ ...profile, telegram_chat_id: e.target.value })}
+                    className="font-mono text-sm"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <Button variant="outline" size="sm" onClick={resolveChannelName} disabled={resolvingChat}>
+                    {resolvingChat
+                      ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Fetching…</>
+                      : <><Search className="h-3 w-3 mr-1" />Fetch Name</>}
+                  </Button>
+                </div>
+              </div>
+              {(profile.telegram_chat_title || profile.telegram_chat_username) && (
+                <div className="flex items-center gap-2 text-xs">
+                  <Badge variant="outline" className="border-pink-500/50 text-pink-300">
+                    {profile.telegram_chat_title || '—'}
+                  </Badge>
+                  {profile.telegram_chat_username && (
+                    <span className="text-muted-foreground">@{profile.telegram_chat_username}</span>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Template editor */}
       <div className="space-y-2">
@@ -319,6 +286,7 @@ export function NoLubeChannelPanel({
             Template — <code className="text-xs bg-muted px-1 rounded">{templateName}</code>
           </Label>
           <div className="flex gap-2">
+            <EmojiPickerPopover onPick={insertEmoji} />
             <Button variant="outline" size="sm" onClick={onResetTemplate}>
               <RotateCcw className="h-3 w-3 mr-1" />Reset
             </Button>
@@ -329,6 +297,7 @@ export function NoLubeChannelPanel({
           </div>
         </div>
         <Textarea
+          ref={textareaRef}
           value={templateText}
           onChange={e => onTemplateChange(e.target.value)}
           rows={14}
