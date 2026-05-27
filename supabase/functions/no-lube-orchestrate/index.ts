@@ -35,6 +35,16 @@ async function invoke(fnUrl: string, anon: string, body: unknown) {
   return { ok: r.ok, status: r.status, json: j };
 }
 
+function jsonResp(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json',
+    },
+  });
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
@@ -73,17 +83,60 @@ serve(async (req) => {
     const composeUrl = `${supabaseUrl}/functions/v1/no-lube-compose`;
     const pushUrl = `${supabaseUrl}/functions/v1/no-lube-push`;
 
+    const composeAndPush = async (channel: Channel, mint: string, multiplier: number | null) => {
+      const cmp = await invoke(composeUrl, anonKey, { mint, channel, multiplier });
+      if (!cmp.ok || !cmp.json?.ok) {
+        return { ok: false, channel, error: 'compose failed', detail: cmp.json, pushed: false };
+      }
+      if (!cmp.json.post_eligible) {
+        return {
+          ok: true, channel, pushed: false,
+          eligible: false, block_reason: cmp.json.block_reason,
+          logId: cmp.json.log_id, mcap: null,
+        };
+      }
+      const text = cmp.json.text as string;
+      const logId = cmp.json.log_id;
+      let mcap: number | null = null;
+      if (logId) {
+        const { data: lr } = await supabase
+          .from('no_lube_post_log').select('mcap').eq('id', logId).maybeSingle();
+        mcap = lr?.mcap != null ? Number(lr.mcap) : null;
+      }
+      const psh = await invoke(pushUrl, anonKey, { text, log_id: logId, channel });
+      const pushed = !!(psh.ok && psh.json?.ok);
+      return {
+        ok: true, channel, pushed, eligible: true,
+        logId, mcap,
+        message_id: psh.json?.message_id ?? null,
+        push_error: pushed ? null : psh.json,
+      };
+    };
+
+    const stampPost = async (
+      logId: string | null | undefined,
+      patch: { times_posted: number; last_mcap_at_post: number; last_multiplier: number | null },
+    ) => {
+      if (!logId) return;
+      await supabase.from('no_lube_post_log').update({
+        times_posted: patch.times_posted,
+        last_mcap_at_post: patch.last_mcap_at_post,
+        last_multiplier: patch.last_multiplier,
+        last_posted_at: new Date().toISOString(),
+      }).eq('id', logId);
+    };
+
     // ---- FIRST SIGHTING → PRIVATE ONLY ----
     if (isFirstSighting) {
       const result = await composeAndPush('private', mint, null);
       if (result.ok && result.pushed && result.mcap != null) {
-        await stampPost(supabase, result.logId, {
+        await stampPost(result.logId, {
           times_posted: 1,
           last_mcap_at_post: result.mcap,
           last_multiplier: null,
         });
       }
-      return json({
+      return jsonResp({
         ok: true,
         flow: 'first_sighting',
         threshold,
@@ -97,23 +150,20 @@ serve(async (req) => {
       // No baseline to compare against — treat as first sighting
       const result = await composeAndPush('private', mint, null);
       if (result.ok && result.pushed && result.mcap != null) {
-        await stampPost(supabase, result.logId, {
+        await stampPost(result.logId, {
           times_posted: (prev.times_posted ?? 0) + 1,
           last_mcap_at_post: result.mcap,
           last_multiplier: null,
         });
       }
-      return json({ ok: true, flow: 'baseline_missing', threshold, results: { private: result } });
+      return jsonResp({ ok: true, flow: 'baseline_missing', threshold, results: { private: result } });
     }
 
     // Probe current mcap via compose (private) WITHOUT pushing yet — we need the number.
     const probe = await invoke(composeUrl, anonKey, { mint, channel: 'private' });
     if (!probe.ok || !probe.json?.ok) {
-      return json({ ok: false, error: 'compose probe failed', detail: probe.json }, 502);
+      return jsonResp({ ok: false, error: 'compose probe failed', detail: probe.json }, 502);
     }
-    const currentMcap = Number(probe.json?.vars?.mc ? null : null) || Number(probe.json?.vars?.mcRaw) || null;
-    // compose returns formatted mc string only; pull raw from cache row via mcap field on log
-    // The probe just inserted a log row; fetch its mcap directly.
     let probeMcap: number | null = null;
     if (probe.json?.log_id) {
       const { data: logRow } = await supabase
@@ -125,12 +175,12 @@ serve(async (req) => {
     }
 
     if (probeMcap == null) {
-      return json({ ok: true, flow: 'skipped', skipped: true, reason: 'current_mcap_unknown', threshold });
+      return jsonResp({ ok: true, flow: 'skipped', skipped: true, reason: 'current_mcap_unknown', threshold });
     }
 
     const ratio = probeMcap / baseMcap;
     if (ratio < threshold) {
-      return json({
+      return jsonResp({
         ok: true,
         flow: 'skipped',
         skipped: true,
@@ -146,28 +196,25 @@ serve(async (req) => {
     // Threshold met — multiplier label rounds to nearest 0.1 above integer
     const multiplier = Math.round(ratio * 10) / 10;
 
-    // Push the probe (already composed) to private with the multiplier var by re-composing
-    // (so {multiplier} renders correctly). The probe row stays as a record of the eligibility check.
     const privateResult = await composeAndPush('private', mint, multiplier);
     const publicResult = await composeAndPush('public', mint, multiplier);
 
-    // Stamp re-sighting metadata on the private push log row (canonical source of truth)
     if (privateResult.ok && privateResult.pushed && privateResult.mcap != null) {
-      await stampPost(supabase, privateResult.logId, {
+      await stampPost(privateResult.logId, {
         times_posted: (prev.times_posted ?? 1) + 1,
         last_mcap_at_post: privateResult.mcap,
         last_multiplier: multiplier,
       });
     }
     if (publicResult.ok && publicResult.pushed && publicResult.mcap != null) {
-      await stampPost(supabase, publicResult.logId, {
+      await stampPost(publicResult.logId, {
         times_posted: (prev.times_posted ?? 1) + 1,
         last_mcap_at_post: publicResult.mcap,
         last_multiplier: multiplier,
       });
     }
 
-    return json({
+    return jsonResp({
       ok: true,
       flow: 're_sighting',
       threshold,
@@ -177,58 +224,6 @@ serve(async (req) => {
       multiplier,
       results: { private: privateResult, public: publicResult },
     });
-
-    // -- helpers --
-    async function composeAndPush(channel: Channel, mint: string, multiplier: number | null) {
-      const cmp = await invoke(composeUrl, anonKey, { mint, channel, multiplier });
-      if (!cmp.ok || !cmp.json?.ok) {
-        return { ok: false, channel, error: 'compose failed', detail: cmp.json, pushed: false };
-      }
-      if (!cmp.json.post_eligible) {
-        return {
-          ok: true, channel, pushed: false,
-          eligible: false, block_reason: cmp.json.block_reason,
-          logId: cmp.json.log_id, mcap: null,
-        };
-      }
-      const text = cmp.json.text as string;
-      const logId = cmp.json.log_id;
-      // Pull mcap from the log row compose just inserted
-      let mcap: number | null = null;
-      if (logId) {
-        const { data: lr } = await supabase
-          .from('no_lube_post_log').select('mcap').eq('id', logId).maybeSingle();
-        mcap = lr?.mcap != null ? Number(lr.mcap) : null;
-      }
-      const psh = await invoke(pushUrl, anonKey, { text, log_id: logId, channel });
-      const pushed = !!(psh.ok && psh.json?.ok);
-      return {
-        ok: true, channel, pushed, eligible: true,
-        logId, mcap,
-        message_id: psh.json?.message_id ?? null,
-        push_error: pushed ? null : psh.json,
-      };
-    }
-
-    function json(body: unknown, status = 200) {
-      return new Response(JSON.stringify(body), {
-        status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    async function stampPost(
-      sb: ReturnType<typeof createClient>,
-      logId: string | null | undefined,
-      patch: { times_posted: number; last_mcap_at_post: number; last_multiplier: number | null },
-    ) {
-      if (!logId) return;
-      await sb.from('no_lube_post_log').update({
-        times_posted: patch.times_posted,
-        last_mcap_at_post: patch.last_mcap_at_post,
-        last_multiplier: patch.last_multiplier,
-        last_posted_at: new Date().toISOString(),
-      }).eq('id', logId);
-    }
   } catch (e: any) {
     console.error('[no-lube-orchestrate] fatal', e);
     return new Response(JSON.stringify({ ok: false, error: String(e?.message || e) }), {
