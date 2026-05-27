@@ -333,9 +333,83 @@ Reputation: {devReputation}
 [📈 Chart]({chartUrl}) · [🐋 BubbleMap]({bubbleMapUrl}) · [🧠 Full Intel]({intelUrl})
 [💰 Buy]({buyUrl}) · [⚠️ Scan History]({scanHistoryUrl}) · [🌐 Socials]({socialsUrl})`,
 
-  no_lube_public: `🐸 *$\{ticker}*\n{multiplierLine}\n\n🟢 Momentum: {momentum}\n🟡 Risk: {risk}\n⚡ Verdict: {verdict}\n\n💰 MC: {mc} ({mcChange}) · VOL: {vol24h} · LP: {lp}\nAge: {age}\n\n🧠 Top 10: {top10} · Fresh: {freshWallets}`,
+  no_lube_public: `🐸 *$\{ticker}*
+{multiplierLine}
+━━━━━━━━━━━━
 
-  no_lube_private: `🐸 *$\{ticker}* — PRIVATE\n{multiplierLine}\n\n🟢 Momentum: {momentum}\n🟡 Risk: {risk}\n⚡ Verdict: {verdict}\n\n💰 MC: {mc} ({mcChange})\nVOL: {vol24h}\nLP: {lp}\nAge: {age}\n\n🧠 Top 10: {top10}\nFresh Wallets: {freshWallets}\nWallet Spread: {walletSpread}`,
+🟢 Momentum: {momentum}
+🟡 Risk: {risk}
+⚡ Verdict: {verdict}
+
+💰 *Market*
+MC: {mc} ({mcChange})
+VOL: {vol24h}
+LP: {lp}
+Age: {age}
+
+🧠 *Holder Health*
+Top 10: {top10}
+Fresh Wallets: {freshWallets}
+Wallet Spread: {walletSpread}
+Bundled Risk: {bundledRisk}
+
+🤖 *BlackBox AI*
+• {aiBullet1}
+• {aiBullet2}
+• {aiBullet3}
+• {aiBullet4}
+
+🕵️ *Developer Intel*
+Funded By: {fundedBy}
+Past Launches: {pastLaunches}
+Rugs: {rugs}
+Reputation: {devReputation}
+
+*BLACKBOX SCORE: {blackboxScore}/100*
+
+[📈 Chart]({chartUrl}) · [🐋 BubbleMap]({bubbleMapUrl}) · [🧠 Full Intel]({intelUrl})
+[💰 Buy]({buyUrl}) · [⚠️ Scan History]({scanHistoryUrl}) · [🌐 Socials]({socialsUrl})
+
+CA: \`{ca}\``,
+
+  no_lube_private: `🐸 *$\{ticker}* — PRIVATE
+{multiplierLine}
+━━━━━━━━━━━━
+
+🟢 Momentum: {momentum}
+🟡 Risk: {risk}
+⚡ Verdict: {verdict}
+
+💰 *Market*
+MC: {mc} ({mcChange})
+VOL: {vol24h}
+LP: {lp}
+Age: {age}
+
+🧠 *Holder Health*
+Top 10: {top10}
+Fresh Wallets: {freshWallets}
+Wallet Spread: {walletSpread}
+Bundled Risk: {bundledRisk}
+
+🤖 *BlackBox AI*
+• {aiBullet1}
+• {aiBullet2}
+• {aiBullet3}
+• {aiBullet4}
+
+🕵️ *Developer Intel*
+Funded By: {fundedBy}
+Past Launches: {pastLaunches}
+Rugs: {rugs}
+Reputation: {devReputation}
+
+*BLACKBOX SCORE: {blackboxScore}/100*
+
+[📈 Chart]({chartUrl}) · [🐋 BubbleMap]({bubbleMapUrl}) · [🧠 Full Intel]({intelUrl})
+[💰 Buy]({buyUrl}) · [⚠️ Scan History]({scanHistoryUrl}) · [🌐 Socials]({socialsUrl})
+
+CA: \`{ca}\``,
 };
 
 // Legacy default for backwards compatibility
