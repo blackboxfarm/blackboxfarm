@@ -279,46 +279,47 @@ export function NoLubeChannelPanel({
         </CardContent>
       </Card>
 
-      {/* Template editor */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label className="text-sm font-medium">
-            Template — <code className="text-xs bg-muted px-1 rounded">{templateName}</code>
-          </Label>
-          <div className="flex gap-2">
-            <EmojiPickerPopover onPick={insertEmoji} />
-            <Button variant="outline" size="sm" onClick={onResetTemplate}>
-              <RotateCcw className="h-3 w-3 mr-1" />Reset
-            </Button>
-            <Button size="sm" onClick={() => onSaveTemplate()} disabled={isSaving}>
-              {isSaving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
-              Save
+      {/* Template editor + Preview — side-by-side */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-medium">
+              Template — <code className="text-xs bg-muted px-1 rounded">{templateName}</code>
+            </Label>
+            <div className="flex gap-2">
+              <EmojiPickerPopover onPick={insertEmoji} />
+              <Button variant="outline" size="sm" onClick={onResetTemplate}>
+                <RotateCcw className="h-3 w-3 mr-1" />Reset
+              </Button>
+              <Button size="sm" onClick={() => onSaveTemplate()} disabled={isSaving}>
+                {isSaving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
+                Save
+              </Button>
+            </div>
+          </div>
+          <Textarea
+            ref={textareaRef}
+            value={templateText}
+            onChange={e => onTemplateChange(e.target.value)}
+            rows={28}
+            className="font-mono text-xs min-h-[640px]"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-medium">Preview (mock data)</Label>
+            <Button
+              variant="outline" size="sm"
+              onClick={() => { navigator.clipboard.writeText(previewRendered); toast.success('Copied'); }}
+            >
+              <Copy className="h-3 w-3 mr-1" />Copy
             </Button>
           </div>
+          <pre className="p-3 rounded border border-border bg-muted/30 text-xs whitespace-pre-wrap font-mono min-h-[640px] max-h-[640px] overflow-auto">
+            {previewRendered}
+          </pre>
         </div>
-        <Textarea
-          ref={textareaRef}
-          value={templateText}
-          onChange={e => onTemplateChange(e.target.value)}
-          rows={14}
-          className="font-mono text-xs"
-        />
-      </div>
-
-      {/* Preview */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label className="text-sm font-medium">Preview (mock data)</Label>
-          <Button
-            variant="outline" size="sm"
-            onClick={() => { navigator.clipboard.writeText(previewRendered); toast.success('Copied'); }}
-          >
-            <Copy className="h-3 w-3 mr-1" />Copy
-          </Button>
-        </div>
-        <pre className="p-3 rounded border border-border bg-muted/30 text-xs whitespace-pre-wrap font-mono">
-          {previewRendered}
-        </pre>
       </div>
 
       {/* Compose + Push for THIS channel */}
