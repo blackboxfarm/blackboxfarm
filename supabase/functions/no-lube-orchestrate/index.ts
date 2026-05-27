@@ -3,10 +3,16 @@
 // Flow:
 //   1) Look up the most recent successful no_lube_post_log row for this mint.
 //   2) If none: compose+push to the PRIVATE channel only. Stamp last_mcap_at_post.
-//   3) If a previous post exists AND current mcap >= last_mcap_at_post * threshold:
+//   3) If a previous post exists AND current mcap >= FIRST-SEEN mcap * threshold:
 //        compose+push to PRIVATE and PUBLIC, exposing {multiplier} in the template.
 //        Bump times_posted, refresh last_mcap_at_post, store last_multiplier.
 //   4) Otherwise: skip (returns skipped=true with reason).
+//
+// IMPORTANT: the multiplier is the cumulative growth factor from the very first
+// time we ever logged this token (oldest successful post_log row). It is NOT
+// based on the previous post's mcap and NOT based on how many times we've seen
+// the token. Example: first seen at 26k, later 58k → 2X; later 120k → ~4X;
+// later 380k → ~14X (all measured against the original 26k baseline).
 //
 // Threshold lives on no_lube_global_profile.multiplier_threshold (default 2.0).
 // Compose handles all variable resolution, eligibility, and translation.
@@ -69,7 +75,7 @@ serve(async (req) => {
       .maybeSingle();
     if (gprof?.multiplier_threshold) threshold = Number(gprof.multiplier_threshold) || 2.0;
 
-    // Last successful post for this mint (carries last_mcap_at_post + times_posted)
+    // Last successful post for this mint (carries times_posted + last_multiplier)
     const { data: prevRows } = await supabase
       .from('no_lube_post_log')
       .select('id, times_posted, last_mcap_at_post, mcap, posted_at, composed_at')
@@ -79,6 +85,24 @@ serve(async (req) => {
       .limit(1);
     const prev = prevRows?.[0] || null;
     const isFirstSighting = !prev;
+
+    // FIRST-SEEN mcap = oldest successful post_log row for this mint.
+    // This is the immutable baseline used for the X multiplier.
+    let firstMcap: number | null = null;
+    if (prev) {
+      const { data: firstRows } = await supabase
+        .from('no_lube_post_log')
+        .select('mcap, composed_at')
+        .eq('token_mint', mint)
+        .eq('posted', true)
+        .not('mcap', 'is', null)
+        .order('composed_at', { ascending: true })
+        .limit(1);
+      const f = firstRows?.[0];
+      if (f?.mcap != null && isFinite(Number(f.mcap)) && Number(f.mcap) > 0) {
+        firstMcap = Number(f.mcap);
+      }
+    }
 
     const composeUrl = `${supabaseUrl}/functions/v1/no-lube-compose`;
     const pushUrl = `${supabaseUrl}/functions/v1/no-lube-push`;
@@ -144,8 +168,8 @@ serve(async (req) => {
       });
     }
 
-    // ---- RE-SIGHTING: need current mcap from a fresh compose (private) to compare ----
-    const baseMcap = Number(prev.last_mcap_at_post ?? prev.mcap ?? 0);
+    // ---- RE-SIGHTING: compare current mcap against the FIRST-SEEN mcap ----
+    const baseMcap = Number(firstMcap ?? prev.mcap ?? 0);
     if (!baseMcap) {
       // No baseline to compare against — treat as first sighting
       const result = await composeAndPush('private', mint, null);
