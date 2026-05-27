@@ -13,7 +13,7 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
-    const { text, log_id, override, channel: rawChannel } = await req.json();
+    const { text, log_id, override, channel: rawChannel, image_url, cta } = await req.json();
     if (!text || typeof text !== 'string') {
       return new Response(JSON.stringify({ ok: false, error: 'text required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -87,16 +87,44 @@ serve(async (req) => {
       return { ok: r.ok, json: await r.json() };
     };
 
-    let result = await post({
-      chat_id: chatId,
-      text,
-      parse_mode: 'Markdown',
-      disable_web_page_preview: true,
-    });
-    if (!(result.ok && result.json.ok)) {
-      console.warn('[no-lube-push] markdown failed, retrying plain', result.json);
-      const plain = text.replace(/[*_`\[\]()]/g, '');
-      result = await post({ chat_id: chatId, text: plain, disable_web_page_preview: true });
+    const postPhoto = async (body: Record<string, unknown>) => {
+      const r = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return { ok: r.ok, json: await r.json() };
+    };
+
+    // Build optional inline keyboard from cta = { text, url } | [{text,url},...]
+    const ctaButtons = Array.isArray(cta) ? cta : (cta && cta.text && cta.url ? [cta] : null);
+    const reply_markup = ctaButtons && ctaButtons.length
+      ? { inline_keyboard: [ctaButtons.map((b: any) => ({ text: String(b.text), url: String(b.url) }))] }
+      : undefined;
+
+    let result: { ok: boolean; json: any };
+    if (image_url && typeof image_url === 'string') {
+      // Photo path: caption uses Markdown; Telegram caption limit is 1024 — truncate safely.
+      const caption = text.length > 1024 ? text.slice(0, 1020) + '…' : text;
+      result = await postPhoto({
+        chat_id: chatId, photo: image_url, caption,
+        parse_mode: 'Markdown', reply_markup,
+      });
+      if (!(result.ok && result.json.ok)) {
+        console.warn('[no-lube-push] sendPhoto markdown failed, retrying plain', result.json);
+        const plain = caption.replace(/[*_`\[\]()]/g, '');
+        result = await postPhoto({ chat_id: chatId, photo: image_url, caption: plain, reply_markup });
+      }
+    } else {
+      result = await post({
+        chat_id: chatId, text, parse_mode: 'Markdown',
+        disable_web_page_preview: true, reply_markup,
+      });
+      if (!(result.ok && result.json.ok)) {
+        console.warn('[no-lube-push] markdown failed, retrying plain', result.json);
+        const plain = text.replace(/[*_`\[\]()]/g, '');
+        result = await post({ chat_id: chatId, text: plain, disable_web_page_preview: true, reply_markup });
+      }
     }
 
     if (!(result.ok && result.json.ok)) {

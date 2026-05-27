@@ -106,8 +106,29 @@ serve(async (req) => {
 
     const composeUrl = `${supabaseUrl}/functions/v1/no-lube-compose`;
     const pushUrl = `${supabaseUrl}/functions/v1/no-lube-push`;
+    const renderUrl = `${supabaseUrl}/functions/v1/no-lube-render-card`;
 
-    const composeAndPush = async (channel: Channel, mint: string, multiplier: number | null) => {
+    // Load public profile CTA config once (only used when pushing to public).
+    const { data: pubProfile } = await supabase
+      .from('no_lube_channel_profiles')
+      .select('trade_bot_username, access_purchase_url, cta_button_text')
+      .eq('kind', 'public')
+      .maybeSingle();
+    const buildPublicCta = () => {
+      const url = pubProfile?.access_purchase_url
+        || (pubProfile?.trade_bot_username
+              ? `https://t.me/${String(pubProfile.trade_bot_username).replace(/^@/, '')}`
+              : null);
+      if (!url) return null;
+      return { text: pubProfile?.cta_button_text || '🚀 Buy / Get Access', url };
+    };
+
+    const composeAndPush = async (
+      channel: Channel,
+      mint: string,
+      multiplier: number | null,
+      opts: { image_url?: string | null; cta?: { text: string; url: string } | null } = {},
+    ) => {
       const cmp = await invoke(composeUrl, anonKey, { mint, channel, multiplier });
       if (!cmp.ok || !cmp.json?.ok) {
         return { ok: false, channel, error: 'compose failed', detail: cmp.json, pushed: false };
@@ -127,7 +148,11 @@ serve(async (req) => {
           .from('no_lube_post_log').select('mcap').eq('id', logId).maybeSingle();
         mcap = lr?.mcap != null ? Number(lr.mcap) : null;
       }
-      const psh = await invoke(pushUrl, anonKey, { text, log_id: logId, channel });
+      const psh = await invoke(pushUrl, anonKey, {
+        text, log_id: logId, channel,
+        image_url: opts.image_url || undefined,
+        cta: opts.cta || undefined,
+      });
       const pushed = !!(psh.ok && psh.json?.ok);
       return {
         ok: true, channel, pushed, eligible: true,
@@ -213,7 +238,24 @@ serve(async (req) => {
     const multiplier = Math.round(ratio * 10) / 10;
 
     const privateResult = await composeAndPush('private', mint, multiplier);
-    const publicResult = await composeAndPush('public', mint, multiplier);
+
+    // For the public channel, generate an AI hype card and attach a CTA button.
+    let publicImageUrl: string | null = null;
+    try {
+      const render = await invoke(renderUrl, anonKey, { mint, multiplier });
+      if (render.ok && render.json?.ok && render.json?.image_url) {
+        publicImageUrl = String(render.json.image_url);
+      } else {
+        console.warn('[no-lube-orchestrate] render-card failed, posting text-only', render.json);
+      }
+    } catch (e) {
+      console.warn('[no-lube-orchestrate] render-card threw', e);
+    }
+    const publicCta = buildPublicCta();
+    const publicResult = await composeAndPush('public', mint, multiplier, {
+      image_url: publicImageUrl,
+      cta: publicCta,
+    });
 
     if (privateResult.ok && privateResult.pushed && privateResult.mcap != null) {
       await stampPost(privateResult.logId, {
