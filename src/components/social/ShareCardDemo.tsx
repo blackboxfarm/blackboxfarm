@@ -689,6 +689,44 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
 
           {(['small', 'large', 'subscription', 'shares', 'tg_posted', 'tg_public_post', 'tg_search', 'x_advert_1', 'x_advert_2', 'x_advert_3', 'x_advert_4', 'tg_advert_1', 'tg_advert_2', 'tg_advert_3', 'no_lube'] as TemplateName[]).map((name) => (
             <TabsContent key={name} value={name} className="space-y-4">
+              {name === 'no_lube' ? (
+                <>
+                  <div className="p-3 bg-pink-500/10 border border-pink-500/30 rounded-lg">
+                    <Label className="font-medium text-pink-300">🐸 No Lube — Master / Public / Private</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Default is the master template. Public and Private have their own channel profile
+                      (Telegram chat ID, socials, language) and their own template + preview.
+                    </p>
+                  </div>
+                  <Tabs defaultValue="default" className="w-full">
+                    <TabsList>
+                      <TabsTrigger value="default">Default</TabsTrigger>
+                      <TabsTrigger value="public">Public Channel</TabsTrigger>
+                      <TabsTrigger value="private">Private Channel</TabsTrigger>
+                    </TabsList>
+                    {(['default', 'public', 'private'] as const).map(kind => {
+                      const tname: TemplateName =
+                        kind === 'default' ? 'no_lube'
+                        : kind === 'public' ? 'no_lube_public'
+                        : 'no_lube_private';
+                      return (
+                        <TabsContent key={kind} value={kind} className="space-y-4 pt-3">
+                          <NoLubeChannelPanel
+                            kind={kind}
+                            templateName={tname}
+                            templateText={templates[tname]}
+                            onTemplateChange={(text) => setTemplates(prev => ({ ...prev, [tname]: text }))}
+                            onSaveTemplate={() => handleSaveTemplate(tname)}
+                            onResetTemplate={() => handleResetTemplate(tname)}
+                            isSaving={isSaving}
+                            previewData={tokenData}
+                          />
+                        </TabsContent>
+                      );
+                    })}
+                  </Tabs>
+                </>
+              ) : (<>
               {/* Active toggle for small/large */}
               {(name === 'small' || name === 'large') && (
                 <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
@@ -752,108 +790,6 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                     Sent to BlackBox Telegram group when a holders report is generated on /holders.
                     Uses Markdown formatting (*bold*, \`code\`).
                   </p>
-                </div>
-              )}
-
-              {name === 'no_lube' && (
-                <div className="p-3 bg-pink-500/10 border border-pink-500/30 rounded-lg">
-                  <Label className="font-medium text-pink-300">🐸 No Lube Channel Post</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Posted to the No Lube channel after we bait a CA and harvest the trader-bot replies.
-                    One consensus block per metric — Telegram Markdown (*bold*, \`code\`). Variables below
-                    cover everything we scrape from HoldersIntel + Phanes + Rick + BlackBox AI.
-                  </p>
-                </div>
-              )}
-
-              {name === 'no_lube' && (
-                <div className="p-3 bg-card/60 border border-border rounded-lg space-y-3">
-                  <Label className="font-medium">Compose for a token</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Paste token address (mint)..."
-                      value={noLubeMint}
-                      onChange={(e) => setNoLubeMint(e.target.value)}
-                      className="font-mono text-sm"
-                    />
-                    <Button
-                      onClick={handleComposeNoLube}
-                      disabled={isComposingNoLube || !noLubeMint.trim()}
-                    >
-                      {isComposingNoLube
-                        ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Composing…</>
-                        : <>Compose</>}
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Pulls from DB cache (&lt; 2 min old) → DexScreener → Solscan v2 Pro → Helius.
-                    Anything missing renders as —.
-                  </p>
-                  {noLubeSources && (
-                    <div className="flex flex-wrap gap-1 text-[10px]">
-                      {Object.entries(noLubeSources).map(([k, v]) => (
-                        <Badge key={k} variant="outline" className="text-[10px]">
-                          {k}: {v}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                  {noLubeComposed && (
-                    <>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge
-                          variant="outline"
-                          className={
-                            noLubeVerdictClass === 'healthy' ? 'border-green-500 text-green-400' :
-                            noLubeVerdictClass === 'crazy' ? 'border-orange-500 text-orange-400' :
-                            noLubeVerdictClass === 'dead' ? 'border-red-500 text-red-400' : ''
-                          }
-                        >
-                          {noLubeVerdictClass === 'healthy' && '✅ Healthy'}
-                          {noLubeVerdictClass === 'crazy' && '🤯 Crazy Anomaly'}
-                          {noLubeVerdictClass === 'dead' && '☠️ Dead'}
-                        </Badge>
-                        {noLubeBlockReason && (
-                          <span className="text-xs text-muted-foreground">{noLubeBlockReason}</span>
-                        )}
-                      </div>
-                      <Button
-                        className="w-full bg-pink-600 hover:bg-pink-700"
-                        onClick={handlePushNoLube}
-                        disabled={isPushingNoLube || !noLubeEligible}
-                        title={!noLubeEligible ? (noLubeBlockReason || 'Blocked') : 'Push to No Lube'}
-                      >
-                        {isPushingNoLube
-                          ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Pushing…</>
-                          : !noLubeEligible
-                            ? <>⛔ Blocked — {noLubeBlockReason}</>
-                            : <><Send className="h-4 w-4 mr-1" />Push to No Lube</>}
-                      </Button>
-                    </>
-                  )}
-                  {/* Recent post log */}
-                  <details className="mt-2 rounded border border-border bg-background/40">
-                    <summary className="cursor-pointer px-2 py-1 text-xs text-muted-foreground">
-                      📋 Recent post log ({noLubeLog.length})
-                    </summary>
-                    <div className="max-h-64 overflow-auto text-[11px] font-mono">
-                      {noLubeLog.length === 0 && <div className="p-2 text-muted-foreground">No entries yet.</div>}
-                      {noLubeLog.map((row) => (
-                        <div key={row.id} className="flex items-center gap-2 border-t border-border/50 px-2 py-1">
-                          <span className="w-4">
-                            {row.posted ? '✅' : row.verdict_class === 'crazy' ? '🤯' : row.verdict_class === 'dead' ? '☠️' : '⛔'}
-                          </span>
-                          <span className="w-12 truncate">{row.ticker || '—'}</span>
-                          <span className="w-20 truncate text-muted-foreground">{row.token_mint?.slice(0, 8)}…</span>
-                          <span className="w-14">{row.verdict_class}</span>
-                          <span className="flex-1 truncate text-muted-foreground">
-                            {row.posted ? 'posted' : (row.block_reason || '')}
-                          </span>
-                          <span className="text-muted-foreground">{new Date(row.composed_at).toLocaleTimeString()}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </details>
                 </div>
               )}
 
@@ -934,12 +870,11 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                     )}
                   </Label>
                   <div className="p-3 bg-muted/50 rounded-lg border text-sm whitespace-pre-wrap min-h-[300px]">
-                    {name === 'no_lube' && noLubeComposed
-                      ? noLubeComposed
-                      : processTemplate(templates[name], tokenData)}
+                    {processTemplate(templates[name], tokenData)}
                   </div>
                 </div>
               </div>
+              </>)}
             </TabsContent>
           ))}
         </Tabs>
