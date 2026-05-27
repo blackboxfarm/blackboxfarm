@@ -561,38 +561,26 @@ serve(async (req) => {
         .eq('token_mint', run.token_mint)
         .maybeSingle();
 
-      const { data: replies } = await supabase
-        .from('blackbox_bot_replies')
-        .select('bot_username, parsed_jsonb, raw_text')
-        .eq('run_id', run.id);
-
-      const digest = composeDigest({
-        mint: run.token_mint,
-        replies: replies || [],
-        native: { ...(native || {}), symbol: native?.token_symbol },
-      });
-
-      const digestMsgId = await sendViaHoldersIntel(Number(outputChat), digest);
+      // Legacy composeDigest path retired — the No Lube orchestrator now owns
+      // all routing (Private on first sight, Private + Public on re-sight ≥ Nx).
       await supabase.from('blackbox_aggregator_runs').update({
-        status: digestMsgId ? 'published' : 'failed',
-        digest_message_id: digestMsgId,
-        digest_text: digest,
+        status: 'handed_off',
         replies_collected: saved,
-        error_message: digestMsgId ? null : 'digest post failed',
       }).eq('id', run.id);
       summary.harvested++;
-      if (digestMsgId) summary.published++;
 
       // Hand the mint to the No Lube orchestrator. It decides First-Sighting
       // (→ Private channel) vs Re-Sighting at ≥ Nx (→ Private + Public) using
       // no_lube_post_log + no_lube_global_profile.multiplier_threshold.
-      // Fire-and-forget so a slow translation never blocks the next tick.
       try {
-        supabase.functions.invoke('no-lube-orchestrate', {
+        const { error: orchErr } = await supabase.functions.invoke('no-lube-orchestrate', {
           body: { mint: run.token_mint },
-        }).then(({ error }) => {
-          if (error) console.warn('[blackbox-tick] no-lube-orchestrate error', error);
-        }).catch((e) => console.warn('[blackbox-tick] no-lube-orchestrate exception', e));
+        });
+        if (orchErr) {
+          console.warn('[blackbox-tick] no-lube-orchestrate error', orchErr);
+        } else {
+          summary.published++;
+        }
       } catch (e) {
         console.warn('[blackbox-tick] no-lube-orchestrate dispatch failed', e);
       }
