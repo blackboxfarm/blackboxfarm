@@ -326,29 +326,40 @@ serve(async (req) => {
       .maybeSingle();
     const tpl = tplRow?.template_text || '🐸 *${ticker}*\n{momentum} · {risk} · {verdict}';
 
-    // 1b) Channel profile (language + socials for {vars})
+    // 1b) Shared global profile (language + style) + per-tab profile (nickname + TG title)
+    //     + ordered socials list (shared across all 3 tabs).
     let language = 'en';
-    let profileVars: Record<string, string> = {
+    let style = 'degen';
+    const profileVars: Record<string, string> = {
       profileXHandle: DASH,
       profileInstagramHandle: DASH,
       profileTiktokHandle: DASH,
       profileChannelTitle: DASH,
+      profileTabNickname: DASH,
+      profileTelegramLink: DASH,
+      profileStyle: style,
     };
-    if (channel !== 'default') {
-      const { data: prof } = await supabase
-        .from('no_lube_channel_profiles')
-        .select('*')
-        .eq('kind', channel)
-        .maybeSingle();
-      if (prof) {
-        language = prof.language || 'en';
-        profileVars = {
-          profileXHandle: prof.x_handle || DASH,
-          profileInstagramHandle: prof.instagram_handle || DASH,
-          profileTiktokHandle: prof.tiktok_handle || DASH,
-          profileChannelTitle: prof.telegram_chat_title || DASH,
-        };
-      }
+    const { data: gprof } = await supabase
+      .from('no_lube_global_profile').select('language, style').eq('id', 'singleton').maybeSingle();
+    if (gprof) {
+      language = gprof.language || 'en';
+      style = gprof.style || 'degen';
+      profileVars.profileStyle = style;
+    }
+    const { data: tprof } = await supabase
+      .from('no_lube_channel_profiles').select('*').eq('kind', channel).maybeSingle();
+    if (tprof) {
+      profileVars.profileTabNickname = tprof.tab_nickname || DASH;
+      profileVars.profileTelegramLink = tprof.telegram_link || DASH;
+      profileVars.profileChannelTitle = tprof.telegram_chat_title || DASH;
+    }
+    const { data: socials } = await supabase
+      .from('no_lube_socials').select('platform, handle').order('display_order', { ascending: true });
+    for (const s of (socials || [])) {
+      const p = String(s.platform || '').toLowerCase();
+      if (p === 'x' && profileVars.profileXHandle === DASH) profileVars.profileXHandle = s.handle || DASH;
+      if (p === 'instagram' && profileVars.profileInstagramHandle === DASH) profileVars.profileInstagramHandle = s.handle || DASH;
+      if (p === 'tiktok' && profileVars.profileTiktokHandle === DASH) profileVars.profileTiktokHandle = s.handle || DASH;
     }
 
     // 2) DB cache (token_rankings most recent within 2 min)
