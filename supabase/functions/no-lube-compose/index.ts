@@ -258,15 +258,58 @@ function renderTemplate(tpl: string, vars: Record<string, string>): string {
   return out;
 }
 
+const LANGUAGE_NAMES: Record<string, string> = {
+  en: 'English', fr: 'French', ar: 'Arabic', ja: 'Japanese',
+  zh: 'Mandarin Chinese', tr: 'Turkish', 'pt-BR': 'Brazilian Portuguese',
+  ko: 'Korean', id: 'Indonesian', es: 'Spanish', ru: 'Russian', vi: 'Vietnamese',
+};
+
+/** Full re-render translation via Lovable AI Gateway. Preserves numbers/URLs/Markdown. */
+async function translateText(text: string, langCode: string): Promise<string | null> {
+  const apiKey = Deno.env.get('LOVABLE_API_KEY');
+  if (!apiKey) return null;
+  const langName = LANGUAGE_NAMES[langCode] || langCode;
+  const r = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'google/gemini-2.5-flash',
+      messages: [
+        { role: 'system', content:
+          `Translate the user message into ${langName}. Rules:\n` +
+          `- Translate EVERY natural-language word, including section labels and headers.\n` +
+          `- Do NOT translate numbers, percentages, money amounts, URLs, $TICKER symbols, contract addresses, or emoji.\n` +
+          `- Preserve Telegram Markdown exactly (*bold*, _italic_, \`code\`, [text](url)) and all line breaks.\n` +
+          `- Output ONLY the translated text, no preface or quotes.`,
+        },
+        { role: 'user', content: text },
+      ],
+      temperature: 0.2,
+    }),
+  });
+  if (!r.ok) {
+    console.error('[translate] gateway error', r.status, await r.text().catch(() => ''));
+    return null;
+  }
+  const j = await r.json();
+  return j?.choices?.[0]?.message?.content?.trim() || null;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
-    const { mint } = await req.json();
+    const { mint, channel: rawChannel } = await req.json();
     if (!mint || typeof mint !== 'string') {
       return new Response(JSON.stringify({ ok: false, error: 'mint required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+    const channel: 'default' | 'public' | 'private' =
+      rawChannel === 'public' || rawChannel === 'private' ? rawChannel : 'default';
+    const templateName =
+      channel === 'public' ? 'no_lube_public'
+      : channel === 'private' ? 'no_lube_private'
+      : 'no_lube';
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
@@ -275,13 +318,38 @@ serve(async (req) => {
 
     const sources: Record<string, string> = {};
 
-    // 1) Template
+    // 1) Template — per-channel
     const { data: tplRow } = await supabase
       .from('holders_intel_templates')
       .select('template_text')
-      .eq('template_name', 'no_lube')
+      .eq('template_name', templateName)
       .maybeSingle();
     const tpl = tplRow?.template_text || '🐸 *${ticker}*\n{momentum} · {risk} · {verdict}';
+
+    // 1b) Channel profile (language + socials for {vars})
+    let language = 'en';
+    let profileVars: Record<string, string> = {
+      profileXHandle: DASH,
+      profileInstagramHandle: DASH,
+      profileTiktokHandle: DASH,
+      profileChannelTitle: DASH,
+    };
+    if (channel !== 'default') {
+      const { data: prof } = await supabase
+        .from('no_lube_channel_profiles')
+        .select('*')
+        .eq('kind', channel)
+        .maybeSingle();
+      if (prof) {
+        language = prof.language || 'en';
+        profileVars = {
+          profileXHandle: prof.x_handle || DASH,
+          profileInstagramHandle: prof.instagram_handle || DASH,
+          profileTiktokHandle: prof.tiktok_handle || DASH,
+          profileChannelTitle: prof.telegram_chat_title || DASH,
+        };
+      }
+    }
 
     // 2) DB cache (token_rankings most recent within 2 min)
     let cached: any = null;
@@ -416,9 +484,22 @@ serve(async (req) => {
       twitterUrl: dex?.info?.socials?.find((s: any) => s.type === 'twitter')?.url || DASH,
       telegramUrl: dex?.info?.socials?.find((s: any) => s.type === 'telegram')?.url || DASH,
       websiteUrl: dex?.info?.websites?.[0]?.url || DASH,
+      ...profileVars,
     };
 
-    const text = renderTemplate(tpl, vars);
+    let text = renderTemplate(tpl, vars);
+
+    // Optional full re-render translation when channel language is not English.
+    // We translate the rendered text wholesale (labels + natural-language) but
+    // preserve numbers, tickers, URLs, and Markdown via the model instructions.
+    if (language && language !== 'en') {
+      try {
+        const translated = await translateText(text, language);
+        if (translated && translated.trim().length > 0) text = translated;
+      } catch (e) {
+        console.error('[no-lube-compose] translation failed; using English', e);
+      }
+    }
 
     // Log the compose attempt (posted=false until push succeeds)
     let logId: string | null = null;

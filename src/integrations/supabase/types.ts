@@ -11364,6 +11364,42 @@ export type Database = {
         }
         Relationships: []
       }
+      no_lube_channel_profiles: {
+        Row: {
+          instagram_handle: string | null
+          kind: string
+          language: string
+          telegram_chat_id: string | null
+          telegram_chat_title: string | null
+          telegram_chat_username: string | null
+          tiktok_handle: string | null
+          updated_at: string
+          x_handle: string | null
+        }
+        Insert: {
+          instagram_handle?: string | null
+          kind: string
+          language?: string
+          telegram_chat_id?: string | null
+          telegram_chat_title?: string | null
+          telegram_chat_username?: string | null
+          tiktok_handle?: string | null
+          updated_at?: string
+          x_handle?: string | null
+        }
+        Update: {
+          instagram_handle?: string | null
+          kind?: string
+          language?: string
+          telegram_chat_id?: string | null
+          telegram_chat_title?: string | null
+          telegram_chat_username?: string | null
+          tiktok_handle?: string | null
+          updated_at?: string
+          x_handle?: string | null
+        }
+        Relationships: []
+      }
       no_lube_post_log: {
         Row: {
           age_minutes: number | null
