@@ -1,115 +1,87 @@
+# Plan — Public-Channel Image Cards + Per-Profile Trade Bots + Asset Library
 
-## Goal
-
-Stop No Lube from posting garbage (dead rugs AND insane rockets), add proper iconography and time/bonding vars to the template, and keep a full audit log of every token that was considered — posted or not, with reason.
-
----
-
-## 1. "Crazy Filter" — gate every Compose → Push
-
-In `no-lube-compose` compute a `verdict_class` after we gather metrics:
-
-- **dead** — price down ≥ 80% from ATH within 24h, OR dev sold + liq < $5k, OR 24h vol < $1k on a >1h old token
-- **crazy** — age < 10m AND (mcap ≥ $500k OR 5m price change ≥ +100% OR 24h vol ≥ $500k on a <10m token), OR top10 ≥ 80% + age < 30m
-- **healthy** — everything else (still subject to existing momentum/risk classification)
-
-Compose response gains:
-```
-{ ok, text, vars, sources, verdict_class, post_eligible, block_reason }
-```
-- `post_eligible = verdict_class === 'healthy'`
-- UI: when `post_eligible=false`, the "Push to No Lube" button is disabled and shows the `block_reason` ("⛔ Anomaly — 1M mcap in 2m, not posting"). Compose preview still renders so user can see why.
-- `no-lube-push` re-checks `post_eligible` server-side (defense in depth) — refuses if false unless an `override:true` flag is sent (admin only).
-
-## 2. Post log table
-
-New table `no_lube_post_log`:
-```
-id uuid pk, token_mint text, ticker text,
-verdict_class text,     -- dead | crazy | healthy
-posted boolean,
-block_reason text,      -- null when posted
-mcap numeric, vol_24h numeric, liq_usd numeric,
-price_change_24h numeric, top10_pct numeric,
-age_minutes int, mint_time timestamptz,
-composed_at timestamptz default now(),
-posted_at timestamptz, tg_message_id bigint,
-composed_by uuid        -- auth.uid()
-```
-- `no-lube-compose` writes a row on every compose (posted=false initially)
-- `no-lube-push` updates row with `posted=true, posted_at, tg_message_id` on success
-- RLS: super_admin select-all; service_role full.
-- Admin UI: small log panel under the Compose widget showing last 50 rows with mint, verdict, posted Y/N, reason.
-
-## 3. Template variable additions
-
-New vars exposed by `no-lube-compose` and documented in the template editor:
-
-| Var | Meaning |
-|---|---|
-| `{momentumIcon}` | 🚀 strong / ➡️ flat / 📉 fading |
-| `{riskIcon}` | 🟢 low / 🟡 med / 🔴 high / ☠️ dead / 🤯 crazy |
-| `{verdictIcon}` | ✅ send / 👀 watch / ⛔ pass / ☠️ dead / 🤯 anomaly |
-| `{age}` | DEX pair age (existing — bonded age) |
-| `{mintTime}` | Human-readable "X mins ago" / "Yh Zm ago" / "Xd Yh ago" |
-| `{bondingState}` | If not yet bonded: `Not Yet Bonded! 55% Bonding Curve!`; else empty |
-
-Formatter rules for `{mintTime}`:
-- `< 1h` → `36 mins ago`
-- `< 1d` → `7 hrs 21 mins ago`
-- `≥ 1d` → `2 days 4 hrs ago`
-
-Mint time source order: Helius `getAsset` → first signature via Helius `getSignaturesForAddress(mint, limit=1, before=null)` reversed → fall back to DexScreener `pairCreatedAt` with a `(approx)` suffix.
-
-Bonding curve %: Pump.fun curve progress via existing pump-fun pricer (already in codebase per memory). If `bondedAt` exists → `bondingState = ''`.
-
-## 4. Default `no_lube` template (updated)
-
-```
-{verdictIcon} *${ticker}*
-{momentumIcon} Momentum: {momentum}
-{riskIcon} Risk: {risk}
-{verdictIcon} Verdict: {verdict}
-
-💰 Market
-MC: {mc}  ({mcChange})
-VOL: {vol24h}
-LP: {lp}
-Age: {age}
-Minted: {mintTime}
-{bondingState}
-
-🧠 Holder Health
-Top 10: {top10}
-Fresh Wallets: {freshWallets}
-Wallet Spread: {walletSpread}
-Bundled Risk: {bundledRisk}
-```
-(User can still edit in DB; this is just the new default.)
-
-## 5. UI changes (ShareCardDemo / Compose widget)
-
-- Show `verdict_class` badge above preview (healthy/dead/crazy)
-- Disable Push button when not healthy; tooltip = `block_reason`
-- Add collapsible "Post Log" panel pulling from `no_lube_post_log`
+Three connected pieces. Build in this order: **Asset Library → Image Card Generator → Per-Profile Trade Bot scaffold**.
 
 ---
 
-## Technical notes
+## 1. Asset Library (admin-managed, Supabase Storage)
 
-- Files touched:
-  - `supabase/functions/no-lube-compose/index.ts` — add classifier, mint-time fetch, bonding lookup, log insert, new vars
-  - `supabase/functions/no-lube-push/index.ts` — re-check eligibility, update log row
-  - `src/components/social/ShareCardDemo.tsx` — badge, disabled button + reason, log panel
-  - New migration: `no_lube_post_log` table + GRANTs + RLS + super_admin policy
-  - Seed/update `holders_intel_templates` row `no_lube` with new default body
-- No new secrets needed; Helius + DexScreener already wired.
-- Bundled Risk stays `—` unless we have a signal — not part of this change.
+A super-admin panel under `/super-admin` → new tab **"No Lube → Assets"**.
+
+**Storage:** new public bucket `no-lube-assets`.
+
+**Table:** `no_lube_assets`
+- `id`, `category` (enum: `background`, `character`, `frame`, `sticker`, `logo`)
+- `name`, `tags` (text[]), `storage_path`, `public_url`
+- `language` (nullable — for language-specific meme variants: `en`, `ko`, `zh`, `ja`, `universal`)
+- `enabled` (bool), `usage_count`, `last_used_at`
+- `created_by`, `created_at`
+
+**Admin UI:** upload, tag, preview grid, toggle enable/disable, filter by category/language, delete. Each row shows a thumbnail + usage stats.
+
+Assets feed the image generator as **style references** (sent to Gemini-3-pro-image as multimodal input) — not composited literally. Library = inspiration pool the AI mixes per post.
 
 ---
 
-## Out of scope (flag for later)
+## 2. Image Card Generator (`no-lube-render-card` edge function)
 
-- Auto-suggesting an alternate ticker when one is blocked
-- Backfilling log for historical compose runs
-- Per-channel filter tuning (currently global to No Lube)
+Called by `no-lube-orchestrate` when a re-sighting hits ≥2x **AND** the channel = `public`.
+
+**Inputs:** mint, ticker, current mcap, entry mcap, multiplier (2x/3x/8x…), channel branding, token PFP URL (from mint metadata), language (channel locale).
+
+**Pipeline:**
+1. Fetch token mint image from Helius/DexScreener metadata.
+2. Pick 1–3 random enabled assets from `no_lube_assets` matching the language + categories needed (1 character, optional background).
+3. Build a prompt grounded in the uploaded **BLACKBOX IMAGE GENERATION + TG CARD** style guide (matte black, cyan neon, gold accents, pulse cube branding, multiplier as huge typographic accent — like the `8X` in your screenshot).
+4. Call **Lovable AI Gateway** `openai/gpt-image-2` (quality `medium`, `1024x1536` portrait — Telegram card-friendly), passing the token PFP + selected library assets as reference images.
+5. Upload result to `no-lube-rendered-cards` bucket. Stamp `no_lube_post_log.image_url`.
+
+**Post structure (public channel):**
+```
+[ AI-generated image card ]
+🎉 $TICKER  8X! 🎉
+💎 Token: $TICKER
+📝 CA: <mint>
+💰 Entry: $103k → Now: $914k
+DexScreener | DexTools
+[👑 JOIN PREMIUM INSIDERS] ← inline button → deep link to profile's trade bot
+```
+
+The bottom button is a `t.me/<ProfileBot>?start=access_<mint>` deep link (per Q4 below).
+
+---
+
+## 3. Per-Profile Trade Bot Scaffold
+
+You said: **one trade bot per profile**, nicknamed to the profile (Luna's VIP Calls → `@LunaVIPTradeBot`, etc.). This is exactly how the competitor's `InsiderAccessBot` works — but theirs is a Mini App with `startapp=`; **ours will be a plain bot with inline-keyboard quick-buy** (cheaper, faster, no Mini App hosting overhead, identical UX for the user).
+
+**Schema:** extend `no_lube_channel_profiles` with:
+- `trade_bot_username` (text) — e.g. `LunaVIPTradeBot`
+- `trade_bot_token_secret_name` (text) — name of the secret holding that bot's token (e.g. `LUNA_TRADE_BOT_TOKEN`)
+- `trade_bot_webhook_set` (bool)
+- `access_purchase_url` (text, fallback) — Stripe / SOL payment link until trade bot is provisioned
+
+**New edge function:** `profile-trade-bot-webhook` (single function, routes by `bot_id` query param so all profile bots share one endpoint).
+
+**Phase 1 (this build):** scaffold the table columns + webhook router skeleton + admin UI fields to paste in BotFather token. **No trade execution yet** — the public card's CTA button initially routes to `access_purchase_url` (Stripe/SOL pay-for-access flow you already have).
+
+**Phase 2 (next iteration, not in this plan):** wire trade execution into the webhook (reuse existing wallet infra from CommunityWallet / campaign wallets), inline buttons for `Buy 0.1 / 0.5 / 1 SOL`, `Ape Max`.
+
+---
+
+## What this plan does NOT do
+- No actual trade execution (Phase 2).
+- No Mini App (not needed — costs nothing on TG side, but adds hosting/UI complexity for zero user benefit at this stage).
+- Doesn't touch the private-channel template (already working).
+
+---
+
+## Open follow-up questions (answer in chat, not blocking the plan)
+
+1. **AI model:** `openai/gpt-image-2 medium` (~$0.04/image, very strong typography for the `8X` accent) or `google/gemini-3-pro-image-preview` (~$0.03, better at integrating reference images / token PFP)? My recommendation: **Gemini-3-pro** because we're feeding it the real token mint PFP + library assets as references, which is its strength.
+
+2. **Card aspect ratio:** Portrait `1024x1536` (matches your competitor screenshot, dominates mobile TG feed) or landscape `1536x1024` (more "trading card")? Recommend portrait.
+
+3. **Language detection:** Pull from the channel profile's `language` field (already exists?) or detect from channel name? Need to confirm where channel locale lives so I select language-tagged assets correctly.
+
+4. **CTA target now:** For the public 2x+ post's bottom button — point it at (a) the existing Stripe access checkout, (b) a `t.me/<bot>?start=...` link that the per-profile bot will eventually own (button text just says "Get Premium Access"), or (c) both — Stripe primary + small "Pay with SOL via bot" secondary?
