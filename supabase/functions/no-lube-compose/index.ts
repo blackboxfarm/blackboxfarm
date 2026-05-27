@@ -447,9 +447,22 @@ serve(async (req) => {
       twitterUrl: dex?.info?.socials?.find((s: any) => s.type === 'twitter')?.url || DASH,
       telegramUrl: dex?.info?.socials?.find((s: any) => s.type === 'telegram')?.url || DASH,
       websiteUrl: dex?.info?.websites?.[0]?.url || DASH,
+      ...profileVars,
     };
 
-    const text = renderTemplate(tpl, vars);
+    let text = renderTemplate(tpl, vars);
+
+    // Optional full re-render translation when channel language is not English.
+    // We translate the rendered text wholesale (labels + natural-language) but
+    // preserve numbers, tickers, URLs, and Markdown via the model instructions.
+    if (language && language !== 'en') {
+      try {
+        const translated = await translateText(text, language);
+        if (translated && translated.trim().length > 0) text = translated;
+      } catch (e) {
+        console.error('[no-lube-compose] translation failed; using English', e);
+      }
+    }
 
     // Log the compose attempt (posted=false until push succeeds)
     let logId: string | null = null;
