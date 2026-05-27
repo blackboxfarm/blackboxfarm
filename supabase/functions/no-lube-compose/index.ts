@@ -298,7 +298,7 @@ async function translateText(text: string, langCode: string): Promise<string | n
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
-    const { mint, channel: rawChannel } = await req.json();
+    const { mint, channel: rawChannel, multiplier: rawMultiplier } = await req.json();
     if (!mint || typeof mint !== 'string') {
       return new Response(JSON.stringify({ ok: false, error: 'mint required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -306,6 +306,11 @@ serve(async (req) => {
     }
     const channel: 'default' | 'public' | 'private' =
       rawChannel === 'public' || rawChannel === 'private' ? rawChannel : 'default';
+    const multiplierNum = typeof rawMultiplier === 'number' && isFinite(rawMultiplier) && rawMultiplier > 0
+      ? rawMultiplier : null;
+    const multiplierLabel = multiplierNum
+      ? (Number.isInteger(multiplierNum) ? `${multiplierNum}x` : `${multiplierNum.toFixed(1)}x`)
+      : DASH;
     const templateName =
       channel === 'public' ? 'no_lube_public'
       : channel === 'private' ? 'no_lube_private'
@@ -495,6 +500,7 @@ serve(async (req) => {
       twitterUrl: dex?.info?.socials?.find((s: any) => s.type === 'twitter')?.url || DASH,
       telegramUrl: dex?.info?.socials?.find((s: any) => s.type === 'telegram')?.url || DASH,
       websiteUrl: dex?.info?.websites?.[0]?.url || DASH,
+      multiplier: multiplierLabel,
       ...profileVars,
     };
 

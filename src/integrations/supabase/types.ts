@@ -11410,18 +11410,21 @@ export type Database = {
         Row: {
           id: string
           language: string
+          multiplier_threshold: number
           style: string
           updated_at: string
         }
         Insert: {
           id?: string
           language?: string
+          multiplier_threshold?: number
           style?: string
           updated_at?: string
         }
         Update: {
           id?: string
           language?: string
+          multiplier_threshold?: number
           style?: string
           updated_at?: string
         }
@@ -11434,6 +11437,9 @@ export type Database = {
           composed_at: string
           composed_by: string | null
           id: string
+          last_mcap_at_post: number | null
+          last_multiplier: number | null
+          last_posted_at: string | null
           liq_usd: number | null
           mcap: number | null
           mint_time: string | null
@@ -11442,6 +11448,7 @@ export type Database = {
           price_change_24h: number | null
           tg_message_id: number | null
           ticker: string | null
+          times_posted: number
           token_mint: string
           top10_pct: number | null
           verdict_class: string
@@ -11453,6 +11460,9 @@ export type Database = {
           composed_at?: string
           composed_by?: string | null
           id?: string
+          last_mcap_at_post?: number | null
+          last_multiplier?: number | null
+          last_posted_at?: string | null
           liq_usd?: number | null
           mcap?: number | null
           mint_time?: string | null
@@ -11461,6 +11471,7 @@ export type Database = {
           price_change_24h?: number | null
           tg_message_id?: number | null
           ticker?: string | null
+          times_posted?: number
           token_mint: string
           top10_pct?: number | null
           verdict_class: string
@@ -11472,6 +11483,9 @@ export type Database = {
           composed_at?: string
           composed_by?: string | null
           id?: string
+          last_mcap_at_post?: number | null
+          last_multiplier?: number | null
+          last_posted_at?: string | null
           liq_usd?: number | null
           mcap?: number | null
           mint_time?: string | null
@@ -11480,6 +11494,7 @@ export type Database = {
           price_change_24h?: number | null
           tg_message_id?: number | null
           ticker?: string | null
+          times_posted?: number
           token_mint?: string
           top10_pct?: number | null
           verdict_class?: string
