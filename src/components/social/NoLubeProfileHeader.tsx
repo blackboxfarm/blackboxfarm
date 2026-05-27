@@ -18,7 +18,7 @@ export const NO_LUBE_STYLES: { code: string; label: string; hint: string }[] = [
   { code: 'old_school', label: 'Old School',         hint: '2017 CT vibe, careful TA language' },
   { code: 'gamer',      label: 'Gamer',              hint: 'GG/clutch/raid party vernacular' },
   { code: 'sv',         label: 'Silicon Valley',     hint: 'product-launch / VC deck phrasing' },
-  { code: 'alpha_inner','label': 'Alpha — Inner Circle', hint: 'whispered, "for the family" coded leaks' } as any,
+  { code: 'alpha_inner', label: 'Alpha — Inner Circle', hint: 'whispered, "for the family" coded leaks' },
   { code: 'alpha_pro',  label: 'Alpha — Pro Desk',   hint: 'desk-style risk callouts, clinical' },
   { code: 'alpha_street', label: 'Alpha — Street',   hint: 'street-talk, blunt, no euphemism' },
 ];
