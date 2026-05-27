@@ -237,12 +237,45 @@ serve(async (req) => {
     // Threshold met — multiplier label rounds to nearest 0.1 above integer
     const multiplier = Math.round(ratio * 10) / 10;
 
+    // ---- MILESTONE GATE ----
+    // Only post when we cross a NEW integer milestone (2x, 3x, 4x, ...).
+    // While the price hovers in the same milestone band we stay silent so
+    // the channel doesn't repeat "2.1x / 2.2x / 2.1x" over and over.
+    const currentMilestone = Math.floor(ratio);
+    const prevMilestone = prev.last_multiplier != null
+      ? Math.floor(Number(prev.last_multiplier))
+      : 1; // first re-sighting baseline = 1x band
+    if (currentMilestone <= prevMilestone) {
+      return jsonResp({
+        ok: true,
+        flow: 'skipped',
+        skipped: true,
+        reason: 'milestone_already_posted',
+        threshold,
+        base_mcap: baseMcap,
+        current_mcap: probeMcap,
+        ratio,
+        current_milestone: currentMilestone,
+        prev_milestone: prevMilestone,
+      });
+    }
+
     const privateResult = await composeAndPush('private', mint, multiplier);
 
     // For the public channel, generate an AI hype card and attach a CTA button.
     let publicImageUrl: string | null = null;
     try {
-      const render = await invoke(renderUrl, anonKey, { mint, multiplier });
+      const tickerForCard =
+        (probe.json?.vars?.ticker as string | undefined) ||
+        (privateResult as any)?.ticker ||
+        null;
+      const render = await invoke(renderUrl, anonKey, {
+        mint,
+        ticker: tickerForCard,
+        multiplier,
+        entry_mcap: baseMcap,
+        current_mcap: probeMcap,
+      });
       if (render.ok && render.json?.ok && render.json?.image_url) {
         publicImageUrl = String(render.json.image_url);
       } else {
