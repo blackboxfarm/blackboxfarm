@@ -31,6 +31,7 @@ import {
 import { HolderBreakdownPanel, type GranularTierCounts } from './HolderBreakdownPanel';
 import { NoLubeChannelPanel } from './NoLubeChannelPanel';
 import { NoLubeProfileHeader } from './NoLubeProfileHeader';
+import { NoLubeRecentSightings } from './NoLubeRecentSightings';
 
 interface CronStatus {
   schedulersActive: number;
@@ -675,6 +676,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
               {name === 'no_lube' ? (
                 <>
                   <NoLubeProfileHeader />
+                  <NoLubeRecentSightings />
                   <Tabs defaultValue="default" className="w-full">
                     <TabsList>
                       <TabsTrigger value="default">Default</TabsTrigger>

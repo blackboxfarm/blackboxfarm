@@ -298,7 +298,7 @@ async function translateText(text: string, langCode: string): Promise<string | n
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
-    const { mint, channel: rawChannel, multiplier: rawMultiplier } = await req.json();
+    const { mint, channel: rawChannel, multiplier: rawMultiplier, dry_run } = await req.json();
     if (!mint || typeof mint !== 'string') {
       return new Response(JSON.stringify({ ok: false, error: 'mint required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -310,7 +310,8 @@ serve(async (req) => {
       ? rawMultiplier : null;
     const multiplierLabel = multiplierNum
       ? (Number.isInteger(multiplierNum) ? `${multiplierNum}x` : `${multiplierNum.toFixed(1)}x`)
-      : DASH;
+      : '';
+    const multiplierLine = multiplierNum ? `🚀 RE-SIGHTING: ${multiplierLabel}` : '';
     const templateName =
       channel === 'public' ? 'no_lube_public'
       : channel === 'private' ? 'no_lube_private'
@@ -501,6 +502,7 @@ serve(async (req) => {
       telegramUrl: dex?.info?.socials?.find((s: any) => s.type === 'telegram')?.url || DASH,
       websiteUrl: dex?.info?.websites?.[0]?.url || DASH,
       multiplier: multiplierLabel,
+      multiplierLine,
       ...profileVars,
     };
 
@@ -518,9 +520,11 @@ serve(async (req) => {
       }
     }
 
-    // Log the compose attempt (posted=false until push succeeds)
+    // Log the compose attempt (posted=false until push succeeds).
+    // dry_run skips logging — used by orchestrate's mcap probe so we don't
+    // pollute no_lube_post_log with rows that never get pushed.
     let logId: string | null = null;
-    try {
+    if (!dry_run) try {
       const { data: logRow } = await supabase
         .from('no_lube_post_log')
         .insert({
@@ -553,6 +557,7 @@ serve(async (req) => {
       post_eligible: verdict_class === 'healthy',
       block_reason,
       log_id: logId,
+      mcap: mcUsd,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

@@ -159,20 +159,13 @@ serve(async (req) => {
       return jsonResp({ ok: true, flow: 'baseline_missing', threshold, results: { private: result } });
     }
 
-    // Probe current mcap via compose (private) WITHOUT pushing yet — we need the number.
-    const probe = await invoke(composeUrl, anonKey, { mint, channel: 'private' });
+    // Probe current mcap via compose (dry_run — no log row written).
+    const probe = await invoke(composeUrl, anonKey, { mint, channel: 'private', dry_run: true });
     if (!probe.ok || !probe.json?.ok) {
       return jsonResp({ ok: false, error: 'compose probe failed', detail: probe.json }, 502);
     }
-    let probeMcap: number | null = null;
-    if (probe.json?.log_id) {
-      const { data: logRow } = await supabase
-        .from('no_lube_post_log')
-        .select('mcap')
-        .eq('id', probe.json.log_id)
-        .maybeSingle();
-      probeMcap = logRow?.mcap != null ? Number(logRow.mcap) : null;
-    }
+    const probeMcap: number | null =
+      probe.json?.mcap != null && isFinite(Number(probe.json.mcap)) ? Number(probe.json.mcap) : null;
 
     if (probeMcap == null) {
       return jsonResp({ ok: true, flow: 'skipped', skipped: true, reason: 'current_mcap_unknown', threshold });
@@ -189,7 +182,6 @@ serve(async (req) => {
         base_mcap: baseMcap,
         current_mcap: probeMcap,
         ratio,
-        probe_log_id: probe.json.log_id ?? null,
       });
     }
 

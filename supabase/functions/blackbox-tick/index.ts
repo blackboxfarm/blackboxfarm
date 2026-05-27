@@ -582,6 +582,20 @@ serve(async (req) => {
       }).eq('id', run.id);
       summary.harvested++;
       if (digestMsgId) summary.published++;
+
+      // Hand the mint to the No Lube orchestrator. It decides First-Sighting
+      // (→ Private channel) vs Re-Sighting at ≥ Nx (→ Private + Public) using
+      // no_lube_post_log + no_lube_global_profile.multiplier_threshold.
+      // Fire-and-forget so a slow translation never blocks the next tick.
+      try {
+        supabase.functions.invoke('no-lube-orchestrate', {
+          body: { mint: run.token_mint },
+        }).then(({ error }) => {
+          if (error) console.warn('[blackbox-tick] no-lube-orchestrate error', error);
+        }).catch((e) => console.warn('[blackbox-tick] no-lube-orchestrate exception', e));
+      } catch (e) {
+        console.warn('[blackbox-tick] no-lube-orchestrate dispatch failed', e);
+      }
     }
   } catch (e: any) {
     summary.errors.push(`step2: ${e.message}`);
