@@ -189,7 +189,7 @@ export function HoldersIntelTemplateEditor() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 max-w-3xl">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">📝 Tweet Templates</h2>
@@ -261,14 +261,14 @@ export function HoldersIntelTemplateEditor() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <Textarea
                   value={text}
                   onChange={(e) => setEditedText(p => ({ ...p, [row.id]: e.target.value }))}
-                  rows={10}
-                  className="font-mono text-xs"
+                  rows={22}
+                  className="font-mono text-xs min-h-[480px]"
                 />
-                <div className="rounded border border-dashed border-border/50 bg-background/40 p-3">
+                <div className="rounded border border-dashed border-border/50 bg-background/40 p-3 min-h-[480px] overflow-auto">
                   <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
                     <Eye className="h-3 w-3" /> Preview with sample data
                   </div>
