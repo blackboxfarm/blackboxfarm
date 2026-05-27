@@ -332,6 +332,10 @@ Reputation: {devReputation}
 
 [📈 Chart]({chartUrl}) · [🐋 BubbleMap]({bubbleMapUrl}) · [🧠 Full Intel]({intelUrl})
 [💰 Buy]({buyUrl}) · [⚠️ Scan History]({scanHistoryUrl}) · [🌐 Socials]({socialsUrl})`,
+
+  no_lube_public: `🐸 *$\{ticker}*\n\n🟢 Momentum: {momentum}\n🟡 Risk: {risk}\n⚡ Verdict: {verdict}\n\n💰 MC: {mc} ({mcChange}) · VOL: {vol24h} · LP: {lp}\nAge: {age}\n\n🧠 Top 10: {top10} · Fresh: {freshWallets}`,
+
+  no_lube_private: `🐸 *$\{ticker}* — PRIVATE\n\n🟢 Momentum: {momentum}\n🟡 Risk: {risk}\n⚡ Verdict: {verdict}\n\n💰 MC: {mc} ({mcChange})\nVOL: {vol24h}\nLP: {lp}\nAge: {age}\n\n🧠 Top 10: {top10}\nFresh Wallets: {freshWallets}\nWallet Spread: {walletSpread}`,
 };
 
 // Legacy default for backwards compatibility
