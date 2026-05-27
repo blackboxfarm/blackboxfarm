@@ -40,6 +40,9 @@ interface ChannelProfile {
   telegram_chat_username: string | null;
   tab_nickname: string | null;
   telegram_link: string | null;
+  trade_bot_username?: string | null;
+  access_purchase_url?: string | null;
+  cta_button_text?: string | null;
 }
 
 interface Props {
@@ -272,6 +275,46 @@ export function NoLubeChannelPanel({
                   {profile.telegram_chat_username && (
                     <span className="text-muted-foreground">@{profile.telegram_chat_username}</span>
                   )}
+                </div>
+              )}
+
+              {kind !== 'default' && (
+                <div className="pt-3 mt-3 border-t border-border/50 space-y-3">
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Trade bot &amp; CTA (per-profile)
+                  </Label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <Label className="text-xs">Trade bot username</Label>
+                      <Input
+                        placeholder="MyInsidersTradeBot"
+                        value={profile.trade_bot_username || ''}
+                        onChange={e => setProfile({ ...profile, trade_bot_username: e.target.value })}
+                        className="font-mono text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Access purchase URL (overrides bot)</Label>
+                      <Input
+                        placeholder="https://… or t.me/Bot?start=access"
+                        value={profile.access_purchase_url || ''}
+                        onChange={e => setProfile({ ...profile, access_purchase_url: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">CTA button text</Label>
+                      <Input
+                        placeholder="🚀 Buy / Get Access"
+                        value={profile.cta_button_text || ''}
+                        onChange={e => setProfile({ ...profile, cta_button_text: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    {kind === 'public'
+                      ? 'Public re-sighting posts (2X+) attach an AI hype card image and this CTA button.'
+                      : 'Reserved for per-profile private bot (phase 2).'}
+                  </p>
                 </div>
               )}
             </>
