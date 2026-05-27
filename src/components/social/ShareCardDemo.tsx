@@ -30,6 +30,7 @@ import {
 } from '@/lib/share-template';
 import { HolderBreakdownPanel, type GranularTierCounts } from './HolderBreakdownPanel';
 import { NoLubeChannelPanel } from './NoLubeChannelPanel';
+import { NoLubeAssetLibrary } from './NoLubeAssetLibrary';
 import { NoLubeProfileHeader } from './NoLubeProfileHeader';
 import { NoLubeRecentSightings } from './NoLubeRecentSightings';
 
@@ -682,6 +683,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                       <TabsTrigger value="default">Default</TabsTrigger>
                       <TabsTrigger value="public">Public Channel</TabsTrigger>
                       <TabsTrigger value="private">Private Channel</TabsTrigger>
+                      <TabsTrigger value="assets">🎨 Asset Library</TabsTrigger>
                     </TabsList>
                     {(['default', 'public', 'private'] as const).map(kind => {
                       const tname: TemplateName =
@@ -703,6 +705,9 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                         </TabsContent>
                       );
                     })}
+                    <TabsContent value="assets" className="space-y-4 pt-3">
+                      <NoLubeAssetLibrary />
+                    </TabsContent>
                   </Tabs>
                 </>
               ) : (<>
