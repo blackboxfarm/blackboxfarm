@@ -29,6 +29,7 @@ import {
   type TemplateRecord,
 } from '@/lib/share-template';
 import { HolderBreakdownPanel, type GranularTierCounts } from './HolderBreakdownPanel';
+import { NoLubeChannelPanel } from './NoLubeChannelPanel';
 
 interface CronStatus {
   schedulersActive: number;
