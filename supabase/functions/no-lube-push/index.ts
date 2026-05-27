@@ -13,12 +13,14 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
-    const { text, log_id, override } = await req.json();
+    const { text, log_id, override, channel: rawChannel } = await req.json();
     if (!text || typeof text !== 'string') {
       return new Response(JSON.stringify({ ok: false, error: 'text required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+    const channel: 'default' | 'public' | 'private' =
+      rawChannel === 'public' || rawChannel === 'private' ? rawChannel : 'default';
 
     const token = Deno.env.get('TELEGRAM_HOLDERSINTEL_BOT_TOKEN');
     if (!token) {
@@ -48,16 +50,32 @@ serve(async (req) => {
       }
     }
 
-    const { data: cfg } = await supabase
-      .from('blackbox_channel_config')
-      .select('role, chat_id')
-      .eq('role', 'output_channel')
-      .maybeSingle();
-    const chatId = cfg?.chat_id;
+    // Resolve destination chat_id by channel.
+    // - default → existing blackbox_channel_config.output_channel (backward compatible)
+    // - public / private → no_lube_channel_profiles[kind].telegram_chat_id
+    let chatId: string | null = null;
+    if (channel === 'default') {
+      const { data: cfg } = await supabase
+        .from('blackbox_channel_config')
+        .select('role, chat_id')
+        .eq('role', 'output_channel')
+        .maybeSingle();
+      chatId = cfg?.chat_id ?? null;
+    } else {
+      const { data: prof } = await supabase
+        .from('no_lube_channel_profiles')
+        .select('telegram_chat_id')
+        .eq('kind', channel)
+        .maybeSingle();
+      chatId = prof?.telegram_chat_id ?? null;
+    }
     if (!chatId) {
-      return new Response(JSON.stringify({ ok: false, error: 'output_channel not configured' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return new Response(JSON.stringify({
+        ok: false,
+        error: channel === 'default'
+          ? 'output_channel not configured'
+          : `No Lube ${channel} channel has no telegram_chat_id set`,
+      }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const post = async (body: Record<string, unknown>) => {
