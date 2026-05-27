@@ -1,87 +1,42 @@
-# Plan — Public-Channel Image Cards + Per-Profile Trade Bots + Asset Library
+## What I found
 
-Three connected pieces. Build in this order: **Asset Library → Image Card Generator → Per-Profile Trade Bot scaffold**.
+- The system is not stuck in Telegram itself; it is repeatedly invoking `no-lube-orchestrate` for the same already-qualified GOSLINGS mint.
+- `no_lube_post_log` shows GOSLINGS posted dozens of times in minutes at the same ~2.1x–2.2x range.
+- The current re-sighting logic posts every time `current_mcap / first_seen_mcap >= 2.0`, but it does **not** require a new higher milestone than the last one already posted.
+- There is also a backlog of `blackbox_aggregator_runs` still sitting in `harvesting`, so old runs can keep getting harvested and handed off again instead of cleanly aging out.
+- The image renderer is being called with only `mint` and `multiplier`, while `no-lube-render-card` currently expects `mint`, `ticker`, and `multiplier`; that is causing repeated `render-card failed, posting text-only` warnings, but it is not the main duplicate-post root cause.
 
----
+## Fix plan
 
-## 1. Asset Library (admin-managed, Supabase Storage)
+1. **Add milestone de-dupe in `no-lube-orchestrate`**
+   - Calculate the current multiplier from first-seen market cap as now.
+   - Before posting, read the last posted multiplier for that token.
+   - Only post when the token crosses a new material X milestone, not every time it is merely still above 2x.
+   - Example behavior:
+     - first seen 363k → 771k = 2.1x: post once as 2x/2.1x
+     - 771k → 791k while still 2.2x: skip
+     - later reaches 3.0x: post again
+     - later reaches 4.0x: post again
 
-A super-admin panel under `/super-admin` → new tab **"No Lube → Assets"**.
+2. **Use a stable milestone label**
+   - Store/compare a milestone floor such as `2`, `3`, `4`, etc. so a token cannot spam `2.1x`, `2.2x`, `2.1x` repeatedly.
+   - Keep the display multiplier available for the message, but the posting gate will be milestone-based.
 
-**Storage:** new public bucket `no-lube-assets`.
+3. **Fix the rendered-card call**
+   - Pass the ticker into `no-lube-render-card`, or make the renderer resolve ticker internally.
+   - This removes the `mint, ticker, multiplier required` warning and restores image cards.
 
-**Table:** `no_lube_assets`
-- `id`, `category` (enum: `background`, `character`, `frame`, `sticker`, `logo`)
-- `name`, `tags` (text[]), `storage_path`, `public_url`
-- `language` (nullable — for language-specific meme variants: `en`, `ko`, `zh`, `ja`, `universal`)
-- `enabled` (bool), `usage_count`, `last_used_at`
-- `created_by`, `created_at`
+4. **Prevent stale harvest backlog from re-triggering posts**
+   - In `blackbox-tick`, if a harvesting run has no matching bot replies, mark it as completed/failed/stale instead of leaving it in `harvesting` forever.
+   - This keeps the queue moving to new tokens instead of repeatedly revisiting old eligible runs.
 
-**Admin UI:** upload, tag, preview grid, toggle enable/disable, filter by category/language, delete. Each row shows a thumbnail + usage stats.
+5. **Validate after changes**
+   - Deploy the touched edge functions.
+   - Query recent `no_lube_post_log` rows to confirm GOSLINGS stops reposting at the same milestone.
+   - Confirm new tokens are still first-sighting to private, and public only fires once a new X milestone is crossed.
 
-Assets feed the image generator as **style references** (sent to Gemini-3-pro-image as multimodal input) — not composited literally. Library = inspiration pool the AI mixes per post.
+## Files to change after approval
 
----
-
-## 2. Image Card Generator (`no-lube-render-card` edge function)
-
-Called by `no-lube-orchestrate` when a re-sighting hits ≥2x **AND** the channel = `public`.
-
-**Inputs:** mint, ticker, current mcap, entry mcap, multiplier (2x/3x/8x…), channel branding, token PFP URL (from mint metadata), language (channel locale).
-
-**Pipeline:**
-1. Fetch token mint image from Helius/DexScreener metadata.
-2. Pick 1–3 random enabled assets from `no_lube_assets` matching the language + categories needed (1 character, optional background).
-3. Build a prompt grounded in the uploaded **BLACKBOX IMAGE GENERATION + TG CARD** style guide (matte black, cyan neon, gold accents, pulse cube branding, multiplier as huge typographic accent — like the `8X` in your screenshot).
-4. Call **Lovable AI Gateway** `openai/gpt-image-2` (quality `medium`, `1024x1536` portrait — Telegram card-friendly), passing the token PFP + selected library assets as reference images.
-5. Upload result to `no-lube-rendered-cards` bucket. Stamp `no_lube_post_log.image_url`.
-
-**Post structure (public channel):**
-```
-[ AI-generated image card ]
-🎉 $TICKER  8X! 🎉
-💎 Token: $TICKER
-📝 CA: <mint>
-💰 Entry: $103k → Now: $914k
-DexScreener | DexTools
-[👑 JOIN PREMIUM INSIDERS] ← inline button → deep link to profile's trade bot
-```
-
-The bottom button is a `t.me/<ProfileBot>?start=access_<mint>` deep link (per Q4 below).
-
----
-
-## 3. Per-Profile Trade Bot Scaffold
-
-You said: **one trade bot per profile**, nicknamed to the profile (Luna's VIP Calls → `@LunaVIPTradeBot`, etc.). This is exactly how the competitor's `InsiderAccessBot` works — but theirs is a Mini App with `startapp=`; **ours will be a plain bot with inline-keyboard quick-buy** (cheaper, faster, no Mini App hosting overhead, identical UX for the user).
-
-**Schema:** extend `no_lube_channel_profiles` with:
-- `trade_bot_username` (text) — e.g. `LunaVIPTradeBot`
-- `trade_bot_token_secret_name` (text) — name of the secret holding that bot's token (e.g. `LUNA_TRADE_BOT_TOKEN`)
-- `trade_bot_webhook_set` (bool)
-- `access_purchase_url` (text, fallback) — Stripe / SOL payment link until trade bot is provisioned
-
-**New edge function:** `profile-trade-bot-webhook` (single function, routes by `bot_id` query param so all profile bots share one endpoint).
-
-**Phase 1 (this build):** scaffold the table columns + webhook router skeleton + admin UI fields to paste in BotFather token. **No trade execution yet** — the public card's CTA button initially routes to `access_purchase_url` (Stripe/SOL pay-for-access flow you already have).
-
-**Phase 2 (next iteration, not in this plan):** wire trade execution into the webhook (reuse existing wallet infra from CommunityWallet / campaign wallets), inline buttons for `Buy 0.1 / 0.5 / 1 SOL`, `Ape Max`.
-
----
-
-## What this plan does NOT do
-- No actual trade execution (Phase 2).
-- No Mini App (not needed — costs nothing on TG side, but adds hosting/UI complexity for zero user benefit at this stage).
-- Doesn't touch the private-channel template (already working).
-
----
-
-## Open follow-up questions (answer in chat, not blocking the plan)
-
-1. **AI model:** `openai/gpt-image-2 medium` (~$0.04/image, very strong typography for the `8X` accent) or `google/gemini-3-pro-image-preview` (~$0.03, better at integrating reference images / token PFP)? My recommendation: **Gemini-3-pro** because we're feeding it the real token mint PFP + library assets as references, which is its strength.
-
-2. **Card aspect ratio:** Portrait `1024x1536` (matches your competitor screenshot, dominates mobile TG feed) or landscape `1536x1024` (more "trading card")? Recommend portrait.
-
-3. **Language detection:** Pull from the channel profile's `language` field (already exists?) or detect from channel name? Need to confirm where channel locale lives so I select language-tagged assets correctly.
-
-4. **CTA target now:** For the public 2x+ post's bottom button — point it at (a) the existing Stripe access checkout, (b) a `t.me/<bot>?start=...` link that the per-profile bot will eventually own (button text just says "Get Premium Access"), or (c) both — Stripe primary + small "Pay with SOL via bot" secondary?
+- `supabase/functions/no-lube-orchestrate/index.ts`
+- `supabase/functions/blackbox-tick/index.ts`
+- possibly `supabase/functions/no-lube-render-card/index.ts` if ticker should be resolved inside the renderer instead of passed by orchestrate
