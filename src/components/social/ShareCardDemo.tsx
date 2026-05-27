@@ -100,6 +100,8 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     tg_advert_2: false,
     tg_advert_3: false,
     no_lube: false,
+    no_lube_public: false,
+    no_lube_private: false,
   });
   
   const [tokenMint, setTokenMint] = useState('');
