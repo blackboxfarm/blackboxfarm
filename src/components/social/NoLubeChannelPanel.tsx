@@ -86,8 +86,8 @@ export function NoLubeChannelPanel({
   const loadProfile = async () => {
     setProfileLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('no_lube_channel_profiles' as any)
+      const { data, error } = await (supabase as any)
+        .from('no_lube_channel_profiles')
         .select('*')
         .eq('kind', kind)
         .maybeSingle();
@@ -115,8 +115,8 @@ export function NoLubeChannelPanel({
     if (!profile) return;
     setProfileSaving(true);
     try {
-      const { error } = await supabase
-        .from('no_lube_channel_profiles' as any)
+      const { error } = await (supabase as any)
+        .from('no_lube_channel_profiles')
         .upsert({
           ...profile,
           kind,
