@@ -472,6 +472,7 @@ serve(async (req) => {
       .limit(10);
 
     for (const run of (ready || [])) {
+     try {
       // Fetch recent messages from BlackBox group via existing MTProto helper.
       // Note: MTProto fetch by numeric chat_id requires the channel to be in
       // telegram_channel_config with an entity_access_hash — fallback: try
@@ -568,6 +569,18 @@ serve(async (req) => {
         replies_collected: saved,
       }).eq('id', run.id);
       summary.harvested++;
+
+     } catch (innerErr: any) {
+       // Never leave a run stuck in 'harvesting'. Mark it failed so the
+       // backlog drains and the orchestrator stops being re-invoked for
+       // tokens whose harvest cycle already expired.
+       console.warn('[blackbox-tick] step2 run failed, marking stale', run.id, innerErr?.message);
+       await supabase.from('blackbox_aggregator_runs').update({
+         status: 'failed',
+         error_message: `harvest exception: ${innerErr?.message || innerErr}`,
+       }).eq('id', run.id);
+       continue;
+     }
 
       // Hand the mint to the No Lube orchestrator. It decides First-Sighting
       // (→ Private channel) vs Re-Sighting at ≥ Nx (→ Private + Public) using
