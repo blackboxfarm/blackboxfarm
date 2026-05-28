@@ -21,10 +21,10 @@ const FIELDS: string[] = [
   'entry_mc_text', 'entry_market_cap', 'peak_market_cap', 'peak_multiplier',
   'peak_reached_at', 'milestone_count', 'last_milestone_at', 'total_messages',
   'first_called_at',
-  'ingest_status', 'ingest_started_at', 'ingest_completed_at', 'ingest_last_error',
+  'ingest_status', 'ingest_started_at', 'ingest_completed_at', 'ingest_last_error', 'ingest_latency_ms',
   'creator_status', 'creator_wallet', 'creator_attempts',
   'creator_last_attempt_at', 'creator_resolved_at', 'creator_risk_tier',
-  'dev_wallet_resolved_at', 'dev_history_warning',
+  'dev_wallet', 'dev_wallet_source', 'dev_wallet_resolved_at', 'dev_history_warning',
   'kyc_status', 'kyc_label', 'kyc_attempts', 'kyc_last_attempt_at',
   'genealogy_depth', 'genealogy_kyc_root',
   'mesh_hydrated_at', 'mesh_promoted_at', 'mesh_promotion_status', 'mesh_promotion_reason',
@@ -43,6 +43,9 @@ type Row = Record<string, unknown> & {
   creator_status: string | null;
   kyc_status: string | null;
   mesh_hydrated_at: string | null;
+  dev_wallet: string | null;
+  dev_wallet_source: string | null;
+  ingest_latency_ms: number | null;
 };
 
 const fmt = (v: unknown): string => {
@@ -65,6 +68,7 @@ export function NoLubeProcessPanel() {
     const { data, error } = await supabase
       .from('telegram_insider_token_lifecycle')
       .select(FIELDS.concat(['id']).join(','))
+      .neq('ingest_status', 'archived')
       .order('first_called_at', { ascending: false })
       .limit(100);
     if (!error && data) setRows(data as unknown as Row[]);
@@ -90,8 +94,10 @@ export function NoLubeProcessPanel() {
           <div>
             <div className="text-sm font-semibold">Insiders → No Lube pipeline</div>
             <p className="text-xs text-muted-foreground">
-              Status columns reflect the real enrichment pipeline (creator wallet → KYC root → mesh hydration).
-              <span className="text-amber-400"> Note:</span> <code>ingest_status</code> is the No-Lube posting flag — it stays <code>pending</code> until a card is composed, so don't read it as pipeline health.
+              Event-driven ingest: every new Insiders message triggers <code>insiders-row-ingest</code> the second it lands in DB.
+              Dev wallet is resolved via Solscan <code>fund_by</code> in one call. If Solscan misses it, <code>dev_wallet_source = in_process</code>
+              and the No-Lube poster shows "In Process" for that slot while background enrichment fills it in.
+              <span className="text-muted-foreground"> Pre-pipeline backlog is archived and hidden.</span>
             </p>
           </div>
           <div className="flex gap-2">
@@ -120,8 +126,10 @@ export function NoLubeProcessPanel() {
               <TableRow>
                 <TableHead compact>Ticker / Mint</TableHead>
                 <TableHead compact>Creator</TableHead>
+                <TableHead compact>Dev wallet</TableHead>
                 <TableHead compact>KYC</TableHead>
                 <TableHead compact>Mesh</TableHead>
+                <TableHead compact>Latency</TableHead>
                 <TableHead compact>First called</TableHead>
               </TableRow>
             </TableHeader>
@@ -140,6 +148,18 @@ export function NoLubeProcessPanel() {
                     </div>
                   </TableCell>
                   <TableCell compact><Badge variant="outline" className="text-[10px]">{r.creator_status || '—'}</Badge></TableCell>
+                  <TableCell compact>
+                    {r.dev_wallet ? (
+                      <div className="flex flex-col">
+                        <code className="text-[10px] font-mono">{short(r.dev_wallet)}</code>
+                        <span className="text-[9px] text-muted-foreground">{r.dev_wallet_source}</span>
+                      </div>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-400/50">
+                        {r.dev_wallet_source === 'in_process' ? 'in_process' : '—'}
+                      </Badge>
+                    )}
+                  </TableCell>
                   <TableCell compact><Badge variant="outline" className="text-[10px]">{r.kyc_status || '—'}</Badge></TableCell>
                   <TableCell compact>
                     <Badge variant="outline" className="text-[10px]">
@@ -147,12 +167,15 @@ export function NoLubeProcessPanel() {
                     </Badge>
                   </TableCell>
                   <TableCell compact className="text-[10px] text-muted-foreground">
+                    {typeof r.ingest_latency_ms === 'number' ? `${r.ingest_latency_ms}ms` : '—'}
+                  </TableCell>
+                  <TableCell compact className="text-[10px] text-muted-foreground">
                     {new Date(r.first_called_at).toLocaleString()}
                   </TableCell>
                 </TableRow>
               ))}
               {!loading && rows.length === 0 && (
-                <TableRow><TableCell compact colSpan={5} className="text-center text-muted-foreground">No tokens yet.</TableCell></TableRow>
+                <TableRow><TableCell compact colSpan={7} className="text-center text-muted-foreground">No tokens yet.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>

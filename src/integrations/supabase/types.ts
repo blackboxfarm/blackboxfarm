@@ -17837,7 +17837,9 @@ export type Database = {
           creator_status: string
           creator_wallet: string | null
           dev_history_warning: boolean | null
+          dev_wallet: string | null
           dev_wallet_resolved_at: string | null
+          dev_wallet_source: string | null
           enrichment_last_run_at: string | null
           enrichment_status: string | null
           entry_market_cap: number | null
@@ -17851,6 +17853,7 @@ export type Database = {
           id: string
           ingest_completed_at: string | null
           ingest_last_error: string | null
+          ingest_latency_ms: number | null
           ingest_started_at: string | null
           ingest_status: string
           is_rugged: boolean
@@ -17894,7 +17897,9 @@ export type Database = {
           creator_status?: string
           creator_wallet?: string | null
           dev_history_warning?: boolean | null
+          dev_wallet?: string | null
           dev_wallet_resolved_at?: string | null
+          dev_wallet_source?: string | null
           enrichment_last_run_at?: string | null
           enrichment_status?: string | null
           entry_market_cap?: number | null
@@ -17908,6 +17913,7 @@ export type Database = {
           id?: string
           ingest_completed_at?: string | null
           ingest_last_error?: string | null
+          ingest_latency_ms?: number | null
           ingest_started_at?: string | null
           ingest_status?: string
           is_rugged?: boolean
@@ -17951,7 +17957,9 @@ export type Database = {
           creator_status?: string
           creator_wallet?: string | null
           dev_history_warning?: boolean | null
+          dev_wallet?: string | null
           dev_wallet_resolved_at?: string | null
+          dev_wallet_source?: string | null
           enrichment_last_run_at?: string | null
           enrichment_status?: string | null
           entry_market_cap?: number | null
@@ -17965,6 +17973,7 @@ export type Database = {
           id?: string
           ingest_completed_at?: string | null
           ingest_last_error?: string | null
+          ingest_latency_ms?: number | null
           ingest_started_at?: string | null
           ingest_status?: string
           is_rugged?: boolean

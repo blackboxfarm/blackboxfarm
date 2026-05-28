@@ -1,3 +1,19 @@
+## Event-driven ingest (May 2026 update)
+
+- Postgres trigger `trg_insiders_call_enqueue_aft_ins` fires on every INSERT into
+  `telegram_channel_calls WHERE channel_name ILIKE 'insiders'` and calls
+  `insiders-row-ingest` immediately. No more waiting for the 2-min cron.
+- `insiders-row-ingest` order:
+  1. **DB-first cache** (`_shared/token-cache-lookup.ts`) — reuse creator/dev/KYC
+     from prior Insiders rows, `token_lifecycle`, `developer_profiles`.
+  2. **Resolve creator_wallet** (Pump.fun → Birdeye → Helius DAS → Helius RPC).
+  3. **Solscan `fund_by`** on the creator wallet → `dev_wallet`. One HTTP call.
+     - Hit → `dev_wallet_source = 'solscan_fund_by'`.
+     - Miss → `dev_wallet_source = 'in_process'`, poster shows "In Process".
+  4. Upsert lifecycle row with `ingest_latency_ms` and fire `no-lube-ingest`.
+- The 2-min `insiders-lifecycle-builder` cron remains as a safety sweep for any
+  rows the trigger missed; pre-pipeline backlog rows are marked
+  `ingest_status='archived'` and hidden from the Process tab.
 # No Lube — Private Channel Processing Protocol
 
 This document describes **every variable** the system fetches, resolves, calculates, or writes when a new token is scraped from the Insiders channel and pushed through the No Lube pipeline. The Process tab in the Private channel renders this file as the canonical reference, and each row in the recent-tokens table opens the same field list filled in with that token's live values.
