@@ -379,6 +379,9 @@ serve(async (req) => {
     // source the /quick TG reply uses). Skipped on snapshot kind since snapshot
     // is supposed to fire fast with zero enrichment cost.
     let simpleTiers: any = null;
+    let baglessData: any = null;
+    let earlyWarnings: any[] = [];
+    let devRep: any = null;
     if (kind === 'big_picture') {
       try {
         const baglessResp = await fetch(
@@ -393,12 +396,32 @@ serve(async (req) => {
           },
         );
         if (baglessResp.ok) {
-          const baglessData = await baglessResp.json();
+          baglessData = await baglessResp.json();
           simpleTiers = baglessData?.simpleTiers ?? null;
           if (simpleTiers) sources.distribution = 'bagless-holders-report';
         }
       } catch (e) {
         console.error('[no-lube-compose] bagless-holders-report fetch failed', e);
+      }
+
+      // Intel Alerts — same source the bot's Quick Stats uses
+      try {
+        const { data: warnings } = await supabase
+          .from('token_early_warnings')
+          .select('plain_text, severity, scan_count, last_seen_at')
+          .eq('token_mint', mint)
+          .in('severity', ['critical', 'high', 'medium'])
+          .order('last_seen_at', { ascending: false })
+          .limit(10);
+        if (warnings?.length) {
+          const sevOrder: Record<string, number> = { critical: 0, high: 1, medium: 2 };
+          earlyWarnings = warnings
+            .sort((a: any, b: any) => (sevOrder[a.severity] ?? 9) - (sevOrder[b.severity] ?? 9))
+            .slice(0, 3);
+          sources.intelAlerts = 'token_early_warnings';
+        }
+      } catch (e) {
+        console.error('[no-lube-compose] token_early_warnings fetch failed', e);
       }
     }
 
