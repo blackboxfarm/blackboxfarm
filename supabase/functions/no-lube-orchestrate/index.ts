@@ -394,6 +394,29 @@ serve(async (req) => {
       return jsonResp({ ok: true, flow: 'skipped', skipped: true, reason: 'current_mcap_unknown', threshold });
     }
 
+    // LOWEST-EVER ENTRY LOCK: ensure the lifecycle row carries an immutable
+    // entry baseline. If no Insiders entry exists, the current probe becomes
+    // the baseline. If a prior baseline exists, this RPC keeps the lower of
+    // the two — entry MCap never moves up.
+    try {
+      const tickerProbe = (probe.json?.vars as any)?.ticker || lcRow?.token_symbol || null;
+      const { data: locked } = await supabase.rpc('lock_entry_mcap', {
+        p_mint: mint,
+        p_observed: probeMcap,
+        p_symbol: tickerProbe,
+      });
+      if (locked != null && Number(locked) > 0) {
+        const lockedNum = Number(locked);
+        // If we had no baseline before, adopt the locked value going forward.
+        if (!firstMcap || lockedNum < firstMcap) {
+          firstMcap = lockedNum;
+          if (baselineSource === 'none') baselineSource = 'insiders';
+        }
+      }
+    } catch (e) {
+      console.warn('[no-lube-orchestrate] lock_entry_mcap failed (non-fatal):', (e as Error).message);
+    }
+
     // Hard invariant: refuse to proceed without both market caps.
     if (!baseMcap || baseMcap <= 0) {
       return jsonResp({
