@@ -364,6 +364,17 @@ serve(async (req) => {
 
     const sources: Record<string, string> = {};
 
+    // Global profile: includes the snapshot_use_mint_image toggle (default ON).
+    // We read it here so the snapshot path can decide whether to attach the
+    // token's mint image as the Telegram photo header.
+    const { data: globalProfile } = await supabase
+      .from('no_lube_global_profile')
+      .select('snapshot_use_mint_image')
+      .eq('id', 'singleton')
+      .maybeSingle();
+    const useMintImageOnSnapshot =
+      (globalProfile as any)?.snapshot_use_mint_image !== false; // default true
+
     // Pull the latest hourly health snapshot for wallet-distribution vars so the
     // post isn't full of "—" when /holders has already been refreshed.
     const { data: healthRow } = await supabase
