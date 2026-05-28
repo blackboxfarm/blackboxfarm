@@ -1,69 +1,62 @@
-## Goal
-Kill retries by making rows ineligible until they're actually ready to post. Plus build the template library, show_url safe zone, settings table, and logging.
+## Two changes
 
-## A. Prevent failures (no more retry loop)
+### 1. Immutable Entry MC (lowest-ever lock)
 
-**`no-lube-orchestrate` candidate selection rewrite**
-Replace current "pick anything not posted" with a strict eligibility view. Row is eligible ONLY when ALL true:
-- `entry_market_cap IS NOT NULL AND entry_market_cap > 0`
-- `creator_status = 'resolved'`
-- `dev_wallet_resolved_at IS NOT NULL`
-- `mesh_hydrated_at IS NOT NULL`
-- Live DexScreener mcap available + fresh (≤5 min) AND > 0
-- Not already in `no_lube_post_log` for this profile_kind
-- Not `terminal_dead`
+**Problem:** $RAIN first-seen MC was $17.3k, the 2x post still showed Entry $17.3k / Current $48.2k, but a later post showed Current MC $45.5k with Entry "—". The system is recomputing `mcEntry` live from `Math.min(...)` of mutable sources, and `Entry` isn't actually persisted/locked anywhere — so when the sources move or drop a row, the floor changes or disappears.
 
-If no row passes → orchestrator exits clean ("no eligible candidates"), no error, no retry, no log spam. Next tick re-evaluates. Failed posts become impossible because we never attempt one that isn't ready.
+**Fix:**
+- Add a dedicated column `entry_mcap_usd` on `holders_intel_seen_tokens` (nullable; once set, only ratchets DOWN, never up, never to null).
+- On every compose run (and on first-sight ingest), compute `candidate = min(current_mcap, existing_entry_mcap_usd, market_cap_at_discovery, historical_min_from_token_rankings)`; `UPDATE ... SET entry_mcap_usd = candidate WHERE entry_mcap_usd IS NULL OR candidate < entry_mcap_usd`.
+- `{mcEntry}` in templates resolves ONLY from this column. Never recomputed at render time. This is the immutable floor.
+- `{factor}` / milestone math (2x, 3.4x) uses `current_mcap / entry_mcap_usd`.
 
-**`insiders-lifecycle-builder` hard-reject**
-If a parsed Telegram message lacks entry_mcap or mint, do NOT insert a partial row. Log to a new `insiders_parse_failures` table for review. No half-baked rows enter the pipeline.
+### 2. Two-tier post flow: Snapshot (fast) → Big Picture (enriched)
 
-**Single Telegram retry only**
-Compose-card → Telegram send: one immediate retry on HTTP 5xx (Telegram's side), then give up cleanly and mark the post `failed_external`. No re-queue loop.
+Rename the current enrichment-gated post to **Big Picture** and add a new **Snapshot** post that fires immediately on first sighting.
 
-## B. Template library + active-template selector (Q3)
+**Snapshot (Private, fires within seconds of detection):**
+- Fields: ticker, CA, MC (= Entry MC), age, top10, mintable, LP burned, dev wallet (if cached), DexScreener/DexTools links.
+- Gates: only DexScreener basics + dev-wallet cache lookup + bad-actor / all-star quick check. NO holders refresh, NO blackbox harvest, NO mesh hydrate required.
+- If dev wallet has bad-actor flag or all-star plus → include that one line, otherwise skip.
+- No image (text-only, fast).
+- Template key: `no_lube_template_snapshot`.
 
-**Table `no_lube_channel_settings`**
-- `profile_kind` (public | private) PK
-- `active_template_id` → templates
-- `rotation_mode` ('sticky' | 'random' | 'round_robin') default 'sticky'
-- `last_used_template_id` (round_robin bookkeeping)
-- GRANTs + RLS (admin-only writes, service_role full)
+**Big Picture (Private + Public, fires after enrichment completes):**
+- The existing full template with wallet analysis, dust/whale %, BlackBox score, mesh, image composite.
+- Continues to require `holders_refreshed_at`, `blackbox_harvested_at`, `mesh_hydrated_at`.
+- Posted as a REPLY to the Snapshot message in Private (threaded), and standalone to Public.
 
-**Compositor `no-lube-compose-card`**
-Replace `is_default=true` lookup with: read settings row → pick template per rotation_mode → record `selection_reason` on `no_lube_card_renders`.
+**Orchestrator changes (`no-lube-orchestrate`):**
+- On first sighting → enqueue Snapshot post immediately (no enrichment gate).
+- After Snapshot posts → kick off enrichment pipeline as today.
+- When enrichment completes → enqueue Big Picture post (Private as reply, Public as new).
+- `no_lube_post_log` gets a `post_kind` column: `snapshot` | `big_picture` | `milestone`.
 
-**UI** in `NoLubeTemplateManager`
-- On Public + Private tabs add "Active background" dropdown listing enabled templates for that kind/lang.
-- Rotation-mode selector (sticky / random / round-robin).
-- Upload/CRUD stays — new PNGs auto-appear in the dropdown.
+**Process panel:**
+- New `Snapshot` column (✓ + timestamp + image flag) alongside the existing `Posted` Private/Public indicators.
+- Shows the time delta between Snapshot and Big Picture so you can see enrichment lag.
 
-## C. show_url safe zone (Q4)
+### Technical details
 
-- Add `show_url` to default safe-zones JSON seed (suggested `{x:30, y:600, w:964, h:28}`).
-- Compositor renders channel handle/URL text into `show_url` if present.
-- Templates tab overlay preview renders the box.
-- Migration backfills existing template rows with the new key + default coords.
+**Migration:**
+```sql
+ALTER TABLE public.holders_intel_seen_tokens
+  ADD COLUMN IF NOT EXISTS entry_mcap_usd numeric;
 
-## D. Migration files (Q5)
+ALTER TABLE public.no_lube_post_log
+  ADD COLUMN IF NOT EXISTS post_kind text NOT NULL DEFAULT 'big_picture';
 
-1. `no_lube_channel_settings` table + GRANTs + RLS + seed rows for `public`/`private` pointing at current default template.
-2. JSON backfill: add `show_url` to every existing `no_lube_card_templates.safe_zones`.
-3. New `insiders_parse_failures` table for hard-reject debugging.
-4. New column `no_lube_card_renders.selection_reason TEXT`.
+-- backfill entry from existing min signals
+UPDATE public.holders_intel_seen_tokens
+SET entry_mcap_usd = market_cap_at_discovery
+WHERE entry_mcap_usd IS NULL AND market_cap_at_discovery IS NOT NULL;
+```
 
-## E. Edge-function logging (Q6)
+**Files touched:**
+- `supabase/functions/no-lube-compose/index.ts` — replace live `mcEntry` calc with `entry_mcap_usd` read; add ratchet-down UPSERT before compose; branch template by `post_kind`.
+- `supabase/functions/no-lube-orchestrate/index.ts` — add snapshot enqueue on first sight, remove enrichment gate for snapshot path, keep gate for big_picture.
+- `supabase/functions/no-lube-push/index.ts` — stamp `post_kind`, thread big_picture as reply in Private.
+- New template file or constant: `SNAPSHOT_TEMPLATE` (minimal field set).
+- `src/components/social/NoLubeProcessPanel.tsx` — Snapshot column + delta display.
 
-- `no-lube-compose-card`: log `template_id`, `rotation_mode`, `selection_reason` on every render.
-- `no-lube-orchestrate`: log eligibility-filter counts each tick (`eligible: N, blocked_missing_mcap: X, blocked_no_creator: Y, blocked_stale_price: Z`). This makes "why nothing posted" answerable in 5 seconds.
-- All writes wrapped in `assertUpdate`/`assertInsert`.
-
-## F. Cron cadence
-
-Recommend `insiders-pipeline-orchestrator-15m` → **5 min**. Genealogy step is cooldown-guarded so cost is negligible. Lifecycle-builder stays at 2 min.
-
-## Out of scope
-- Heartbeat alerts
-- AI character-swap pass
-
-Awaiting **Plan Approved**.
+**Non-goals:** Not touching milestone/re-sighting logic, not changing image generation, not changing Public post timing rules.

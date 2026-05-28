@@ -8486,6 +8486,7 @@ export type Database = {
           creator_fetched_at: string | null
           creator_wallet: string | null
           description: string | null
+          entry_mcap_usd: number | null
           first_seen_at: string
           health_grade: string | null
           image_uri: string | null
@@ -8514,6 +8515,7 @@ export type Database = {
           creator_fetched_at?: string | null
           creator_wallet?: string | null
           description?: string | null
+          entry_mcap_usd?: number | null
           first_seen_at?: string
           health_grade?: string | null
           image_uri?: string | null
@@ -8542,6 +8544,7 @@ export type Database = {
           creator_fetched_at?: string | null
           creator_wallet?: string | null
           description?: string | null
+          entry_mcap_usd?: number | null
           first_seen_at?: string
           health_grade?: string | null
           image_uri?: string | null
@@ -11713,6 +11716,7 @@ export type Database = {
           liq_usd: number | null
           mcap: number | null
           mint_time: string | null
+          post_kind: string
           posted: boolean
           posted_at: string | null
           price_change_24h: number | null
@@ -11741,6 +11745,7 @@ export type Database = {
           liq_usd?: number | null
           mcap?: number | null
           mint_time?: string | null
+          post_kind?: string
           posted?: boolean
           posted_at?: string | null
           price_change_24h?: number | null
@@ -11769,6 +11774,7 @@ export type Database = {
           liq_usd?: number | null
           mcap?: number | null
           mint_time?: string | null
+          post_kind?: string
           posted?: boolean
           posted_at?: string | null
           price_change_24h?: number | null
