@@ -202,6 +202,7 @@ serve(async (req) => {
         last_mcap_at_post: patch.last_mcap_at_post,
         last_multiplier: patch.last_multiplier,
         last_posted_at: new Date().toISOString(),
+        source_message_id: source_message_id ?? null,
       }).eq('id', logId);
     };
 
