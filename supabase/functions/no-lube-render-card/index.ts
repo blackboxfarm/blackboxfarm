@@ -26,11 +26,25 @@ serve(async (req) => {
     const {
       mint, ticker, multiplier, entry_mcap, current_mcap,
       language = 'en', channel_brand = 'No Lube Alpha', token_image_url,
+      profile_kind = 'public',
+      show_url = false,
+      url_to_show = null,
+      show_ca = true,
     } = await req.json();
 
     if (!mint || !ticker || !multiplier) {
       return new Response(JSON.stringify({ ok: false, error: 'mint, ticker, multiplier required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // Hard validation: refuse to render without both market caps.
+    if (entry_mcap == null || !isFinite(Number(entry_mcap)) || Number(entry_mcap) <= 0 ||
+        current_mcap == null || !isFinite(Number(current_mcap)) || Number(current_mcap) <= 0) {
+      return new Response(JSON.stringify({
+        ok: false,
+        error: 'missing_mcap_invariant',
+        detail: { entry_mcap, current_mcap },
+      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
@@ -44,37 +58,75 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    // Pick up to 3 enabled assets (1 character + optional background) matching language or universal.
+    // Pick assets matching language OR universal OR null. Previous `.or()` had a
+    // bug that always matched universal because of the language.is.null clause
+    // combined with un-escaped interpolation. Switch to a clean filter chain.
+    const langSafe = String(language || 'universal').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 16);
     const { data: assetRows } = await supabase
       .from('no_lube_assets')
-      .select('id, category, public_url')
+      .select('id, category, public_url, last_used_at, times_used')
       .eq('enabled', true)
-      .or(`language.eq.${language},language.is.null,language.eq.universal`)
+      .or(`language.eq.${langSafe},language.eq.universal,language.is.null`)
       .in('category', ['character', 'background', 'sticker'])
-      .limit(50);
+      .limit(80);
 
-    const pool = (assetRows || []) as Array<{ id: string; category: string; public_url: string }>;
+    const pool = (assetRows || []) as Array<{
+      id: string; category: string; public_url: string;
+      last_used_at: string | null; times_used: number | null;
+    }>;
+    // Prefer assets not used in the last 24h, then least-used overall, then random tie-breaker.
+    const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
     const pick = (cat: string) => {
       const sub = pool.filter(a => a.category === cat);
-      return sub.length ? sub[Math.floor(Math.random() * sub.length)] : null;
+      if (!sub.length) return null;
+      sub.sort((a, b) => {
+        const aFresh = !a.last_used_at || new Date(a.last_used_at).getTime() < dayAgo ? 0 : 1;
+        const bFresh = !b.last_used_at || new Date(b.last_used_at).getTime() < dayAgo ? 0 : 1;
+        if (aFresh !== bFresh) return aFresh - bFresh;
+        const au = a.times_used ?? 0, bu = b.times_used ?? 0;
+        if (au !== bu) return au - bu;
+        return Math.random() - 0.5;
+      });
+      return sub[0];
     };
     const refs = [pick('character'), pick('background'), pick('sticker')].filter(Boolean) as
       Array<{ id: string; category: string; public_url: string }>;
 
-    const promptText = `Generate a vertical (1024x1536) Telegram-ready alert card.
+    // Landscape 1024x640 — matches the standard Telegram link-preview ratio
+    // and the user-supplied reference cards (ss1/ss2).
+    const caShort = `${mint.slice(0, 6)}…${mint.slice(-6)}`;
+    const strictBlock = [
+      `"$${ticker}"`,
+      `"${multiplier}X"`,
+      `"$${Math.round(Number(entry_mcap) / 1000)}k"`,
+      `"$${Math.round(Number(current_mcap) / 1000)}k"`,
+    ].join(', ');
+
+    const urlLine = show_url && url_to_show
+      ? `- Small bottom-right CTA URL: "${url_to_show}"`
+      : '';
+    const caLine = show_ca
+      ? `- Tiny footer (small grey text, very low emphasis): "${caShort}"`
+      : '';
+
+    const promptText = `Generate a horizontal landscape (1024x640) Telegram-ready alert card.
 
 ${STYLE_GUIDE}
 
 SUBJECT: Token "$${ticker}" hit ${multiplier}X — display ${multiplier}X as the dominant typographic element (huge cyan glow), and feature the token's mint image prominently. Include a small whimsical mascot character (drawn in the style of the reference images) celebrating the gain.
 
-TEXT TO RENDER ON CARD (clean, large, mobile-readable):
+STRICT TEXT — render EXACTLY these strings, do NOT translate, abbreviate, or modify a single character: ${strictBlock}. Misspelling the ticker or the multiplier is a render failure.
+
+TEXT LAYOUT (clean, large, mobile-readable):
 - "$${ticker}"
 - "${multiplier}X"
 - "Entry: $${Math.round((entry_mcap || 0) / 1000)}k  →  Now: $${Math.round((current_mcap || 0) / 1000)}k"
 - Small footer: "${channel_brand}"
+${caLine}
+${urlLine}
 
 Language flavor for any incidental text: ${language}.
-Do NOT include URLs, contract addresses, or QR codes.`;
+Do NOT include QR codes. Do NOT add any text other than what is listed above.`;
 
     const userContent: Array<Record<string, unknown>> = [{ type: 'text', text: promptText }];
     if (token_image_url) {
@@ -128,15 +180,40 @@ Do NOT include URLs, contract addresses, or QR codes.`;
     const { data: pub } = supabase.storage.from('no-lube-rendered-cards').getPublicUrl(filename);
     const publicUrl = pub.publicUrl;
 
-    // Stamp usage on the picked assets (best-effort)
+    // Stamp usage on the picked assets — increment times_used + bump last_used_at.
     if (refs.length) {
       const ids = refs.map(r => r.id);
+      const nowIso = new Date().toISOString();
+      // Per-row update so we can increment times_used atomically client-side.
+      for (const r of refs) {
+        const { data: cur } = await supabase
+          .from('no_lube_assets')
+          .select('times_used')
+          .eq('id', r.id)
+          .maybeSingle();
+        const next = (cur?.times_used ?? 0) + 1;
+        await supabase.from('no_lube_assets')
+          .update({ times_used: next, last_used_at: nowIso })
+          .eq('id', r.id);
+      }
+      // Archive render to no_lube_card_renders (best-effort).
       try {
-        await supabase.rpc('increment'); // placeholder — falls through silently
-      } catch (_) { /* ignore */ }
-      await supabase.from('no_lube_assets')
-        .update({ last_used_at: new Date().toISOString() })
-        .in('id', ids);
+        await supabase.from('no_lube_card_renders').insert({
+          profile_kind,
+          language,
+          token_mint: mint,
+          ticker,
+          multiplier,
+          entry_mcap,
+          current_mcap,
+          asset_ids: ids,
+          prompt: promptText,
+          output_url: publicUrl,
+          ai_used: true,
+        });
+      } catch (e) {
+        console.warn('[render-card] archive insert failed', e);
+      }
     }
 
     return new Response(JSON.stringify({
