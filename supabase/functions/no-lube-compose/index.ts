@@ -580,10 +580,71 @@ serve(async (req) => {
     const helFileCdn = (hel?.content?.files as any)?.[0]?.cdn_uri as string | undefined;
     const dexImage = (dex?.info as any)?.imageUrl as string | undefined;
     const cachedImage = (cached?.metadata as any)?.image as string | undefined;
+    // Live sources first, then fall back to persisted holders_intel_seen_tokens.image_uri
+    // (so re-runs reuse the canonical URL once we've validated one).
+    const seenImage = (seenRow as any)?.image_uri as string | undefined;
     const tokenImageUrl: string | null =
-      helLinksImage || helFileCdn || helFileUri || dexImage || cachedImage || null;
+      helLinksImage || helFileCdn || helFileUri || dexImage || seenImage || cachedImage || null;
     if (tokenImageUrl) sources.tokenImage =
-      helLinksImage || helFileCdn || helFileUri ? 'helius' : dexImage ? 'dexscreener' : 'cache';
+      (helLinksImage || helFileCdn || helFileUri) ? 'helius'
+      : dexImage ? 'dexscreener'
+      : seenImage ? 'seen_token_cache'
+      : 'cache';
+
+    // DexScreener banner — read DB cache first, then live fetch, then persist.
+    // Also surface a paid-DEX flag (boosts.active > 0) so the card compositor
+    // can later overlay a 50X/100X strip when the user wires up the visual.
+    let bannerUrl: string | null = (seenRow as any)?.banner_url || null;
+    let bannerSource: string | null = bannerUrl ? 'seen_token_cache' : null;
+    let hasPaidDex = false;
+    try {
+      // Detect paid boost from the live DexScreener pairs (cheap, public).
+      const dsRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {
+        headers: { Accept: 'application/json' },
+      }).catch(() => null);
+      if (dsRes?.ok) {
+        const dsJson: any = await dsRes.json().catch(() => null);
+        const dsPairs: any[] = Array.isArray(dsJson?.pairs) ? dsJson.pairs : [];
+        hasPaidDex = dsPairs.some((p) => (p?.boosts?.active ?? 0) > 0 || !!p?.info?.header);
+      }
+      if (!bannerUrl) {
+        const banner = await fetchDexBanner(mint);
+        if (banner?.url) {
+          bannerUrl = banner.url;
+          bannerSource = banner.source || 'dexscreener';
+        }
+      }
+    } catch (e) {
+      console.warn('[no-lube-compose] banner fetch failed', (e as Error).message);
+    }
+    if (bannerUrl) sources.banner = bannerSource || 'dexscreener';
+    if (hasPaidDex) sources.paidDex = 'dexscreener.boosts';
+
+    // Persist fresh canonical image + banner back to holders_intel_seen_tokens
+    // so subsequent milestone runs reuse the validated URLs and never
+    // synthesize fake imagery.
+    if (seenRow && !dry_run) {
+      const patch: Record<string, any> = {};
+      if (tokenImageUrl && tokenImageUrl !== (seenRow as any).image_uri) {
+        patch.image_uri = tokenImageUrl;
+      }
+      if (bannerUrl && bannerUrl !== (seenRow as any).banner_url) {
+        patch.banner_url = bannerUrl;
+      }
+      if (Object.keys(patch).length > 0) {
+        try {
+          await assertUpdate(
+            supabase
+              .from('holders_intel_seen_tokens')
+              .update(patch)
+              .eq('token_mint', mint),
+            'holders_intel_seen_tokens',
+          );
+        } catch (e) {
+          console.error('[no-lube-compose] image/banner persist failed', (e as Error).message);
+        }
+      }
+    }
     const ticker =
       base.symbol ||
       sol?.meta?.symbol ||
