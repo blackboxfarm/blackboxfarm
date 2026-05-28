@@ -507,6 +507,7 @@ serve(async (req) => {
       .eq('pipeline_name', 'insiders_no_lube_process_queue')
       .maybeSingle();
     const resetAfter = resetMarker?.reset_after || null;
+    const resetAfterMs = resetAfter ? new Date(resetAfter).getTime() : 0;
     if (resetAfter) {
       console.log(`[insiders-lifecycle-builder] Queue reset cutoff active: ${resetAfter}`);
     }
@@ -549,6 +550,8 @@ serve(async (req) => {
       if (!mint) continue;
 
       const ts = (row.message_timestamp || row.created_at) as string;
+      if (resetAfterMs && new Date(ts).getTime() <= resetAfterMs) continue;
+
       const raw = (row.raw_message || '') as string;
       const isMilestone = /MILESTONE/i.test(raw);
       // Track which timestamp source we used so we can detect bulk-import collapse later
