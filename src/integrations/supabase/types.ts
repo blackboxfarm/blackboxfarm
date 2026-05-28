@@ -11511,6 +11511,7 @@ export type Database = {
           posted: boolean
           posted_at: string | null
           price_change_24h: number | null
+          source_message_id: number | null
           tg_message_id: number | null
           ticker: string | null
           times_posted: number
@@ -11536,6 +11537,7 @@ export type Database = {
           posted?: boolean
           posted_at?: string | null
           price_change_24h?: number | null
+          source_message_id?: number | null
           tg_message_id?: number | null
           ticker?: string | null
           times_posted?: number
@@ -11561,6 +11563,7 @@ export type Database = {
           posted?: boolean
           posted_at?: string | null
           price_change_24h?: number | null
+          source_message_id?: number | null
           tg_message_id?: number | null
           ticker?: string | null
           times_posted?: number
