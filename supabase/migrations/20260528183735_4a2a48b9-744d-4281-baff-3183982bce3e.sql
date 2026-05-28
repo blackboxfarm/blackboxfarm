@@ -1,0 +1,1 @@
+UPDATE telegram_insider_token_lifecycle SET creator_status = 'resolved' WHERE creator_status = 'unknown' AND creator_wallet IS NOT NULL;
