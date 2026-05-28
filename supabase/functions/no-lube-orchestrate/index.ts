@@ -325,68 +325,55 @@ serve(async (req) => {
       });
     }
 
-    const privateResult = await composeAndPush('private', mint, multiplier);
+    // ---- Probe ticker for both renders ----
+    const tickerForCard =
+      (probe.json?.vars?.ticker as string | undefined) || null;
 
-    // For the public channel, generate an AI hype card and attach a CTA button.
-    // Look up template config (show_url / show_ca / url_to_show) per channel.
-    let publicImageUrl: string | null = null;
+    const renderCard = async (
+      kind: 'private' | 'public',
+      tpl: Awaited<ReturnType<typeof loadTemplate>>,
+      profile: typeof pubProfile,
+      brand: string,
+    ) => {
+      try {
+        const render = await invoke(renderUrl, anonKey, {
+          mint,
+          ticker: tickerForCard,
+          multiplier,
+          entry_mcap: baseMcap,
+          current_mcap: probeMcap,
+          language: profile?.language || 'en',
+          profile_kind: kind,
+          channel_brand: brand,
+          show_url: tpl?.show_url ?? false,
+          url_to_show: tpl?.url_to_show
+            ?? (kind === 'public' && pubProfile?.trade_bot_username
+                  ? `t.me/${String(pubProfile.trade_bot_username).replace(/^@/, '')}`
+                  : null),
+          show_ca: tpl?.show_ca ?? true,
+        });
+        if (render.ok && render.json?.ok && render.json?.image_url) {
+          return String(render.json.image_url);
+        }
+        console.warn(`[no-lube-orchestrate] render-card ${kind} failed`, render.json);
+      } catch (e) {
+        console.warn(`[no-lube-orchestrate] render-card ${kind} threw`, e);
+      }
+      return null;
+    };
+
     const publicTpl = await loadTemplate('public', pubProfile?.language || null);
-    try {
-      const tickerForCard =
-        (probe.json?.vars?.ticker as string | undefined) ||
-        (privateResult as any)?.ticker ||
-        null;
-      const render = await invoke(renderUrl, anonKey, {
-        mint,
-        ticker: tickerForCard,
-        multiplier,
-        entry_mcap: baseMcap,
-        current_mcap: probeMcap,
-        language: pubProfile?.language || 'en',
-        profile_kind: 'public',
-        show_url: publicTpl?.show_url ?? false,
-        url_to_show: publicTpl?.url_to_show
-          ?? (pubProfile?.trade_bot_username
-                ? `t.me/${String(pubProfile.trade_bot_username).replace(/^@/, '')}`
-                : null),
-        show_ca: publicTpl?.show_ca ?? true,
-      });
-      if (render.ok && render.json?.ok && render.json?.image_url) {
-        publicImageUrl = String(render.json.image_url);
-      } else {
-        console.warn('[no-lube-orchestrate] render-card failed, posting text-only', render.json);
-      }
-    } catch (e) {
-      console.warn('[no-lube-orchestrate] render-card threw', e);
-    }
-
-    // Private channel: render its own card (distinct template/fields).
-    let privateImageUrl: string | null = null;
     const privateTpl = await loadTemplate('private', privProfile?.language || null);
-    try {
-      const tickerForCard =
-        (probe.json?.vars?.ticker as string | undefined) ||
-        (privateResult as any)?.ticker ||
-        null;
-      const render = await invoke(renderUrl, anonKey, {
-        mint,
-        ticker: tickerForCard,
-        multiplier,
-        entry_mcap: baseMcap,
-        current_mcap: probeMcap,
-        language: privProfile?.language || 'en',
-        profile_kind: 'private',
-        channel_brand: 'Premium Insiders',
-        show_url: privateTpl?.show_url ?? false,
-        url_to_show: privateTpl?.url_to_show ?? null,
-        show_ca: privateTpl?.show_ca ?? true,
-      });
-      if (render.ok && render.json?.ok && render.json?.image_url) {
-        privateImageUrl = String(render.json.image_url);
-      }
-    } catch (e) {
-      console.warn('[no-lube-orchestrate] private render-card threw', e);
-    }
+
+    // Render both cards in parallel (independent calls).
+    const [privateImageUrl, publicImageUrl] = await Promise.all([
+      renderCard('private', privateTpl, privProfile, 'Premium Insiders'),
+      renderCard('public', publicTpl, pubProfile, pubProfile?.telegram_chat_title || 'No Lube Alpha'),
+    ]);
+
+    const privateResult = await composeAndPush('private', mint, multiplier, {
+      image_url: privateImageUrl,
+    });
 
     const publicCta = buildPublicCta();
     const publicResult = await composeAndPush('public', mint, multiplier, {
