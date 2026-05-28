@@ -553,6 +553,7 @@ serve(async (req) => {
         .insert({
           token_mint: mint,
           ticker: String(ticker),
+          channel,
           verdict_class,
           posted: false,
           block_reason,
