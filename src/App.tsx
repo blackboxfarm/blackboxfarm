@@ -111,6 +111,7 @@ const App = () => {
                     <Routes>
                       <Route path="/" element={<Home />} />
                       <Route path="/dashboard" element={<Dashboard />} />
+                      <Route path="/wtf" element={<Wtf />} />
                       <Route path="/onboarding" element={<Onboarding />} />
                       <Route path="/auth" element={<Auth />} />
                       <Route path="/admin" element={<SuperAdminRoute><Navigate to="/super-admin" replace /></SuperAdminRoute>} />
