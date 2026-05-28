@@ -11680,6 +11680,7 @@ export type Database = {
           id: string
           language: string
           multiplier_threshold: number
+          snapshot_use_mint_image: boolean
           style: string
           updated_at: string
         }
@@ -11687,6 +11688,7 @@ export type Database = {
           id?: string
           language?: string
           multiplier_threshold?: number
+          snapshot_use_mint_image?: boolean
           style?: string
           updated_at?: string
         }
@@ -11694,6 +11696,7 @@ export type Database = {
           id?: string
           language?: string
           multiplier_threshold?: number
+          snapshot_use_mint_image?: boolean
           style?: string
           updated_at?: string
         }

@@ -364,6 +364,17 @@ serve(async (req) => {
 
     const sources: Record<string, string> = {};
 
+    // Global profile: includes the snapshot_use_mint_image toggle (default ON).
+    // We read it here so the snapshot path can decide whether to attach the
+    // token's mint image as the Telegram photo header.
+    const { data: globalProfile } = await supabase
+      .from('no_lube_global_profile')
+      .select('snapshot_use_mint_image')
+      .eq('id', 'singleton')
+      .maybeSingle();
+    const useMintImageOnSnapshot =
+      (globalProfile as any)?.snapshot_use_mint_image !== false; // default true
+
     // Pull the latest hourly health snapshot for wallet-distribution vars so the
     // post isn't full of "—" when /holders has already been refreshed.
     const { data: healthRow } = await supabase
@@ -559,6 +570,18 @@ serve(async (req) => {
     // ---- normalize ----
     const base = dex?.baseToken || {};
     const helContent = hel?.content?.metadata || {};
+    // Token mint image — used as the Telegram photo header on snapshot posts
+    // when the global toggle is enabled. Source order: Helius DAS content.links.image,
+    // Helius first file URI, DexScreener pair info imageUrl, cached metadata image.
+    const helLinksImage = (hel?.content?.links as any)?.image as string | undefined;
+    const helFileUri = (hel?.content?.files as any)?.[0]?.uri as string | undefined;
+    const helFileCdn = (hel?.content?.files as any)?.[0]?.cdn_uri as string | undefined;
+    const dexImage = (dex?.info as any)?.imageUrl as string | undefined;
+    const cachedImage = (cached?.metadata as any)?.image as string | undefined;
+    const tokenImageUrl: string | null =
+      helLinksImage || helFileCdn || helFileUri || dexImage || cachedImage || null;
+    if (tokenImageUrl) sources.tokenImage =
+      helLinksImage || helFileCdn || helFileUri ? 'helius' : dexImage ? 'dexscreener' : 'cache';
     const ticker =
       base.symbol ||
       sol?.meta?.symbol ||
@@ -794,6 +817,7 @@ serve(async (req) => {
       websiteUrl: dex?.info?.websites?.[0]?.url || DASH,
       multiplier: multiplierLabel,
       multiplierLine,
+      token_image_url: tokenImageUrl || DASH,
       ...profileVars,
     };
 
@@ -851,6 +875,11 @@ serve(async (req) => {
       block_reason,
       log_id: logId,
       mcap: mcUsd,
+      // Snapshot-only: surface the token's mint image so orchestrate/push can
+      // attach it as the Telegram photo header. Big-picture posts get their
+      // header from the AI-rendered card pipeline instead.
+      image_url: kind === 'snapshot' && useMintImageOnSnapshot ? tokenImageUrl : null,
+      token_image_url: tokenImageUrl,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
