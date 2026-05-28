@@ -523,10 +523,27 @@ serve(async (req) => {
     // Seen-token row (entry mcap + persisted mint timestamp + immutable entry floor)
     const { data: seenRow } = await supabase
       .from('holders_intel_seen_tokens')
-      .select('market_cap_at_discovery, minted_at, entry_mcap_usd')
+      .select('market_cap_at_discovery, minted_at, entry_mcap_usd, dev_wallet')
       .eq('token_mint', mint)
       .maybeSingle();
     if (seenRow) sources.seen = 'holders_intel_seen_tokens';
+
+    // Dev wallet reputation (powers {devReputation}, {pastLaunches}, {rugs})
+    if (kind === 'big_picture' && seenRow?.dev_wallet) {
+      try {
+        const { data: rep } = await supabase
+          .from('dev_wallet_reputation')
+          .select('reputation_score, trust_level, total_tokens_launched, tokens_rugged, tokens_successful, dev_pattern, is_serial_spammer, is_legitimate_builder')
+          .eq('wallet_address', seenRow.dev_wallet)
+          .maybeSingle();
+        if (rep) {
+          devRep = rep;
+          sources.devRep = 'dev_wallet_reputation';
+        }
+      } catch (e) {
+        console.error('[no-lube-compose] dev_wallet_reputation fetch failed', e);
+      }
+    }
 
     // Lowest mcap we've ever observed for this token across the ranking history.
     const { data: minRow } = await supabase
