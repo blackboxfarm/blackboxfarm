@@ -11378,6 +11378,7 @@ export type Database = {
           public_url: string
           storage_path: string
           tags: string[]
+          times_used: number
           updated_at: string
           usage_count: number
         }
@@ -11394,6 +11395,7 @@ export type Database = {
           public_url: string
           storage_path: string
           tags?: string[]
+          times_used?: number
           updated_at?: string
           usage_count?: number
         }
@@ -11410,8 +11412,137 @@ export type Database = {
           public_url?: string
           storage_path?: string
           tags?: string[]
+          times_used?: number
           updated_at?: string
           usage_count?: number
+        }
+        Relationships: []
+      }
+      no_lube_card_renders: {
+        Row: {
+          ai_used: boolean
+          asset_ids: string[]
+          created_at: string
+          current_mcap: number | null
+          entry_mcap: number | null
+          fallback_reason: string | null
+          id: string
+          language: string | null
+          multiplier: number | null
+          output_url: string
+          profile_kind: string
+          prompt: string | null
+          template_id: string | null
+          ticker: string | null
+          token_mint: string
+        }
+        Insert: {
+          ai_used?: boolean
+          asset_ids?: string[]
+          created_at?: string
+          current_mcap?: number | null
+          entry_mcap?: number | null
+          fallback_reason?: string | null
+          id?: string
+          language?: string | null
+          multiplier?: number | null
+          output_url: string
+          profile_kind: string
+          prompt?: string | null
+          template_id?: string | null
+          ticker?: string | null
+          token_mint: string
+        }
+        Update: {
+          ai_used?: boolean
+          asset_ids?: string[]
+          created_at?: string
+          current_mcap?: number | null
+          entry_mcap?: number | null
+          fallback_reason?: string | null
+          id?: string
+          language?: string | null
+          multiplier?: number | null
+          output_url?: string
+          profile_kind?: string
+          prompt?: string | null
+          template_id?: string | null
+          ticker?: string | null
+          token_mint?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "no_lube_card_renders_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "no_lube_card_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      no_lube_card_templates: {
+        Row: {
+          aspect: string
+          created_at: string
+          enabled: boolean
+          exif_copyright: string | null
+          exif_description: string | null
+          exif_owner: string | null
+          font_family: string | null
+          font_url: string | null
+          id: string
+          is_default: boolean
+          language: string
+          profile_kind: string
+          safe_zones: Json
+          show_ca: boolean
+          show_url: boolean
+          template_name: string
+          template_url: string
+          updated_at: string
+          url_to_show: string | null
+        }
+        Insert: {
+          aspect?: string
+          created_at?: string
+          enabled?: boolean
+          exif_copyright?: string | null
+          exif_description?: string | null
+          exif_owner?: string | null
+          font_family?: string | null
+          font_url?: string | null
+          id?: string
+          is_default?: boolean
+          language?: string
+          profile_kind: string
+          safe_zones?: Json
+          show_ca?: boolean
+          show_url?: boolean
+          template_name: string
+          template_url: string
+          updated_at?: string
+          url_to_show?: string | null
+        }
+        Update: {
+          aspect?: string
+          created_at?: string
+          enabled?: boolean
+          exif_copyright?: string | null
+          exif_description?: string | null
+          exif_owner?: string | null
+          font_family?: string | null
+          font_url?: string | null
+          id?: string
+          is_default?: boolean
+          language?: string
+          profile_kind?: string
+          safe_zones?: Json
+          show_ca?: boolean
+          show_url?: boolean
+          template_name?: string
+          template_url?: string
+          updated_at?: string
+          url_to_show?: string | null
         }
         Relationships: []
       }

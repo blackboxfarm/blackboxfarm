@@ -1,0 +1,1 @@
+SELECT cron.alter_job(jobid, active := true) FROM cron.job WHERE jobname = 'insiders-pipeline-orchestrator-15m';
