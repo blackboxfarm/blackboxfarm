@@ -94,6 +94,40 @@ function fmtMintTime(mintTs: number | null | undefined): string {
   return `${d} days ${h} hrs ago`;
 }
 
+/** Short humanised mint-ago, e.g. "42m", "3h 12m", "2d 4h". */
+function fmtMintAgo(mintTs: number | null | undefined): string {
+  if (!mintTs) return DASH;
+  const ms = Date.now() - mintTs;
+  if (ms <= 0) return DASH;
+  const sec = Math.floor(ms / 1000);
+  if (sec < 3600) return `${Math.max(1, Math.round(sec / 60))}m`;
+  if (sec < 86400) {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    return m ? `${h}h ${m}m` : `${h}h`;
+  }
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  return h ? `${d}d ${h}h` : `${d}d`;
+}
+
+/** Computer-style timestamp, e.g. "2026-05-28 18:42 UTC". */
+function fmtMintStamp(mintTs: number | null | undefined): string {
+  if (!mintTs) return DASH;
+  const d = new Date(mintTs);
+  if (isNaN(d.getTime())) return DASH;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ` +
+    `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
+}
+
+/** 10-segment block progress bar for bonding curve. */
+function fmtBondingBar(pct: number | null | undefined): string {
+  if (pct == null || !isFinite(pct)) return DASH;
+  const filled = Math.max(0, Math.min(10, Math.round(pct / 10)));
+  return '█'.repeat(filled) + '░'.repeat(10 - filled);
+}
+
 /**
  * Decide if this token is "crazy" (anomaly rocket), "dead" (rugged/dust),
  * or "healthy" (worth posting). Healthy is the only postable class.
@@ -409,6 +443,25 @@ serve(async (req) => {
     if (mintTs) sources.mintTime = 'helius.signatures';
     if (bondPct != null) sources.bonding = 'pumpfun';
 
+    // Seen-token row (entry mcap + persisted mint timestamp)
+    const { data: seenRow } = await supabase
+      .from('holders_intel_seen_tokens')
+      .select('market_cap_at_discovery, minted_at')
+      .eq('token_mint', mint)
+      .maybeSingle();
+    if (seenRow) sources.seen = 'holders_intel_seen_tokens';
+
+    // Lowest mcap we've ever observed for this token across the ranking history.
+    const { data: minRow } = await supabase
+      .from('token_rankings')
+      .select('market_cap')
+      .eq('token_mint', mint)
+      .not('market_cap', 'is', null)
+      .order('market_cap', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const historicalMin = minRow?.market_cap != null ? Number(minRow.market_cap) : null;
+
     // ---- normalize ----
     const base = dex?.baseToken || {};
     const helContent = hel?.content?.metadata || {};
@@ -442,6 +495,26 @@ serve(async (req) => {
     const createdAt = dex?.pairCreatedAt ? Number(dex.pairCreatedAt) : null;
     const ageMs = createdAt ? Date.now() - createdAt : null;
     const ageMin = ageMs ? Math.floor(ageMs / 60000) : null;
+
+    // Resolve mint timestamp: prefer persisted DB value, fall back to Helius probe.
+    const dbMintTs = seenRow?.minted_at ? new Date(seenRow.minted_at).getTime() : null;
+    const effectiveMintTs = dbMintTs || mintTs || null;
+
+    // Entry mcap = lowest of (discovery snapshot, historical ranking min, current mcap).
+    const entryCandidates = [
+      seenRow?.market_cap_at_discovery != null ? Number(seenRow.market_cap_at_discovery) : null,
+      historicalMin,
+      mcUsd,
+    ].filter((v): v is number => v != null && isFinite(v) && v > 0);
+    const mcEntryVal = entryCandidates.length ? Math.min(...entryCandidates) : null;
+
+    // Bonding/progress copy varies by bonded vs still-on-curve.
+    const bondingBar = fmtBondingBar(bondPct);
+    const bondingPctStr = bondPct != null ? bondPct.toFixed(0) : DASH;
+    const ageHuman = fmtAge(ageMs);
+    const progressLine = bondPct != null
+      ? `${bondingBar} ${bondingPctStr}% Bonding`
+      : `Bonded! ${ageHuman} ago`;
 
     // Holder distribution (best effort)
     let top10Pct: number | null = null;
@@ -488,11 +561,17 @@ serve(async (req) => {
       riskIcon: rIcon,
       verdictIcon: vIcon,
       mc: fmtMoney(mcUsd),
+      mcEntry: fmtMoney(mcEntryVal),
       mcChange: fmtPct(ch24, true),
       vol24h: fmtMoney(vol24),
       lp: fmtMoney(liq),
       age: fmtAge(ageMs),
       mintTime: fmtMintTime(mintTs),
+      mint_ago: fmtMintAgo(effectiveMintTs),
+      mint_stamp: fmtMintStamp(effectiveMintTs),
+      bondingbar: bondingBar,
+      bondingpct: bondingPctStr,
+      progress: progressLine,
       bondingState,
       top10: top10Pct != null ? `${top10Pct.toFixed(1)}%` : DASH,
       freshWallets: healthRow?.dust_percentage != null
