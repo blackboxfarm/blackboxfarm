@@ -502,6 +502,26 @@ async function processMessages(supabase: any, source: FunnelSource, messages: an
     if (!insertErr) {
       newTokens++;
 
+      // Fire the dev-wallet resolution waterfall (cache → creator → Solscan
+      // fund_by → dev_wallet). Fire-and-forget so the scan stays fast; the
+      // 2-min insiders-lifecycle-builder is the safety net for stragglers.
+      try {
+        fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/insiders-row-ingest`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+          },
+          body: JSON.stringify({
+            mint,
+            symbol: tokenSymbol,
+            channel_name: source.source_name,
+            message_id: info.messageId,
+          }),
+        }).catch(() => { /* fire-and-forget */ });
+      } catch { /* ignore */ }
+
       // Feed into mesh pipeline
       try {
         await meshFeed.token(supabase, {
