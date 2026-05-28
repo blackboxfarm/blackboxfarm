@@ -3383,9 +3383,30 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
       fantasyBuysExecuted: totalFantasyBuys,
       rawMessagesRetrieved: totalRawMessages,
       channels: results
-    }), {
+    }), (() => {
+      // Fire-and-forget: immediately invoke insiders-lifecycle-builder so any
+      // newly scraped Insiders message is converted to a lifecycle row and
+      // dispatched to no-lube-ingest within the same tick instead of waiting
+      // up to 15 minutes for the orchestrator. Cheap: builder skips known mints.
+      try {
+        const sbUrl = Deno.env.get('SUPABASE_URL')!;
+        const sbKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        fetch(`${sbUrl}/functions/v1/insiders-lifecycle-builder`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${sbKey}`,
+            'apikey': sbKey,
+          },
+          body: JSON.stringify({ source: 'telegram-channel-monitor' }),
+        }).catch((e) => console.warn('[telegram-channel-monitor] lifecycle-builder dispatch failed:', (e as Error).message));
+      } catch (e) {
+        console.warn('[telegram-channel-monitor] lifecycle-builder dispatch fatal:', (e as Error).message);
+      }
+      return {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+      };
+    })());
 
   } catch (error: any) {
     console.error('[telegram-channel-monitor] Error:', error);
