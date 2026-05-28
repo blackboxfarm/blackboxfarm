@@ -496,6 +496,26 @@ serve(async (req) => {
     const ageMs = createdAt ? Date.now() - createdAt : null;
     const ageMin = ageMs ? Math.floor(ageMs / 60000) : null;
 
+    // Resolve mint timestamp: prefer persisted DB value, fall back to Helius probe.
+    const dbMintTs = seenRow?.minted_at ? new Date(seenRow.minted_at).getTime() : null;
+    const effectiveMintTs = dbMintTs || mintTs || null;
+
+    // Entry mcap = lowest of (discovery snapshot, historical ranking min, current mcap).
+    const entryCandidates = [
+      seenRow?.market_cap_at_discovery != null ? Number(seenRow.market_cap_at_discovery) : null,
+      historicalMin,
+      mcUsd,
+    ].filter((v): v is number => v != null && isFinite(v) && v > 0);
+    const mcEntryVal = entryCandidates.length ? Math.min(...entryCandidates) : null;
+
+    // Bonding/progress copy varies by bonded vs still-on-curve.
+    const bondingBar = fmtBondingBar(bondPct);
+    const bondingPctStr = bondPct != null ? bondPct.toFixed(0) : DASH;
+    const ageHuman = fmtAge(ageMs);
+    const progressLine = bondPct != null
+      ? `${bondingBar} ${bondingPctStr}% Bonding`
+      : `Bonded! ${ageHuman} ago`;
+
     // Holder distribution (best effort)
     let top10Pct: number | null = null;
     const holderList: any[] = sol?.holders?.items || sol?.holders || [];
@@ -541,11 +561,17 @@ serve(async (req) => {
       riskIcon: rIcon,
       verdictIcon: vIcon,
       mc: fmtMoney(mcUsd),
+      mcEntry: fmtMoney(mcEntryVal),
       mcChange: fmtPct(ch24, true),
       vol24h: fmtMoney(vol24),
       lp: fmtMoney(liq),
       age: fmtAge(ageMs),
       mintTime: fmtMintTime(mintTs),
+      mint_ago: fmtMintAgo(effectiveMintTs),
+      mint_stamp: fmtMintStamp(effectiveMintTs),
+      bondingbar: bondingBar,
+      bondingpct: bondingPctStr,
+      progress: progressLine,
       bondingState,
       top10: top10Pct != null ? `${top10Pct.toFixed(1)}%` : DASH,
       freshWallets: healthRow?.dust_percentage != null
