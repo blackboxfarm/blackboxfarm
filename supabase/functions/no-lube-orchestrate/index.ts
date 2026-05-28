@@ -86,10 +86,21 @@ serve(async (req) => {
     const prev = prevRows?.[0] || null;
     const isFirstSighting = !prev;
 
-    // FIRST-SEEN mcap = oldest successful post_log row for this mint.
-    // This is the immutable baseline used for the X multiplier.
+    // FIRST-SEEN mcap = the Insiders scrape's entry_market_cap. This is the
+    // canonical baseline captured the moment the token was first announced
+    // and never moves. We fall back to the oldest no_lube_post_log row only
+    // if the lifecycle row is missing or has no entry mcap (legacy data).
     let firstMcap: number | null = null;
-    if (prev) {
+    let baselineSource: 'insiders' | 'post_log' | 'none' = 'none';
+    const { data: lcRow } = await supabase
+      .from('telegram_insider_token_lifecycle')
+      .select('entry_market_cap, token_symbol')
+      .eq('token_mint', mint)
+      .maybeSingle();
+    if (lcRow?.entry_market_cap != null && Number(lcRow.entry_market_cap) > 0) {
+      firstMcap = Number(lcRow.entry_market_cap);
+      baselineSource = 'insiders';
+    } else if (prev) {
       const { data: firstRows } = await supabase
         .from('no_lube_post_log')
         .select('mcap, composed_at')
@@ -101,6 +112,7 @@ serve(async (req) => {
       const f = firstRows?.[0];
       if (f?.mcap != null && isFinite(Number(f.mcap)) && Number(f.mcap) > 0) {
         firstMcap = Number(f.mcap);
+        baselineSource = 'post_log';
       }
     }
 
@@ -189,6 +201,8 @@ serve(async (req) => {
         ok: true,
         flow: 'first_sighting',
         threshold,
+        baseline_source: baselineSource,
+        base_mcap: firstMcap,
         results: { private: result },
       });
     }
@@ -309,6 +323,7 @@ serve(async (req) => {
       ok: true,
       flow: 're_sighting',
       threshold,
+      baseline_source: baselineSource,
       base_mcap: baseMcap,
       current_mcap: probeMcap,
       ratio,
