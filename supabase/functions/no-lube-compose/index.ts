@@ -324,6 +324,17 @@ serve(async (req) => {
 
     const sources: Record<string, string> = {};
 
+    // Pull the latest hourly health snapshot for wallet-distribution vars so the
+    // post isn't full of "—" when /holders has already been refreshed.
+    const { data: healthRow } = await supabase
+      .from('token_health_snapshots')
+      .select('dust_percentage, whale_count, total_holders, real_holders, top10_pct, health_score, health_grade, snapshot_hour')
+      .eq('token_mint', mint)
+      .order('snapshot_hour', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (healthRow) sources.health = 'token_health_snapshots';
+
     // 1) Template — per-channel
     const { data: tplRow } = await supabase
       .from('holders_intel_templates')
