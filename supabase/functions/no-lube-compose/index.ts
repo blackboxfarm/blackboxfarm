@@ -875,6 +875,11 @@ serve(async (req) => {
       block_reason,
       log_id: logId,
       mcap: mcUsd,
+      // Snapshot-only: surface the token's mint image so orchestrate/push can
+      // attach it as the Telegram photo header. Big-picture posts get their
+      // header from the AI-rendered card pipeline instead.
+      image_url: kind === 'snapshot' && useMintImageOnSnapshot ? tokenImageUrl : null,
+      token_image_url: tokenImageUrl,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
