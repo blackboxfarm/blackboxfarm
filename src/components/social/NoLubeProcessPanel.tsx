@@ -49,6 +49,7 @@ type Row = Record<string, unknown> & {
 };
 
 type PostStatus = {
+  snapshot?: { posted_at: string | null };
   private?: { posted_at: string | null; had_image: boolean; image_url: string | null };
   public?: { posted_at: string | null; had_image: boolean; image_url: string | null };
 };
@@ -92,15 +93,19 @@ export function NoLubeProcessPanel() {
       const mints = (data as any[]).map(r => r.token_mint).filter(Boolean);
       const { data: posts } = await supabase
         .from('no_lube_post_log')
-        .select('token_mint, channel, posted_at, had_image, image_url, posted')
+        .select('token_mint, channel, post_kind, posted_at, had_image, image_url, posted')
         .in('token_mint', mints)
         .eq('posted', true)
         .order('posted_at', { ascending: false });
       const byMint: Record<string, PostStatus> = {};
       for (const p of (posts || []) as any[]) {
+        const slot = (byMint[p.token_mint] ||= {});
+        if (p.post_kind === 'snapshot') {
+          if (!slot.snapshot) slot.snapshot = { posted_at: p.posted_at };
+          continue;
+        }
         const ch = (p.channel === 'public' || p.channel === 'private') ? p.channel : null;
         if (!ch) continue;
-        const slot = (byMint[p.token_mint] ||= {});
         // first row per (mint, channel) wins because list is sorted DESC
         if (!slot[ch]) {
           slot[ch] = {
@@ -213,6 +218,13 @@ export function NoLubeProcessPanel() {
                   </TableCell>
                   <TableCell compact>
                     <div className="flex flex-col gap-0.5">
+                      {ps?.snapshot ? (
+                        <Badge variant="outline" className="text-[10px] text-amber-300 border-amber-300/40">
+                          ⚡ Snapshot
+                        </Badge>
+                      ) : (
+                        <span className="text-[9px] text-muted-foreground">Snapshot —</span>
+                      )}
                       {ps?.private ? (
                         <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-400/40">
                           Private {ps.private.had_image ? '🖼️' : '📝'}
