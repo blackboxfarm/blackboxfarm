@@ -410,6 +410,26 @@ Reputation: {devReputation}
 [💰 Buy]({buyUrl}) · [⚠️ Scan History]({scanHistoryUrl}) · [🌐 Socials]({socialsUrl})
 
 CA: \`{ca}\``,
+
+  no_lube_snapshot_private: `⚡ *$\{ticker} Quick Stats*
+
+👥 Holders: *{totalHolders}*
+❤️ Health: *{healthScore}/100*
+🏦 Top 10%: *{top10}*
+
+📈 *Wallet Distribution*
+{walletDistBlock}
+
+🚨 *Intel Alerts*
+{intelAlert1}
+
+💰 *Market*
+MC: *{mc}* ({mcChange})  VOL: *{vol24h}*
+Entry: *{mcEntry}*  Age: *{age}*
+
+🔗 [Full Report]({intelUrl}) | [BubbleMap]({bubbleMapUrl})
+
+CA: \`{ca}\``,
 };
 
 // Legacy default for backwards compatibility
