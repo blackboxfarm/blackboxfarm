@@ -141,7 +141,7 @@ serve(async (req) => {
     // Load public profile CTA config once (only used when pushing to public).
     const { data: pubProfile } = await supabase
       .from('no_lube_channel_profiles')
-      .select('trade_bot_username, access_purchase_url, cta_button_text, language')
+      .select('trade_bot_username, access_purchase_url, cta_button_text, language, telegram_chat_title')
       .eq('kind', 'public')
       .maybeSingle();
     const { data: privProfile } = await supabase
