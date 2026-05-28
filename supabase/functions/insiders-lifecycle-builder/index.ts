@@ -499,19 +499,34 @@ serve(async (req) => {
     const startedAt = Date.now();
     const deadlineExceeded = () => (Date.now() - startedAt) > DEADLINE_MS;
 
-    // Pull every insiders message in chronological order.
+    // Queue reset guard: after a manual wipe, never rebuild the visible
+    // Process queue from pre-reset telegram_channel_calls history.
+    const { data: resetMarker } = await supabase
+      .from('pipeline_reset_markers')
+      .select('reset_after')
+      .eq('pipeline_name', 'insiders_no_lube_process_queue')
+      .maybeSingle();
+    const resetAfter = resetMarker?.reset_after || null;
+    if (resetAfter) {
+      console.log(`[insiders-lifecycle-builder] Queue reset cutoff active: ${resetAfter}`);
+    }
+
+    // Pull every eligible insiders message in chronological order.
     // Page through to bypass 1000-row limit.
     const allRows: any[] = [];
     const PAGE_SIZE = 1000;
     let from = 0;
     while (true) {
-      const { data, error } = await supabase
+      let query = supabase
         .from('telegram_channel_calls')
         .select('id, message_id, token_mint, token_symbol, raw_message, message_timestamp, created_at')
         .ilike('channel_name', 'insiders')
         .not('token_mint', 'is', null)
-        .order('created_at', { ascending: true })
-        .range(from, from + PAGE_SIZE - 1);
+        .order('created_at', { ascending: true });
+
+      if (resetAfter) query = query.gt('created_at', resetAfter);
+
+      const { data, error } = await query.range(from, from + PAGE_SIZE - 1);
 
       if (error) throw error;
       if (!data || data.length === 0) break;
