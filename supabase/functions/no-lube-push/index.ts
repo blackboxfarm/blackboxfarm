@@ -13,7 +13,7 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
-    const { text, log_id, override, channel: rawChannel, image_url, cta } = await req.json();
+    const { text, log_id, override, channel: rawChannel, image_url, cta, reply_to_message_id } = await req.json();
     if (!text || typeof text !== 'string') {
       return new Response(JSON.stringify({ ok: false, error: 'text required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -102,6 +102,9 @@ serve(async (req) => {
       ? { inline_keyboard: [ctaButtons.map((b: any) => ({ text: String(b.text), url: String(b.url) }))] }
       : undefined;
 
+    const replyTo = (typeof reply_to_message_id === 'number' && Number.isFinite(reply_to_message_id))
+      ? reply_to_message_id : undefined;
+
     let result: { ok: boolean; json: any };
     if (image_url && typeof image_url === 'string') {
       // Photo path: caption uses Markdown; Telegram caption limit is 1024 — truncate safely.
@@ -109,21 +112,29 @@ serve(async (req) => {
       result = await postPhoto({
         chat_id: chatId, photo: image_url, caption,
         parse_mode: 'Markdown', reply_markup,
+        reply_to_message_id: replyTo, allow_sending_without_reply: true,
       });
       if (!(result.ok && result.json.ok)) {
         console.warn('[no-lube-push] sendPhoto markdown failed, retrying plain', result.json);
         const plain = caption.replace(/[*_`\[\]()]/g, '');
-        result = await postPhoto({ chat_id: chatId, photo: image_url, caption: plain, reply_markup });
+        result = await postPhoto({
+          chat_id: chatId, photo: image_url, caption: plain, reply_markup,
+          reply_to_message_id: replyTo, allow_sending_without_reply: true,
+        });
       }
     } else {
       result = await post({
         chat_id: chatId, text, parse_mode: 'Markdown',
         disable_web_page_preview: true, reply_markup,
+        reply_to_message_id: replyTo, allow_sending_without_reply: true,
       });
       if (!(result.ok && result.json.ok)) {
         console.warn('[no-lube-push] markdown failed, retrying plain', result.json);
         const plain = text.replace(/[*_`\[\]()]/g, '');
-        result = await post({ chat_id: chatId, text: plain, disable_web_page_preview: true, reply_markup });
+        result = await post({
+          chat_id: chatId, text: plain, disable_web_page_preview: true, reply_markup,
+          reply_to_message_id: replyTo, allow_sending_without_reply: true,
+        });
       }
     }
 

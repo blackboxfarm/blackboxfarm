@@ -126,13 +126,18 @@ serve(async (req) => {
     // Last successful post for this mint (carries times_posted + last_multiplier)
     const { data: prevRows } = await supabase
       .from('no_lube_post_log')
-      .select('id, times_posted, last_mcap_at_post, last_multiplier, mcap, posted_at, composed_at')
+      .select('id, times_posted, last_mcap_at_post, last_multiplier, mcap, posted_at, composed_at, post_kind, tg_message_id, channel')
       .eq('token_mint', mint)
       .eq('posted', true)
       .order('composed_at', { ascending: false })
-      .limit(1);
-    const prev = prevRows?.[0] || null;
-    const isFirstSighting = !prev;
+      .limit(20);
+    const allPrev = prevRows || [];
+    const snapshotPost = allPrev.find((r: any) => r.post_kind === 'snapshot') || null;
+    const bigPicturePosts = allPrev.filter((r: any) => r.post_kind === 'big_picture' || r.post_kind === 'milestone' || r.post_kind == null);
+    const prev = bigPicturePosts[0] || null;
+    const hasSnapshot = !!snapshotPost;
+    const hasBigPicture = !!prev;
+    const isFirstSighting = !hasBigPicture; // first big_picture = first "real" sighting
 
     // FIRST-SEEN mcap = the Insiders scrape's entry_market_cap. This is the
     // canonical baseline captured the moment the token was first announced
@@ -147,33 +152,46 @@ serve(async (req) => {
       .maybeSingle();
 
     // ---- STRICT ELIGIBILITY GATE ----
-    // Prevent failures by refusing to attempt a post when the row isn't ready.
-    // No retries: ineligible rows are skipped cleanly and re-evaluated next tick.
+    // Two-phase: SNAPSHOT fires fast with only minimal lifecycle row + entry mcap,
+    // BIG_PICTURE fires after enrichment completes (holders + blackbox + mesh).
     const eligibilityBlockers: string[] = [];
     if (!lcRow) eligibilityBlockers.push('no_lifecycle_row');
     if (!lcRow?.entry_market_cap || Number(lcRow.entry_market_cap) <= 0) eligibilityBlockers.push('missing_entry_mcap');
-    if (!lcRow?.creator_wallet) eligibilityBlockers.push('creator_unresolved');
-    if (lcRow?.creator_status && !['resolved', 'kyc_resolved', 'no_kyc_reachable', 'unresolvable'].includes(String(lcRow.creator_status))) {
-      eligibilityBlockers.push(`creator_status_${lcRow.creator_status}`);
-    }
-    // First-sighting only: require holders + blackbox enrichment so the very first
-    // Private post carries real wallet analysis (dust %, whales, health grade)
-    // instead of a row of "—". Re-sightings are gated by milestone math, not
-    // enrichment freshness — those vars are refreshed on every compose.
-    const isFirstSightingCheck = !prev;
-    if (isFirstSightingCheck) {
-      if (!lcRow?.holders_refreshed_at) eligibilityBlockers.push('holders_not_refreshed');
-      if (!lcRow?.blackbox_harvested_at) eligibilityBlockers.push('blackbox_not_harvested');
-      if (!lcRow?.mesh_hydrated_at) eligibilityBlockers.push('mesh_not_hydrated');
-    }
-    if (eligibilityBlockers.length) {
-      console.log('[no-lube-orchestrate] not_eligible', { mint, blockers: eligibilityBlockers });
-      return jsonResp({
-        ok: true, flow: 'skipped', skipped: true,
-        reason: 'not_eligible_yet',
-        blockers: eligibilityBlockers,
-        retry: false,
-      });
+    // Snapshot is the fast first-touch post — it does NOT require creator/KYC/holders
+    // to be resolved. It pushes ticker + CA + raw DexScreener stats and a "more
+    // intel incoming" note. We only enforce creator/enrichment gates for the
+    // BIG PICTURE post that follows.
+    if (!hasSnapshot && !hasBigPicture) {
+      // SNAPSHOT path: only basics required
+      if (eligibilityBlockers.length) {
+        console.log('[no-lube-orchestrate] snapshot not_eligible', { mint, blockers: eligibilityBlockers });
+        return jsonResp({
+          ok: true, flow: 'skipped', skipped: true,
+          reason: 'snapshot_not_eligible_yet',
+          blockers: eligibilityBlockers,
+          retry: false,
+        });
+      }
+    } else {
+      // BIG_PICTURE / milestone path: full enrichment required
+      if (!lcRow?.creator_wallet) eligibilityBlockers.push('creator_unresolved');
+      if (lcRow?.creator_status && !['resolved', 'kyc_resolved', 'no_kyc_reachable', 'unresolvable'].includes(String(lcRow.creator_status))) {
+        eligibilityBlockers.push(`creator_status_${lcRow.creator_status}`);
+      }
+      if (!hasBigPicture) {
+        if (!lcRow?.holders_refreshed_at) eligibilityBlockers.push('holders_not_refreshed');
+        if (!lcRow?.blackbox_harvested_at) eligibilityBlockers.push('blackbox_not_harvested');
+        if (!lcRow?.mesh_hydrated_at) eligibilityBlockers.push('mesh_not_hydrated');
+      }
+      if (eligibilityBlockers.length) {
+        console.log('[no-lube-orchestrate] big_picture not_eligible', { mint, blockers: eligibilityBlockers });
+        return jsonResp({
+          ok: true, flow: 'skipped', skipped: true,
+          reason: 'big_picture_not_eligible_yet',
+          blockers: eligibilityBlockers,
+          retry: false,
+        });
+      }
     }
 
     if (lcRow?.entry_market_cap != null && Number(lcRow.entry_market_cap) > 0) {
@@ -242,9 +260,14 @@ serve(async (req) => {
       channel: Channel,
       mint: string,
       multiplier: number | null,
-      opts: { image_url?: string | null; cta?: { text: string; url: string } | null } = {},
+      opts: {
+        image_url?: string | null;
+        cta?: { text: string; url: string } | null;
+        kind?: 'snapshot' | 'big_picture';
+        reply_to_message_id?: number | null;
+      } = {},
     ) => {
-      const cmp = await invoke(composeUrl, anonKey, { mint, channel, multiplier });
+      const cmp = await invoke(composeUrl, anonKey, { mint, channel, multiplier, kind: opts.kind || 'big_picture' });
       if (!cmp.ok || !cmp.json?.ok) {
         return { ok: false, channel, error: 'compose failed', detail: cmp.json, pushed: false };
       }
@@ -267,6 +290,7 @@ serve(async (req) => {
         text, log_id: logId, channel,
         image_url: opts.image_url || undefined,
         cta: opts.cta || undefined,
+        reply_to_message_id: opts.reply_to_message_id ?? undefined,
       });
       const pushed = !!(psh.ok && psh.json?.ok);
       return {
@@ -294,9 +318,9 @@ serve(async (req) => {
       );
     };
 
-    // ---- FIRST SIGHTING → PRIVATE ONLY ----
-    if (isFirstSighting) {
-      const result = await composeAndPush('private', mint, null);
+    // ---- PHASE 1: SNAPSHOT (fast first-touch, Private only, no image) ----
+    if (!hasSnapshot && !hasBigPicture) {
+      const result = await composeAndPush('private', mint, null, { kind: 'snapshot' });
       if (result.ok && result.pushed && result.mcap != null) {
         await stampPost(result.logId, {
           times_posted: 1,
@@ -306,10 +330,37 @@ serve(async (req) => {
       }
       return jsonResp({
         ok: true,
-        flow: 'first_sighting',
+        flow: 'snapshot',
         threshold,
         baseline_source: baselineSource,
         base_mcap: firstMcap,
+        results: { private: result },
+      });
+    }
+
+    // ---- PHASE 2: BIG PICTURE (enriched, Private as reply to snapshot + Public) ----
+    if (hasSnapshot && !hasBigPicture) {
+      const snapshotMsgId = snapshotPost && (snapshotPost as any).channel === 'private'
+        ? (snapshotPost as any).tg_message_id ?? null
+        : null;
+      const result = await composeAndPush('private', mint, null, {
+        kind: 'big_picture',
+        reply_to_message_id: snapshotMsgId,
+      });
+      if (result.ok && result.pushed && result.mcap != null) {
+        await stampPost(result.logId, {
+          times_posted: 1,
+          last_mcap_at_post: result.mcap,
+          last_multiplier: null,
+        });
+      }
+      return jsonResp({
+        ok: true,
+        flow: 'big_picture',
+        threshold,
+        baseline_source: baselineSource,
+        base_mcap: firstMcap,
+        replied_to: snapshotMsgId,
         results: { private: result },
       });
     }
