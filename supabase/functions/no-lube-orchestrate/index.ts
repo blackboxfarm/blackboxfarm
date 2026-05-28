@@ -288,7 +288,9 @@ serve(async (req) => {
       }
       const psh = await invoke(pushUrl, anonKey, {
         text, log_id: logId, channel,
-        image_url: opts.image_url || undefined,
+        // Prefer an explicit image_url from the caller (big_picture AI card pipeline),
+        // but fall back to whatever compose surfaced (snapshot mint-image toggle).
+        image_url: opts.image_url || cmp.json?.image_url || undefined,
         cta: opts.cta || undefined,
         reply_to_message_id: opts.reply_to_message_id ?? undefined,
       });
