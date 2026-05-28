@@ -456,7 +456,7 @@ serve(async (req) => {
     // Hard-coded snapshot fallback if no template at all exists yet.
     if (!tplText && kind === 'snapshot') {
       tplText =
-        '⚡ *SNAPSHOT* — ${ticker}\n' +
+        '⚡ *SNAPSHOT* — {ticker}\n' +
         '`{ca}`\n\n' +
         '💰 MC: {mc}  ·  Entry: {mcEntry}\n' +
         '💧 LP: {lp}  ·  📊 24h Vol: {vol24h}\n' +
@@ -465,7 +465,7 @@ serve(async (req) => {
         '🔗 [Chart]({chartUrl}) · [Bubble]({bubbleMapUrl}) · [Buy]({buyUrl})\n\n' +
         '_Full intel incoming…_';
     }
-    const tpl = tplText || '🐸 *${ticker}*\n{momentum} · {risk} · {verdict}';
+    const tpl = tplText || '🐸 *{ticker}*\n{momentum} · {risk} · {verdict}';
 
     // 1b) Shared global profile (language + style) + per-tab profile (nickname + TG title)
     //     + ordered socials list (shared across all 3 tabs).
