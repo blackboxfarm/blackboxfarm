@@ -80,6 +80,7 @@ export function NoLubeChannelPanel({
   const [verdictClass, setVerdictClass] = useState<string | null>(null);
   const [blockReason, setBlockReason] = useState<string | null>(null);
   const [logId, setLogId] = useState<string | null>(null);
+  const [postKind, setPostKind] = useState<'snapshot' | 'big_picture'>('big_picture');
 
   useEffect(() => {
     void loadProfile();
