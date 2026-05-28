@@ -172,12 +172,11 @@ export function NoLubeChannelPanel({
     setIsComposing(true);
     setComposedText(null); setVerdictClass(null); setBlockReason(null); setLogId(null); setEligible(true);
     try {
-      // Snapshot is a post-kind that always targets the Private channel with
-      // the minimal {no_lube_snapshot_private} template.
-      const composeChannel = kind === 'snapshot' ? 'private' : kind;
-      const composeKind = kind === 'snapshot' ? 'snapshot' : 'big_picture';
+      // Snapshot (or Big Picture toggled to Snapshot) always targets the Private channel
+      const effectiveKind = kind === 'snapshot' ? 'snapshot' : postKind;
+      const composeChannel = effectiveKind === 'snapshot' ? 'private' : kind;
       const { data, error } = await supabase.functions.invoke('no-lube-compose', {
-        body: { mint: m, channel: composeChannel, kind: composeKind },
+        body: { mint: m, channel: composeChannel, kind: effectiveKind },
       });
       if (error) throw error;
       if (!data?.ok) throw new Error(data?.error || 'compose failed');
@@ -200,7 +199,8 @@ export function NoLubeChannelPanel({
     if (!composedText) return;
     setIsPushing(true);
     try {
-      const pushChannel = kind === 'snapshot' ? 'private' : kind;
+      const effectiveKind = kind === 'snapshot' ? 'snapshot' : postKind;
+      const pushChannel = effectiveKind === 'snapshot' ? 'private' : kind;
       const { data, error } = await supabase.functions.invoke('no-lube-push', {
         body: { text: composedText, log_id: logId, channel: pushChannel },
       });
