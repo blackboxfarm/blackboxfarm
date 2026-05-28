@@ -332,7 +332,7 @@ async function translateText(text: string, langCode: string): Promise<string | n
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
-    const { mint, channel: rawChannel, multiplier: rawMultiplier, dry_run } = await req.json();
+    const { mint, channel: rawChannel, multiplier: rawMultiplier, dry_run, kind: rawKind } = await req.json();
     if (!mint || typeof mint !== 'string') {
       return new Response(JSON.stringify({ ok: false, error: 'mint required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -340,16 +340,22 @@ serve(async (req) => {
     }
     const channel: 'default' | 'public' | 'private' =
       rawChannel === 'public' || rawChannel === 'private' ? rawChannel : 'default';
+    const kind: 'snapshot' | 'big_picture' = rawKind === 'snapshot' ? 'snapshot' : 'big_picture';
     const multiplierNum = typeof rawMultiplier === 'number' && isFinite(rawMultiplier) && rawMultiplier > 0
       ? rawMultiplier : null;
     const multiplierLabel = multiplierNum
       ? (Number.isInteger(multiplierNum) ? `${multiplierNum}x` : `${multiplierNum.toFixed(1)}x`)
       : '';
     const multiplierLine = multiplierNum ? `🚀 RE-SIGHTING: ${multiplierLabel}` : '';
-    const templateName =
-      channel === 'public' ? 'no_lube_public'
-      : channel === 'private' ? 'no_lube_private'
-      : 'no_lube';
+    // Snapshot kind uses a dedicated minimal template (private only). Fallback to
+    // the standard private template if the snapshot template isn't configured.
+    const primaryTemplateName =
+      kind === 'snapshot'
+        ? 'no_lube_snapshot_private'
+        : (channel === 'public' ? 'no_lube_public'
+           : channel === 'private' ? 'no_lube_private'
+           : 'no_lube');
+    const fallbackTemplateName = kind === 'snapshot' ? 'no_lube_private' : null;
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
@@ -369,13 +375,34 @@ serve(async (req) => {
       .maybeSingle();
     if (healthRow) sources.health = 'token_health_snapshots';
 
-    // 1) Template — per-channel
+    // 1) Template — per-channel/kind, with snapshot fallback to private template
     const { data: tplRow } = await supabase
       .from('holders_intel_templates')
       .select('template_text')
-      .eq('template_name', templateName)
+      .eq('template_name', primaryTemplateName)
       .maybeSingle();
-    const tpl = tplRow?.template_text || '🐸 *${ticker}*\n{momentum} · {risk} · {verdict}';
+    let tplText = tplRow?.template_text || null;
+    if (!tplText && fallbackTemplateName) {
+      const { data: fb } = await supabase
+        .from('holders_intel_templates')
+        .select('template_text')
+        .eq('template_name', fallbackTemplateName)
+        .maybeSingle();
+      tplText = fb?.template_text || null;
+    }
+    // Hard-coded snapshot fallback if no template at all exists yet.
+    if (!tplText && kind === 'snapshot') {
+      tplText =
+        '⚡ *SNAPSHOT* — ${ticker}\n' +
+        '`{ca}`\n\n' +
+        '💰 MC: {mc}  ·  Entry: {mcEntry}\n' +
+        '💧 LP: {lp}  ·  📊 24h Vol: {vol24h}\n' +
+        '👥 Top10: {top10}\n' +
+        '⏱ Mint: {mint_ago} ago\n\n' +
+        '🔗 [Chart]({chartUrl}) · [Bubble]({bubbleMapUrl}) · [Buy]({buyUrl})\n\n' +
+        '_Full intel incoming…_';
+    }
+    const tpl = tplText || '🐸 *${ticker}*\n{momentum} · {risk} · {verdict}';
 
     // 1b) Shared global profile (language + style) + per-tab profile (nickname + TG title)
     //     + ordered socials list (shared across all 3 tabs).
@@ -443,10 +470,10 @@ serve(async (req) => {
     if (mintTs) sources.mintTime = 'helius.signatures';
     if (bondPct != null) sources.bonding = 'pumpfun';
 
-    // Seen-token row (entry mcap + persisted mint timestamp)
+    // Seen-token row (entry mcap + persisted mint timestamp + immutable entry floor)
     const { data: seenRow } = await supabase
       .from('holders_intel_seen_tokens')
-      .select('market_cap_at_discovery, minted_at')
+      .select('market_cap_at_discovery, minted_at, entry_mcap_usd')
       .eq('token_mint', mint)
       .maybeSingle();
     if (seenRow) sources.seen = 'holders_intel_seen_tokens';
@@ -500,13 +527,38 @@ serve(async (req) => {
     const dbMintTs = seenRow?.minted_at ? new Date(seenRow.minted_at).getTime() : null;
     const effectiveMintTs = dbMintTs || mintTs || null;
 
-    // Entry mcap = lowest of (discovery snapshot, historical ranking min, current mcap).
+    // ---- IMMUTABLE ENTRY MC (ratchet-down only) ----
+    // entry_mcap_usd on holders_intel_seen_tokens is the locked floor. It is
+    // computed as the minimum of every MC signal we've ever observed and is
+    // only ever updated DOWNWARD — never up, never back to null. This is the
+    // value the templates render as {mcEntry} and what milestone math compares
+    // against, so 2x/3x labels remain stable even when sources fluctuate.
+    const persistedEntry = seenRow?.entry_mcap_usd != null ? Number(seenRow.entry_mcap_usd) : null;
     const entryCandidates = [
+      persistedEntry,
       seenRow?.market_cap_at_discovery != null ? Number(seenRow.market_cap_at_discovery) : null,
       historicalMin,
       mcUsd,
     ].filter((v): v is number => v != null && isFinite(v) && v > 0);
-    const mcEntryVal = entryCandidates.length ? Math.min(...entryCandidates) : null;
+    const candidateEntry = entryCandidates.length ? Math.min(...entryCandidates) : null;
+    let mcEntryVal: number | null = persistedEntry;
+    if (candidateEntry != null) {
+      if (persistedEntry == null || candidateEntry < persistedEntry) {
+        // Ratchet the floor DOWN and persist. Never update if candidate >= persisted.
+        try {
+          await supabase
+            .from('holders_intel_seen_tokens')
+            .update({ entry_mcap_usd: candidateEntry })
+            .eq('token_mint', mint);
+          mcEntryVal = candidateEntry;
+        } catch (e) {
+          console.error('[no-lube-compose] entry_mcap_usd ratchet failed', e);
+          mcEntryVal = persistedEntry ?? candidateEntry;
+        }
+      } else {
+        mcEntryVal = persistedEntry;
+      }
+    }
 
     // Bonding/progress copy varies by bonded vs still-on-curve.
     const bondingBar = fmtBondingBar(bondPct);
@@ -633,6 +685,7 @@ serve(async (req) => {
           token_mint: mint,
           ticker: String(ticker),
           channel,
+          post_kind: kind,
           verdict_class,
           posted: false,
           block_reason,
