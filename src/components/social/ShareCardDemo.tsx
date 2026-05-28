@@ -33,6 +33,8 @@ import { NoLubeChannelPanel } from './NoLubeChannelPanel';
 import { NoLubeAssetLibrary } from './NoLubeAssetLibrary';
 import { NoLubeProfileHeader } from './NoLubeProfileHeader';
 import { NoLubeRecentSightings } from './NoLubeRecentSightings';
+import { NoLubeTemplateManager } from './NoLubeTemplateManager';
+import { NoLubeArchivePanel } from './NoLubeArchivePanel';
 
 interface CronStatus {
   schedulersActive: number;
