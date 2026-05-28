@@ -94,6 +94,40 @@ function fmtMintTime(mintTs: number | null | undefined): string {
   return `${d} days ${h} hrs ago`;
 }
 
+/** Short humanised mint-ago, e.g. "42m", "3h 12m", "2d 4h". */
+function fmtMintAgo(mintTs: number | null | undefined): string {
+  if (!mintTs) return DASH;
+  const ms = Date.now() - mintTs;
+  if (ms <= 0) return DASH;
+  const sec = Math.floor(ms / 1000);
+  if (sec < 3600) return `${Math.max(1, Math.round(sec / 60))}m`;
+  if (sec < 86400) {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    return m ? `${h}h ${m}m` : `${h}h`;
+  }
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  return h ? `${d}d ${h}h` : `${d}d`;
+}
+
+/** Computer-style timestamp, e.g. "2026-05-28 18:42 UTC". */
+function fmtMintStamp(mintTs: number | null | undefined): string {
+  if (!mintTs) return DASH;
+  const d = new Date(mintTs);
+  if (isNaN(d.getTime())) return DASH;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ` +
+    `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
+}
+
+/** 10-segment block progress bar for bonding curve. */
+function fmtBondingBar(pct: number | null | undefined): string {
+  if (pct == null || !isFinite(pct)) return DASH;
+  const filled = Math.max(0, Math.min(10, Math.round(pct / 10)));
+  return '█'.repeat(filled) + '░'.repeat(10 - filled);
+}
+
 /**
  * Decide if this token is "crazy" (anomaly rocket), "dead" (rugged/dust),
  * or "healthy" (worth posting). Healthy is the only postable class.
