@@ -18,7 +18,7 @@ import {
   type TemplateName,
 } from '@/lib/share-template';
 
-export type NoLubeChannelKind = 'default' | 'public' | 'private';
+export type NoLubeChannelKind = 'default' | 'public' | 'private' | 'snapshot';
 
 export const NO_LUBE_LANGUAGES: { code: string; label: string }[] = [
   { code: 'en', label: 'English' },
@@ -36,7 +36,7 @@ export const NO_LUBE_LANGUAGES: { code: string; label: string }[] = [
 ];
 
 interface ChannelProfile {
-  kind: 'default' | 'public' | 'private';
+  kind: 'default' | 'public' | 'private' | 'snapshot';
   telegram_chat_id: string | null;
   telegram_chat_title: string | null;
   telegram_chat_username: string | null;
@@ -87,10 +87,14 @@ export function NoLubeChannelPanel({
   const loadProfile = async () => {
     setProfileLoading(true);
     try {
+      // Snapshot is a post-kind, not its own channel — it always rides the
+      // Private channel's chat config. Load the private profile for display so
+      // the operator can see where snapshot posts will be delivered.
+      const profileKey = kind === 'snapshot' ? 'private' : kind;
       const { data, error } = await (supabase as any)
         .from('no_lube_channel_profiles')
         .select('*')
-        .eq('kind', kind)
+        .eq('kind', profileKey)
         .maybeSingle();
       if (error) throw error;
       setProfile(
@@ -99,7 +103,11 @@ export function NoLubeChannelPanel({
           telegram_chat_id: '',
           telegram_chat_title: '',
           telegram_chat_username: '',
-          tab_nickname: kind === 'default' ? 'Default' : kind === 'public' ? 'Public Channel' : 'Private Channel',
+          tab_nickname:
+            kind === 'default' ? 'Default'
+            : kind === 'public' ? 'Public Channel'
+            : kind === 'snapshot' ? 'Snapshot Post (Private)'
+            : 'Private Channel',
           telegram_link: '',
         },
       );
@@ -161,8 +169,12 @@ export function NoLubeChannelPanel({
     setIsComposing(true);
     setComposedText(null); setVerdictClass(null); setBlockReason(null); setLogId(null); setEligible(true);
     try {
+      // Snapshot is a post-kind that always targets the Private channel with
+      // the minimal {no_lube_snapshot_private} template.
+      const composeChannel = kind === 'snapshot' ? 'private' : kind;
+      const composeKind = kind === 'snapshot' ? 'snapshot' : 'big_picture';
       const { data, error } = await supabase.functions.invoke('no-lube-compose', {
-        body: { mint: m, channel: kind },
+        body: { mint: m, channel: composeChannel, kind: composeKind },
       });
       if (error) throw error;
       if (!data?.ok) throw new Error(data?.error || 'compose failed');
@@ -185,8 +197,9 @@ export function NoLubeChannelPanel({
     if (!composedText) return;
     setIsPushing(true);
     try {
+      const pushChannel = kind === 'snapshot' ? 'private' : kind;
       const { data, error } = await supabase.functions.invoke('no-lube-push', {
-        body: { text: composedText, log_id: logId, channel: kind },
+        body: { text: composedText, log_id: logId, channel: pushChannel },
       });
       if (error) throw error;
       if (!data?.ok) throw new Error(data?.error?.description || data?.error || 'push failed');
