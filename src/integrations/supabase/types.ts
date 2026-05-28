@@ -12008,6 +12008,30 @@ export type Database = {
         }
         Relationships: []
       }
+      pipeline_reset_markers: {
+        Row: {
+          created_at: string
+          note: string | null
+          pipeline_name: string
+          reset_after: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          note?: string | null
+          pipeline_name: string
+          reset_after: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          note?: string | null
+          pipeline_name?: string
+          reset_after?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       platform_config: {
         Row: {
           config_key: string
