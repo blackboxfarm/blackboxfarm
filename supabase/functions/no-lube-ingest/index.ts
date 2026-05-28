@@ -136,16 +136,16 @@ serve(async (req) => {
       }
     } catch (e) { steps.blackbox = { ok: false, error: (e as Error).message }; }
 
-    // 4. /holders refresh — true wallet count, dust vs whale %, top10 dynamic
+    // 4. /holders refresh — fire-and-forget so the 45s call doesn't hold a DB
+    //    connection while the rest of the ingest chain runs. The report writes
+    //    its own results back to the DB when it completes.
     try {
-      const r = await invoke(`${supabaseUrl}/functions/v1/bagless-holders-report`, serviceKey, { tokenMint: mint }, 45000);
-      steps.holders = { ok: r.ok, status: r.status };
-      if (r.ok) {
-        await supabase
-          .from('telegram_insider_token_lifecycle')
-          .update({ holders_refreshed_at: now() })
-          .eq('token_mint', mint);
-      }
+      fetch(`${supabaseUrl}/functions/v1/bagless-holders-report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}`, 'apikey': serviceKey },
+        body: JSON.stringify({ tokenMint: mint }),
+      }).catch((e) => console.warn('[no-lube-ingest] holders dispatch failed:', (e as Error).message));
+      steps.holders = { ok: true, dispatched: true };
     } catch (e) { steps.holders = { ok: false, error: (e as Error).message }; }
 
     // 5. Hand off to orchestrate — it owns private/public posting + milestone gate.
