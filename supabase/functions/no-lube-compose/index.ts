@@ -375,6 +375,33 @@ serve(async (req) => {
       .maybeSingle();
     if (healthRow) sources.health = 'token_health_snapshots';
 
+    // Pull the 4-bucket Wallet Distribution from bagless-holders-report (same
+    // source the /quick TG reply uses). Skipped on snapshot kind since snapshot
+    // is supposed to fire fast with zero enrichment cost.
+    let simpleTiers: any = null;
+    if (kind === 'big_picture') {
+      try {
+        const baglessResp = await fetch(
+          `${Deno.env.get('SUPABASE_URL')}/functions/v1/bagless-holders-report`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            },
+            body: JSON.stringify({ tokenMint: mint }),
+          },
+        );
+        if (baglessResp.ok) {
+          const baglessData = await baglessResp.json();
+          simpleTiers = baglessData?.simpleTiers ?? null;
+          if (simpleTiers) sources.distribution = 'bagless-holders-report';
+        }
+      } catch (e) {
+        console.error('[no-lube-compose] bagless-holders-report fetch failed', e);
+      }
+    }
+
     // 1) Template — per-channel/kind, with snapshot fallback to private template
     const { data: tplRow } = await supabase
       .from('holders_intel_templates')
