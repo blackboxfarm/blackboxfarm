@@ -197,6 +197,21 @@ export function NoLubeProfileHeader() {
               </div>
             </div>
 
+            <div className="flex items-start justify-between gap-3 p-3 rounded border border-border bg-card/40">
+              <div className="space-y-0.5">
+                <Label className="text-xs font-semibold">Use token mint image on snapshot posts</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Attaches the token's mint artwork as the Telegram photo header on the
+                  fast first-touch (snapshot) post. Big-picture follow-ups keep using the
+                  AI-rendered card pipeline.
+                </p>
+              </div>
+              <Switch
+                checked={snapshotUseMintImage}
+                onCheckedChange={setSnapshotUseMintImage}
+              />
+            </div>
+
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label className="text-xs font-semibold">Socials (ordered)</Label>
