@@ -18,7 +18,7 @@ import {
   type TemplateName,
 } from '@/lib/share-template';
 
-export type NoLubeChannelKind = 'default' | 'public' | 'private';
+export type NoLubeChannelKind = 'default' | 'public' | 'private' | 'snapshot';
 
 export const NO_LUBE_LANGUAGES: { code: string; label: string }[] = [
   { code: 'en', label: 'English' },
@@ -36,7 +36,7 @@ export const NO_LUBE_LANGUAGES: { code: string; label: string }[] = [
 ];
 
 interface ChannelProfile {
-  kind: 'default' | 'public' | 'private';
+  kind: 'default' | 'public' | 'private' | 'snapshot';
   telegram_chat_id: string | null;
   telegram_chat_title: string | null;
   telegram_chat_username: string | null;
@@ -87,10 +87,14 @@ export function NoLubeChannelPanel({
   const loadProfile = async () => {
     setProfileLoading(true);
     try {
+      // Snapshot is a post-kind, not its own channel — it always rides the
+      // Private channel's chat config. Load the private profile for display so
+      // the operator can see where snapshot posts will be delivered.
+      const profileKey = kind === 'snapshot' ? 'private' : kind;
       const { data, error } = await (supabase as any)
         .from('no_lube_channel_profiles')
         .select('*')
-        .eq('kind', kind)
+        .eq('kind', profileKey)
         .maybeSingle();
       if (error) throw error;
       setProfile(
@@ -99,7 +103,11 @@ export function NoLubeChannelPanel({
           telegram_chat_id: '',
           telegram_chat_title: '',
           telegram_chat_username: '',
-          tab_nickname: kind === 'default' ? 'Default' : kind === 'public' ? 'Public Channel' : 'Private Channel',
+          tab_nickname:
+            kind === 'default' ? 'Default'
+            : kind === 'public' ? 'Public Channel'
+            : kind === 'snapshot' ? 'Snapshot Post (Private)'
+            : 'Private Channel',
           telegram_link: '',
         },
       );
@@ -161,8 +169,12 @@ export function NoLubeChannelPanel({
     setIsComposing(true);
     setComposedText(null); setVerdictClass(null); setBlockReason(null); setLogId(null); setEligible(true);
     try {
+      // Snapshot is a post-kind that always targets the Private channel with
+      // the minimal {no_lube_snapshot_private} template.
+      const composeChannel = kind === 'snapshot' ? 'private' : kind;
+      const composeKind = kind === 'snapshot' ? 'snapshot' : 'big_picture';
       const { data, error } = await supabase.functions.invoke('no-lube-compose', {
-        body: { mint: m, channel: kind },
+        body: { mint: m, channel: composeChannel, kind: composeKind },
       });
       if (error) throw error;
       if (!data?.ok) throw new Error(data?.error || 'compose failed');
@@ -185,8 +197,9 @@ export function NoLubeChannelPanel({
     if (!composedText) return;
     setIsPushing(true);
     try {
+      const pushChannel = kind === 'snapshot' ? 'private' : kind;
       const { data, error } = await supabase.functions.invoke('no-lube-push', {
-        body: { text: composedText, log_id: logId, channel: kind },
+        body: { text: composedText, log_id: logId, channel: pushChannel },
       });
       if (error) throw error;
       if (!data?.ok) throw new Error(data?.error?.description || data?.error || 'push failed');
@@ -215,7 +228,9 @@ export function NoLubeChannelPanel({
 
   const body = (
     <div className="space-y-4">
-      {/* Per-tab profile: nickname + Telegram link + chat ID lookup */}
+      {/* Per-tab profile: nickname + Telegram link + chat ID lookup.
+          Hidden on snapshot — snapshot inherits the Private channel config. */}
+      {kind !== 'snapshot' && (
       <Card className="bg-card/60 border-border">
         <CardContent className="pt-4 space-y-3">
           <div className="flex items-center justify-between">
@@ -323,6 +338,22 @@ export function NoLubeChannelPanel({
           )}
         </CardContent>
       </Card>
+      )}
+
+      {kind === 'snapshot' && (
+        <Card className="bg-pink-500/5 border-pink-500/30">
+          <CardContent className="pt-4">
+            <Label className="text-xs font-semibold text-pink-300">
+              📸 Snapshot Post — fast first-touch
+            </Label>
+            <p className="text-xs text-muted-foreground mt-1">
+              Posted to the <strong>Private</strong> channel on the very first sighting, before
+              enrichment completes. Mirrors the bot&apos;s Quick Stats reply. Token mint image is
+              attached as the header when the global toggle is on.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Template editor + Preview — side-by-side */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -371,7 +402,12 @@ export function NoLubeChannelPanel({
       <Card className="bg-card/60 border-border">
         <CardContent className="pt-4 space-y-3">
           <Label className="font-medium">
-            Compose & Push to {kind === 'default' ? 'No Lube (Default channel)' : `No Lube ${kind === 'public' ? 'Public' : 'Private'} Channel`}
+            Compose & Push to {
+              kind === 'default' ? 'No Lube (Default channel)'
+              : kind === 'public' ? 'No Lube Public Channel'
+              : kind === 'snapshot' ? 'No Lube Private Channel (snapshot)'
+              : 'No Lube Private Channel'
+            }
           </Label>
           <div className="flex gap-2">
             <Input
@@ -414,7 +450,12 @@ export function NoLubeChannelPanel({
                   ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Pushing…</>
                   : !eligible
                     ? <>⛔ Blocked — {blockReason}</>
-                    : <><Send className="h-4 w-4 mr-1" />Push to {kind === 'default' ? 'No Lube' : kind === 'public' ? 'Public' : 'Private'}</>}
+                    : <><Send className="h-4 w-4 mr-1" />Push to {
+                        kind === 'default' ? 'No Lube'
+                        : kind === 'public' ? 'Public'
+                        : kind === 'snapshot' ? 'Private (snapshot)'
+                        : 'Private'
+                      }</>}
               </Button>
             </>
           )}

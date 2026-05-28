@@ -12,7 +12,7 @@ export const HOLDERS_SHARE_URL = (() => {
 })();
 
 // Template names
-export type TemplateName = 'small' | 'large' | 'shares' | 'tg_posted' | 'tg_search' | 'tg_public_post' | 'subscription' | 'bot_holders' | 'bot_holders_lite' | 'bot_momentum' | 'bot_verdict' | 'bot_verdict_lite' | 'bot_oracle' | 'bot_wallet' | 'x_advert_1' | 'x_advert_2' | 'x_advert_3' | 'x_advert_4' | 'tg_advert_1' | 'tg_advert_2' | 'tg_advert_3' | 'no_lube' | 'no_lube_public' | 'no_lube_private';
+export type TemplateName = 'small' | 'large' | 'shares' | 'tg_posted' | 'tg_search' | 'tg_public_post' | 'subscription' | 'bot_holders' | 'bot_holders_lite' | 'bot_momentum' | 'bot_verdict' | 'bot_verdict_lite' | 'bot_oracle' | 'bot_wallet' | 'x_advert_1' | 'x_advert_2' | 'x_advert_3' | 'x_advert_4' | 'tg_advert_1' | 'tg_advert_2' | 'tg_advert_3' | 'no_lube' | 'no_lube_public' | 'no_lube_private' | 'no_lube_snapshot_private';
 
 // Bump this key to force reset of old templates in localStorage
 export const TEMPLATE_STORAGE_KEY = 'share-tweet-template-v3';
@@ -408,6 +408,26 @@ Reputation: {devReputation}
 
 [📈 Chart]({chartUrl}) · [🐋 BubbleMap]({bubbleMapUrl}) · [🧠 Full Intel]({intelUrl})
 [💰 Buy]({buyUrl}) · [⚠️ Scan History]({scanHistoryUrl}) · [🌐 Socials]({socialsUrl})
+
+CA: \`{ca}\``,
+
+  no_lube_snapshot_private: `⚡ *$\{ticker} Quick Stats*
+
+👥 Holders: *{totalHolders}*
+❤️ Health: *{healthScore}/100*
+🏦 Top 10%: *{top10}*
+
+📈 *Wallet Distribution*
+{walletDistBlock}
+
+🚨 *Intel Alerts*
+{intelAlert1}
+
+💰 *Market*
+MC: *{mc}* ({mcChange})  VOL: *{vol24h}*
+Entry: *{mcEntry}*  Age: *{age}*
+
+🔗 [Full Report]({intelUrl}) | [BubbleMap]({bubbleMapUrl})
 
 CA: \`{ca}\``,
 };

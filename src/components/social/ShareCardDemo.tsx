@@ -108,6 +108,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     no_lube: false,
     no_lube_public: false,
     no_lube_private: false,
+    no_lube_snapshot_private: false,
   });
   
   const [tokenMint, setTokenMint] = useState('');
@@ -685,14 +686,16 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                       <TabsTrigger value="default">Default</TabsTrigger>
                       <TabsTrigger value="public">Public Channel</TabsTrigger>
                       <TabsTrigger value="private">Private Channel</TabsTrigger>
+                      <TabsTrigger value="snapshot">📸 Snapshot Post</TabsTrigger>
                       <TabsTrigger value="templates">🎯 Templates</TabsTrigger>
                       <TabsTrigger value="assets">🎨 Asset Library</TabsTrigger>
                       <TabsTrigger value="archive">📦 Archive</TabsTrigger>
                     </TabsList>
-                    {(['default', 'public', 'private'] as const).map(kind => {
+                    {(['default', 'public', 'private', 'snapshot'] as const).map(kind => {
                       const tname: TemplateName =
                         kind === 'default' ? 'no_lube'
                         : kind === 'public' ? 'no_lube_public'
+                        : kind === 'snapshot' ? 'no_lube_snapshot_private'
                         : 'no_lube_private';
                       return (
                         <TabsContent key={kind} value={kind} className="space-y-4 pt-3">
