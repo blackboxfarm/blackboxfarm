@@ -379,6 +379,9 @@ serve(async (req) => {
     // source the /quick TG reply uses). Skipped on snapshot kind since snapshot
     // is supposed to fire fast with zero enrichment cost.
     let simpleTiers: any = null;
+    let baglessData: any = null;
+    let earlyWarnings: any[] = [];
+    let devRep: any = null;
     if (kind === 'big_picture') {
       try {
         const baglessResp = await fetch(
@@ -393,12 +396,32 @@ serve(async (req) => {
           },
         );
         if (baglessResp.ok) {
-          const baglessData = await baglessResp.json();
+          baglessData = await baglessResp.json();
           simpleTiers = baglessData?.simpleTiers ?? null;
           if (simpleTiers) sources.distribution = 'bagless-holders-report';
         }
       } catch (e) {
         console.error('[no-lube-compose] bagless-holders-report fetch failed', e);
+      }
+
+      // Intel Alerts — same source the bot's Quick Stats uses
+      try {
+        const { data: warnings } = await supabase
+          .from('token_early_warnings')
+          .select('plain_text, severity, scan_count, last_seen_at')
+          .eq('token_mint', mint)
+          .in('severity', ['critical', 'high', 'medium'])
+          .order('last_seen_at', { ascending: false })
+          .limit(10);
+        if (warnings?.length) {
+          const sevOrder: Record<string, number> = { critical: 0, high: 1, medium: 2 };
+          earlyWarnings = warnings
+            .sort((a: any, b: any) => (sevOrder[a.severity] ?? 9) - (sevOrder[b.severity] ?? 9))
+            .slice(0, 3);
+          sources.intelAlerts = 'token_early_warnings';
+        }
+      } catch (e) {
+        console.error('[no-lube-compose] token_early_warnings fetch failed', e);
       }
     }
 
@@ -500,10 +523,27 @@ serve(async (req) => {
     // Seen-token row (entry mcap + persisted mint timestamp + immutable entry floor)
     const { data: seenRow } = await supabase
       .from('holders_intel_seen_tokens')
-      .select('market_cap_at_discovery, minted_at, entry_mcap_usd')
+      .select('market_cap_at_discovery, minted_at, entry_mcap_usd, dev_wallet')
       .eq('token_mint', mint)
       .maybeSingle();
     if (seenRow) sources.seen = 'holders_intel_seen_tokens';
+
+    // Dev wallet reputation (powers {devReputation}, {pastLaunches}, {rugs})
+    if (kind === 'big_picture' && seenRow?.dev_wallet) {
+      try {
+        const { data: rep } = await supabase
+          .from('dev_wallet_reputation')
+          .select('reputation_score, trust_level, total_tokens_launched, tokens_rugged, tokens_successful, dev_pattern, is_serial_spammer, is_legitimate_builder')
+          .eq('wallet_address', seenRow.dev_wallet)
+          .maybeSingle();
+        if (rep) {
+          devRep = rep;
+          sources.devRep = 'dev_wallet_reputation';
+        }
+      } catch (e) {
+        console.error('[no-lube-compose] dev_wallet_reputation fetch failed', e);
+      }
+    }
 
     // Lowest mcap we've ever observed for this token across the ranking history.
     const { data: minRow } = await supabase
@@ -629,6 +669,33 @@ serve(async (req) => {
     const rIcon = verdict_class === 'crazy' ? ICON.risk.crazy : verdict_class === 'dead' ? ICON.risk.dead : riskIcon(risk);
     const vIcon = verdict_class === 'crazy' ? ICON.verdict.crazy : verdict_class === 'dead' ? ICON.verdict.dead : verdictIcon(verdict);
 
+    // Bagless-derived fallbacks (used when the hourly token_health_snapshots row is missing)
+    const bagRealHolders = baglessData?.realHolders ?? null;
+    const bagTotalHolders = baglessData?.totalHolders ?? null;
+    const bagTop10 = baglessData?.distributionStats?.top10Percentage ?? null;
+    const bagHealthScore = baglessData?.healthScore?.score ?? baglessData?.stabilityScore ?? null;
+    const bagHealthGrade = baglessData?.healthScore?.grade ?? null;
+    const dustPctVal = simpleTiers?.dust?.percentage ?? null;
+    const whalesPctVal = simpleTiers?.whales?.percentage ?? null;
+    const whalesCount = simpleTiers?.whales?.count ?? null;
+
+    // Intel Alerts strings
+    const fmtAlert = (w: any) => {
+      const seenNote = w.scan_count > 1 ? ` _(seen ${w.scan_count}x)_` : '';
+      return `${w.plain_text}${seenNote}`;
+    };
+    const intelAlertLines = earlyWarnings.map(fmtAlert);
+    const intelAlertsBlock = intelAlertLines.length
+      ? `🚨 *Intel Alerts*\n${intelAlertLines.join('\n\n')}`
+      : '';
+
+    // Dev reputation strings
+    const devTotal = devRep?.total_tokens_launched ?? null;
+    const devRugs = devRep?.tokens_rugged ?? null;
+    const devTrust = devRep?.trust_level || null;
+    const devScore = devRep?.reputation_score ?? null;
+    const devPattern = devRep?.dev_pattern || null;
+
     const vars: Record<string, string> = {
       ticker: String(ticker),
       name: String(name),
@@ -652,16 +719,22 @@ serve(async (req) => {
       bondingpct: bondingPctStr,
       progress: progressLine,
       bondingState,
-      top10: top10Pct != null ? `${top10Pct.toFixed(1)}%` : DASH,
+      top10: top10Pct != null
+        ? `${top10Pct.toFixed(1)}%`
+        : (bagTop10 != null ? `${Number(bagTop10).toFixed(1)}%` : DASH),
       freshWallets: healthRow?.dust_percentage != null
         ? `${Number(healthRow.dust_percentage).toFixed(1)}% dust`
-        : DASH,
+        : (dustPctVal != null ? `${Math.round(dustPctVal)}% dust` : DASH),
       walletSpread: healthRow?.real_holders != null && healthRow?.total_holders != null
         ? `${healthRow.real_holders}/${healthRow.total_holders} real`
-        : DASH,
+        : (bagRealHolders != null && bagTotalHolders != null
+            ? `${bagRealHolders}/${bagTotalHolders} real`
+            : DASH),
       bundledRisk: healthRow?.whale_count != null
         ? `${healthRow.whale_count} whales`
-        : DASH,
+        : (whalesCount != null
+            ? `${whalesCount} whales${whalesPctVal != null ? ` (${Math.round(whalesPctVal)}%)` : ''}`
+            : DASH),
       // ── Wallet Distribution buckets (from bagless-holders-report.simpleTiers) ──
       whalesPct: simpleTiers?.whales?.percentage != null ? `${Math.round(simpleTiers.whales.percentage)}%` : DASH,
       seriousPct: simpleTiers?.serious?.percentage != null ? `${Math.round(simpleTiers.serious.percentage)}%` : DASH,
@@ -679,20 +752,36 @@ serve(async (req) => {
             `\`Dust    ${fmtBondingBar(simpleTiers.dust?.percentage ?? 0)} ${Math.round(simpleTiers.dust?.percentage ?? 0)}%\`  <$1`,
           ].join('\n')
         : DASH,
-      realHolders: healthRow?.real_holders != null ? String(healthRow.real_holders) : DASH,
-      totalHolders: healthRow?.total_holders != null ? String(healthRow.total_holders) : DASH,
-      healthScore: healthRow?.health_score != null ? String(healthRow.health_score) : DASH,
-      healthGrade: healthRow?.health_grade || DASH,
-      aiBullet1: DASH,
-      aiBullet2: DASH,
-      aiBullet3: DASH,
+      realHolders: healthRow?.real_holders != null
+        ? String(healthRow.real_holders)
+        : (bagRealHolders != null ? String(bagRealHolders) : DASH),
+      totalHolders: healthRow?.total_holders != null
+        ? String(healthRow.total_holders)
+        : (bagTotalHolders != null ? String(bagTotalHolders) : DASH),
+      healthScore: healthRow?.health_score != null
+        ? String(healthRow.health_score)
+        : (bagHealthScore != null ? String(bagHealthScore) : DASH),
+      healthGrade: healthRow?.health_grade || bagHealthGrade || DASH,
+      // Intel Alerts (from token_early_warnings — same source as bot Quick Stats)
+      intelAlerts: intelAlertsBlock || DASH,
+      intelAlert1: intelAlertLines[0] || DASH,
+      intelAlert2: intelAlertLines[1] || DASH,
+      intelAlert3: intelAlertLines[2] || DASH,
+      intelAlertCount: String(intelAlertLines.length),
+      aiBullet1: intelAlertLines[0] || DASH,
+      aiBullet2: intelAlertLines[1] || DASH,
+      aiBullet3: intelAlertLines[2] || DASH,
       aiBullet4: DASH,
       fundedBy: DASH,
-      pastLaunches: DASH,
-      rugs: DASH,
-      devReputation: DASH,
-      blackboxScore: healthRow?.health_grade
-        ? `${healthRow.health_grade} (${healthRow.health_score ?? '—'})`
+      pastLaunches: devTotal != null ? String(devTotal) : DASH,
+      rugs: devRugs != null && devTotal != null
+        ? `${devRugs}/${devTotal}`
+        : (devRugs != null ? String(devRugs) : DASH),
+      devReputation: devTrust
+        ? `${devTrust}${devScore != null ? ` (${devScore})` : ''}${devPattern ? ` · ${devPattern}` : ''}`
+        : DASH,
+      blackboxScore: (healthRow?.health_grade || bagHealthGrade)
+        ? `${healthRow?.health_grade || bagHealthGrade} (${healthRow?.health_score ?? bagHealthScore ?? '—'})`
         : DASH,
       chartUrl: `https://dexscreener.com/solana/${mint}`,
       bubbleMapUrl: `https://blackbox.farm/bubble?token=${mint}`,
