@@ -327,6 +327,11 @@ serve(async (req) => {
       selection_reason: selectionReason,
       rotation_mode: rotationMode,
       ai_used: false,
+      // Surface the real source assets used so the orchestrator (and any
+      // future visual overlay step) can prove the imagery is authentic.
+      token_image_url: token_image_url || null,
+      banner_url: banner_url || null,
+      has_paid_dex: !!has_paid_dex,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('[no-lube-compose-card] fatal', e);
