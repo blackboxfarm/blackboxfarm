@@ -19,6 +19,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { assertUpdate } from '../_shared/db-assert.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -51,6 +52,16 @@ function jsonResp(body: unknown, status = 200) {
   });
 }
 
+function isTerminalDead(rows: Array<{ verdict_class: string | null; price_change_24h: number | null; block_reason: string | null }>): boolean {
+  if (rows.length === 0) return false;
+  const firstThree = rows.slice(0, 3);
+  return firstThree.length >= 3 && firstThree.every(r =>
+    r.verdict_class === 'dead' ||
+    (r.price_change_24h != null && Number(r.price_change_24h) <= -80) ||
+    String(r.block_reason || '').toLowerCase().startsWith('dead')
+  );
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
@@ -65,6 +76,25 @@ serve(async (req) => {
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabase = createClient(supabaseUrl, serviceKey);
+
+    // Terminal-dead guard: if the last 3 compose attempts were dead, do not
+    // keep creating rows or retrying pushes for the same dead mint forever.
+    const { data: recentAttempts } = await supabase
+      .from('no_lube_post_log')
+      .select('verdict_class, price_change_24h, block_reason, composed_at')
+      .eq('token_mint', mint)
+      .order('composed_at', { ascending: false })
+      .limit(5);
+    if (isTerminalDead((recentAttempts || []) as any[])) {
+      return jsonResp({
+        ok: true,
+        flow: 'skipped',
+        skipped: true,
+        reason: 'terminal_dead_retry_guard',
+        attempts_checked: recentAttempts?.length || 0,
+        last_reason: recentAttempts?.[0]?.block_reason || null,
+      });
+    }
 
     // HARD GUARD: same (mint, source_message_id) can NEVER post twice.
     if (source_message_id != null) {
@@ -221,13 +251,16 @@ serve(async (req) => {
       patch: { times_posted: number; last_mcap_at_post: number; last_multiplier: number | null },
     ) => {
       if (!logId) return;
-      await supabase.from('no_lube_post_log').update({
-        times_posted: patch.times_posted,
-        last_mcap_at_post: patch.last_mcap_at_post,
-        last_multiplier: patch.last_multiplier,
-        last_posted_at: new Date().toISOString(),
-        source_message_id: source_message_id ?? null,
-      }).eq('id', logId);
+      await assertUpdate(
+        supabase.from('no_lube_post_log').update({
+          times_posted: patch.times_posted,
+          last_mcap_at_post: patch.last_mcap_at_post,
+          last_multiplier: patch.last_multiplier,
+          last_posted_at: new Date().toISOString(),
+          source_message_id: source_message_id ?? null,
+        }).eq('id', logId),
+        'no_lube_post_log',
+      );
     };
 
     // ---- FIRST SIGHTING → PRIVATE ONLY ----
