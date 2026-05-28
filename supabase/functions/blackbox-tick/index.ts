@@ -11,6 +11,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { parseReply } from "../_shared/blackbox-parsers/index.ts";
+import { assertInsert, assertUpdate, assertUpsert } from "../_shared/db-assert.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -425,9 +426,8 @@ serve(async (req) => {
       if (existing) continue;
 
       const harvestUntil = new Date(Date.now() + HARVEST_WINDOW_SEC * 1000).toISOString();
-      const { data: run, error: insErr } = await supabase
-        .from('blackbox_aggregator_runs')
-        .insert({
+      const run = await assertInsert(
+        supabase.from('blackbox_aggregator_runs').insert({
           token_mint: call.token_mint,
           source_chat_id: insidersChat,
           source_message_id: call.message_id,
@@ -436,8 +436,9 @@ serve(async (req) => {
           status: 'pending',
         })
         .select('id')
-        .single();
-      if (insErr || !run) { summary.errors.push(`run insert: ${insErr?.message}`); continue; }
+        .single(),
+        'blackbox_aggregator_runs',
+      );
 
       // 1a) Post the bare CA via MTProto (as the system_reset user account).
       //     This is the bait that trader bots (Trojan/Phanes/GMGN/Rick/etc.)
@@ -447,12 +448,15 @@ serve(async (req) => {
       // 1b) SUSPENDED — full Holders Report post disabled per ops directive to
       //     stop hammering Phanes. Bare CA bait remains the only group post.
       const ok = baitMsgId != null;
-      await supabase.from('blackbox_aggregator_runs').update({
-        ca_posted_at: new Date().toISOString(),
-        ca_post_message_id: baitMsgId,
-        status: ok ? 'harvesting' : 'failed',
-        error_message: ok ? null : 'MTProto bait CA post to BlackBox group failed',
-      }).eq('id', run.id);
+      await assertUpdate(
+        supabase.from('blackbox_aggregator_runs').update({
+          ca_posted_at: new Date().toISOString(),
+          ca_post_message_id: baitMsgId,
+          status: ok ? 'harvesting' : 'failed',
+          error_message: ok ? null : 'MTProto bait CA post to BlackBox group failed',
+        }).eq('id', run.id),
+        'blackbox_aggregator_runs',
+      );
       summary.created++;
       postedThisTick++;
     }
