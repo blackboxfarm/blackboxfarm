@@ -54,7 +54,7 @@ function jsonResp(body: unknown, status = 200) {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
-    const { mint } = await req.json();
+    const { mint, source_message_id } = await req.json();
     if (!mint || typeof mint !== 'string') {
       return new Response(JSON.stringify({ ok: false, error: 'mint required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -65,6 +65,24 @@ serve(async (req) => {
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabase = createClient(supabaseUrl, serviceKey);
+
+    // HARD GUARD: same (mint, source_message_id) can NEVER post twice.
+    if (source_message_id != null) {
+      const { data: dup } = await supabase
+        .from('no_lube_post_log')
+        .select('id, posted_at')
+        .eq('token_mint', mint)
+        .eq('source_message_id', source_message_id)
+        .eq('posted', true)
+        .limit(1);
+      if (dup && dup.length > 0) {
+        return jsonResp({
+          ok: true, flow: 'skipped', skipped: true,
+          reason: 'source_message_already_posted',
+          source_message_id, existing_post_id: dup[0].id,
+        });
+      }
+    }
 
     // Threshold from global profile
     let threshold = 2.0;
@@ -78,7 +96,7 @@ serve(async (req) => {
     // Last successful post for this mint (carries times_posted + last_multiplier)
     const { data: prevRows } = await supabase
       .from('no_lube_post_log')
-      .select('id, times_posted, last_mcap_at_post, mcap, posted_at, composed_at')
+      .select('id, times_posted, last_mcap_at_post, last_multiplier, mcap, posted_at, composed_at')
       .eq('token_mint', mint)
       .eq('posted', true)
       .order('composed_at', { ascending: false })
@@ -184,6 +202,7 @@ serve(async (req) => {
         last_mcap_at_post: patch.last_mcap_at_post,
         last_multiplier: patch.last_multiplier,
         last_posted_at: new Date().toISOString(),
+        source_message_id: source_message_id ?? null,
       }).eq('id', logId);
     };
 
