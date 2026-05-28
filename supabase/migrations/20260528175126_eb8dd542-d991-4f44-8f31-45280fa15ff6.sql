@@ -1,0 +1,1 @@
+DELETE FROM public.telegram_insider_token_lifecycle;
