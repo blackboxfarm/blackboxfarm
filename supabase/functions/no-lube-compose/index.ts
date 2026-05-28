@@ -453,6 +453,10 @@ serve(async (req) => {
         top10Pct = (sum / supply) * 100;
       }
     }
+    // Fall back to the health snapshot's top10 when on-chain probe didn't yield it.
+    if (top10Pct == null && healthRow?.top10_pct != null) {
+      top10Pct = Number(healthRow.top10_pct);
+    }
 
     const momentum = classifyMomentum(ch24);
     const risk = classifyRisk(liq, ageMin);
