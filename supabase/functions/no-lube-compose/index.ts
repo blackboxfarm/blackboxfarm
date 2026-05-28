@@ -662,6 +662,27 @@ serve(async (req) => {
       bundledRisk: healthRow?.whale_count != null
         ? `${healthRow.whale_count} whales`
         : DASH,
+      // ── Wallet Distribution buckets (from bagless-holders-report.simpleTiers) ──
+      whalesPct: simpleTiers?.whales?.percentage != null ? `${Math.round(simpleTiers.whales.percentage)}%` : DASH,
+      seriousPct: simpleTiers?.serious?.percentage != null ? `${Math.round(simpleTiers.serious.percentage)}%` : DASH,
+      retailPct: simpleTiers?.retail?.percentage != null ? `${Math.round(simpleTiers.retail.percentage)}%` : DASH,
+      dustPct: simpleTiers?.dust?.percentage != null ? `${Math.round(simpleTiers.dust.percentage)}%` : DASH,
+      whalesBar: simpleTiers?.whales?.percentage != null ? fmtBondingBar(simpleTiers.whales.percentage) : '░░░░░░░░░░',
+      seriousBar: simpleTiers?.serious?.percentage != null ? fmtBondingBar(simpleTiers.serious.percentage) : '░░░░░░░░░░',
+      retailBar: simpleTiers?.retail?.percentage != null ? fmtBondingBar(simpleTiers.retail.percentage) : '░░░░░░░░░░',
+      dustBar: simpleTiers?.dust?.percentage != null ? fmtBondingBar(simpleTiers.dust.percentage) : '░░░░░░░░░░',
+      walletDistBlock: simpleTiers
+        ? [
+            `\`Whales  ${fmtBondingBar(simpleTiers.whales?.percentage ?? 0)} ${Math.round(simpleTiers.whales?.percentage ?? 0)}%\`  >$1K`,
+            `\`Serious ${fmtBondingBar(simpleTiers.serious?.percentage ?? 0)} ${Math.round(simpleTiers.serious?.percentage ?? 0)}%\`  $200-$1K`,
+            `\`Retail  ${fmtBondingBar(simpleTiers.retail?.percentage ?? 0)} ${Math.round(simpleTiers.retail?.percentage ?? 0)}%\`  $1-$199`,
+            `\`Dust    ${fmtBondingBar(simpleTiers.dust?.percentage ?? 0)} ${Math.round(simpleTiers.dust?.percentage ?? 0)}%\`  <$1`,
+          ].join('\n')
+        : DASH,
+      realHolders: healthRow?.real_holders != null ? String(healthRow.real_holders) : DASH,
+      totalHolders: healthRow?.total_holders != null ? String(healthRow.total_holders) : DASH,
+      healthScore: healthRow?.health_score != null ? String(healthRow.health_score) : DASH,
+      healthGrade: healthRow?.health_grade || DASH,
       aiBullet1: DASH,
       aiBullet2: DASH,
       aiBullet3: DASH,
