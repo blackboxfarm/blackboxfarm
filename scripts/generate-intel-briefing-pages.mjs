@@ -24,7 +24,13 @@ export async function generateIntelBriefingPages() {
   }
   const assetTags = extractAssetTags(baseHtml);
   const appRoot = baseHtml.match(/<div id="root"><\/div>/)?.[0] || '<div id="root"></div>';
-  const articles = await fetchPublishedArticles();
+  let articles = [];
+  try {
+    articles = await fetchPublishedArticles();
+  } catch (err) {
+    console.warn(`[intel-og-pages] skipped: ${err?.message || err}`);
+    return;
+  }
 
   const briefingsDir = path.resolve('dist', 'intel', 'briefing');
   await mkdir(briefingsDir, { recursive: true });
