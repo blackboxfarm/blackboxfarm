@@ -587,7 +587,7 @@ serve(async (req) => {
       // no_lube_post_log + no_lube_global_profile.multiplier_threshold.
       try {
         const { error: orchErr } = await supabase.functions.invoke('no-lube-orchestrate', {
-          body: { mint: run.token_mint },
+          body: { mint: run.token_mint, source_message_id: run.source_message_id },
         });
         if (orchErr) {
           console.warn('[blackbox-tick] no-lube-orchestrate error', orchErr);
