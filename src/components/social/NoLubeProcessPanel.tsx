@@ -65,8 +65,8 @@ export function NoLubeProcessPanel() {
 
   const load = async () => {
     setLoading(true);
-    const { data: marker } = await supabase
-      .from('pipeline_reset_markers' as never)
+    const { data: marker } = await (supabase as any)
+      .from('pipeline_reset_markers')
       .select('reset_after')
       .eq('pipeline_name', 'insiders_no_lube_process_queue')
       .maybeSingle();
