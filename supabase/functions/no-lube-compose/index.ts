@@ -324,6 +324,17 @@ serve(async (req) => {
 
     const sources: Record<string, string> = {};
 
+    // Pull the latest hourly health snapshot for wallet-distribution vars so the
+    // post isn't full of "—" when /holders has already been refreshed.
+    const { data: healthRow } = await supabase
+      .from('token_health_snapshots')
+      .select('dust_percentage, whale_count, total_holders, real_holders, top10_pct, health_score, health_grade, snapshot_hour')
+      .eq('token_mint', mint)
+      .order('snapshot_hour', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (healthRow) sources.health = 'token_health_snapshots';
+
     // 1) Template — per-channel
     const { data: tplRow } = await supabase
       .from('holders_intel_templates')
@@ -442,6 +453,10 @@ serve(async (req) => {
         top10Pct = (sum / supply) * 100;
       }
     }
+    // Fall back to the health snapshot's top10 when on-chain probe didn't yield it.
+    if (top10Pct == null && healthRow?.top10_pct != null) {
+      top10Pct = Number(healthRow.top10_pct);
+    }
 
     const momentum = classifyMomentum(ch24);
     const risk = classifyRisk(liq, ageMin);
@@ -480,9 +495,15 @@ serve(async (req) => {
       mintTime: fmtMintTime(mintTs),
       bondingState,
       top10: top10Pct != null ? `${top10Pct.toFixed(1)}%` : DASH,
-      freshWallets: DASH,
-      walletSpread: DASH,
-      bundledRisk: DASH,
+      freshWallets: healthRow?.dust_percentage != null
+        ? `${Number(healthRow.dust_percentage).toFixed(1)}% dust`
+        : DASH,
+      walletSpread: healthRow?.real_holders != null && healthRow?.total_holders != null
+        ? `${healthRow.real_holders}/${healthRow.total_holders} real`
+        : DASH,
+      bundledRisk: healthRow?.whale_count != null
+        ? `${healthRow.whale_count} whales`
+        : DASH,
       aiBullet1: DASH,
       aiBullet2: DASH,
       aiBullet3: DASH,
@@ -491,7 +512,9 @@ serve(async (req) => {
       pastLaunches: DASH,
       rugs: DASH,
       devReputation: DASH,
-      blackboxScore: DASH,
+      blackboxScore: healthRow?.health_grade
+        ? `${healthRow.health_grade} (${healthRow.health_score ?? '—'})`
+        : DASH,
       chartUrl: `https://dexscreener.com/solana/${mint}`,
       bubbleMapUrl: `https://blackbox.farm/bubble?token=${mint}`,
       intelUrl: `https://blackbox.farm/holders?token=${mint}`,
@@ -530,6 +553,7 @@ serve(async (req) => {
         .insert({
           token_mint: mint,
           ticker: String(ticker),
+          channel,
           verdict_class,
           posted: false,
           block_reason,

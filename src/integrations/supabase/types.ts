@@ -11700,8 +11700,10 @@ export type Database = {
         Row: {
           age_minutes: number | null
           block_reason: string | null
+          channel: string | null
           composed_at: string
           composed_by: string | null
+          had_image: boolean
           id: string
           image_prompt: string | null
           image_url: string | null
@@ -11726,8 +11728,10 @@ export type Database = {
         Insert: {
           age_minutes?: number | null
           block_reason?: string | null
+          channel?: string | null
           composed_at?: string
           composed_by?: string | null
+          had_image?: boolean
           id?: string
           image_prompt?: string | null
           image_url?: string | null
@@ -11752,8 +11756,10 @@ export type Database = {
         Update: {
           age_minutes?: number | null
           block_reason?: string | null
+          channel?: string | null
           composed_at?: string
           composed_by?: string | null
+          had_image?: boolean
           id?: string
           image_prompt?: string | null
           image_url?: string | null

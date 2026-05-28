@@ -142,7 +142,7 @@ serve(async (req) => {
     let baselineSource: 'insiders' | 'post_log' | 'none' = 'none';
     const { data: lcRow } = await supabase
       .from('telegram_insider_token_lifecycle')
-      .select('entry_market_cap, token_symbol, creator_wallet, creator_status')
+      .select('entry_market_cap, token_symbol, creator_wallet, creator_status, holders_refreshed_at, blackbox_harvested_at, mesh_hydrated_at')
       .eq('token_mint', mint)
       .maybeSingle();
 
@@ -155,6 +155,16 @@ serve(async (req) => {
     if (!lcRow?.creator_wallet) eligibilityBlockers.push('creator_unresolved');
     if (lcRow?.creator_status && !['resolved', 'kyc_resolved', 'no_kyc_reachable', 'unresolvable'].includes(String(lcRow.creator_status))) {
       eligibilityBlockers.push(`creator_status_${lcRow.creator_status}`);
+    }
+    // First-sighting only: require holders + blackbox enrichment so the very first
+    // Private post carries real wallet analysis (dust %, whales, health grade)
+    // instead of a row of "—". Re-sightings are gated by milestone math, not
+    // enrichment freshness — those vars are refreshed on every compose.
+    const isFirstSightingCheck = !prev;
+    if (isFirstSightingCheck) {
+      if (!lcRow?.holders_refreshed_at) eligibilityBlockers.push('holders_not_refreshed');
+      if (!lcRow?.blackbox_harvested_at) eligibilityBlockers.push('blackbox_not_harvested');
+      if (!lcRow?.mesh_hydrated_at) eligibilityBlockers.push('mesh_not_hydrated');
     }
     if (eligibilityBlockers.length) {
       console.log('[no-lube-orchestrate] not_eligible', { mint, blockers: eligibilityBlockers });

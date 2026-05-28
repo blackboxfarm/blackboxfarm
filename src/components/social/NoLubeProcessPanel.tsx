@@ -48,6 +48,11 @@ type Row = Record<string, unknown> & {
   ingest_latency_ms: number | null;
 };
 
+type PostStatus = {
+  private?: { posted_at: string | null; had_image: boolean; image_url: string | null };
+  public?: { posted_at: string | null; had_image: boolean; image_url: string | null };
+};
+
 const fmt = (v: unknown): string => {
   if (v === null || v === undefined) return '∅ null';
   if (typeof v === 'object') return JSON.stringify(v);
@@ -62,6 +67,7 @@ export function NoLubeProcessPanel() {
   const [running, setRunning] = useState(false);
   const [showDoc, setShowDoc] = useState(false);
   const [selected, setSelected] = useState<Row | null>(null);
+  const [postStatus, setPostStatus] = useState<Record<string, PostStatus>>({});
 
   const load = async () => {
     setLoading(true);
@@ -82,6 +88,32 @@ export function NoLubeProcessPanel() {
 
     const { data, error } = await query.limit(100);
     if (!error && data) setRows(data as unknown as Row[]);
+    if (!error && data && data.length > 0) {
+      const mints = (data as any[]).map(r => r.token_mint).filter(Boolean);
+      const { data: posts } = await supabase
+        .from('no_lube_post_log')
+        .select('token_mint, channel, posted_at, had_image, image_url, posted')
+        .in('token_mint', mints)
+        .eq('posted', true)
+        .order('posted_at', { ascending: false });
+      const byMint: Record<string, PostStatus> = {};
+      for (const p of (posts || []) as any[]) {
+        const ch = (p.channel === 'public' || p.channel === 'private') ? p.channel : null;
+        if (!ch) continue;
+        const slot = (byMint[p.token_mint] ||= {});
+        // first row per (mint, channel) wins because list is sorted DESC
+        if (!slot[ch]) {
+          slot[ch] = {
+            posted_at: p.posted_at,
+            had_image: !!p.had_image,
+            image_url: p.image_url || null,
+          };
+        }
+      }
+      setPostStatus(byMint);
+    } else {
+      setPostStatus({});
+    }
     setLoading(false);
   };
 
@@ -139,12 +171,15 @@ export function NoLubeProcessPanel() {
                 <TableHead compact>Dev wallet</TableHead>
                 <TableHead compact>KYC</TableHead>
                 <TableHead compact>Mesh</TableHead>
+                <TableHead compact>Posted</TableHead>
                 <TableHead compact>Latency</TableHead>
                 <TableHead compact>First called</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map(r => (
+              {rows.map(r => {
+                const ps = postStatus[r.token_mint];
+                return (
                 <TableRow
                   key={r.id}
                   className="cursor-pointer"
@@ -176,6 +211,24 @@ export function NoLubeProcessPanel() {
                       {r.mesh_hydrated_at ? 'hydrated' : '—'}
                     </Badge>
                   </TableCell>
+                  <TableCell compact>
+                    <div className="flex flex-col gap-0.5">
+                      {ps?.private ? (
+                        <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-400/40">
+                          Private {ps.private.had_image ? '🖼️' : '📝'}
+                        </Badge>
+                      ) : (
+                        <span className="text-[9px] text-muted-foreground">Private —</span>
+                      )}
+                      {ps?.public ? (
+                        <Badge variant="outline" className="text-[10px] text-cyan-400 border-cyan-400/40">
+                          Public {ps.public.had_image ? '🖼️' : '📝'}
+                        </Badge>
+                      ) : (
+                        <span className="text-[9px] text-muted-foreground">Public —</span>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell compact className="text-[10px] text-muted-foreground">
                     {typeof r.ingest_latency_ms === 'number' ? `${r.ingest_latency_ms}ms` : '—'}
                   </TableCell>
@@ -183,9 +236,10 @@ export function NoLubeProcessPanel() {
                     {new Date(r.first_called_at).toLocaleString()}
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
               {!loading && rows.length === 0 && (
-                <TableRow><TableCell compact colSpan={7} className="text-center text-muted-foreground">No tokens yet.</TableCell></TableRow>
+                <TableRow><TableCell compact colSpan={8} className="text-center text-muted-foreground">No tokens yet.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
