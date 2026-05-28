@@ -140,6 +140,9 @@ serve(async (req) => {
           posted: true,
           posted_at: new Date().toISOString(),
           tg_message_id: result.json.result?.message_id ?? null,
+          channel,
+          image_url: image_url ?? null,
+          had_image: !!image_url,
         }).eq('id', log_id);
       } catch (e) {
         console.error('[no-lube-push] log update failed', e);
