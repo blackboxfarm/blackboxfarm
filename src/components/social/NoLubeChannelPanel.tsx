@@ -10,7 +10,9 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { EmojiPickerPopover } from '@/components/admin/telegram/EmojiPickerPopover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { NoLubeProcessPanel } from './NoLubeProcessPanel';
+
 import {
   DEFAULT_TEMPLATES,
   processTemplate,
@@ -78,6 +80,7 @@ export function NoLubeChannelPanel({
   const [verdictClass, setVerdictClass] = useState<string | null>(null);
   const [blockReason, setBlockReason] = useState<string | null>(null);
   const [logId, setLogId] = useState<string | null>(null);
+  const [postKind, setPostKind] = useState<'snapshot' | 'big_picture'>('big_picture');
 
   useEffect(() => {
     void loadProfile();
@@ -169,12 +172,11 @@ export function NoLubeChannelPanel({
     setIsComposing(true);
     setComposedText(null); setVerdictClass(null); setBlockReason(null); setLogId(null); setEligible(true);
     try {
-      // Snapshot is a post-kind that always targets the Private channel with
-      // the minimal {no_lube_snapshot_private} template.
-      const composeChannel = kind === 'snapshot' ? 'private' : kind;
-      const composeKind = kind === 'snapshot' ? 'snapshot' : 'big_picture';
+      // Snapshot (or Big Picture toggled to Snapshot) always targets the Private channel
+      const effectiveKind = kind === 'snapshot' ? 'snapshot' : postKind;
+      const composeChannel = effectiveKind === 'snapshot' ? 'private' : kind;
       const { data, error } = await supabase.functions.invoke('no-lube-compose', {
-        body: { mint: m, channel: composeChannel, kind: composeKind },
+        body: { mint: m, channel: composeChannel, kind: effectiveKind },
       });
       if (error) throw error;
       if (!data?.ok) throw new Error(data?.error || 'compose failed');
@@ -197,7 +199,8 @@ export function NoLubeChannelPanel({
     if (!composedText) return;
     setIsPushing(true);
     try {
-      const pushChannel = kind === 'snapshot' ? 'private' : kind;
+      const effectiveKind = kind === 'snapshot' ? 'snapshot' : postKind;
+      const pushChannel = effectiveKind === 'snapshot' ? 'private' : kind;
       const { data, error } = await supabase.functions.invoke('no-lube-push', {
         body: { text: composedText, log_id: logId, channel: pushChannel },
       });
@@ -401,14 +404,31 @@ export function NoLubeChannelPanel({
       {/* Compose + Push for THIS channel */}
       <Card className="bg-card/60 border-border">
         <CardContent className="pt-4 space-y-3">
-          <Label className="font-medium">
-            Compose & Push to {
-              kind === 'default' ? 'No Lube (Default channel)'
-              : kind === 'public' ? 'No Lube Public Channel'
-              : kind === 'snapshot' ? 'No Lube Private Channel (snapshot)'
-              : 'No Lube Private Channel'
-            }
-          </Label>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <Label className="font-medium">
+              Compose & Push to {
+                kind === 'default' ? 'No Lube (Default channel)'
+                : kind === 'public' ? (postKind === 'snapshot' ? 'No Lube Private Channel (snapshot)' : 'No Lube Public Channel')
+                : kind === 'snapshot' ? 'No Lube Private Channel (snapshot)'
+                : (postKind === 'snapshot' ? 'No Lube Private Channel (snapshot)' : 'No Lube Private Channel')
+              }
+            </Label>
+            {(kind === 'private' || kind === 'public') && (
+              <ToggleGroup
+                type="single"
+                value={postKind}
+                onValueChange={(v) => { if (v) setPostKind(v as 'snapshot' | 'big_picture'); }}
+                className="bg-muted rounded-md p-0.5"
+              >
+                <ToggleGroupItem value="snapshot" className="text-xs px-2.5 py-1 data-[state=on]:bg-pink-600 data-[state=on]:text-white">
+                  Snapshot
+                </ToggleGroupItem>
+                <ToggleGroupItem value="big_picture" className="text-xs px-2.5 py-1 data-[state=on]:bg-pink-600 data-[state=on]:text-white">
+                  Big Picture
+                </ToggleGroupItem>
+              </ToggleGroup>
+            )}
+          </div>
           <div className="flex gap-2">
             <Input
               placeholder="Paste token address (mint)..."
@@ -452,9 +472,9 @@ export function NoLubeChannelPanel({
                     ? <>⛔ Blocked — {blockReason}</>
                     : <><Send className="h-4 w-4 mr-1" />Push to {
                         kind === 'default' ? 'No Lube'
-                        : kind === 'public' ? 'Public'
+                        : kind === 'public' ? (postKind === 'snapshot' ? 'Private (snapshot)' : 'Public')
                         : kind === 'snapshot' ? 'Private (snapshot)'
-                        : 'Private'
+                        : (postKind === 'snapshot' ? 'Private (snapshot)' : 'Private')
                       }</>}
               </Button>
             </>
