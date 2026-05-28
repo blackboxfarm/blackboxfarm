@@ -817,6 +817,7 @@ serve(async (req) => {
       websiteUrl: dex?.info?.websites?.[0]?.url || DASH,
       multiplier: multiplierLabel,
       multiplierLine,
+      token_image_url: tokenImageUrl || DASH,
       ...profileVars,
     };
 
