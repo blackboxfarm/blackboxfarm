@@ -1442,6 +1442,39 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
   // Generate unique lock ID for this invocation
   const lockerId = `monitor-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   let lockAcquired = false;
+
+  // 15-second sub-minute polling. The pg_cron tick fires once a minute; we
+  // self-schedule 3 more runs at +15s / +30s / +45s so we effectively poll
+  // Telegram every 15 seconds without changing pg_cron. Only do this for the
+  // default cron-style invocation (no action, no singleChannel, no resetMessageId)
+  // and only when this run is itself the first tick (no _sub flag).
+  try {
+    const peekBody = req.headers.get('x-sub-tick') ? null : await req.clone().json().catch(() => ({}));
+    const isCronTick = peekBody && !peekBody.action && !peekBody.singleChannel && !peekBody.channelId && !peekBody.resetMessageId && !peekBody._sub;
+    if (isCronTick && typeof (globalThis as any).EdgeRuntime?.waitUntil === 'function') {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      (globalThis as any).EdgeRuntime.waitUntil((async () => {
+        for (const delayMs of [15000, 30000, 45000]) {
+          await new Promise((r) => setTimeout(r, 15000));
+          try {
+            await fetch(`${supabaseUrl}/functions/v1/telegram-channel-monitor`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${serviceKey}`,
+                'apikey': serviceKey,
+                'x-sub-tick': '1',
+              },
+              body: JSON.stringify({ _sub: true, _offset_ms: delayMs }),
+            });
+          } catch (e) {
+            console.warn('[telegram-channel-monitor] sub-tick self-invoke failed:', (e as Error).message);
+          }
+        }
+      })());
+    }
+  } catch { /* ignore */ }
   
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
