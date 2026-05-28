@@ -8,6 +8,8 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { fetchDexBanner } from '../_shared/dexscreener-banner.ts';
+import { assertUpdate } from '../_shared/db-assert.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -534,7 +536,7 @@ serve(async (req) => {
     // Seen-token row (entry mcap + persisted mint timestamp + immutable entry floor)
     const { data: seenRow } = await supabase
       .from('holders_intel_seen_tokens')
-      .select('market_cap_at_discovery, minted_at, entry_mcap_usd, dev_wallet')
+      .select('market_cap_at_discovery, minted_at, entry_mcap_usd, dev_wallet, image_uri, banner_url')
       .eq('token_mint', mint)
       .maybeSingle();
     if (seenRow) sources.seen = 'holders_intel_seen_tokens';
