@@ -468,11 +468,24 @@ serve(async (req) => {
 
   // STEP 2: Harvest + compose for runs whose window has elapsed
   try {
+    // Dead-man switch: never let expired harvest rows live forever. A stuck
+    // harvesting row was repeatedly handing the same dead token to No Lube.
+    await assertUpdate(
+      supabase.from('blackbox_aggregator_runs').update({
+        status: 'failed',
+        error_message: 'stale harvest auto-failed before handoff',
+      })
+      .eq('status', 'harvesting')
+      .lt('harvest_until', new Date(Date.now() - 2 * 60 * 1000).toISOString()),
+      'blackbox_aggregator_runs',
+    );
+
     const { data: ready } = await supabase
       .from('blackbox_aggregator_runs')
       .select('*')
       .eq('status', 'harvesting')
       .lte('harvest_until', new Date().toISOString())
+      .order('harvest_until', { ascending: true })
       .limit(10);
 
     for (const run of (ready || [])) {
@@ -531,15 +544,18 @@ serve(async (req) => {
         const username = m.callerUsername || null;
         const body = m.text || m.message || m.caption || '';
         const { parser, fields } = parseReply(username, body);
-        const { error } = await supabase.from('blackbox_bot_replies').upsert({
-          run_id: run.id,
-          message_id: Number(m.messageId || m.id || 0),
-          bot_username: username,
-          raw_text: body,
-          parsed_jsonb: fields,
-          parser_used: parser,
-        }, { onConflict: 'run_id,message_id' });
-        if (!error) saved++;
+        await assertUpsert(
+          supabase.from('blackbox_bot_replies').upsert({
+            run_id: run.id,
+            message_id: Number(m.messageId || m.id || 0),
+            bot_username: username,
+            raw_text: body,
+            parsed_jsonb: fields,
+            parser_used: parser,
+          }, { onConflict: 'run_id,message_id' }),
+          'blackbox_bot_replies',
+        );
+        saved++;
       }
 
       // Passive parser-sample capture — dump verbatim copies of every reply
@@ -568,10 +584,13 @@ serve(async (req) => {
 
       // Legacy composeDigest path retired — the No Lube orchestrator now owns
       // all routing (Private on first sight, Private + Public on re-sight ≥ Nx).
-      await supabase.from('blackbox_aggregator_runs').update({
-        status: 'handed_off',
-        replies_collected: saved,
-      }).eq('id', run.id);
+      await assertUpdate(
+        supabase.from('blackbox_aggregator_runs').update({
+          status: 'handed_off',
+          replies_collected: saved,
+        }).eq('id', run.id),
+        'blackbox_aggregator_runs',
+      );
       summary.harvested++;
 
      } catch (innerErr: any) {
@@ -579,10 +598,13 @@ serve(async (req) => {
        // backlog drains and the orchestrator stops being re-invoked for
        // tokens whose harvest cycle already expired.
        console.warn('[blackbox-tick] step2 run failed, marking stale', run.id, innerErr?.message);
-       await supabase.from('blackbox_aggregator_runs').update({
-         status: 'failed',
-         error_message: `harvest exception: ${innerErr?.message || innerErr}`,
-       }).eq('id', run.id);
+       await assertUpdate(
+         supabase.from('blackbox_aggregator_runs').update({
+           status: 'failed',
+           error_message: `harvest exception: ${innerErr?.message || innerErr}`,
+         }).eq('id', run.id),
+         'blackbox_aggregator_runs',
+       );
        continue;
      }
 
