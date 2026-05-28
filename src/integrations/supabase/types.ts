@@ -8866,6 +8866,33 @@ export type Database = {
         }
         Relationships: []
       }
+      insiders_parse_failures: {
+        Row: {
+          created_at: string
+          id: string
+          message_id: number | null
+          parsed_fields: Json | null
+          raw_text: string | null
+          reason: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message_id?: number | null
+          parsed_fields?: Json | null
+          raw_text?: string | null
+          reason: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message_id?: number | null
+          parsed_fields?: Json | null
+          raw_text?: string | null
+          reason?: string
+        }
+        Relationships: []
+      }
       installer_x_profiles: {
         Row: {
           created_at: string
@@ -11432,6 +11459,8 @@ export type Database = {
           output_url: string
           profile_kind: string
           prompt: string | null
+          rotation_mode: string | null
+          selection_reason: string | null
           template_id: string | null
           ticker: string | null
           token_mint: string
@@ -11449,6 +11478,8 @@ export type Database = {
           output_url: string
           profile_kind: string
           prompt?: string | null
+          rotation_mode?: string | null
+          selection_reason?: string | null
           template_id?: string | null
           ticker?: string | null
           token_mint: string
@@ -11466,6 +11497,8 @@ export type Database = {
           output_url?: string
           profile_kind?: string
           prompt?: string | null
+          rotation_mode?: string | null
+          selection_reason?: string | null
           template_id?: string | null
           ticker?: string | null
           token_mint?: string
@@ -11599,6 +11632,45 @@ export type Database = {
           x_handle?: string | null
         }
         Relationships: []
+      }
+      no_lube_channel_settings: {
+        Row: {
+          active_template_id: string | null
+          last_used_template_id: string | null
+          profile_kind: string
+          rotation_mode: string
+          updated_at: string
+        }
+        Insert: {
+          active_template_id?: string | null
+          last_used_template_id?: string | null
+          profile_kind: string
+          rotation_mode?: string
+          updated_at?: string
+        }
+        Update: {
+          active_template_id?: string | null
+          last_used_template_id?: string | null
+          profile_kind?: string
+          rotation_mode?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "no_lube_channel_settings_active_template_id_fkey"
+            columns: ["active_template_id"]
+            isOneToOne: false
+            referencedRelation: "no_lube_card_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "no_lube_channel_settings_last_used_template_id_fkey"
+            columns: ["last_used_template_id"]
+            isOneToOne: false
+            referencedRelation: "no_lube_card_templates"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       no_lube_global_profile: {
         Row: {

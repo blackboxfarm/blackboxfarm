@@ -651,10 +651,35 @@ serve(async (req) => {
       };
     });
 
+    // ---- HARD REJECT: never insert rows that lack mint or entry_market_cap ----
+    // A row without these can never become eligible for the No-Lube pipeline,
+    // so it would just sit in the queue forever creating retry pressure.
+    // Park them in insiders_parse_failures for review instead.
+    const rejected = upsertRows.filter(r => !r.token_mint || !r.entry_market_cap || Number(r.entry_market_cap) <= 0);
+    const cleanRows = upsertRows.filter(r => r.token_mint && r.entry_market_cap && Number(r.entry_market_cap) > 0);
+    if (rejected.length) {
+      console.warn(`[insiders-lifecycle-builder] HARD REJECT: ${rejected.length} rows missing mint or entry_market_cap`);
+      try {
+        await supabase.from('insiders_parse_failures').insert(rejected.map(r => ({
+          message_id: r.first_call_message_id,
+          raw_text: r.raw_alert_message,
+          reason: !r.token_mint ? 'missing_token_mint' : 'missing_entry_market_cap',
+          parsed_fields: {
+            token_mint: r.token_mint,
+            token_symbol: r.token_symbol,
+            entry_mc_text: r.entry_mc_text,
+            entry_market_cap: r.entry_market_cap,
+          },
+        })));
+      } catch (e) {
+        console.warn('[insiders-lifecycle-builder] parse_failures insert failed:', (e as Error).message);
+      }
+    }
+
     // Detect which mints are net-new BEFORE we upsert, so we can fire
     // no-lube-ingest only for them (the existing rows already went
     // through the enrichment chain on their first sighting).
-    const allMints = upsertRows.map(r => r.token_mint).filter(Boolean);
+    const allMints = cleanRows.map(r => r.token_mint).filter(Boolean);
     const existingMints = new Set<string>();
     if (allMints.length > 0) {
       const { data: existing } = await supabase
@@ -668,8 +693,8 @@ serve(async (req) => {
     // Upsert in chunks of 200 to avoid request size limits
     const CHUNK = 200;
     let upserted = 0;
-    for (let i = 0; i < upsertRows.length; i += CHUNK) {
-      const chunk = upsertRows.slice(i, i + CHUNK);
+    for (let i = 0; i < cleanRows.length; i += CHUNK) {
+      const chunk = cleanRows.slice(i, i + CHUNK);
       const { error } = await supabase
         .from('telegram_insider_token_lifecycle')
         .upsert(chunk, { onConflict: 'token_mint' });

@@ -142,9 +142,30 @@ serve(async (req) => {
     let baselineSource: 'insiders' | 'post_log' | 'none' = 'none';
     const { data: lcRow } = await supabase
       .from('telegram_insider_token_lifecycle')
-      .select('entry_market_cap, token_symbol')
+      .select('entry_market_cap, token_symbol, creator_wallet, creator_status')
       .eq('token_mint', mint)
       .maybeSingle();
+
+    // ---- STRICT ELIGIBILITY GATE ----
+    // Prevent failures by refusing to attempt a post when the row isn't ready.
+    // No retries: ineligible rows are skipped cleanly and re-evaluated next tick.
+    const eligibilityBlockers: string[] = [];
+    if (!lcRow) eligibilityBlockers.push('no_lifecycle_row');
+    if (!lcRow?.entry_market_cap || Number(lcRow.entry_market_cap) <= 0) eligibilityBlockers.push('missing_entry_mcap');
+    if (!lcRow?.creator_wallet) eligibilityBlockers.push('creator_unresolved');
+    if (lcRow?.creator_status && !['resolved', 'kyc_resolved', 'no_kyc_reachable', 'unresolvable'].includes(String(lcRow.creator_status))) {
+      eligibilityBlockers.push(`creator_status_${lcRow.creator_status}`);
+    }
+    if (eligibilityBlockers.length) {
+      console.log('[no-lube-orchestrate] not_eligible', { mint, blockers: eligibilityBlockers });
+      return jsonResp({
+        ok: true, flow: 'skipped', skipped: true,
+        reason: 'not_eligible_yet',
+        blockers: eligibilityBlockers,
+        retry: false,
+      });
+    }
+
     if (lcRow?.entry_market_cap != null && Number(lcRow.entry_market_cap) > 0) {
       firstMcap = Number(lcRow.entry_market_cap);
       baselineSource = 'insiders';

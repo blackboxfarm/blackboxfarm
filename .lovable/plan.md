@@ -1,149 +1,69 @@
+## Goal
+Kill retries by making rows ineligible until they're actually ready to post. Plus build the template library, show_url safe zone, settings table, and logging.
 
-# No-Lube Card System — Template-First Redesign + Restore Posting
+## A. Prevent failures (no more retry loop)
 
-## A. Why no posts since 06:00 UTC (separate bug, fix first)
+**`no-lube-orchestrate` candidate selection rewrite**
+Replace current "pick anything not posted" with a strict eligibility view. Row is eligible ONLY when ALL true:
+- `entry_market_cap IS NOT NULL AND entry_market_cap > 0`
+- `creator_status = 'resolved'`
+- `dev_wallet_resolved_at IS NOT NULL`
+- `mesh_hydrated_at IS NOT NULL`
+- Live DexScreener mcap available + fresh (≤5 min) AND > 0
+- Not already in `no_lube_post_log` for this profile_kind
+- Not `terminal_dead`
 
-Last successful post: `2026-05-28 05:59 UTC` (BIZZY). Since then 487 compose attempts, all blocked (mostly "Dead — 24h price -94%" for `SUMMERBODY` retrying every minute).
+If no row passes → orchestrator exits clean ("no eligible candidates"), no error, no retry, no log spam. Next tick re-evaluates. Failed posts become impossible because we never attempt one that isn't ready.
 
-Root cause: during last night's emergency cron cleanup, `insiders-pipeline-orchestrator-15m` was set to `active = false` and never re-enabled. That orchestrator is what drains newly-seen insider mints into `no-lube-ingest` → `no-lube-orchestrate`. Channel monitor still runs, but new mints aren't being routed.
+**`insiders-lifecycle-builder` hard-reject**
+If a parsed Telegram message lacks entry_mcap or mint, do NOT insert a partial row. Log to a new `insiders_parse_failures` table for review. No half-baked rows enter the pipeline.
 
-Fix: re-enable that cron (migration) and confirm fresh tokens flow into `no_lube_post_log`.
+**Single Telegram retry only**
+Compose-card → Telegram send: one immediate retry on HTTP 5xx (Telegram's side), then give up cleanly and mark the post `failed_external`. No re-queue loop.
 
-## B. New card-generation architecture
+## B. Template library + active-template selector (Q3)
 
-### B1. Per-profile background templates (PNG)
+**Table `no_lube_channel_settings`**
+- `profile_kind` (public | private) PK
+- `active_template_id` → templates
+- `rotation_mode` ('sticky' | 'random' | 'round_robin') default 'sticky'
+- `last_used_template_id` (round_robin bookkeeping)
+- GRANTs + RLS (admin-only writes, service_role full)
 
-Add table `no_lube_card_templates`:
-- `profile_kind` ('private' | 'public')
-- `language` (e.g. 'en','ko','universal')
-- `aspect` ('landscape_tg' = 1024x640) — extensible later
-- `template_url` (storage public URL)
-- `template_name`, `enabled`, `is_default`
-- `font_family` (Google font name, e.g. "Bebas Neue", "Inter", "JetBrains Mono")
-- `font_url` (optional self-hosted .ttf)
-- `safe_zones` JSONB — named rectangles where AI is ALLOWED to draw, e.g.
-  ```
-  {
-    "mint_pfp":      {"x": 60,  "y": 140, "w": 140, "h": 140, "shape": "circle"},
-    "ticker":        {"x": 220, "y": 150, "w": 500, "h": 80},
-    "ca":            {"x": 220, "y": 230, "w": 500, "h": 30},
-    "multiplier":    {"x": 60,  "y": 320, "w": 200, "h": 110},
-    "entry_label":   {"x": 60,  "y": 480, "w": 200, "h": 30},
-    "entry_value":   {"x": 60,  "y": 520, "w": 200, "h": 60},
-    "current_label": {"x": 300, "y": 480, "w": 200, "h": 30},
-    "current_value": {"x": 300, "y": 520, "w": 200, "h": 60},
-    "character":     {"x": 680, "y": 60,  "w": 340, "h": 560}
-  }
-  ```
-- `show_url` (bool — surface channel/X URL or not)
-- `url_to_show` (optional override; default = profile's TG/X handle)
-- `show_ca` (bool — small CA footer, default true)
-- `exif_owner`, `exif_copyright`, `exif_description` per-profile defaults
+**Compositor `no-lube-compose-card`**
+Replace `is_default=true` lookup with: read settings row → pick template per rotation_mode → record `selection_reason` on `no_lube_card_renders`.
 
-New tab "Templates" in the Admin No-Lube panel:
-- Upload PNG per (profile, language) or click "Generate" (calls existing image gateway).
-- Visual editor to paint/drag the safe-zone rectangles on top of the template.
-- Font picker, EXIF fields, URL/CA toggles.
-- Preview button: composes a dummy card so you can see the final layout before saving.
+**UI** in `NoLubeTemplateManager`
+- On Public + Private tabs add "Active background" dropdown listing enabled templates for that kind/lang.
+- Rotation-mode selector (sticky / random / round-robin).
+- Upload/CRUD stays — new PNGs auto-appear in the dropdown.
 
-### B2. Card pipeline (new compositor)
+## C. show_url safe zone (Q4)
 
-Replace today's "Gemini renders the whole card" with a deterministic compositor:
+- Add `show_url` to default safe-zones JSON seed (suggested `{x:30, y:600, w:964, h:28}`).
+- Compositor renders channel handle/URL text into `show_url` if present.
+- Templates tab overlay preview renders the box.
+- Migration backfills existing template rows with the new key + default coords.
 
-```
-1. Load background template PNG for (profile_kind, language).
-2. Fetch mint PFP from on-chain metadata → fit + circle-mask into mint_pfp safe zone.
-3. Render fixed text overlays with the template's font:
-     ticker, CA (truncated middle), multiplier, entry/current mcap.
-4. AI step (Lovable AI gateway, gemini-3-pro-image-preview, EDIT mode):
-     - Input: composited base (template + pfp + text)
-     - Prompt: "place a character in the 'character' safe zone, do not modify
-       any pixels outside this rectangle, do not add or change text".
-     - Reference assets: 1 character + 1 sticker pulled from no_lube_assets
-       (filtered by profile_kind + language). Apply randomization + last_used_at
-       penalty so the same combo isn't reused within 24h.
-5. Convert PNG → JPG (quality 92).
-6. Strip all EXIF, inject our EXIF (owner, copyright, description, profile name).
-7. Upload to no-lube-rendered-cards bucket.
-8. Archive row in no_lube_card_renders: {template_id, asset_ids[], prompt,
-   output_url, profile_kind, mint, multiplier, created_at}.
-```
+## D. Migration files (Q5)
 
-If step 4 fails (AI error / rate limit / content block): use the base composite from step 3 as the final card. **No more text-only fallback when an image was expected.**
+1. `no_lube_channel_settings` table + GRANTs + RLS + seed rows for `public`/`private` pointing at current default template.
+2. JSON backfill: add `show_url` to every existing `no_lube_card_templates.safe_zones`.
+3. New `insiders_parse_failures` table for hard-reject debugging.
+4. New column `no_lube_card_renders.selection_reason TEXT`.
 
-### B3. Orchestrate flow change (milestone-first)
+## E. Edge-function logging (Q6)
 
-Current order: compose → check eligibility → render. New order:
+- `no-lube-compose-card`: log `template_id`, `rotation_mode`, `selection_reason` on every render.
+- `no-lube-orchestrate`: log eligibility-filter counts each tick (`eligible: N, blocked_missing_mcap: X, blocked_no_creator: Y, blocked_stale_price: Z`). This makes "why nothing posted" answerable in 5 seconds.
+- All writes wrapped in `assertUpdate`/`assertInsert`.
 
-```
-1. Compute multiplier from baseline.
-2. Milestone gate: floor(ratio) > prev_milestone? If no → skip, no compose, no render.
-3. If yes → branch on channel:
-     - PRIVATE template: ticker, CA short, multiplier, called/peak MC, "PREMIUM INSIDERS" header
-     - PUBLIC template:  ticker, CA short, multiplier, entry/now MC, channel name header (e.g. "솔라나 펌핑 파티"), CTA URL if show_url=true
-4. Render card (B2) for the matching template.
-5. Compose text body via existing no-lube-compose.
-6. Push to telegram with the rendered card + text caption.
-```
+## F. Cron cadence
 
-Private and public get **distinct templates** and **distinct field sets** (matches your two screenshots).
+Recommend `insiders-pipeline-orchestrator-15m` → **5 min**. Genealogy step is cooldown-guarded so cost is negligible. Lifecycle-builder stays at 2 min.
 
-### B4. Strict-text instructions to AI
+## Out of scope
+- Heartbeat alerts
+- AI character-swap pass
 
-Edit prompt now includes a hard preface:
-
-> "The following text strings are already rendered on the base image. DO NOT redraw, modify, translate, or overlap them: `$PAYNE`, `BCa34u…W5pump`, `2X`, `$103k`, `$205k`. Do not add any other text."
-
-Combined with edit-mode (vs generate-from-scratch) this eliminates the misspell-ticker problem without a QA loop.
-
-### B5. Validation hard-stop
-
-`no-lube-orchestrate` will refuse to proceed when `entry_market_cap` or `current_mcap` is null/0. Returns `{skipped: true, reason: 'missing_mcap_invariant'}`. No partial cards ever rendered.
-
-### B6. Misc cleanups in `no-lube-render-card`
-
-- Fix language pool query bug (OR clause currently always matches universal because of `language.is.null` AND wrong escape).
-- Wire `last_used_at` + add `times_used` counter (replaces the broken `rpc('increment')`).
-- Remove "no URL / no CA" hard rule. CA = small footer always-on by default; URL = controlled by template `show_url`.
-
-## C. Admin UI changes
-
-`src/components/admin/` No-Lube panel gets a new top-level tab:
-```
-[ Profiles ] [ Templates (NEW) ] [ Assets ] [ Recent Sightings ] [ Archive (NEW) ]
-```
-- **Templates**: per-profile/language template manager described in B1.
-- **Archive**: filterable table of `no_lube_card_renders` — thumbnail, profile, mint, multiplier, asset_ids, prompt, created_at, "regenerate" button.
-
-## D. Out of scope this round
-
-- New aspect ratios beyond 1024x640 landscape (schema supports it; UI later).
-- Video cards.
-- Auto-translation of fixed text (templates already per-language).
-
-## Technical notes
-
-Files touched:
-- migration: re-enable `insiders-pipeline-orchestrator-15m`; create `no_lube_card_templates`, `no_lube_card_renders` (with GRANTs + RLS); add `times_used`, `last_used_at` columns to `no_lube_assets` if missing.
-- new edge function `no-lube-compose-card` (the deterministic compositor in B2) using `imagescript` (PNG ops) + a small JPEG EXIF writer. Replaces direct calls to `no-lube-render-card` from the orchestrator.
-- edit `no-lube-orchestrate/index.ts` — milestone-first ordering (B3), mcap invariant (B5), pass `profile_kind` into compositor.
-- edit `no-lube-render-card/index.ts` — language query fix, last_used wiring, drop "no URL/CA" rule, strict-text preface.
-- new admin React components: `NoLubeTemplateManager.tsx`, `TemplateSafeZoneEditor.tsx`, `NoLubeArchivePanel.tsx`.
-
-Awaiting "Plan Approved" before touching code.
-
----
-
-## Status (post-implementation)
-
-- DB: `no_lube_card_templates`, `no_lube_card_renders`, `times_used`/`last_used_at` on assets ✅
-- Storage: `no-lube-card-templates` (public) + existing `no-lube-rendered-cards` ✅
-- Edge fn `no-lube-compose-card`: deterministic compositor (template + PFP + text + character asset), JPEG + EXIF rebrand, archived to `no_lube_card_renders`. No AI step in v1 — strict text guaranteed. ✅
-- Orchestrator: prefers `no-lube-compose-card` when a template exists for `(profile_kind, language)`; falls back to the AI `no-lube-render-card` otherwise. Hard mcap invariant in both paths. ✅
-- Admin UI: new tabs under No Lube → **🎯 Templates** (upload PNG, edit safe-zones JSON live preview, font/EXIF/URL/CA toggles) and **📦 Archive** (filter by kind/ticker/mint, thumbnails, prompt). ✅
-- Posting flow restored (`insiders-pipeline-orchestrator-15m` cron re-enabled). ✅
-
-## Follow-up (not done this round)
-- Drag-and-drop safe-zone editor (current editor is JSON + live overlay).
-- Optional AI character-zone edit pass after deterministic composite (when user wants more dynamic characters than the static asset library).
-- Token PFP URL is fetched best-effort from compose `vars.token_image_url`; if upstream compose stops returning it the PFP slot stays empty.
+Awaiting **Plan Approved**.

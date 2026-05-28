@@ -40,6 +40,7 @@ const DEFAULT_SAFE_ZONES = {
   current_label: { x: 300, y: 480, w: 200, h: 30 },
   current_value: { x: 300, y: 520, w: 200, h: 60 },
   character: { x: 680, y: 60, w: 340, h: 560 },
+  show_url: { x: 30, y: 600, w: 964, h: 28 },
 };
 
 const ZONE_COLORS: Record<string, string> = {
@@ -52,6 +53,13 @@ const ZONE_COLORS: Record<string, string> = {
   current_label: '#fb923c',
   current_value: '#f97316',
   character: '#a78bfa',
+  show_url: '#38bdf8',
+};
+
+type ChannelSetting = {
+  profile_kind: 'public' | 'private';
+  active_template_id: string | null;
+  rotation_mode: 'sticky' | 'random' | 'round_robin';
 };
 
 export function NoLubeTemplateManager() {
@@ -62,6 +70,7 @@ export function NoLubeTemplateManager() {
   const [templateName, setTemplateName] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [settings, setSettings] = useState<Record<string, ChannelSetting>>({});
 
   const load = async () => {
     setLoading(true);
@@ -73,11 +82,29 @@ export function NoLubeTemplateManager() {
         .order('language', { ascending: true });
       if (error) throw error;
       setRows((data || []) as TplRow[]);
+      const { data: s } = await (supabase as any)
+        .from('no_lube_channel_settings').select('*');
+      const map: Record<string, ChannelSetting> = {};
+      for (const r of (s || []) as ChannelSetting[]) map[r.profile_kind] = r;
+      setSettings(map);
     } catch (e: any) {
       toast.error(`Load failed: ${e.message}`);
     } finally { setLoading(false); }
   };
   useEffect(() => { void load(); }, []);
+
+  const saveSetting = async (kind: 'public' | 'private', patch: Partial<ChannelSetting>) => {
+    const current = settings[kind] || { profile_kind: kind, active_template_id: null, rotation_mode: 'sticky' };
+    const next = { ...current, ...patch, profile_kind: kind };
+    try {
+      const { error } = await (supabase as any)
+        .from('no_lube_channel_settings')
+        .upsert(next, { onConflict: 'profile_kind' });
+      if (error) throw error;
+      setSettings(prev => ({ ...prev, [kind]: next }));
+      toast.success('Channel settings saved');
+    } catch (e: any) { toast.error(`Save failed: ${e.message}`); }
+  };
 
   const handleUpload = async () => {
     if (!file) { toast.error('Pick a PNG'); return; }
@@ -165,6 +192,52 @@ export function NoLubeTemplateManager() {
           <p className="text-xs text-muted-foreground">
             Default safe-zones get attached automatically — edit per-template below. Logo and channel-name decorations can be baked into the PNG.
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="pt-4 space-y-3">
+          <Label className="text-base font-semibold">Active background per channel</Label>
+          <p className="text-xs text-muted-foreground">
+            Sticky = always use the selected template. Random = pick any enabled template for this channel on every render. Round-robin = cycle through enabled templates in order.
+          </p>
+          {(['public','private'] as const).map(kind => {
+            const opts = rows.filter(r => r.profile_kind === kind && r.enabled);
+            const cur = settings[kind] || { profile_kind: kind, active_template_id: null, rotation_mode: 'sticky' as const };
+            return (
+              <div key={kind} className="grid grid-cols-1 md:grid-cols-3 gap-2 items-end border-t pt-3 first:border-t-0 first:pt-0">
+                <div>
+                  <Label className="text-xs uppercase">{kind} channel</Label>
+                  <Badge variant={kind === 'private' ? 'default' : 'secondary'}>{kind}</Badge>
+                </div>
+                <div>
+                  <Label className="text-xs">Active template</Label>
+                  <select
+                    value={cur.active_template_id || ''}
+                    onChange={(e) => saveSetting(kind, { active_template_id: e.target.value || null })}
+                    className="w-full h-9 rounded-md bg-background border border-input px-2 text-sm"
+                  >
+                    <option value="">— none (fallback to default) —</option>
+                    {opts.map(o => (
+                      <option key={o.id} value={o.id}>{o.template_name} [{o.language}]</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-xs">Rotation mode</Label>
+                  <select
+                    value={cur.rotation_mode}
+                    onChange={(e) => saveSetting(kind, { rotation_mode: e.target.value as ChannelSetting['rotation_mode'] })}
+                    className="w-full h-9 rounded-md bg-background border border-input px-2 text-sm"
+                  >
+                    <option value="sticky">sticky (always active)</option>
+                    <option value="random">random</option>
+                    <option value="round_robin">round-robin</option>
+                  </select>
+                </div>
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
 
