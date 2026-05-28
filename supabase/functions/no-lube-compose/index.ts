@@ -881,6 +881,8 @@ serve(async (req) => {
       multiplier: multiplierLabel,
       multiplierLine,
       token_image_url: tokenImageUrl || DASH,
+      banner_url: bannerUrl || DASH,
+      has_paid_dex: hasPaidDex ? 'true' : 'false',
       ...profileVars,
     };
 
@@ -943,6 +945,9 @@ serve(async (req) => {
       // header from the AI-rendered card pipeline instead.
       image_url: kind === 'snapshot' && useMintImageOnSnapshot ? tokenImageUrl : null,
       token_image_url: tokenImageUrl,
+      banner_url: bannerUrl,
+      banner_source: bannerSource,
+      has_paid_dex: hasPaidDex,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
