@@ -17620,6 +17620,7 @@ export type Database = {
       }
       telegram_insider_token_lifecycle: {
         Row: {
+          blackbox_harvested_at: string | null
           built_at: string
           channel_name: string
           created_at: string
@@ -17630,6 +17631,7 @@ export type Database = {
           creator_status: string
           creator_wallet: string | null
           dev_history_warning: boolean | null
+          dev_wallet_resolved_at: string | null
           enrichment_last_run_at: string | null
           enrichment_status: string | null
           entry_market_cap: number | null
@@ -17639,7 +17641,12 @@ export type Database = {
           genealogy_chain: Json | null
           genealogy_depth: number | null
           genealogy_kyc_root: string | null
+          holders_refreshed_at: string | null
           id: string
+          ingest_completed_at: string | null
+          ingest_last_error: string | null
+          ingest_started_at: string | null
+          ingest_status: string
           is_rugged: boolean
           kyc_attempts: number
           kyc_label: string | null
@@ -17649,6 +17656,7 @@ export type Database = {
           launchpad: string | null
           lifespan_minutes: number | null
           mesh_decision_trace: Json | null
+          mesh_hydrated_at: string | null
           mesh_promoted_at: string | null
           mesh_promotion_reason: string | null
           mesh_promotion_status: string
@@ -17669,6 +17677,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          blackbox_harvested_at?: string | null
           built_at?: string
           channel_name?: string
           created_at?: string
@@ -17679,6 +17688,7 @@ export type Database = {
           creator_status?: string
           creator_wallet?: string | null
           dev_history_warning?: boolean | null
+          dev_wallet_resolved_at?: string | null
           enrichment_last_run_at?: string | null
           enrichment_status?: string | null
           entry_market_cap?: number | null
@@ -17688,7 +17698,12 @@ export type Database = {
           genealogy_chain?: Json | null
           genealogy_depth?: number | null
           genealogy_kyc_root?: string | null
+          holders_refreshed_at?: string | null
           id?: string
+          ingest_completed_at?: string | null
+          ingest_last_error?: string | null
+          ingest_started_at?: string | null
+          ingest_status?: string
           is_rugged?: boolean
           kyc_attempts?: number
           kyc_label?: string | null
@@ -17698,6 +17713,7 @@ export type Database = {
           launchpad?: string | null
           lifespan_minutes?: number | null
           mesh_decision_trace?: Json | null
+          mesh_hydrated_at?: string | null
           mesh_promoted_at?: string | null
           mesh_promotion_reason?: string | null
           mesh_promotion_status?: string
@@ -17718,6 +17734,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          blackbox_harvested_at?: string | null
           built_at?: string
           channel_name?: string
           created_at?: string
@@ -17728,6 +17745,7 @@ export type Database = {
           creator_status?: string
           creator_wallet?: string | null
           dev_history_warning?: boolean | null
+          dev_wallet_resolved_at?: string | null
           enrichment_last_run_at?: string | null
           enrichment_status?: string | null
           entry_market_cap?: number | null
@@ -17737,7 +17755,12 @@ export type Database = {
           genealogy_chain?: Json | null
           genealogy_depth?: number | null
           genealogy_kyc_root?: string | null
+          holders_refreshed_at?: string | null
           id?: string
+          ingest_completed_at?: string | null
+          ingest_last_error?: string | null
+          ingest_started_at?: string | null
+          ingest_status?: string
           is_rugged?: boolean
           kyc_attempts?: number
           kyc_label?: string | null
@@ -17747,6 +17770,7 @@ export type Database = {
           launchpad?: string | null
           lifespan_minutes?: number | null
           mesh_decision_trace?: Json | null
+          mesh_hydrated_at?: string | null
           mesh_promoted_at?: string | null
           mesh_promotion_reason?: string | null
           mesh_promotion_status?: string
