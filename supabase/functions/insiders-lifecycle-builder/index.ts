@@ -419,6 +419,7 @@ async function enrichOneToken(supabase: any, row: any, summary: EnrichmentResult
       .update({
         creator_wallet: creator,
         creator_resolved_at: creator ? new Date().toISOString() : null,
+        creator_status: creator ? 'resolved' : 'unresolvable',
         launchpad,
         socials_last_checked_at: new Date().toISOString(),
         socials_changed: anyChanged ? true : row.socials_changed || false,
