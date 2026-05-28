@@ -452,6 +452,53 @@ serve(async (req) => {
   try {
     console.log('[insiders-lifecycle-builder] Starting build...');
 
+    // ---- Concurrency guard ----
+    // Prevent stacked runs from exhausting the DB connection pool. If another
+    // builder run is in flight, exit immediately. Lock auto-released at session
+    // end (when this function instance exits).
+    const LOCK_KEY = 728143001; // arbitrary stable int for this job
+    const { data: lockData, error: lockErr } = await supabase
+      .rpc('pg_try_advisory_lock', { key: LOCK_KEY })
+      .single();
+    // Fallback: many setups don't expose pg_try_advisory_lock via PostgREST.
+    // If RPC missing, do a soft DB-side guard via a sentinel row check instead.
+    let acquired = lockData === true;
+    if (lockErr) {
+      // Soft guard: check most recent run timestamp on edge_function_runs (best-effort)
+      try {
+        const { data: recent } = await supabase
+          .from('edge_function_runs')
+          .select('started_at, status')
+          .eq('function_name', 'insiders-lifecycle-builder')
+          .order('started_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (recent && recent.status === 'running' && recent.started_at) {
+          const ageSec = (Date.now() - new Date(recent.started_at).getTime()) / 1000;
+          if (ageSec < 120) {
+            console.log('[insiders-lifecycle-builder] Soft-guard: prior run in flight, exiting');
+            return new Response(JSON.stringify({ ok: true, skipped: 'prior_run_in_flight' }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
+        acquired = true; // proceed without advisory lock
+      } catch {
+        acquired = true;
+      }
+    }
+    if (!acquired) {
+      console.log('[insiders-lifecycle-builder] Another run in flight, exiting');
+      return new Response(JSON.stringify({ ok: true, skipped: 'lock_held' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ---- Hard deadline ----
+    const DEADLINE_MS = 90_000;
+    const startedAt = Date.now();
+    const deadlineExceeded = () => (Date.now() - startedAt) > DEADLINE_MS;
+
     // Pull every insiders message in chronological order.
     // Page through to bypass 1000-row limit.
     const allRows: any[] = [];
@@ -471,6 +518,10 @@ serve(async (req) => {
       allRows.push(...data);
       if (data.length < PAGE_SIZE) break;
       from += PAGE_SIZE;
+      if (deadlineExceeded()) {
+        console.warn('[insiders-lifecycle-builder] Deadline hit during paging, stopping early');
+        break;
+      }
     }
 
     console.log(`[insiders-lifecycle-builder] Loaded ${allRows.length} messages`);
