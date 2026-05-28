@@ -137,6 +137,7 @@ serve(async (req) => {
     const composeUrl = `${supabaseUrl}/functions/v1/no-lube-compose`;
     const pushUrl = `${supabaseUrl}/functions/v1/no-lube-push`;
     const renderUrl = `${supabaseUrl}/functions/v1/no-lube-render-card`;
+    const composeCardUrl = `${supabaseUrl}/functions/v1/no-lube-compose-card`;
 
     // Load public profile CTA config once (only used when pushing to public).
     const { data: pubProfile } = await supabase
@@ -335,6 +336,30 @@ serve(async (req) => {
       profile: typeof pubProfile,
       brand: string,
     ) => {
+      // Prefer the deterministic template compositor when a template exists.
+      // This guarantees ticker / multiplier / mcap are NEVER mis-rendered by AI.
+      if (tpl) {
+        try {
+          const composed = await invoke(composeCardUrl, anonKey, {
+            mint,
+            ticker: tickerForCard,
+            multiplier,
+            entry_mcap: baseMcap,
+            current_mcap: probeMcap,
+            language: profile?.language || 'en',
+            profile_kind: kind,
+            channel_brand: brand,
+            token_image_url: (probe.json?.vars as any)?.token_image_url || null,
+          });
+          if (composed.ok && composed.json?.ok && composed.json?.image_url) {
+            return String(composed.json.image_url);
+          }
+          console.warn(`[no-lube-orchestrate] compose-card ${kind} failed → falling back to AI render`, composed.json);
+        } catch (e) {
+          console.warn(`[no-lube-orchestrate] compose-card ${kind} threw → falling back to AI render`, e);
+        }
+      }
+      // Fallback: legacy AI render-card.
       try {
         const render = await invoke(renderUrl, anonKey, {
           mint,
