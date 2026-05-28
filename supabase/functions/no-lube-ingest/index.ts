@@ -97,7 +97,7 @@ serve(async (req) => {
 
     // 1. Mesh probe — already-known wallets, prior tokens, sister mints
     try {
-      const r = await invoke(`${supabaseUrl}/functions/v1/token-mesh-hydrate`, serviceKey, { token_mint: mint }, 25000);
+      const r = await invoke(`${supabaseUrl}/functions/v1/token-mesh-hydrate`, serviceKey, { mint, surface: 'no-lube-ingest' }, 25000);
       steps.mesh = { ok: r.ok, status: r.status };
       if (r.ok) {
         await supabase
