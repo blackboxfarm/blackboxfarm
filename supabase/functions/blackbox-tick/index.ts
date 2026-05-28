@@ -11,6 +11,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { parseReply } from "../_shared/blackbox-parsers/index.ts";
+import { assertInsert, assertUpdate, assertUpsert } from "../_shared/db-assert.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -425,9 +426,8 @@ serve(async (req) => {
       if (existing) continue;
 
       const harvestUntil = new Date(Date.now() + HARVEST_WINDOW_SEC * 1000).toISOString();
-      const { data: run, error: insErr } = await supabase
-        .from('blackbox_aggregator_runs')
-        .insert({
+      const run = await assertInsert(
+        supabase.from('blackbox_aggregator_runs').insert({
           token_mint: call.token_mint,
           source_chat_id: insidersChat,
           source_message_id: call.message_id,
@@ -436,8 +436,9 @@ serve(async (req) => {
           status: 'pending',
         })
         .select('id')
-        .single();
-      if (insErr || !run) { summary.errors.push(`run insert: ${insErr?.message}`); continue; }
+        .single(),
+        'blackbox_aggregator_runs',
+      );
 
       // 1a) Post the bare CA via MTProto (as the system_reset user account).
       //     This is the bait that trader bots (Trojan/Phanes/GMGN/Rick/etc.)
@@ -447,12 +448,15 @@ serve(async (req) => {
       // 1b) SUSPENDED — full Holders Report post disabled per ops directive to
       //     stop hammering Phanes. Bare CA bait remains the only group post.
       const ok = baitMsgId != null;
-      await supabase.from('blackbox_aggregator_runs').update({
-        ca_posted_at: new Date().toISOString(),
-        ca_post_message_id: baitMsgId,
-        status: ok ? 'harvesting' : 'failed',
-        error_message: ok ? null : 'MTProto bait CA post to BlackBox group failed',
-      }).eq('id', run.id);
+      await assertUpdate(
+        supabase.from('blackbox_aggregator_runs').update({
+          ca_posted_at: new Date().toISOString(),
+          ca_post_message_id: baitMsgId,
+          status: ok ? 'harvesting' : 'failed',
+          error_message: ok ? null : 'MTProto bait CA post to BlackBox group failed',
+        }).eq('id', run.id),
+        'blackbox_aggregator_runs',
+      );
       summary.created++;
       postedThisTick++;
     }
@@ -464,11 +468,24 @@ serve(async (req) => {
 
   // STEP 2: Harvest + compose for runs whose window has elapsed
   try {
+    // Dead-man switch: never let expired harvest rows live forever. A stuck
+    // harvesting row was repeatedly handing the same dead token to No Lube.
+    await assertUpdate(
+      supabase.from('blackbox_aggregator_runs').update({
+        status: 'failed',
+        error_message: 'stale harvest auto-failed before handoff',
+      })
+      .eq('status', 'harvesting')
+      .lt('harvest_until', new Date(Date.now() - 2 * 60 * 1000).toISOString()),
+      'blackbox_aggregator_runs',
+    );
+
     const { data: ready } = await supabase
       .from('blackbox_aggregator_runs')
       .select('*')
       .eq('status', 'harvesting')
       .lte('harvest_until', new Date().toISOString())
+      .order('harvest_until', { ascending: true })
       .limit(10);
 
     for (const run of (ready || [])) {
@@ -527,15 +544,18 @@ serve(async (req) => {
         const username = m.callerUsername || null;
         const body = m.text || m.message || m.caption || '';
         const { parser, fields } = parseReply(username, body);
-        const { error } = await supabase.from('blackbox_bot_replies').upsert({
-          run_id: run.id,
-          message_id: Number(m.messageId || m.id || 0),
-          bot_username: username,
-          raw_text: body,
-          parsed_jsonb: fields,
-          parser_used: parser,
-        }, { onConflict: 'run_id,message_id' });
-        if (!error) saved++;
+        await assertUpsert(
+          supabase.from('blackbox_bot_replies').upsert({
+            run_id: run.id,
+            message_id: Number(m.messageId || m.id || 0),
+            bot_username: username,
+            raw_text: body,
+            parsed_jsonb: fields,
+            parser_used: parser,
+          }, { onConflict: 'run_id,message_id' }),
+          'blackbox_bot_replies',
+        );
+        saved++;
       }
 
       // Passive parser-sample capture — dump verbatim copies of every reply
@@ -564,10 +584,13 @@ serve(async (req) => {
 
       // Legacy composeDigest path retired — the No Lube orchestrator now owns
       // all routing (Private on first sight, Private + Public on re-sight ≥ Nx).
-      await supabase.from('blackbox_aggregator_runs').update({
-        status: 'handed_off',
-        replies_collected: saved,
-      }).eq('id', run.id);
+      await assertUpdate(
+        supabase.from('blackbox_aggregator_runs').update({
+          status: 'handed_off',
+          replies_collected: saved,
+        }).eq('id', run.id),
+        'blackbox_aggregator_runs',
+      );
       summary.harvested++;
 
      } catch (innerErr: any) {
@@ -575,10 +598,13 @@ serve(async (req) => {
        // backlog drains and the orchestrator stops being re-invoked for
        // tokens whose harvest cycle already expired.
        console.warn('[blackbox-tick] step2 run failed, marking stale', run.id, innerErr?.message);
-       await supabase.from('blackbox_aggregator_runs').update({
-         status: 'failed',
-         error_message: `harvest exception: ${innerErr?.message || innerErr}`,
-       }).eq('id', run.id);
+       await assertUpdate(
+         supabase.from('blackbox_aggregator_runs').update({
+           status: 'failed',
+           error_message: `harvest exception: ${innerErr?.message || innerErr}`,
+         }).eq('id', run.id),
+         'blackbox_aggregator_runs',
+       );
        continue;
      }
 
