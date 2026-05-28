@@ -9,6 +9,8 @@ import { Loader2, Save, RotateCcw, Send, Copy, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { EmojiPickerPopover } from '@/components/admin/telegram/EmojiPickerPopover';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { NoLubeProcessPanel } from './NoLubeProcessPanel';
 import {
   DEFAULT_TEMPLATES,
   processTemplate,
@@ -211,7 +213,7 @@ export function NoLubeChannelPanel({
     });
   };
 
-  return (
+  const body = (
     <div className="space-y-4">
       {/* Per-tab profile: nickname + Telegram link + chat ID lookup */}
       <Card className="bg-card/60 border-border">
@@ -419,5 +421,20 @@ export function NoLubeChannelPanel({
         </CardContent>
       </Card>
     </div>
+  );
+
+  if (kind !== 'private') return body;
+
+  return (
+    <Tabs defaultValue="compose" className="space-y-3">
+      <TabsList>
+        <TabsTrigger value="compose">Compose &amp; Settings</TabsTrigger>
+        <TabsTrigger value="process">Process</TabsTrigger>
+      </TabsList>
+      <TabsContent value="compose">{body}</TabsContent>
+      <TabsContent value="process">
+        <NoLubeProcessPanel />
+      </TabsContent>
+    </Tabs>
   );
 }
