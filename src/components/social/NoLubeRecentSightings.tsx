@@ -16,6 +16,9 @@ interface SightingRow {
   last_posted_at: string | null;
   posted: boolean | null;
   composed_at: string | null;
+  // Joined from telegram_insider_token_lifecycle — preserved Insiders baseline
+  entry_market_cap?: number | null;
+  first_called_at?: string | null;
 }
 
 function fmtMoney(n: number | null): string {
@@ -47,7 +50,26 @@ export function NoLubeRecentSightings() {
       .order('composed_at', { ascending: false })
       .limit(25);
     if (error) toast.error(`Load failed: ${error.message}`);
-    else setRows((data || []) as SightingRow[]);
+    else {
+      const base = (data || []) as SightingRow[];
+      const mints = Array.from(new Set(base.map(r => r.token_mint).filter(Boolean)));
+      if (mints.length) {
+        const { data: lc } = await supabase
+          .from('telegram_insider_token_lifecycle')
+          .select('token_mint, entry_market_cap, first_called_at')
+          .in('token_mint', mints);
+        const byMint = new Map<string, any>();
+        for (const r of (lc || []) as any[]) byMint.set(r.token_mint, r);
+        for (const r of base) {
+          const m = byMint.get(r.token_mint);
+          if (m) {
+            r.entry_market_cap = m.entry_market_cap != null ? Number(m.entry_market_cap) : null;
+            r.first_called_at = m.first_called_at || null;
+          }
+        }
+      }
+      setRows(base);
+    }
     setLoading(false);
   };
 
@@ -75,18 +97,35 @@ export function NoLubeRecentSightings() {
           <p className="text-xs text-muted-foreground">No sightings logged yet.</p>
         )}
         <div className="space-y-1 max-h-[360px] overflow-y-auto">
-          {rows.map(r => (
-            <div key={r.id} className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-2 items-center text-xs py-1.5 border-b border-border/40">
+          {rows.map(r => {
+            const entry = r.entry_market_cap ?? null;
+            const cur = r.last_mcap_at_post ?? null;
+            // True multiplier = current / Insiders entry. Falls back to stored
+            // last_multiplier (legacy) when entry is missing.
+            const trueMult = (entry && cur && entry > 0)
+              ? Number((cur / entry).toFixed(2))
+              : (r.last_multiplier ?? null);
+            const isReallyFirst = !r.first_called_at && !entry;
+            return (
+            <div key={r.id} className="grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto] gap-2 items-center text-xs py-1.5 border-b border-border/40">
               <div className="truncate">
                 <span className="font-mono font-semibold">{r.ticker || '???'}</span>
                 <span className="text-muted-foreground ml-2 font-mono text-[10px]">{r.token_mint.slice(0, 6)}…{r.token_mint.slice(-4)}</span>
               </div>
               <Badge variant="outline" className="text-[10px]">×{r.times_posted ?? 0}</Badge>
-              <span className="text-muted-foreground tabular-nums">{fmtMoney(r.last_mcap_at_post)}</span>
-              {r.last_multiplier ? (
-                <Badge className="text-[10px] bg-green-500/20 text-green-300 border-green-500/40">{r.last_multiplier}x</Badge>
-              ) : (
+              <span
+                className="text-[10px] text-amber-300 tabular-nums"
+                title="Insiders entry MCap (preserved baseline)"
+              >
+                {entry != null ? `entry ${fmtMoney(entry)}` : 'entry —'}
+              </span>
+              <span className="text-muted-foreground tabular-nums" title="MCap at last post">{fmtMoney(cur)}</span>
+              {trueMult && trueMult >= 1.05 ? (
+                <Badge className="text-[10px] bg-green-500/20 text-green-300 border-green-500/40">{trueMult}x</Badge>
+              ) : isReallyFirst ? (
                 <span className="text-[10px] text-muted-foreground">first</span>
+              ) : (
+                <span className="text-[10px] text-muted-foreground">—</span>
               )}
               <span className="text-muted-foreground text-[10px]">{fmtTime(r.last_posted_at || r.composed_at)}</span>
               <Button size="sm" variant="ghost" className="h-7 px-2"
@@ -96,7 +135,8 @@ export function NoLubeRecentSightings() {
                 <Send className={`h-3 w-3 ${triggering === r.token_mint ? 'animate-pulse' : ''}`} />
               </Button>
             </div>
-          ))}
+            );
+          })}
         </div>
         <p className="text-[10px] text-muted-foreground mt-2">
           First sighting → Private only. Re-sighting at ≥ threshold × prior MCap → Private + Public.
