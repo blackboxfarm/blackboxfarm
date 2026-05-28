@@ -1,42 +1,114 @@
-## What I found
+## Goal
 
-- The system is not stuck in Telegram itself; it is repeatedly invoking `no-lube-orchestrate` for the same already-qualified GOSLINGS mint.
-- `no_lube_post_log` shows GOSLINGS posted dozens of times in minutes at the same ~2.1x–2.2x range.
-- The current re-sighting logic posts every time `current_mcap / first_seen_mcap >= 2.0`, but it does **not** require a new higher milestone than the last one already posted.
-- There is also a backlog of `blackbox_aggregator_runs` still sitting in `harvesting`, so old runs can keep getting harvested and handed off again instead of cleanly aging out.
-- The image renderer is being called with only `mint` and `multiplier`, while `no-lube-render-card` currently expects `mint`, `ticker`, and `multiplier`; that is causing repeated `render-card failed, posting text-only` warnings, but it is not the main duplicate-post root cause.
+Stop treating the No Lube post log as the source of truth. The **Insiders channel scrape is the canonical "first seen" event** for every token. Everything else (mesh check, dev wallet discovery, blackbox bot-reply scrape, /holders, private/public posts, X-factor math) flows from that single ingestion.
 
-## Fix plan
+## Current vs. desired behavior
 
-1. **Add milestone de-dupe in `no-lube-orchestrate`**
-   - Calculate the current multiplier from first-seen market cap as now.
-   - Before posting, read the last posted multiplier for that token.
-   - Only post when the token crosses a new material X milestone, not every time it is merely still above 2x.
-   - Example behavior:
-     - first seen 363k → 771k = 2.1x: post once as 2x/2.1x
-     - 771k → 791k while still 2.2x: skip
-     - later reaches 3.0x: post again
-     - later reaches 4.0x: post again
+| | Today | Desired |
+|---|---|---|
+| First-seen mcap baseline | First successful `no_lube_post_log` row | `telegram_insider_token_lifecycle.entry_market_cap` (captured at scrape time from the Insiders message — $107k QUEENBIRD in the screenshot) |
+| Mesh lookup on new token | Not done at ingestion | Run as soon as the CA is parsed |
+| Dev wallet discovery | Lazy, hours later via cron | Resolved immediately on first sighting (Pump.fun → Helius DAS → on-chain) and persisted to mesh |
+| Blackbox bot-reply scrape | Separate manual aggregator | Auto-fired on first sighting; replies harvested after ~15s and merged into mesh |
+| /holders enrichment | Ad-hoc | Run on first sighting AND on every re-sighting (only dynamic data refreshes) |
+| Private vs public posting | OK | Keep, but use the richer enriched payload + Insiders entry_mcap for the X factor |
+| Re-sighting "X factor" | `current_mcap / first_no_lube_post_mcap`, milestone-gated | `current_mcap / insiders_entry_market_cap`, milestone-gated (2x → 3x → 4x …) |
 
-2. **Use a stable milestone label**
-   - Store/compare a milestone floor such as `2`, `3`, `4`, etc. so a token cannot spam `2.1x`, `2.2x`, `2.1x` repeatedly.
-   - Keep the display multiplier available for the message, but the posting gate will be milestone-based.
+## New lifecycle (single source of truth)
 
-3. **Fix the rendered-card call**
-   - Pass the ticker into `no-lube-render-card`, or make the renderer resolve ticker internally.
-   - This removes the `mint, ticker, multiplier required` warning and restores image cards.
+```text
+Insiders TG msg arrives
+  │
+  ▼
+insiders-lifecycle-builder
+  ├─ writes telegram_insider_token_lifecycle row
+  │    (token_mint, ticker, entry_market_cap, age, top10, security, image_url, first_called_at)
+  └─ enqueues new-token job ──▶ no-lube-ingest  (new function)
+                                  │
+                                  ├─ 1. Mesh probe: token_mesh_hydrate(mint)
+                                  │      → returns any prior knowledge, related wallets, sister tokens
+                                  │
+                                  ├─ 2. Dev wallet resolve (fast path):
+                                  │      creator-wallet-resolver({tokenMint, single})
+                                  │      → if found, upsert into mesh (developer_profiles + creator_profiles)
+                                  │      → if dev already known: pull prior_tokens, prior_x_handles,
+                                  │        ATH history, KYC root → attach to lifecycle.metadata
+                                  │
+                                  ├─ 3. Post bare CA into BLACKBOX group
+                                  │      (existing blackbox-tick / aggregator path)
+                                  │      → wait 15s for bot replies → scrape socials (X, website, TG,
+                                  │        Discord), security flags, anything cheaper than API
+                                  │      → fuseCreator() merges everything into mesh
+                                  │
+                                  ├─ 4. /holders enrichment:
+                                  │      bagless-holders-report(mint)
+                                  │      → true wallet count, dust vs whale %, top10 dynamic refresh
+                                  │
+                                  └─ 5. no-lube-orchestrate(mint, source='insiders')
+                                         → first sighting → PRIVATE only, with full enriched payload
+                                         → baseline = lifecycle.entry_market_cap (NOT post_log mcap)
+```
 
-4. **Prevent stale harvest backlog from re-triggering posts**
-   - In `blackbox-tick`, if a harvesting run has no matching bot replies, mark it as completed/failed/stale instead of leaving it in `harvesting` forever.
-   - This keeps the queue moving to new tokens instead of repeatedly revisiting old eligible runs.
+On every later re-sighting (same mint seen again in Insiders OR scheduler tick):
 
-5. **Validate after changes**
-   - Deploy the touched edge functions.
-   - Query recent `no_lube_post_log` rows to confirm GOSLINGS stops reposting at the same milestone.
-   - Confirm new tokens are still first-sighting to private, and public only fires once a new X milestone is crossed.
+```text
+no-lube-orchestrate(mint)
+  ├─ baseline = telegram_insider_token_lifecycle.entry_market_cap   ← immutable
+  ├─ skip dev/mesh/blackbox steps (already done)
+  ├─ refresh ONLY: current mcap, /holders breakdown, AI assessment
+  ├─ ratio = current_mcap / baseline
+  ├─ milestone = floor(ratio); post only when milestone > last posted milestone
+  └─ post PRIVATE + PUBLIC with new X factor, fresh holder %, fresh AI take
+```
 
-## Files to change after approval
+## Files to change
 
-- `supabase/functions/no-lube-orchestrate/index.ts`
-- `supabase/functions/blackbox-tick/index.ts`
-- possibly `supabase/functions/no-lube-render-card/index.ts` if ticker should be resolved inside the renderer instead of passed by orchestrate
+1. **`supabase/functions/no-lube-orchestrate/index.ts`**
+   - Replace the "first post_log row" baseline lookup with a read of
+     `telegram_insider_token_lifecycle.entry_market_cap` for the mint.
+   - Fall back to first post_log mcap only if lifecycle row is missing.
+   - Keep the milestone gate; remove the dependency on `no_lube_post_log` for the baseline.
+   - Pass the lifecycle metadata (ticker, age, top10, security) into compose so templates can use it without re-fetching.
+
+2. **`supabase/functions/no-lube-ingest/index.ts`** *(new)*
+   - Single entry the lifecycle builder calls per new mint.
+   - Sequentially fires: `token-mesh-hydrate` → `creator-wallet-resolver` (single-target) → blackbox CA post → wait + harvest → `bagless-holders-report` → `no-lube-orchestrate`.
+   - Idempotent: marks `telegram_insider_token_lifecycle.ingest_status` so a re-call no-ops.
+
+3. **`supabase/functions/insiders-lifecycle-builder/index.ts`**
+   - After upserting a new lifecycle row, `supabase.functions.invoke('no-lube-ingest', { mint })` (fire-and-forget, don't block the cron).
+
+4. **`supabase/functions/no-lube-compose/index.ts`**
+   - Read `entry_market_cap`, `ticker`, `top10`, `security`, dev dossier from
+     lifecycle + creator_profiles instead of re-deriving.
+   - Accept optional `baseMcap` from orchestrate so it doesn't re-query.
+
+5. **`supabase/functions/blackbox-tick/index.ts`**
+   - Already wired for aggregator scrape; expose a `triggerForMint(mint)` helper
+     so `no-lube-ingest` can fire it on-demand instead of waiting for the cron.
+
+6. **Migration** — add to `telegram_insider_token_lifecycle`:
+   - `ingest_status text default 'pending'` (`pending` | `enriching` | `enriched` | `failed`)
+   - `ingest_completed_at timestamptz`
+   - `dev_wallet_resolved_at timestamptz`
+   - `mesh_hydrated_at timestamptz`
+   - `holders_refreshed_at timestamptz`
+
+## Validation after build
+
+- Trigger Insiders ingest manually for QUEENBIRD (`Btbk9EA2NxNj7x3FbJZSGB6RivLcoAezcwAnwKK8pump`):
+  - lifecycle row has `entry_market_cap = 107000`
+  - `no_lube_post_log` first row uses that as baseline
+  - dev wallet is resolved within 30s
+  - blackbox aggregator run exists for the mint
+  - /holders report row exists
+  - PRIVATE post fires once; PUBLIC stays silent until 2x of $107k = $214k
+- Trigger GOSLINGS again — confirm baseline is the original Insiders entry mcap (not the 363k post-log row) and the next public post only fires at the next integer milestone above what's already been posted.
+
+## Out of scope (will not touch)
+
+- The existing milestone gate logic itself (working as intended).
+- `no-lube-render-card` (already getting ticker + entry_mcap + current_mcap).
+- Telegram bot DM formatting / obfuscation rules.
+
+Reply **Plan Approved** to proceed.
