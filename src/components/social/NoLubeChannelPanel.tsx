@@ -404,14 +404,31 @@ export function NoLubeChannelPanel({
       {/* Compose + Push for THIS channel */}
       <Card className="bg-card/60 border-border">
         <CardContent className="pt-4 space-y-3">
-          <Label className="font-medium">
-            Compose & Push to {
-              kind === 'default' ? 'No Lube (Default channel)'
-              : kind === 'public' ? 'No Lube Public Channel'
-              : kind === 'snapshot' ? 'No Lube Private Channel (snapshot)'
-              : 'No Lube Private Channel'
-            }
-          </Label>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <Label className="font-medium">
+              Compose & Push to {
+                kind === 'default' ? 'No Lube (Default channel)'
+                : kind === 'public' ? (postKind === 'snapshot' ? 'No Lube Private Channel (snapshot)' : 'No Lube Public Channel')
+                : kind === 'snapshot' ? 'No Lube Private Channel (snapshot)'
+                : (postKind === 'snapshot' ? 'No Lube Private Channel (snapshot)' : 'No Lube Private Channel')
+              }
+            </Label>
+            {(kind === 'private' || kind === 'public') && (
+              <ToggleGroup
+                type="single"
+                value={postKind}
+                onValueChange={(v) => { if (v) setPostKind(v as 'snapshot' | 'big_picture'); }}
+                className="bg-muted rounded-md p-0.5"
+              >
+                <ToggleGroupItem value="snapshot" className="text-xs px-2.5 py-1 data-[state=on]:bg-pink-600 data-[state=on]:text-white">
+                  Snapshot
+                </ToggleGroupItem>
+                <ToggleGroupItem value="big_picture" className="text-xs px-2.5 py-1 data-[state=on]:bg-pink-600 data-[state=on]:text-white">
+                  Big Picture
+                </ToggleGroupItem>
+              </ToggleGroup>
+            )}
+          </div>
           <div className="flex gap-2">
             <Input
               placeholder="Paste token address (mint)..."
@@ -455,9 +472,9 @@ export function NoLubeChannelPanel({
                     ? <>⛔ Blocked — {blockReason}</>
                     : <><Send className="h-4 w-4 mr-1" />Push to {
                         kind === 'default' ? 'No Lube'
-                        : kind === 'public' ? 'Public'
+                        : kind === 'public' ? (postKind === 'snapshot' ? 'Private (snapshot)' : 'Public')
                         : kind === 'snapshot' ? 'Private (snapshot)'
-                        : 'Private'
+                        : (postKind === 'snapshot' ? 'Private (snapshot)' : 'Private')
                       }</>}
               </Button>
             </>
