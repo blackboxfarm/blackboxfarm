@@ -700,14 +700,33 @@ serve(async (req) => {
     // through the enrichment chain on their first sighting).
     const allMints = cleanRows.map(r => r.token_mint).filter(Boolean);
     const existingMints = new Set<string>();
+    const existingEntryByMint = new Map<string, number>();
     if (allMints.length > 0) {
       const { data: existing } = await supabase
         .from('telegram_insider_token_lifecycle')
-        .select('token_mint')
+        .select('token_mint, entry_market_cap')
         .in('token_mint', allMints);
-      for (const r of (existing || []) as any[]) existingMints.add(r.token_mint);
+      for (const r of (existing || []) as any[]) {
+        existingMints.add(r.token_mint);
+        if (r.entry_market_cap != null && Number(r.entry_market_cap) > 0) {
+          existingEntryByMint.set(r.token_mint, Number(r.entry_market_cap));
+        }
+      }
     }
     const newMints = allMints.filter(m => !existingMints.has(m));
+
+    // LOWEST-EVER LOCK: entry_market_cap is immutable once set; only ever
+    // moves DOWN if a later observation reveals a lower historical entry.
+    // Never let an upsert raise the baseline.
+    for (const row of cleanRows) {
+      const prior = existingEntryByMint.get(row.token_mint);
+      const parsed = row.entry_market_cap != null ? Number(row.entry_market_cap) : null;
+      if (prior != null && (parsed == null || parsed > prior)) {
+        row.entry_market_cap = prior;
+      } else if (prior != null && parsed != null && parsed < prior) {
+        row.entry_market_cap = parsed; // lowest-ever wins
+      }
+    }
 
     // Upsert in chunks of 200 to avoid request size limits
     const CHUNK = 200;
