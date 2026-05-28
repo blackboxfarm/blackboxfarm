@@ -1,0 +1,1 @@
+ALTER TABLE public.no_lube_global_profile ADD COLUMN IF NOT EXISTS snapshot_use_mint_image boolean NOT NULL DEFAULT true;
