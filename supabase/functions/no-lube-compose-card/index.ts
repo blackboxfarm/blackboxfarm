@@ -118,6 +118,8 @@ serve(async (req) => {
       current_mcap,
       token_image_url,
       channel_brand = 'No Lube Alpha',
+      banner_url = null,
+      has_paid_dex = false,
     } = body || {};
 
     if (!mint || !ticker || !multiplier) {
