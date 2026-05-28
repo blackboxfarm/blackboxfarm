@@ -685,7 +685,9 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                       <TabsTrigger value="default">Default</TabsTrigger>
                       <TabsTrigger value="public">Public Channel</TabsTrigger>
                       <TabsTrigger value="private">Private Channel</TabsTrigger>
+                      <TabsTrigger value="templates">🎯 Templates</TabsTrigger>
                       <TabsTrigger value="assets">🎨 Asset Library</TabsTrigger>
+                      <TabsTrigger value="archive">📦 Archive</TabsTrigger>
                     </TabsList>
                     {(['default', 'public', 'private'] as const).map(kind => {
                       const tname: TemplateName =
@@ -709,6 +711,12 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                     })}
                     <TabsContent value="assets" className="space-y-4 pt-3">
                       <NoLubeAssetLibrary />
+                    </TabsContent>
+                    <TabsContent value="templates" className="space-y-4 pt-3">
+                      <NoLubeTemplateManager />
+                    </TabsContent>
+                    <TabsContent value="archive" className="space-y-4 pt-3">
+                      <NoLubeArchivePanel />
                     </TabsContent>
                   </Tabs>
                 </>
