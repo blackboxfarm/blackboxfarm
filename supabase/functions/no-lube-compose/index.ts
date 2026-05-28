@@ -570,6 +570,18 @@ serve(async (req) => {
     // ---- normalize ----
     const base = dex?.baseToken || {};
     const helContent = hel?.content?.metadata || {};
+    // Token mint image — used as the Telegram photo header on snapshot posts
+    // when the global toggle is enabled. Source order: Helius DAS content.links.image,
+    // Helius first file URI, DexScreener pair info imageUrl, cached metadata image.
+    const helLinksImage = (hel?.content?.links as any)?.image as string | undefined;
+    const helFileUri = (hel?.content?.files as any)?.[0]?.uri as string | undefined;
+    const helFileCdn = (hel?.content?.files as any)?.[0]?.cdn_uri as string | undefined;
+    const dexImage = (dex?.info as any)?.imageUrl as string | undefined;
+    const cachedImage = (cached?.metadata as any)?.image as string | undefined;
+    const tokenImageUrl: string | null =
+      helLinksImage || helFileCdn || helFileUri || dexImage || cachedImage || null;
+    if (tokenImageUrl) sources.tokenImage =
+      helLinksImage || helFileCdn || helFileUri ? 'helius' : dexImage ? 'dexscreener' : 'cache';
     const ticker =
       base.symbol ||
       sol?.meta?.symbol ||
