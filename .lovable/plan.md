@@ -131,3 +131,19 @@ Files touched:
 - new admin React components: `NoLubeTemplateManager.tsx`, `TemplateSafeZoneEditor.tsx`, `NoLubeArchivePanel.tsx`.
 
 Awaiting "Plan Approved" before touching code.
+
+---
+
+## Status (post-implementation)
+
+- DB: `no_lube_card_templates`, `no_lube_card_renders`, `times_used`/`last_used_at` on assets ✅
+- Storage: `no-lube-card-templates` (public) + existing `no-lube-rendered-cards` ✅
+- Edge fn `no-lube-compose-card`: deterministic compositor (template + PFP + text + character asset), JPEG + EXIF rebrand, archived to `no_lube_card_renders`. No AI step in v1 — strict text guaranteed. ✅
+- Orchestrator: prefers `no-lube-compose-card` when a template exists for `(profile_kind, language)`; falls back to the AI `no-lube-render-card` otherwise. Hard mcap invariant in both paths. ✅
+- Admin UI: new tabs under No Lube → **🎯 Templates** (upload PNG, edit safe-zones JSON live preview, font/EXIF/URL/CA toggles) and **📦 Archive** (filter by kind/ticker/mint, thumbnails, prompt). ✅
+- Posting flow restored (`insiders-pipeline-orchestrator-15m` cron re-enabled). ✅
+
+## Follow-up (not done this round)
+- Drag-and-drop safe-zone editor (current editor is JSON + live overlay).
+- Optional AI character-zone edit pass after deterministic composite (when user wants more dynamic characters than the static asset library).
+- Token PFP URL is fetched best-effort from compose `vars.token_image_url`; if upstream compose stops returning it the PFP slot stays empty.
