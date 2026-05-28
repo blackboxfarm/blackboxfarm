@@ -137,18 +137,47 @@ serve(async (req) => {
     // 1. Resolve template — prefer (profile_kind, exact language, enabled), then is_default, then any enabled for kind.
     const langSafe = String(language || 'universal').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 16) || 'universal';
     let tpl: any = null;
+    let selectionReason = 'unknown';
+    let rotationMode = 'sticky';
     {
+      const { data: settings } = await supabase
+        .from('no_lube_channel_settings')
+        .select('active_template_id, rotation_mode, last_used_template_id')
+        .eq('profile_kind', profile_kind)
+        .maybeSingle();
+      rotationMode = settings?.rotation_mode || 'sticky';
+
       const { data } = await supabase.from('no_lube_card_templates')
         .select('*').eq('profile_kind', profile_kind).eq('enabled', true)
-        .order('is_default', { ascending: false })
-        .limit(50);
+        .limit(100);
       const list = (data || []) as any[];
-      tpl = list.find(t => t.language === langSafe)
-         || list.find(t => t.language === 'universal')
-         || list.find(t => t.is_default)
-         || list[0]
-         || null;
+      const langPool = list.filter(t => t.language === langSafe);
+      const pool = langPool.length ? langPool : list.filter(t => t.language === 'universal' || !t.language).concat(list);
+
+      if (rotationMode === 'random' && pool.length) {
+        tpl = pool[Math.floor(Math.random() * pool.length)];
+        selectionReason = `random_from_${pool.length}`;
+      } else if (rotationMode === 'round_robin' && pool.length) {
+        const lastIdx = settings?.last_used_template_id
+          ? pool.findIndex(t => t.id === settings.last_used_template_id) : -1;
+        tpl = pool[(lastIdx + 1) % pool.length];
+        selectionReason = `round_robin_idx_${(lastIdx + 1) % pool.length}`;
+      } else if (settings?.active_template_id) {
+        tpl = list.find(t => t.id === settings.active_template_id) || null;
+        selectionReason = tpl ? 'sticky_settings' : 'sticky_settings_missing';
+      }
+      if (!tpl) {
+        tpl = pool.find(t => t.is_default) || pool[0] || list.find(t => t.is_default) || list[0] || null;
+        if (tpl && selectionReason === 'unknown') selectionReason = 'fallback_default';
+      }
+
+      if (tpl && rotationMode === 'round_robin') {
+        await supabase.from('no_lube_channel_settings')
+          .update({ last_used_template_id: tpl.id, updated_at: new Date().toISOString() })
+          .eq('profile_kind', profile_kind);
+      }
     }
+    console.log('[compose-card] template selected', { profile_kind, language: langSafe, rotation_mode: rotationMode, selection_reason: selectionReason, template_id: tpl?.id });
     if (!tpl) {
       return new Response(JSON.stringify({ ok: false, error: 'no_template', detail: { profile_kind, language: langSafe } }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -228,6 +257,10 @@ serve(async (req) => {
     if (zones.entry_value) drawTextInZone(canvas, font, fmtK(Number(entry_mcap)), zones.entry_value, 0xffffffff, 56);
     if (zones.current_label) drawTextInZone(canvas, font, 'NOW', zones.current_label, 0x94a3b8ff, 26);
     if (zones.current_value) drawTextInZone(canvas, font, fmtK(Number(current_mcap)), zones.current_value, 0x4ade80ff, 56);
+    if (zones.show_url && tpl.show_url !== false) {
+      const urlText = (tpl.url_to_show || channel_brand || 't.me/blackboxfarm').toString();
+      drawTextInZone(canvas, font, urlText, zones.show_url, 0x94a3b8ff, 24);
+    }
 
     // 6. Encode JPEG and rebrand EXIF.
     const jpegBytes = await canvas.encodeJPEG(92);
@@ -278,6 +311,8 @@ serve(async (req) => {
         output_url: publicUrl,
         ai_used: false,
         fallback_reason: null,
+        selection_reason: selectionReason,
+        rotation_mode: rotationMode,
       });
     } catch (e) { console.warn('[compose-card] archive insert failed', e); }
 
@@ -287,6 +322,8 @@ serve(async (req) => {
       template_id: tpl.id,
       template_name: tpl.template_name,
       character_asset_id: characterAssetId,
+      selection_reason: selectionReason,
+      rotation_mode: rotationMode,
       ai_used: false,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
