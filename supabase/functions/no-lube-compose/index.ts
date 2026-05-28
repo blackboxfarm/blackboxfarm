@@ -443,6 +443,25 @@ serve(async (req) => {
     if (mintTs) sources.mintTime = 'helius.signatures';
     if (bondPct != null) sources.bonding = 'pumpfun';
 
+    // Seen-token row (entry mcap + persisted mint timestamp)
+    const { data: seenRow } = await supabase
+      .from('holders_intel_seen_tokens')
+      .select('market_cap_at_discovery, minted_at')
+      .eq('token_mint', mint)
+      .maybeSingle();
+    if (seenRow) sources.seen = 'holders_intel_seen_tokens';
+
+    // Lowest mcap we've ever observed for this token across the ranking history.
+    const { data: minRow } = await supabase
+      .from('token_rankings')
+      .select('market_cap')
+      .eq('token_mint', mint)
+      .not('market_cap', 'is', null)
+      .order('market_cap', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const historicalMin = minRow?.market_cap != null ? Number(minRow.market_cap) : null;
+
     // ---- normalize ----
     const base = dex?.baseToken || {};
     const helContent = hel?.content?.metadata || {};
