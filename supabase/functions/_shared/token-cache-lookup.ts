@@ -80,13 +80,11 @@ export async function lookupKnownToken(
     try {
       const { data: dp } = await supabase
         .from('developer_profiles')
-        .select('master_wallet_address, kyc_root_wallet, kyc_label, kyc_status')
+        .select('master_wallet_address, kyc_root_wallet')
         .eq('master_wallet_address', out.creator_wallet)
         .maybeSingle();
       if (dp?.kyc_root_wallet) {
         out.kyc_root = dp.kyc_root_wallet;
-        out.kyc_label = out.kyc_label ?? dp.kyc_label ?? null;
-        out.kyc_status = out.kyc_status ?? dp.kyc_status ?? null;
         out.hitSources.push('developer_profiles');
       }
     } catch { /* ignore */ }
