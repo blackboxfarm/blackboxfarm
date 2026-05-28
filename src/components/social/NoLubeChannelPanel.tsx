@@ -228,7 +228,9 @@ export function NoLubeChannelPanel({
 
   const body = (
     <div className="space-y-4">
-      {/* Per-tab profile: nickname + Telegram link + chat ID lookup */}
+      {/* Per-tab profile: nickname + Telegram link + chat ID lookup.
+          Hidden on snapshot — snapshot inherits the Private channel config. */}
+      {kind !== 'snapshot' && (
       <Card className="bg-card/60 border-border">
         <CardContent className="pt-4 space-y-3">
           <div className="flex items-center justify-between">
@@ -336,6 +338,22 @@ export function NoLubeChannelPanel({
           )}
         </CardContent>
       </Card>
+      )}
+
+      {kind === 'snapshot' && (
+        <Card className="bg-pink-500/5 border-pink-500/30">
+          <CardContent className="pt-4">
+            <Label className="text-xs font-semibold text-pink-300">
+              📸 Snapshot Post — fast first-touch
+            </Label>
+            <p className="text-xs text-muted-foreground mt-1">
+              Posted to the <strong>Private</strong> channel on the very first sighting, before
+              enrichment completes. Mirrors the bot&apos;s Quick Stats reply. Token mint image is
+              attached as the header when the global toggle is on.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Template editor + Preview — side-by-side */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -384,7 +402,12 @@ export function NoLubeChannelPanel({
       <Card className="bg-card/60 border-border">
         <CardContent className="pt-4 space-y-3">
           <Label className="font-medium">
-            Compose & Push to {kind === 'default' ? 'No Lube (Default channel)' : `No Lube ${kind === 'public' ? 'Public' : 'Private'} Channel`}
+            Compose & Push to {
+              kind === 'default' ? 'No Lube (Default channel)'
+              : kind === 'public' ? 'No Lube Public Channel'
+              : kind === 'snapshot' ? 'No Lube Private Channel (snapshot)'
+              : 'No Lube Private Channel'
+            }
           </Label>
           <div className="flex gap-2">
             <Input
@@ -427,7 +450,12 @@ export function NoLubeChannelPanel({
                   ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Pushing…</>
                   : !eligible
                     ? <>⛔ Blocked — {blockReason}</>
-                    : <><Send className="h-4 w-4 mr-1" />Push to {kind === 'default' ? 'No Lube' : kind === 'public' ? 'Public' : 'Private'}</>}
+                    : <><Send className="h-4 w-4 mr-1" />Push to {
+                        kind === 'default' ? 'No Lube'
+                        : kind === 'public' ? 'Public'
+                        : kind === 'snapshot' ? 'Private (snapshot)'
+                        : 'Private'
+                      }</>}
               </Button>
             </>
           )}
