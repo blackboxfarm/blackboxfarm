@@ -600,6 +600,20 @@ serve(async (req) => {
       };
     });
 
+    // Detect which mints are net-new BEFORE we upsert, so we can fire
+    // no-lube-ingest only for them (the existing rows already went
+    // through the enrichment chain on their first sighting).
+    const allMints = upsertRows.map(r => r.token_mint).filter(Boolean);
+    const existingMints = new Set<string>();
+    if (allMints.length > 0) {
+      const { data: existing } = await supabase
+        .from('telegram_insider_token_lifecycle')
+        .select('token_mint')
+        .in('token_mint', allMints);
+      for (const r of (existing || []) as any[]) existingMints.add(r.token_mint);
+    }
+    const newMints = allMints.filter(m => !existingMints.has(m));
+
     // Upsert in chunks of 200 to avoid request size limits
     const CHUNK = 200;
     let upserted = 0;
@@ -613,6 +627,22 @@ serve(async (req) => {
         throw error;
       }
       upserted += chunk.length;
+    }
+
+    // Fire-and-forget no-lube-ingest for every brand-new mint. Each call
+    // runs the mesh probe → dev wallet → blackbox harvest → /holders →
+    // orchestrate chain. We don't await so the cron stays snappy.
+    if (newMints.length > 0) {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      console.log(`[insiders-lifecycle-builder] Dispatching no-lube-ingest for ${newMints.length} new mints`);
+      for (const mint of newMints) {
+        fetch(`${supabaseUrl}/functions/v1/no-lube-ingest`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
+          body: JSON.stringify({ mint }),
+        }).catch((e) => console.warn(`[insiders-lifecycle-builder] ingest dispatch failed for ${mint}:`, (e as Error).message));
+      }
     }
 
     // Compute summary stats
