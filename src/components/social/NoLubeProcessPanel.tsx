@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, RefreshCw, FileText, ExternalLink } from 'lucide-react';
+import { Loader2, RefreshCw, FileText, ExternalLink, Play } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import processMd from '../../../docs/no-lube-process.md?raw';
 
@@ -42,6 +42,7 @@ type Row = Record<string, unknown> & {
   ingest_status: string | null;
   creator_status: string | null;
   kyc_status: string | null;
+  mesh_hydrated_at: string | null;
 };
 
 const fmt = (v: unknown): string => {
@@ -55,6 +56,7 @@ const short = (s: string, n = 6) => (s.length > n * 2 + 2 ? `${s.slice(0, n)}…
 export function NoLubeProcessPanel() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
+  const [running, setRunning] = useState(false);
   const [showDoc, setShowDoc] = useState(false);
   const [selected, setSelected] = useState<Row | null>(null);
 
@@ -69,6 +71,16 @@ export function NoLubeProcessPanel() {
     setLoading(false);
   };
 
+  const runPipeline = async () => {
+    setRunning(true);
+    try {
+      await supabase.functions.invoke('insiders-pipeline-orchestrator', { body: {} });
+      await load();
+    } finally {
+      setRunning(false);
+    }
+  };
+
   useEffect(() => { load(); }, []);
 
   return (
@@ -78,12 +90,17 @@ export function NoLubeProcessPanel() {
           <div>
             <div className="text-sm font-semibold">Insiders → No Lube pipeline</div>
             <p className="text-xs text-muted-foreground">
-              Every field the system fetches, resolves, calculates and writes per token. Click a token row to see its live values.
+              Status columns reflect the real enrichment pipeline (creator wallet → KYC root → mesh hydration).
+              <span className="text-amber-400"> Note:</span> <code>ingest_status</code> is the No-Lube posting flag — it stays <code>pending</code> until a card is composed, so don't read it as pipeline health.
             </p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowDoc(true)}>
               <FileText className="h-3 w-3 mr-1" /> View protocol
+            </Button>
+            <Button variant="outline" size="sm" onClick={runPipeline} disabled={running}>
+              {running ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Play className="h-3 w-3 mr-1" />}
+              Run pipeline now
             </Button>
             <Button variant="outline" size="sm" onClick={load} disabled={loading}>
               {loading ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1" />}
@@ -102,9 +119,9 @@ export function NoLubeProcessPanel() {
             <TableHeader>
               <TableRow>
                 <TableHead compact>Ticker / Mint</TableHead>
-                <TableHead compact>Ingest</TableHead>
                 <TableHead compact>Creator</TableHead>
                 <TableHead compact>KYC</TableHead>
+                <TableHead compact>Mesh</TableHead>
                 <TableHead compact>First called</TableHead>
               </TableRow>
             </TableHeader>
@@ -122,9 +139,13 @@ export function NoLubeProcessPanel() {
                       <ExternalLink className="h-3 w-3 text-muted-foreground" />
                     </div>
                   </TableCell>
-                  <TableCell compact><Badge variant="outline" className="text-[10px]">{r.ingest_status || '—'}</Badge></TableCell>
                   <TableCell compact><Badge variant="outline" className="text-[10px]">{r.creator_status || '—'}</Badge></TableCell>
                   <TableCell compact><Badge variant="outline" className="text-[10px]">{r.kyc_status || '—'}</Badge></TableCell>
+                  <TableCell compact>
+                    <Badge variant="outline" className="text-[10px]">
+                      {r.mesh_hydrated_at ? 'hydrated' : '—'}
+                    </Badge>
+                  </TableCell>
                   <TableCell compact className="text-[10px] text-muted-foreground">
                     {new Date(r.first_called_at).toLocaleString()}
                   </TableCell>
