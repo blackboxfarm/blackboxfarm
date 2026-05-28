@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -38,6 +39,7 @@ export function NoLubeProfileHeader() {
   const [saving, setSaving] = useState(false);
   const [language, setLanguage] = useState('en');
   const [style, setStyle] = useState('degen');
+  const [snapshotUseMintImage, setSnapshotUseMintImage] = useState(true);
 
   const [socials, setSocials] = useState<SocialRow[]>([]);
   const [pwEditing, setPwEditing] = useState<string | null>(null);
@@ -53,7 +55,11 @@ export function NoLubeProfileHeader() {
         (supabase as any).from('no_lube_global_profile').select('*').eq('id', 'singleton').maybeSingle(),
         (supabase as any).from('no_lube_socials').select('*').order('display_order', { ascending: true }),
       ]);
-      if (g) { setLanguage(g.language || 'en'); setStyle(g.style || 'degen'); }
+      if (g) {
+        setLanguage(g.language || 'en');
+        setStyle(g.style || 'degen');
+        setSnapshotUseMintImage(g.snapshot_use_mint_image !== false);
+      }
       setSocials((s as SocialRow[]) || []);
     } catch (e: any) {
       toast.error(`Failed to load: ${e.message}`);
@@ -65,7 +71,13 @@ export function NoLubeProfileHeader() {
     try {
       const { error } = await (supabase as any)
         .from('no_lube_global_profile')
-        .upsert({ id: 'singleton', language, style, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+        .upsert({
+          id: 'singleton',
+          language,
+          style,
+          snapshot_use_mint_image: snapshotUseMintImage,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' });
       if (error) throw error;
       toast.success('Profile saved');
     } catch (e: any) { toast.error(`Save failed: ${e.message}`); }
