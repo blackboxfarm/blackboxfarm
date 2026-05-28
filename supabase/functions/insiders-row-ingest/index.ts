@@ -60,6 +60,7 @@ serve(async (req) => {
   const messageId: number | null = body?.message_id ?? null;
   const rawMessage: string | null = body?.raw_message ?? null;
   const messageTimestamp: string | null = body?.message_timestamp ?? null;
+  const channelName: string = body?.channel_name || 'insiders';
 
   if (!mint || mint.length < 32) {
     return new Response(JSON.stringify({ ok: false, error: 'mint required' }), {
@@ -110,7 +111,7 @@ serve(async (req) => {
   const upsertRow: any = {
     token_mint: mint,
     token_symbol: symbol,
-    channel_name: 'insiders',
+    channel_name: channelName,
     first_call_message_id: messageId,
     first_called_at: messageTimestamp || now,
     raw_alert_message: rawMessage,
