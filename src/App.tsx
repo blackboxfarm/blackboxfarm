@@ -52,6 +52,7 @@ const BannerCheckout = lazy(() => import("./pages/BannerCheckout"));
 const BannerPreview = lazy(() => import("./pages/BannerPreview"));
 const MyBanners = lazy(() => import("./pages/MyBanners"));
 const TokenAnalysisDownload = lazy(() => import("./pages/TokenAnalysisDownload"));
+const Wtf = lazy(() => import("./pages/Wtf"));
 
 const IntelReport = lazy(() => import("./pages/IntelReport"));
 const HoldersLanding = lazy(() => import("./pages/HoldersLanding"));
@@ -110,6 +111,7 @@ const App = () => {
                     <Routes>
                       <Route path="/" element={<Home />} />
                       <Route path="/dashboard" element={<Dashboard />} />
+                      <Route path="/wtf" element={<Wtf />} />
                       <Route path="/onboarding" element={<Onboarding />} />
                       <Route path="/auth" element={<Auth />} />
                       <Route path="/admin" element={<SuperAdminRoute><Navigate to="/super-admin" replace /></SuperAdminRoute>} />
