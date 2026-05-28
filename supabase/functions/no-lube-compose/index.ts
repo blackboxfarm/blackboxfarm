@@ -375,6 +375,33 @@ serve(async (req) => {
       .maybeSingle();
     if (healthRow) sources.health = 'token_health_snapshots';
 
+    // Pull the 4-bucket Wallet Distribution from bagless-holders-report (same
+    // source the /quick TG reply uses). Skipped on snapshot kind since snapshot
+    // is supposed to fire fast with zero enrichment cost.
+    let simpleTiers: any = null;
+    if (kind === 'big_picture') {
+      try {
+        const baglessResp = await fetch(
+          `${Deno.env.get('SUPABASE_URL')}/functions/v1/bagless-holders-report`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            },
+            body: JSON.stringify({ tokenMint: mint }),
+          },
+        );
+        if (baglessResp.ok) {
+          const baglessData = await baglessResp.json();
+          simpleTiers = baglessData?.simpleTiers ?? null;
+          if (simpleTiers) sources.distribution = 'bagless-holders-report';
+        }
+      } catch (e) {
+        console.error('[no-lube-compose] bagless-holders-report fetch failed', e);
+      }
+    }
+
     // 1) Template — per-channel/kind, with snapshot fallback to private template
     const { data: tplRow } = await supabase
       .from('holders_intel_templates')
@@ -635,6 +662,27 @@ serve(async (req) => {
       bundledRisk: healthRow?.whale_count != null
         ? `${healthRow.whale_count} whales`
         : DASH,
+      // ── Wallet Distribution buckets (from bagless-holders-report.simpleTiers) ──
+      whalesPct: simpleTiers?.whales?.percentage != null ? `${Math.round(simpleTiers.whales.percentage)}%` : DASH,
+      seriousPct: simpleTiers?.serious?.percentage != null ? `${Math.round(simpleTiers.serious.percentage)}%` : DASH,
+      retailPct: simpleTiers?.retail?.percentage != null ? `${Math.round(simpleTiers.retail.percentage)}%` : DASH,
+      dustPct: simpleTiers?.dust?.percentage != null ? `${Math.round(simpleTiers.dust.percentage)}%` : DASH,
+      whalesBar: simpleTiers?.whales?.percentage != null ? fmtBondingBar(simpleTiers.whales.percentage) : '░░░░░░░░░░',
+      seriousBar: simpleTiers?.serious?.percentage != null ? fmtBondingBar(simpleTiers.serious.percentage) : '░░░░░░░░░░',
+      retailBar: simpleTiers?.retail?.percentage != null ? fmtBondingBar(simpleTiers.retail.percentage) : '░░░░░░░░░░',
+      dustBar: simpleTiers?.dust?.percentage != null ? fmtBondingBar(simpleTiers.dust.percentage) : '░░░░░░░░░░',
+      walletDistBlock: simpleTiers
+        ? [
+            `\`Whales  ${fmtBondingBar(simpleTiers.whales?.percentage ?? 0)} ${Math.round(simpleTiers.whales?.percentage ?? 0)}%\`  >$1K`,
+            `\`Serious ${fmtBondingBar(simpleTiers.serious?.percentage ?? 0)} ${Math.round(simpleTiers.serious?.percentage ?? 0)}%\`  $200-$1K`,
+            `\`Retail  ${fmtBondingBar(simpleTiers.retail?.percentage ?? 0)} ${Math.round(simpleTiers.retail?.percentage ?? 0)}%\`  $1-$199`,
+            `\`Dust    ${fmtBondingBar(simpleTiers.dust?.percentage ?? 0)} ${Math.round(simpleTiers.dust?.percentage ?? 0)}%\`  <$1`,
+          ].join('\n')
+        : DASH,
+      realHolders: healthRow?.real_holders != null ? String(healthRow.real_holders) : DASH,
+      totalHolders: healthRow?.total_holders != null ? String(healthRow.total_holders) : DASH,
+      healthScore: healthRow?.health_score != null ? String(healthRow.health_score) : DASH,
+      healthGrade: healthRow?.health_grade || DASH,
       aiBullet1: DASH,
       aiBullet2: DASH,
       aiBullet3: DASH,
