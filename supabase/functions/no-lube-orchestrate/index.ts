@@ -141,9 +141,32 @@ serve(async (req) => {
     // Load public profile CTA config once (only used when pushing to public).
     const { data: pubProfile } = await supabase
       .from('no_lube_channel_profiles')
-      .select('trade_bot_username, access_purchase_url, cta_button_text')
+      .select('trade_bot_username, access_purchase_url, cta_button_text, language')
       .eq('kind', 'public')
       .maybeSingle();
+    const { data: privProfile } = await supabase
+      .from('no_lube_channel_profiles')
+      .select('language')
+      .eq('kind', 'private')
+      .maybeSingle();
+
+    // Resolve the active template for a (profile_kind, language) pair.
+    const loadTemplate = async (kind: 'private' | 'public', language: string | null) => {
+      const lang = language || 'universal';
+      // Prefer (kind, exact language, is_default), then (kind, exact language), then (kind, universal).
+      const { data: rows } = await supabase
+        .from('no_lube_card_templates')
+        .select('id, profile_kind, language, show_url, url_to_show, show_ca, is_default')
+        .eq('profile_kind', kind)
+        .eq('enabled', true);
+      const list = rows || [];
+      const exact = list.filter(r => r.language === lang);
+      const universal = list.filter(r => r.language === 'universal');
+      const pickFrom = (arr: typeof list) =>
+        arr.find(r => r.is_default) || arr[0] || null;
+      return pickFrom(exact) || pickFrom(universal) || null;
+    };
+
     const buildPublicCta = () => {
       const url = pubProfile?.access_purchase_url
         || (pubProfile?.trade_bot_username
@@ -253,6 +276,15 @@ serve(async (req) => {
       return jsonResp({ ok: true, flow: 'skipped', skipped: true, reason: 'current_mcap_unknown', threshold });
     }
 
+    // Hard invariant: refuse to proceed without both market caps.
+    if (!baseMcap || baseMcap <= 0) {
+      return jsonResp({
+        ok: true, flow: 'skipped', skipped: true,
+        reason: 'missing_mcap_invariant',
+        detail: { base_mcap: baseMcap, current_mcap: probeMcap },
+      });
+    }
+
     const ratio = probeMcap / baseMcap;
     if (ratio < threshold) {
       return jsonResp({
@@ -296,7 +328,9 @@ serve(async (req) => {
     const privateResult = await composeAndPush('private', mint, multiplier);
 
     // For the public channel, generate an AI hype card and attach a CTA button.
+    // Look up template config (show_url / show_ca / url_to_show) per channel.
     let publicImageUrl: string | null = null;
+    const publicTpl = await loadTemplate('public', pubProfile?.language || null);
     try {
       const tickerForCard =
         (probe.json?.vars?.ticker as string | undefined) ||
@@ -308,6 +342,14 @@ serve(async (req) => {
         multiplier,
         entry_mcap: baseMcap,
         current_mcap: probeMcap,
+        language: pubProfile?.language || 'en',
+        profile_kind: 'public',
+        show_url: publicTpl?.show_url ?? false,
+        url_to_show: publicTpl?.url_to_show
+          ?? (pubProfile?.trade_bot_username
+                ? `t.me/${String(pubProfile.trade_bot_username).replace(/^@/, '')}`
+                : null),
+        show_ca: publicTpl?.show_ca ?? true,
       });
       if (render.ok && render.json?.ok && render.json?.image_url) {
         publicImageUrl = String(render.json.image_url);
@@ -317,6 +359,35 @@ serve(async (req) => {
     } catch (e) {
       console.warn('[no-lube-orchestrate] render-card threw', e);
     }
+
+    // Private channel: render its own card (distinct template/fields).
+    let privateImageUrl: string | null = null;
+    const privateTpl = await loadTemplate('private', privProfile?.language || null);
+    try {
+      const tickerForCard =
+        (probe.json?.vars?.ticker as string | undefined) ||
+        (privateResult as any)?.ticker ||
+        null;
+      const render = await invoke(renderUrl, anonKey, {
+        mint,
+        ticker: tickerForCard,
+        multiplier,
+        entry_mcap: baseMcap,
+        current_mcap: probeMcap,
+        language: privProfile?.language || 'en',
+        profile_kind: 'private',
+        channel_brand: 'Premium Insiders',
+        show_url: privateTpl?.show_url ?? false,
+        url_to_show: privateTpl?.url_to_show ?? null,
+        show_ca: privateTpl?.show_ca ?? true,
+      });
+      if (render.ok && render.json?.ok && render.json?.image_url) {
+        privateImageUrl = String(render.json.image_url);
+      }
+    } catch (e) {
+      console.warn('[no-lube-orchestrate] private render-card threw', e);
+    }
+
     const publicCta = buildPublicCta();
     const publicResult = await composeAndPush('public', mint, multiplier, {
       image_url: publicImageUrl,
