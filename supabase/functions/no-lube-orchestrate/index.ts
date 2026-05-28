@@ -490,6 +490,8 @@ serve(async (req) => {
             profile_kind: kind,
             channel_brand: brand,
             token_image_url: (probe.json?.vars as any)?.token_image_url || null,
+            banner_url: probe.json?.banner_url || null,
+            has_paid_dex: probe.json?.has_paid_dex === true,
           });
           if (composed.ok && composed.json?.ok && composed.json?.image_url) {
             return String(composed.json.image_url);
@@ -498,6 +500,11 @@ serve(async (req) => {
         } catch (e) {
           console.warn(`[no-lube-orchestrate] compose-card ${kind} threw → falling back to AI render`, e);
         }
+        // MILESTONE INVARIANT: do NOT let the AI render fabricate imagery
+        // when the deterministic compositor fails. Returning null here makes
+        // composeAndPush push the post as text-only (no fake banner image).
+        console.warn(`[no-lube-orchestrate] milestone ${kind}: compose-card unavailable, skipping AI fallback (no synthesized image).`);
+        return null;
       }
       // Fallback: legacy AI render-card.
       try {
