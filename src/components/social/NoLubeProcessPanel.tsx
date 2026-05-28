@@ -65,12 +65,22 @@ export function NoLubeProcessPanel() {
 
   const load = async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    const { data: marker } = await supabase
+      .from('pipeline_reset_markers' as never)
+      .select('reset_after')
+      .eq('pipeline_name', 'insiders_no_lube_process_queue')
+      .maybeSingle();
+
+    let query = supabase
       .from('telegram_insider_token_lifecycle')
       .select(FIELDS.concat(['id']).join(','))
       .neq('ingest_status', 'archived')
-      .order('first_called_at', { ascending: false })
-      .limit(100);
+      .order('first_called_at', { ascending: false });
+
+    const resetAfter = (marker as { reset_after?: string } | null)?.reset_after;
+    if (resetAfter) query = query.gt('created_at', resetAfter);
+
+    const { data, error } = await query.limit(100);
     if (!error && data) setRows(data as unknown as Row[]);
     setLoading(false);
   };
