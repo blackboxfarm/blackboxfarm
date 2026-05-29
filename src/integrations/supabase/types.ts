@@ -24202,20 +24202,15 @@ export type Database = {
       }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       is_user_banned: { Args: { target_user_id: string }; Returns: boolean }
-      lock_entry_mcap:
-        | {
-            Args: { p_mint: string; p_observed: number; p_symbol?: string }
-            Returns: number
-          }
-        | {
-            Args: {
-              p_mint: string
-              p_observed: number
-              p_source?: string
-              p_symbol?: string
-            }
-            Returns: number
-          }
+      lock_entry_mcap: {
+        Args: {
+          p_mint: string
+          p_observed: number
+          p_source?: string
+          p_symbol?: string
+        }
+        Returns: number
+      }
       log_auth_failure: {
         Args: { client_info?: Json; failure_reason: string; user_email: string }
         Returns: undefined
