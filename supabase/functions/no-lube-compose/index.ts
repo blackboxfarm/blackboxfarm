@@ -583,13 +583,32 @@ serve(async (req) => {
     // Live sources first, then fall back to persisted holders_intel_seen_tokens.image_uri
     // (so re-runs reuse the canonical URL once we've validated one).
     const seenImage = (seenRow as any)?.image_uri as string | undefined;
+    // Pump.fun fallback — many pump.fun tokens don't have a Helius DAS image
+    // or DexScreener info.imageUrl until they graduate. Their canonical PFP
+    // lives on the pump.fun frontend API. Fetch it as a last resort so the
+    // mint_pfp circle on the compose card never renders blank.
+    let pumpImage: string | null = null;
+    try {
+      const pfRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (pfRes.ok) {
+        const pfJson: any = await pfRes.json().catch(() => null);
+        if (pfJson?.image_uri && typeof pfJson.image_uri === 'string') {
+          pumpImage = pfJson.image_uri;
+        }
+      }
+    } catch (e) {
+      console.warn('[no-lube-compose] pump.fun image fallback failed', (e as Error).message);
+    }
     const tokenImageUrl: string | null =
-      helLinksImage || helFileCdn || helFileUri || dexImage || seenImage || cachedImage || null;
+      helLinksImage || helFileCdn || helFileUri || dexImage || seenImage || cachedImage || pumpImage || null;
     if (tokenImageUrl) sources.tokenImage =
       (helLinksImage || helFileCdn || helFileUri) ? 'helius'
       : dexImage ? 'dexscreener'
       : seenImage ? 'seen_token_cache'
-      : 'cache';
+      : cachedImage ? 'cache'
+      : 'pump.fun';
 
     // DexScreener banner — read DB cache first, then live fetch, then persist.
     // Also surface a paid-DEX flag (boosts.active > 0) so the card compositor
