@@ -523,6 +523,34 @@ export const TEMPLATE_VARIABLES = [
   { var: '{twitterUrl}', desc: 'No Lube — token X/Twitter URL' },
   { var: '{telegramUrl}', desc: 'No Lube — token Telegram URL' },
   { var: '{websiteUrl}', desc: 'No Lube — token website URL' },
+  // ── No Lube multiplier + lifecycle ──
+  { var: '{multiplier}', desc: 'No Lube — multiplier label rendered lowercase (e.g. 2.4x)' },
+  { var: '{multiplierLine}', desc: 'No Lube — full multiplier badge line (blank on first sighting)' },
+  { var: '{mintTime}', desc: 'No Lube — mint timestamp (UTC)' },
+  { var: '{mint_ago}', desc: 'No Lube — humanised "minted X ago"' },
+  { var: '{mint_stamp}', desc: 'No Lube — short mint timestamp' },
+  { var: '{progress}', desc: 'No Lube — bonding-curve progress line ("Bonded! 3h ago" or bar + %)' },
+  { var: '{bondingbar}', desc: 'No Lube — ASCII bonding-curve bar' },
+  { var: '{bondingpct}', desc: 'No Lube — bonding-curve percent (raw number)' },
+  { var: '{bondingState}', desc: 'No Lube — bonding state copy ("Not Yet Bonded! 64% Bonding Curve!")' },
+  { var: '{momentumIcon}', desc: 'No Lube — momentum emoji icon' },
+  { var: '{riskIcon}', desc: 'No Lube — risk emoji icon' },
+  { var: '{verdictIcon}', desc: 'No Lube — verdict emoji icon' },
+  // ── No Lube wallet-distribution buckets ──
+  { var: '{walletDistBlock}', desc: 'No Lube — full 4-row Whales/Serious/Retail/Dust block with bars' },
+  { var: '{whalesPct}', desc: 'No Lube — Whales (>$1K) percent' },
+  { var: '{seriousPct}', desc: 'No Lube — Serious ($200-$1K) percent' },
+  { var: '{whalesBar}', desc: 'No Lube — Whales ASCII bar' },
+  // ── No Lube Intel Alerts ──
+  { var: '{intelAlerts}', desc: 'No Lube — full Intel Alerts block (all warnings)' },
+  { var: '{intelAlert1}', desc: 'No Lube — Intel Alert #1 (top warning)' },
+  { var: '{intelAlert2}', desc: 'No Lube — Intel Alert #2' },
+  { var: '{intelAlert3}', desc: 'No Lube — Intel Alert #3' },
+  { var: '{intelAlertCount}', desc: 'No Lube — number of intel alerts surfaced' },
+  // ── No Lube card / image plumbing ──
+  { var: '{token_image_url}', desc: 'No Lube — token mint PFP URL (used as snapshot header)' },
+  { var: '{banner_url}', desc: 'No Lube — DexScreener paid banner URL (when available)' },
+  { var: '{has_paid_dex}', desc: 'No Lube — "true"/"false" — token has DexScreener Paid info' },
 ];
 
 export interface TokenShareData {
