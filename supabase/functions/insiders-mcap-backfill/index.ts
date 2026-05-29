@@ -72,10 +72,9 @@ serve(async (req) => {
       .from('telegram_channel_calls')
       .select('id, token_mint, token_symbol, token_name, market_cap_at_call, raw_message, message_timestamp')
       .eq('channel_id', channelId)
-      .order('message_timestamp', { ascending: false })
+      .order('message_timestamp', { ascending: false, nullsFirst: false })
       .limit(limit);
     if (error) throw error;
-    console.log(`[insiders-mcap-backfill] fetched rows=${rows?.length ?? 0} first=`, rows?.[0]);
 
     // Dedupe per mint, keep LOWEST MC (best entry) within the scan window.
     const perMint = new Map<string, {
