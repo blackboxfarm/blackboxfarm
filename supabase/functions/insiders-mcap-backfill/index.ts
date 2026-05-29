@@ -80,6 +80,7 @@ serve(async (req) => {
       .from('telegram_channel_calls')
       .select('id, token_mint, token_symbol, market_cap_at_call, raw_message, message_id, message_timestamp')
       .eq('channel_id', channelId)
+      .or('raw_message.ilike.%Entry MC%,raw_message.ilike.%Market Cap%,raw_message.ilike.%MC:%')
       .order('message_timestamp', { ascending: false })
       .limit(limit);
     if (onlyNull) query = query.is('market_cap_at_call', null);
