@@ -16616,6 +16616,48 @@ export type Database = {
         }
         Relationships: []
       }
+      system_alerts: {
+        Row: {
+          alert_key: string
+          context: Json | null
+          created_at: string
+          first_seen_at: string
+          id: string
+          last_seen_at: string
+          message: string
+          occurrence_count: number
+          resolved_at: string | null
+          severity: string
+          source: string
+        }
+        Insert: {
+          alert_key: string
+          context?: Json | null
+          created_at?: string
+          first_seen_at?: string
+          id?: string
+          last_seen_at?: string
+          message: string
+          occurrence_count?: number
+          resolved_at?: string | null
+          severity?: string
+          source: string
+        }
+        Update: {
+          alert_key?: string
+          context?: Json | null
+          created_at?: string
+          first_seen_at?: string
+          id?: string
+          last_seen_at?: string
+          message?: string
+          occurrence_count?: number
+          resolved_at?: string | null
+          severity?: string
+          source?: string
+        }
+        Relationships: []
+      }
       system_settings: {
         Row: {
           key: string
