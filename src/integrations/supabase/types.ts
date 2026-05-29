@@ -24202,10 +24202,20 @@ export type Database = {
       }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       is_user_banned: { Args: { target_user_id: string }; Returns: boolean }
-      lock_entry_mcap: {
-        Args: { p_mint: string; p_observed: number; p_symbol?: string }
-        Returns: number
-      }
+      lock_entry_mcap:
+        | {
+            Args: { p_mint: string; p_observed: number; p_symbol?: string }
+            Returns: number
+          }
+        | {
+            Args: {
+              p_mint: string
+              p_observed: number
+              p_source?: string
+              p_symbol?: string
+            }
+            Returns: number
+          }
       log_auth_failure: {
         Args: { client_info?: Json; failure_reason: string; user_email: string }
         Returns: undefined
@@ -24297,6 +24307,21 @@ export type Database = {
       update_dex_cron_interval: {
         Args: { minutes_interval: number }
         Returns: undefined
+      }
+      upsert_mesh_entry_mcap: {
+        Args: {
+          p_mint: string
+          p_name?: string
+          p_observed_at?: string
+          p_observed_mcap?: number
+          p_source?: string
+          p_symbol?: string
+        }
+        Returns: {
+          entry_mcap_usd: number
+          first_seen_at: string
+          within_window: boolean
+        }[]
       }
       validate_profile_access: {
         Args: { target_user_id: string }
