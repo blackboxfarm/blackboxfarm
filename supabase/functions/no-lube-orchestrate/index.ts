@@ -396,7 +396,12 @@ serve(async (req) => {
     }
 
     // ---- RE-SIGHTING: compare current mcap against the FIRST-SEEN mcap ----
-    const baseMcap = Number(firstMcap ?? prev.mcap ?? 0);
+    // NOTE: baseMcap is intentionally computed AFTER the lock_entry_mcap RPC
+    // below so the lowest-ever floor (Insiders scrape + BlackBox + HoldersIntel)
+    // is what we measure the multiplier against. The math is simply:
+    //   ratio = currentMcap / lowestEverEntryMcap
+    // and we post when ratio crosses each new integer milestone (2x, 3x...).
+    let baseMcap = Number(firstMcap ?? prev.mcap ?? 0);
     if (!baseMcap) {
       // No baseline to compare against — treat as first sighting
       const result = await composeAndPush('private', mint, null);
@@ -423,9 +428,10 @@ serve(async (req) => {
     }
 
     // LOWEST-EVER ENTRY LOCK: ensure the lifecycle row carries an immutable
-    // entry baseline. If no Insiders entry exists, the current probe becomes
-    // the baseline. If a prior baseline exists, this RPC keeps the lower of
-    // the two — entry MCap never moves up.
+    // entry baseline. The RPC now LEAST()s across every source we observe
+    // (Insiders scrape, BlackBox/Dex sweeps, HoldersIntel discovery + floor)
+    // and the current probe, then mirrors the floor into
+    // holders_intel_seen_tokens.entry_mcap_usd so {mcEntry} matches.
     try {
       const tickerProbe = (probe.json?.vars as any)?.ticker || lcRow?.token_symbol || null;
       const { data: locked } = await supabase.rpc('lock_entry_mcap', {
@@ -435,11 +441,15 @@ serve(async (req) => {
       });
       if (locked != null && Number(locked) > 0) {
         const lockedNum = Number(locked);
-        // If we had no baseline before, adopt the locked value going forward.
+        // Always adopt the locked floor as the new baseline — the RPC is
+        // downward-only, so this can only ever move baseMcap DOWN (or keep it
+        // the same), never up. This guarantees the milestone math uses the
+        // lowest mcap we've ever seen, exactly as described in the protocol.
         if (!firstMcap || lockedNum < firstMcap) {
           firstMcap = lockedNum;
           if (baselineSource === 'none') baselineSource = 'insiders';
         }
+        baseMcap = lockedNum;
       }
     } catch (e) {
       console.warn('[no-lube-orchestrate] lock_entry_mcap failed (non-fatal):', (e as Error).message);
