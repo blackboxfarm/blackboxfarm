@@ -44,7 +44,7 @@ type TplRow = {
 };
 
 const DEFAULT_SAFE_ZONES = {
-  mint_pfp: { x: 40, y: 50, w: 110, h: 110, shape: 'circle' },
+  mint_pfp: { x: 70, y: 80, w: 220, h: 220, shape: 'circle' },
   ticker: {
     x: 160, y: 55, w: 500, h: 56, align: 'left',
     plaque: { shape: 'rect', radius: 10, fill: '#000000', opacity: 0.6, pad_x: 18, pad_y: 8, text_color: '#22d3ee' },
