@@ -94,14 +94,138 @@ function caShort(mint: string): string {
   return `${mint.slice(0, 6)}…${mint.slice(-6)}`;
 }
 
-type SafeZone = { x: number; y: number; w: number; h: number; shape?: string };
+type Plaque = {
+  shape?: 'pill' | 'rect';
+  fill?: string;
+  opacity?: number;
+  pad_x?: number;
+  pad_y?: number;
+  radius?: number;
+  border_color?: string;
+  border_width?: number;
+  text_color?: string;
+};
+type SafeZone = { x: number; y: number; w: number; h: number; shape?: string; plaque?: Plaque };
 
-function drawTextInZone(canvas: Image, font: Uint8Array, text: string, zone: SafeZone, color = 0xffffffff, baseSize = 64) {
-  const size = pickFontSize(text, zone.w, zone.h, baseSize);
-  const rendered = Image.renderText(font, size, text, color);
+function hexToRgba(hex: string, opacity = 1): number {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const a = Math.round(Math.max(0, Math.min(1, opacity)) * 255);
+  return ((r & 0xff) << 24) | ((g & 0xff) << 16) | ((b & 0xff) << 8) | (a & 0xff);
+}
+
+function drawRoundedRect(
+  canvas: Image,
+  x: number, y: number, w: number, h: number,
+  radius: number,
+  fillRGBA: number,
+  borderRGBA: number | null = null,
+  borderW = 0,
+) {
+  const W = canvas.width, H = canvas.height;
+  const r = Math.max(0, Math.min(radius, Math.floor(Math.min(w, h) / 2)));
+  const r2 = r * r;
+  for (let py = 0; py < h; py++) {
+    for (let px = 0; px < w; px++) {
+      const cx = px < r ? r : (px >= w - r ? w - 1 - r : px);
+      const cy = py < r ? r : (py >= h - r ? h - 1 - r : py);
+      const dx = px - cx, dy = py - cy;
+      const d2 = dx * dx + dy * dy;
+      if (d2 > r2) continue;
+      const ax = x + px, ay = y + py;
+      if (ax < 0 || ay < 0 || ax >= W || ay >= H) continue;
+      // Border check (distance from edge)
+      let useBorder = false;
+      if (borderRGBA !== null && borderW > 0) {
+        const insetDistEdge = Math.min(px, py, w - 1 - px, h - 1 - py);
+        const insetDistCorner = r - Math.sqrt(d2);
+        const edgeDist = (px < r || px >= w - r || py < r || py >= h - r)
+          ? Math.min(insetDistEdge, insetDistCorner)
+          : insetDistEdge;
+        if (edgeDist < borderW) useBorder = true;
+      }
+      // ImageScript setPixelAt is 1-indexed
+      canvas.setPixelAt(ax + 1, ay + 1, useBorder ? (borderRGBA as number) : fillRGBA);
+    }
+  }
+}
+
+function drawTextInZone(
+  canvas: Image,
+  font: Uint8Array,
+  text: string,
+  zone: SafeZone,
+  color = 0xffffffff,
+  baseSize = 64,
+) {
+  // If plaque is configured, size text to fit (zone.w - 2*pad_x) so plaque sits inside zone.
+  const plaque = zone.plaque;
+  const padX = plaque?.pad_x ?? 0;
+  const padY = plaque?.pad_y ?? 0;
+  const textMaxW = Math.max(10, zone.w - padX * 2);
+  const textMaxH = Math.max(10, zone.h - padY * 2);
+  const textColor = plaque?.text_color ? hexToRgba(plaque.text_color, 1) : color;
+  const size = pickFontSize(text, textMaxW, textMaxH, baseSize);
+  const rendered = Image.renderText(font, size, text, textColor);
+
+  if (plaque) {
+    const plaqueW = Math.min(zone.w, rendered.width + padX * 2);
+    const plaqueH = Math.min(zone.h, rendered.height + padY * 2);
+    const px = zone.x + Math.round((zone.w - plaqueW) / 2);
+    const py = zone.y + Math.round((zone.h - plaqueH) / 2);
+    const fillRGBA = hexToRgba(plaque.fill ?? '#000000', plaque.opacity ?? 0.55);
+    const radius = plaque.shape === 'rect'
+      ? (plaque.radius ?? 6)
+      : (plaque.radius != null ? Math.min(plaque.radius, Math.floor(plaqueH / 2)) : Math.floor(plaqueH / 2));
+    const borderRGBA = plaque.border_color ? hexToRgba(plaque.border_color, 1) : null;
+    drawRoundedRect(canvas, px, py, plaqueW, plaqueH, radius, fillRGBA, borderRGBA, plaque.border_width ?? 0);
+  }
+
   const dx = zone.x + Math.max(0, Math.round((zone.w - rendered.width) / 2));
   const dy = zone.y + Math.max(0, Math.round((zone.h - rendered.height) / 2));
   canvas.composite(rendered, dx, dy);
+}
+
+// Multiplier renderer: digits + lowercase "x" (x ~70% of digit height, baseline-aligned).
+function drawMultiplierInZone(canvas: Image, font: Uint8Array, multiplier: number, zone: SafeZone, color = 0xfacc15ff, baseSize = 110) {
+  const digits = Number(multiplier) >= 10 ? String(Math.round(Number(multiplier))) : Number(multiplier).toFixed(1);
+  const plaque = zone.plaque;
+  const padX = plaque?.pad_x ?? 0;
+  const padY = plaque?.pad_y ?? 0;
+  const textMaxW = Math.max(10, zone.w - padX * 2);
+  const textMaxH = Math.max(10, zone.h - padY * 2);
+  const textColor = plaque?.text_color ? hexToRgba(plaque.text_color, 1) : color;
+
+  // Size as if rendering "{digits}x" so combined width fits.
+  const combo = `${digits}x`;
+  const digitSize = pickFontSize(combo, textMaxW, textMaxH, baseSize);
+  const xSize = Math.max(12, Math.round(digitSize * 0.7));
+
+  const digitsImg = Image.renderText(font, digitSize, digits, textColor);
+  const xImg = Image.renderText(font, xSize, 'x', textColor);
+  const gap = Math.max(2, Math.round(digitSize * 0.06));
+  const totalW = digitsImg.width + gap + xImg.width;
+  const totalH = digitsImg.height;
+
+  if (plaque) {
+    const plaqueW = Math.min(zone.w, totalW + padX * 2);
+    const plaqueH = Math.min(zone.h, totalH + padY * 2);
+    const ppx = zone.x + Math.round((zone.w - plaqueW) / 2);
+    const ppy = zone.y + Math.round((zone.h - plaqueH) / 2);
+    const fillRGBA = hexToRgba(plaque.fill ?? '#000000', plaque.opacity ?? 0.55);
+    const radius = plaque.shape === 'rect' ? (plaque.radius ?? 6) : Math.floor(plaqueH / 2);
+    const borderRGBA = plaque.border_color ? hexToRgba(plaque.border_color, 1) : null;
+    drawRoundedRect(canvas, ppx, ppy, plaqueW, plaqueH, radius, fillRGBA, borderRGBA, plaque.border_width ?? 0);
+  }
+
+  const startX = zone.x + Math.round((zone.w - totalW) / 2);
+  const dy = zone.y + Math.round((zone.h - totalH) / 2);
+  canvas.composite(digitsImg, startX, dy);
+  // Bottom-align x to digits baseline (approx: align bottoms).
+  const xDy = dy + (digitsImg.height - xImg.height);
+  canvas.composite(xImg, startX + digitsImg.width + gap, xDy);
 }
 
 serve(async (req) => {
@@ -250,10 +374,13 @@ serve(async (req) => {
 
     // 5. Fixed text overlays — STRICT, never AI'd.
     if (zones.ticker) drawTextInZone(canvas, font, `$${ticker}`, zones.ticker, 0x22d3ceff, 72);
-    if (zones.ca && tpl.show_ca !== false) drawTextInZone(canvas, font, caShort(mint), zones.ca, 0xcbd5e1ff, 28);
+    if (zones.ca && tpl.show_ca !== false) {
+      // Show full CA when zone is tall enough; otherwise fall back to short.
+      const caText = (zones.ca.h >= 40) ? mint : caShort(mint);
+      drawTextInZone(canvas, font, caText, zones.ca, 0xffffffff, 36);
+    }
     if (zones.multiplier) {
-      const mTxt = `${Number(multiplier) >= 10 ? Math.round(Number(multiplier)) : Number(multiplier).toFixed(1)}X`;
-      drawTextInZone(canvas, font, mTxt, zones.multiplier, 0xfacc15ff, 110);
+      drawMultiplierInZone(canvas, font, Number(multiplier), zones.multiplier, 0xfacc15ff, 110);
     }
     if (zones.entry_label) drawTextInZone(canvas, font, 'ENTRY', zones.entry_label, 0x94a3b8ff, 26);
     if (zones.entry_value) drawTextInZone(canvas, font, fmtK(Number(entry_mcap)), zones.entry_value, 0xffffffff, 56);
