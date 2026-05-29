@@ -682,35 +682,45 @@ serve(async (req) => {
 
     // ---- IMMUTABLE ENTRY MC (ratchet-down only) ----
     // entry_mcap_usd on holders_intel_seen_tokens is the locked floor. It is
-    // computed as the minimum of every MC signal we've ever observed and is
-    // only ever updated DOWNWARD — never up, never back to null. This is the
+    // computed as the LOWEST MC observed by any authorized source (Insiders,
+    // BlackBox/Phanes/DrRick, HoldersIntel) WITHIN the 30-minute discovery
+    // window starting at first_seen_at. After the window closes, later sightings
+    // (including price dumps) can NEVER lower or raise Entry MC. This is the
     // value the templates render as {mcEntry} and what milestone math compares
-    // against, so 2x/3x labels remain stable even when sources fluctuate.
+    // against.
+    //
+    // We route every observation through upsert_mesh_entry_mcap so the window
+    // guard is enforced in one place (the RPC). The current DexScreener mcUsd
+    // is fed in as source='blackbox' — it'll only lower Entry MC if compose is
+    // running inside the discovery window.
     const persistedEntry = seenRow?.entry_mcap_usd != null ? Number(seenRow.entry_mcap_usd) : null;
-    const entryCandidates = [
-      persistedEntry,
-      seenRow?.market_cap_at_discovery != null ? Number(seenRow.market_cap_at_discovery) : null,
-      historicalMin,
-      mcUsd,
-    ].filter((v): v is number => v != null && isFinite(v) && v > 0);
-    const candidateEntry = entryCandidates.length ? Math.min(...entryCandidates) : null;
     let mcEntryVal: number | null = persistedEntry;
-    if (candidateEntry != null) {
-      if (persistedEntry == null || candidateEntry < persistedEntry) {
-        // Ratchet the floor DOWN and persist. Never update if candidate >= persisted.
-        try {
-          await supabase
-            .from('holders_intel_seen_tokens')
-            .update({ entry_mcap_usd: candidateEntry })
-            .eq('token_mint', mint);
-          mcEntryVal = candidateEntry;
-        } catch (e) {
-          console.error('[no-lube-compose] entry_mcap_usd ratchet failed', e);
-          mcEntryVal = persistedEntry ?? candidateEntry;
+    if (mcUsd != null && isFinite(mcUsd) && mcUsd > 0) {
+      try {
+        const { data: meshRow } = await supabase.rpc('upsert_mesh_entry_mcap', {
+          p_mint: mint,
+          p_symbol: ticker ?? null,
+          p_name: name ?? null,
+          p_observed_mcap: mcUsd,
+          p_source: 'blackbox',
+          p_observed_at: new Date().toISOString(),
+        });
+        const returned = Array.isArray(meshRow) ? meshRow[0] : meshRow;
+        if (returned?.entry_mcap_usd != null && Number(returned.entry_mcap_usd) > 0) {
+          mcEntryVal = Number(returned.entry_mcap_usd);
         }
-      } else {
-        mcEntryVal = persistedEntry;
+      } catch (e) {
+        console.error('[no-lube-compose] upsert_mesh_entry_mcap failed (non-fatal)', e);
       }
+    }
+    // Fall back to the lowest authorized historical signal we already have on
+    // the row if the RPC didn't return one (e.g. token only just appeared).
+    if (mcEntryVal == null) {
+      const fallbacks = [
+        seenRow?.market_cap_at_discovery != null ? Number(seenRow.market_cap_at_discovery) : null,
+        historicalMin,
+      ].filter((v): v is number => v != null && isFinite(v) && v > 0);
+      if (fallbacks.length) mcEntryVal = Math.min(...fallbacks);
     }
 
     // Bonding/progress copy varies by bonded vs still-on-curve.
