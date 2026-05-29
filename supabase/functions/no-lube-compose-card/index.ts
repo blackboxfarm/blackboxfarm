@@ -388,6 +388,18 @@ serve(async (req) => {
           const resized = pfp.resize(zones.mint_pfp.w, zones.mint_pfp.h);
           if (zones.mint_pfp.shape === 'circle') maskCircle(resized);
           canvas.composite(resized, zones.mint_pfp.x, zones.mint_pfp.y);
+          if (zones.mint_pfp.shape === 'circle') {
+            const cx = zones.mint_pfp.x + zones.mint_pfp.w / 2;
+            const cy = zones.mint_pfp.y + zones.mint_pfp.h / 2;
+            const r = Math.min(zones.mint_pfp.w, zones.mint_pfp.h) / 2;
+            // Neon purple rim with outer glow halo
+            drawNeonRing(canvas, cx, cy, r, [
+              { thickness: 4, rgba: 0xc026d3ff }, // solid core ring
+              { thickness: 3, rgba: 0xa855f7cc },
+              { thickness: 4, rgba: 0xa855f777 },
+              { thickness: 6, rgba: 0x9333ea33 },
+            ]);
+          }
         } catch (e) { console.warn('[compose-card] pfp decode failed', e); }
       }
     }
