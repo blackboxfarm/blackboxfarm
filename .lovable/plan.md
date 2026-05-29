@@ -1,59 +1,34 @@
-## Goal
+## Why the Public channel has gone silent
 
-For 2X / 3X / 4X milestone banners, stop using stale or AI-invented images. Always source the **real** mint PFP, cache it, and additionally surface the DexScreener banner (and paid-DEX flag) so we can later overlay a 50X/100X badge strip.
+Public posts are not a separate ingestion path — they only fire from the **re-sighting / milestone flow** in `no-lube-orchestrate`. Yes, we DO track the gain factor (`ratio = current_mcap / entry_market_cap`) and we only fire 2x, 3x, 4x… milestones (`Math.floor(ratio)` must exceed `prev.last_multiplier`). That logic is fine.
 
-Also fix the markdown hyperlinks that aren't rendering in Telegram.
+The blocker is one step earlier in the pipeline.
 
----
+### Evidence from the DB (last 36h)
 
-## Changes
+- Re-sighting events per hour collapsed from ~190/hr on May 27 23:00 → **0/hr from May 28 ~21:00 onward**.
+- Snapshots are still flowing fine (Phase 1).
+- Every single new token since 21:56 May 28 has a `snapshot` row but **zero `big_picture` rows**.
+- Lifecycle rows for every one of those tokens show:
+  - `creator_status = resolved` ✓
+  - `blackbox_harvested_at` ✓
+  - `holders_refreshed_at` = **NULL** ✗
+  - `mesh_hydrated_at` = **NULL** ✗
 
-### 1. Always pull a fresh mint image, persist to DB
+### Why this kills Public posts
 
-`supabase/functions/no-lube-compose/index.ts`
-- Keep current Helius → DexScreener → cache resolution order.
-- When `tokenImageUrl` resolves AND the value differs from `holders_intel_seen_tokens.image_uri` (or that column is null), upsert it onto `holders_intel_seen_tokens.image_uri`. This guarantees a freshly-validated, canonical URL is stored per mint.
-- Return both `token_image_url` and `banner_url` (see step 2) in the response payload so orchestrate can forward them.
+`no-lube-orchestrate` gates the Big-Picture post on `holders_refreshed_at` + `mesh_hydrated_at` + `blackbox_harvested_at`. With holders/mesh missing, the orchestrator returns `big_picture_not_eligible_yet` forever. Re-sighting (the ONLY path that posts to Public) requires `hasBigPicture === true`, so it can never trigger. No big_picture → no re-sighting → no public post.
 
-### 2. Fetch + cache DexScreener banner and paid-DEX flag
+The 2x/3x/4x detector is healthy; it's just never reached because no token graduates past the snapshot phase.
 
-`supabase/functions/no-lube-compose/index.ts`
-- Reuse `_shared/dexscreener-banner.ts` (`fetchDexBanner`) to pull `info.header`. Also detect `boosts.active > 0` → `has_paid_dex: true`.
-- Cache order: read `holders_intel_seen_tokens.banner_url` first; if empty, fetch live; if found, write back to DB.
-- Surface `banner_url`, `banner_source`, and `has_paid_dex` in the compose JSON response (`vars` + top-level).
+## Plan
 
-### 3. Pipe banner info through orchestrate → compose-card
+1. **Confirm root cause** — check `bagless-holders-report` and the mesh-hydration cron logs for the cutoff window (~21:56 UTC May 28). Likely a Helius quota wall, a deploy regression, or the cron stopped firing.
+2. **Restart / fix the holders refresher** so `holders_refreshed_at` and `mesh_hydrated_at` get stamped again. (Most likely a single edge function or pg_cron job that needs re-enabling, an API-key rotation, or a fix to a thrown error.)
+3. **Backfill the stuck queue** — re-run `bagless-holders-report` for the ~15 lifecycle rows created since 21:56 May 28 so they catch up to Big-Picture and become eligible for re-sighting.
+4. **Add a safety valve** in `no-lube-orchestrate`: if a token is older than N minutes and only the holders/mesh gates are blocking it, surface a single warning row in `system_alerts` (or similar) so this never silently stalls Public again.
+5. (Optional, separate) clean up `channel = NULL` on historical `no_lube_post_log` rows where `tg_message_id` proves a Public push happened, so the Process tab analytics are accurate.
 
-`supabase/functions/no-lube-orchestrate/index.ts`
-- Forward `token_image_url`, `banner_url`, `has_paid_dex` from `probe.json.vars` into `composeCardUrl` body.
-- **Critical fix:** if `compose-card` fails, do NOT fall back to AI `render-card` for milestone posts (that's what produces the "made-up" images). Instead, surface the error and skip the post so we never push an invented image. The user can sort positioning later — we just need real assets.
+No changes to the 2x/3x/4x milestone logic — that's working as designed.
 
-`supabase/functions/no-lube-compose-card/index.ts`
-- Accept new optional inputs: `banner_url`, `has_paid_dex`.
-- Persist behavior unchanged: mint PFP still drawn into `mint_pfp` zone using `token_image_url`.
-- Return both fields in the response payload (for future overlay step the user will tune visually).
-
-### 4. Markdown hyperlink syntax check
-
-The user reports `[text](url)` links not rendering. I'll grep the Telegram message templates rendered by `no-lube-compose` for cases where backtick template literals break Markdown escaping (e.g. unescaped `_`, `(`, `)` inside URLs, or accidental backtick wrapping turning a link into inline code). Fix specific instances found; no behavioral change beyond escape cleanup.
-
-### 5. NOT in scope (deferred until images are correct)
-
-- Actually drawing the 50X/100X orange badge over the banner strip.
-- Drawing advert badge in the opposite corner.
-- Choosing exact percentage/positioning.
-
-These come after the user confirms the correct source images are being pulled.
-
----
-
-## Files Touched
-
-- `supabase/functions/no-lube-compose/index.ts` — banner fetch + persist mint image + paid flag
-- `supabase/functions/no-lube-orchestrate/index.ts` — forward fields, kill AI fallback for milestones
-- `supabase/functions/no-lube-compose-card/index.ts` — accept + return banner fields
-- Possibly one or two Telegram message string lines for markdown link escaping
-
-No DB schema changes — `holders_intel_seen_tokens` already has `image_uri` and `banner_url`.
-
-Awaiting **Plan Approved**.
+Awaiting **Plan Approved** before I dig into logs and patch the holders/mesh stage.
