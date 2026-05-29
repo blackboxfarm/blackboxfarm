@@ -438,6 +438,7 @@ serve(async (req) => {
         p_mint: mint,
         p_observed: probeMcap,
         p_symbol: tickerProbe,
+        p_source: 'blackbox',
       });
       if (locked != null && Number(locked) > 0) {
         const lockedNum = Number(locked);

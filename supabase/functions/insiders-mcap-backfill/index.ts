@@ -1,18 +1,12 @@
 // insiders-mcap-backfill
-// Parses market_cap_at_call out of every telegram_channel_calls.raw_message
-// for the Insiders channel (or any channel), writes the parsed number back
-// to market_cap_at_call, then re-runs lock_entry_mcap for every touched
-// mint so the lowest-ever Entry MC is propagated into the lifecycle row
-// and holders_intel_seen_tokens.entry_mcap_usd.
+// FAST Mesh-first ingest. Parses Entry MC from the last N Insiders
+// messages, dedupes per mint (lowest MC wins), and bulk-feeds the main
+// Mesh table holders_intel_seen_tokens via upsert_mesh_entry_mcap, which
+// honors the 30-min discovery-window guard so later dumps cannot lower
+// Entry MC.
 //
-// This is the canonical "I missed a token earlier, now it just re-appeared,
-// compute the X factor instantly" fixer. Idempotent — safe to cron.
-//
-// Body params (all optional):
-//   { channelId?: string, limit?: number, onlyNull?: boolean,
-//     relock?: boolean, dryRun?: boolean }
-// Defaults: channelId = '-1003694579312' (insiders), limit = 500,
-// onlyNull = true, relock = true, dryRun = false.
+// Body (all optional): { channelId?, limit?, writeBack?, dryRun? }
+// Defaults: channelId='-1003694579312', limit=100, writeBack=false.
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -65,9 +59,8 @@ serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const channelId: string = body.channelId || INSIDERS_CHANNEL_ID;
-    const limit: number = Math.min(Math.max(Number(body.limit) || 500, 1), 5000);
-    const onlyNull: boolean = body.onlyNull !== false;
-    const relock: boolean = body.relock !== false;
+    const limit: number = Math.min(Math.max(Number(body.limit) || 100, 1), 1000);
+    const writeBack: boolean = body.writeBack === true;
     const dryRun: boolean = body.dryRun === true;
 
     const supabase = createClient(
@@ -75,61 +68,79 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    // Pull most-recent rows that need parsing.
-    let query = supabase
+    const { data: rows, error } = await supabase
       .from('telegram_channel_calls')
-      .select('id, token_mint, token_symbol, market_cap_at_call, raw_message, message_id, message_timestamp')
+      .select('id, token_mint, token_symbol, token_name, market_cap_at_call, raw_message, message_timestamp')
       .eq('channel_id', channelId)
-      .or('raw_message.ilike.%Entry MC%,raw_message.ilike.%Market Cap%,raw_message.ilike.%MC:%')
-      .order('message_timestamp', { ascending: false })
+      .order('message_timestamp', { ascending: false, nullsFirst: false })
       .limit(limit);
-    if (onlyNull) query = query.is('market_cap_at_call', null);
-    const { data: rows, error } = await query;
     if (error) throw error;
 
-    const updates: Array<{ id: string; mint: string; symbol: string | null; mc: number }> = [];
-    let skippedNoMc = 0;
+    // Dedupe per mint, keep LOWEST MC (best entry) within the scan window.
+    const perMint = new Map<string, {
+      mint: string; symbol: string | null; name: string | null;
+      mc: number; observed_at: string; callIds: string[];
+    }>();
     for (const r of rows || []) {
-      const mc = parseEntryMcFromMessage((r as any).raw_message || '');
-      if (!mc || mc <= 0) { skippedNoMc++; continue; }
-      updates.push({
-        id: (r as any).id,
-        mint: (r as any).token_mint,
-        symbol: (r as any).token_symbol,
-        mc,
-      });
-    }
-
-    let written = 0;
-    if (!dryRun) {
-      for (const u of updates) {
-        const { error: upErr } = await supabase
-          .from('telegram_channel_calls')
-          .update({ market_cap_at_call: u.mc })
-          .eq('id', u.id);
-        if (upErr) {
-          console.warn('[insiders-mcap-backfill] update failed', u.id, upErr.message);
-          continue;
-        }
-        written++;
+      const mint = (r as any).token_mint;
+      if (!mint || mint.length < 32) continue;
+      const stored = (r as any).market_cap_at_call;
+      const mc = (stored != null && Number(stored) > 0)
+        ? Number(stored)
+        : parseEntryMcFromMessage((r as any).raw_message || '');
+      if (!mc || mc <= 0) continue;
+      const ts = (r as any).message_timestamp || new Date().toISOString();
+      const cur = perMint.get(mint);
+      if (!cur) {
+        perMint.set(mint, {
+          mint,
+          symbol: (r as any).token_symbol ?? null,
+          name: (r as any).token_name ?? null,
+          mc: Number(mc),
+          observed_at: ts,
+          callIds: [(r as any).id],
+        });
+      } else {
+        if (Number(mc) < cur.mc) { cur.mc = Number(mc); cur.observed_at = ts; }
+        cur.callIds.push((r as any).id);
       }
     }
 
-    // Re-lock entry MC for every touched mint (deduped).
-    const mints = Array.from(new Set(updates.map(u => u.mint)));
-    const lockResults: Array<{ mint: string; locked: number | null; err?: string }> = [];
-    if (relock && !dryRun) {
-      for (const mint of mints) {
-        const sym = updates.find(u => u.mint === mint)?.symbol ?? null;
-        const { data: locked, error: rpcErr } = await supabase.rpc('lock_entry_mcap', {
-          p_mint: mint,
-          p_symbol: sym,
-          p_observed: null,
-        });
-        if (rpcErr) {
-          lockResults.push({ mint, locked: null, err: rpcErr.message });
-        } else {
-          lockResults.push({ mint, locked: Number(locked) || null });
+    const tokens = Array.from(perMint.values());
+    const meshResults: Array<{ mint: string; entry: number | null; window: boolean | null; err?: string }> = [];
+
+    if (!dryRun) {
+      const CHUNK = 50;
+      for (let i = 0; i < tokens.length; i += CHUNK) {
+        const slice = tokens.slice(i, i + CHUNK);
+        const settled = await Promise.all(slice.map(async (t) => {
+          const { data, error: rpcErr } = await supabase.rpc('upsert_mesh_entry_mcap', {
+            p_mint: t.mint,
+            p_symbol: t.symbol,
+            p_name: t.name,
+            p_observed_mcap: t.mc,
+            p_source: 'insiders',
+            p_observed_at: t.observed_at,
+          });
+          if (rpcErr) return { mint: t.mint, entry: null, window: null, err: rpcErr.message };
+          const row = Array.isArray(data) ? data[0] : data;
+          return {
+            mint: t.mint,
+            entry: row?.entry_mcap_usd != null ? Number(row.entry_mcap_usd) : null,
+            window: row?.within_window ?? null,
+          };
+        }));
+        meshResults.push(...settled);
+      }
+
+      if (writeBack) {
+        for (const t of tokens) {
+          for (const id of t.callIds) {
+            await supabase.from('telegram_channel_calls')
+              .update({ market_cap_at_call: t.mc })
+              .eq('id', id)
+              .is('market_cap_at_call', null);
+          }
         }
       }
     }
@@ -138,12 +149,9 @@ serve(async (req) => {
       ok: true,
       channelId,
       scanned: rows?.length ?? 0,
-      parsed: updates.length,
-      skippedNoMc,
-      written,
-      mintsLocked: lockResults.length,
-      sample: updates.slice(0, 5),
-      lockSample: lockResults.slice(0, 10),
+      uniqueMints: tokens.length,
+      meshUpserts: meshResults.length,
+      sample: meshResults.slice(0, 10),
       dryRun,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e) {

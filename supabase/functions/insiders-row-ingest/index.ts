@@ -146,6 +146,41 @@ serve(async (req) => {
     });
   }
 
+  // MESH-FIRST: parse Entry MC from the raw Insiders alert and feed the
+  // main Mesh table. Window-guarded by the RPC.
+  try {
+    const txt = rawMessage || '';
+    const parseShort = (raw: string | null | undefined): number | null => {
+      if (!raw) return null;
+      const s = raw.replace(/[\s,$]/g, '');
+      const m = s.match(/^(\d+(?:\.\d+)?)([kKmMbB]?)$/);
+      if (!m) return null;
+      const n = parseFloat(m[1]);
+      if (!Number.isFinite(n)) return null;
+      const suf = m[2].toLowerCase();
+      const mult = suf === 'k' ? 1_000 : suf === 'm' ? 1_000_000 : suf === 'b' ? 1_000_000_000 : 1;
+      return n * mult;
+    };
+    const vals: number[] = [];
+    const mE = txt.match(/Entry\s*MC\s*[:=]\s*\$?([\d.,]+\s*[kKmMbB]?)/i);
+    const vE = parseShort(mE?.[1] ?? null); if (vE) vals.push(vE);
+    const mM = txt.match(/Market\s*Cap\s*[:=]\s*\$?([\d.,]+\s*[kKmMbB]?)/i);
+    const vM = parseShort(mM?.[1] ?? null); if (vM) vals.push(vM);
+    const observedMc = vals.length ? Math.min(...vals) : null;
+    if (observedMc && observedMc > 0) {
+      await supabase.rpc('upsert_mesh_entry_mcap', {
+        p_mint: mint,
+        p_symbol: symbol,
+        p_name: null,
+        p_observed_mcap: observedMc,
+        p_source: 'insiders',
+        p_observed_at: messageTimestamp || now,
+      });
+    }
+  } catch (e) {
+    console.warn('[insiders-row-ingest] mesh upsert failed (non-fatal):', (e as Error).message);
+  }
+
   // 4. Fire downstream pipelines. All fire-and-forget — we return fast.
   //    no-lube-ingest will read the row and decide whether to post.
   invokeFn(supabaseUrl, serviceKey, 'no-lube-ingest', { mint });
