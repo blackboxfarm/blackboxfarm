@@ -24281,6 +24281,7 @@ export type Database = {
           deleted_success: number
         }[]
       }
+      prune_log_tables: { Args: never; Returns: Json }
       prune_solscan_api_calls: { Args: never; Returns: undefined }
       record_function_skip: {
         Args: { p_function_name: string }

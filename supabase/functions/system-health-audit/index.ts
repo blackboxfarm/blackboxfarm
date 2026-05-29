@@ -202,22 +202,43 @@ Deno.serve(withRunLog('system-health-audit', async (req) => {
       }
     }
 
-    // ── Check 5: Database table bloat (large tables with no cleanup) ──
+    // ── Check 5: Auto-prune log tables (no nag alerts) ──
+    // Per-table retention enforced by public.prune_log_tables() RPC + nightly cron.
+    // If the audit catches bloat between cron runs we prune on the spot and emit
+    // an informational notification instead of a warning.
     const logTables = ['api_usage_log', 'activity_logs', 'arb_opportunities', 'arb_price_snapshots', 'helius_api_usage'];
+    let triggeredEarlyPrune = false;
+    const preCounts: Record<string, number> = {};
     for (const table of logTables) {
       const { count } = await supabase.from(table).select('*', { count: 'exact', head: true });
-      if (count && count > 100_000) {
-        checks.push({ check: `table_bloat_${table}`, status: 'warning', details: `${table}: ${count.toLocaleString()} rows — consider pruning` });
-        if (count > 500_000) {
-          alerts.push({
-            title: `🟡 Table Bloat: ${table}`,
-            message: `${table} has ${count.toLocaleString()} rows. Consider pruning old data to maintain performance.`,
-            type: 'table_bloat',
-            metadata: { table, row_count: count }
-          });
-        }
+      preCounts[table] = count || 0;
+      if ((count || 0) > 500_000) triggeredEarlyPrune = true;
+      checks.push({ check: `table_size_${table}`, status: 'ok', details: `${table}: ${(count || 0).toLocaleString()} rows` });
+    }
+
+    if (triggeredEarlyPrune) {
+      const { data: pruneResult, error: pruneErr } = await supabase.rpc('prune_log_tables');
+      if (pruneErr) {
+        alerts.push({
+          title: `🔴 Auto-Prune Failed`,
+          message: `prune_log_tables() RPC error: ${pruneErr.message}`,
+          type: 'auto_prune_failed',
+          metadata: { error: pruneErr.message, pre_counts: preCounts },
+        });
       } else {
-        checks.push({ check: `table_bloat_${table}`, status: 'ok', details: `${table}: ${(count || 0).toLocaleString()} rows` });
+        const pruned = pruneResult as Record<string, number> | null;
+        const summary = pruned
+          ? Object.entries(pruned)
+              .filter(([k, v]) => k !== 'pruned_at' && typeof v === 'number' && v > 0)
+              .map(([k, v]) => `${k}: ${(v as number).toLocaleString()}`)
+              .join(', ')
+          : 'no rows pruned';
+        alerts.push({
+          title: `🧹 Auto-Pruned Log Tables`,
+          message: `Bloat detected → ran prune_log_tables() automatically. Pruned ${summary || 'nothing (all within retention)'}.`,
+          type: 'auto_prune_ran',
+          metadata: { pre_counts: preCounts, pruned: pruned },
+        });
       }
     }
 
