@@ -1,46 +1,54 @@
-## Root cause
+Mesh-first Entry MC with discovery-window guard.
 
-`no-lube-compose` reads templates from `holders_intel_templates` by `template_name`. The admin "Snapshot Post" tab shows `no_lube_snapshot_private` (default text from `src/lib/share-template.ts`), but **that row was never saved into the DB**. Confirmed query:
+## What I just landed (DB migration applied)
 
+- New RPC `upsert_mesh_entry_mcap(mint, symbol, name, observed_mcap, source, observed_at)`:
+  - Inserts new token rows directly into the main Mesh table `holders_intel_seen_tokens`.
+  - Lowers `entry_mcap_usd` / `market_cap_at_discovery` ONLY when:
+    - source is one of `insiders | blackbox | phanes | drrick | holdersintel | bagless`, AND
+    - we are still inside the 30-minute discovery window from `first_seen_at`, AND
+    - the new observed MC is lower than the stored Entry MC.
+  - Any MC observed after the 30-min window is treated as a price dump and IGNORED for Entry MC. (`last_seen_at` still stamps.)
+- Rebuilt `lock_entry_mcap` to use the Mesh row as the source of truth and sync `telegram_insider_token_lifecycle.entry_market_cap` from it (instead of the reverse).
+
+## What I will build next (needs build mode)
+
+1. Rewrite `insiders-mcap-backfill` to be the fast Mesh-first path:
+   - Pull last N (default 100) Insiders messages in one query.
+   - Parse Entry MC / Market Cap in memory.
+   - Dedupe per `token_mint` keeping the lowest MC seen in the scanned window.
+   - Bulk-call `upsert_mesh_entry_mcap` in parallel chunks of 50 (source = `insiders`).
+   - No more per-row UPDATE loops, no relock pass. The RPC handles both.
+   - Should finish 100 messages in seconds, not minutes.
+
+2. Live ingest paths feed Mesh on first sight, every sight:
+   - `telegram-channel-monitor`: right after inserting `telegram_channel_calls`, call `upsert_mesh_entry_mcap` with the parsed Insiders MC, source `insiders`, observed_at = message timestamp.
+   - `bagless-holders-report`: replace the raw `holders_intel_seen_tokens.upsert` with a call to `upsert_mesh_entry_mcap`, source `holdersintel`, observed = `inferredMarketCapUSD`. Window guard prevents stale dumps from breaking Entry MC.
+   - `no-lube-orchestrate`: keep using `lock_entry_mcap` but pass source = `blackbox` (the live probe is the BlackBox / DexScreener sweep). Window guard means probe MC will only lower Entry MC during the first 30 min — exactly the cross-source comparison you described (Insiders + BlackBox + HoldersIntel).
+   - `insiders-row-ingest`: same treatment immediately after the lifecycle upsert.
+
+3. Validation (no rewrites, just reads):
+   - Run the new backfill on the last 100 Insiders messages.
+   - Read `holders_intel_seen_tokens` for those mints: confirm `entry_mcap_usd` is populated and matches the lowest-of-three within the window.
+   - Confirm a repeat Insiders sighting now finds the token in Mesh instantly and computes the multiplier from `current_mcap / entry_mcap_usd`.
+
+## ASCII flow
+
+```text
+Insiders / BlackBox / HoldersIntel
+     |
+     v
+upsert_mesh_entry_mcap(mint, mc, source)
+     |
+     +-- new token  -> insert into holders_intel_seen_tokens
+     +-- existing + within 30min + lower -> lower entry_mcap_usd
+     +-- existing + outside window -> stamp last_seen only (dump ignored)
+     |
+     v
+lock_entry_mcap reads Mesh entry -> syncs lifecycle.entry_market_cap
+     |
+     v
+no-lube-orchestrate: ratio = current_mcap / Mesh entry_mcap_usd
 ```
-holders_intel_templates → only: no_lube, no_lube_public, no_lube_private
-```
 
-So compose looks up `no_lube_snapshot_private` → miss → falls back to `no_lube_private` → renders the Big Picture layout but still stamps `post_kind = 'snapshot'` in `no_lube_post_log`. That's why every "snapshot" in Private looks identical to Big Picture.
-
-## Fix ("switch them" = make snapshot actually use the snapshot template)
-
-One DB write — seed the missing template row using the default body already defined in `src/lib/share-template.ts` line 414.
-
-```sql
-INSERT INTO holders_intel_templates (template_name, template_text)
-VALUES ('no_lube_snapshot_private', $$⚡ *${ticker} Quick Stats*
-
-👥 Holders: *{totalHolders}*
-❤️ Health: *{healthScore}/100*
-🏦 Top 10%: *{top10}*
-
-📈 *Wallet Distribution*
-{walletDistBlock}
-
-🚨 *Intel Alerts*
-{intelAlert1}
-
-💰 *Market*
-MC: *{mc}* ({mcChange})  VOL: *{vol24h}*
-Entry: *{mcEntry}*  Age: *{age}*
-
-🔗 [Full Report]({intelUrl}) | [BubbleMap]({bubbleMapUrl})
-
-CA: `{ca}`$$)
-ON CONFLICT (template_name) DO NOTHING;
-```
-
-No code changes. After this migration runs, the next snapshot fired by `no-lube-orchestrate` will render the actual Quick Stats body instead of the Big Picture body.
-
-## Verification
-
-- Re-query `holders_intel_templates` and confirm the new row exists.
-- Trigger one snapshot via orchestrate `force=true` on a fresh mint and confirm the Private channel post matches the Snapshot template (Quick Stats / Holders / Health / Top 10% / Wallet Distribution / Intel Alerts), not the Big Picture layout.
-
-Awaiting **Plan Approved**.
+No secondary Insiders-only Entry MC table is created. Mesh is the only source of truth.
