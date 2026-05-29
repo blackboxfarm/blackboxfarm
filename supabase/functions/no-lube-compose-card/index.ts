@@ -69,6 +69,39 @@ function maskCircle(img: Image): Image {
   return img;
 }
 
+// Draw a neon ring around a circle on the canvas. Stacks layers for glow.
+function drawNeonRing(
+  canvas: Image,
+  centerX: number,
+  centerY: number,
+  innerRadius: number,
+  layers: { thickness: number; rgba: number }[],
+) {
+  const cw = canvas.width, ch = canvas.height;
+  // Build outward layers from innerRadius
+  let r0 = innerRadius;
+  for (const layer of layers) {
+    const rOuter = r0 + layer.thickness;
+    const rOuter2 = rOuter * rOuter;
+    const rInner2 = r0 * r0;
+    const minX = Math.max(0, Math.floor(centerX - rOuter));
+    const maxX = Math.min(cw - 1, Math.ceil(centerX + rOuter));
+    const minY = Math.max(0, Math.floor(centerY - rOuter));
+    const maxY = Math.min(ch - 1, Math.ceil(centerY + rOuter));
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        const dx = x - centerX + 0.5, dy = y - centerY + 0.5;
+        const d2 = dx * dx + dy * dy;
+        if (d2 >= rInner2 && d2 <= rOuter2) {
+          // ImageScript uses 1-based pixel coords
+          canvas.setPixelAt(x + 1, y + 1, layer.rgba);
+        }
+      }
+    }
+    r0 = rOuter;
+  }
+}
+
 function fitContain(img: Image, w: number, h: number): Image {
   const sx = w / img.width;
   const sy = h / img.height;
