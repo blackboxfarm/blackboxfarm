@@ -2134,6 +2134,44 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                 } else {
                   callId = insertedCall?.id ?? null;
                   console.log(`[telegram-channel-monitor] 📝 CALL RECORD INSERTED: ${callId} for ${currentTokenData?.symbol || tokenMint.slice(0, 8)}`);
+                  // MESH-FIRST: feed Entry MC straight into holders_intel_seen_tokens.
+                  // The RPC honors the 30-min discovery-window guard, so this is
+                  // safe to call on every Insiders sighting (later dumps ignored).
+                  try {
+                    const parsedMc = (insertedCall as any)?.market_cap_at_call
+                      ?? null;
+                    // Re-parse from message text if the inserted column wasn't returned.
+                    const txt = messageText || '';
+                    const parseShort = (raw: string | null | undefined): number | null => {
+                      if (!raw) return null;
+                      const s = raw.replace(/[\s,$]/g, '');
+                      const m = s.match(/^(\d+(?:\.\d+)?)([kKmMbB]?)$/);
+                      if (!m) return null;
+                      const n = parseFloat(m[1]);
+                      if (!Number.isFinite(n)) return null;
+                      const suf = m[2].toLowerCase();
+                      const mult = suf === 'k' ? 1_000 : suf === 'm' ? 1_000_000 : suf === 'b' ? 1_000_000_000 : 1;
+                      return n * mult;
+                    };
+                    const vals: number[] = [];
+                    const mE = txt.match(/Entry\s*MC\s*[:=]\s*\$?([\d.,]+\s*[kKmMbB]?)/i);
+                    const vE = parseShort(mE?.[1] ?? null); if (vE) vals.push(vE);
+                    const mM = txt.match(/Market\s*Cap\s*[:=]\s*\$?([\d.,]+\s*[kKmMbB]?)/i);
+                    const vM = parseShort(mM?.[1] ?? null); if (vM) vals.push(vM);
+                    const observedMc = parsedMc ?? (vals.length ? Math.min(...vals) : null);
+                    if (observedMc && observedMc > 0) {
+                      await supabase.rpc('upsert_mesh_entry_mcap', {
+                        p_mint: tokenMint,
+                        p_symbol: currentTokenData?.symbol || null,
+                        p_name: currentTokenData?.name || null,
+                        p_observed_mcap: observedMc,
+                        p_source: 'insiders',
+                        p_observed_at: messageDate.toISOString(),
+                      });
+                    }
+                  } catch (meshErr) {
+                    console.warn(`[telegram-channel-monitor] mesh feed failed for ${tokenMint.slice(0,8)}:`, (meshErr as Error).message);
+                  }
                 }
               } catch (insertError) {
                 console.error(`[telegram-channel-monitor] 📝 CALL RECORD INSERT EXCEPTION for ${tokenMint}:`, insertError);
