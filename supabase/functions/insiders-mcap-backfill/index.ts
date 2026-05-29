@@ -75,6 +75,7 @@ serve(async (req) => {
       .order('message_timestamp', { ascending: false })
       .limit(limit);
     if (error) throw error;
+    console.log(`[insiders-mcap-backfill] fetched rows=${rows?.length ?? 0} first=`, rows?.[0]);
 
     // Dedupe per mint, keep LOWEST MC (best entry) within the scan window.
     const perMint = new Map<string, {
