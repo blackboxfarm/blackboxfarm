@@ -97,31 +97,32 @@ serve(async (req) => {
     const caShort = `${mint.slice(0, 6)}…${mint.slice(-6)}`;
     const strictBlock = [
       `"$${ticker}"`,
-      `"${multiplier}X"`,
+      `"${multiplier}x"`,
       `"$${Math.round(Number(entry_mcap) / 1000)}k"`,
       `"$${Math.round(Number(current_mcap) / 1000)}k"`,
     ].join(', ');
 
     const urlLine = show_url && url_to_show
-      ? `- Small bottom-right CTA URL: "${url_to_show}"`
+      ? `- Small bottom-right CTA URL inside its own rounded pill: "${url_to_show}"`
       : '';
     const caLine = show_ca
-      ? `- Tiny footer (small grey text, very low emphasis): "${caShort}"`
+      ? `- Footer CA inside a small dark rounded pill (small grey text): "${caShort}"`
       : '';
 
     const promptText = `Generate a horizontal landscape (1024x640) Telegram-ready alert card.
 
 ${STYLE_GUIDE}
 
-SUBJECT: Token "$${ticker}" hit ${multiplier}X — display ${multiplier}X as the dominant typographic element (huge cyan glow), and feature the token's mint image prominently. Include a small whimsical mascot character (drawn in the style of the reference images) celebrating the gain.
+SUBJECT: Token "$${ticker}" hit ${multiplier}x — display ${multiplier}x as the dominant typographic element (huge cyan glow, lowercase x), and feature the token's MINT PROFILE IMAGE prominently as a circular avatar on the left side (the first attached image is the token's real mint PFP — you MUST include it visibly, do not omit it, do not replace it with a generic icon). Include a small whimsical mascot character (drawn in the style of the reference images) celebrating the gain.
 
-STRICT TEXT — render EXACTLY these strings, do NOT translate, abbreviate, or modify a single character: ${strictBlock}. Misspelling the ticker or the multiplier is a render failure.
+STRICT TEXT — render EXACTLY these strings, do NOT translate, abbreviate, or modify a single character (note the lowercase x in the multiplier): ${strictBlock}. Misspelling the ticker or changing the x to X is a render failure.
 
-TEXT LAYOUT (clean, large, mobile-readable):
-- "$${ticker}"
-- "${multiplier}X"
-- "Entry: $${Math.round((entry_mcap || 0) / 1000)}k  →  Now: $${Math.round((current_mcap || 0) / 1000)}k"
-- Small footer: "${channel_brand}"
+TEXT LAYOUT (clean, large, mobile-readable). Each labeled text element below must sit inside its own subtle ROUNDED PILL BOX — dark translucent fill, soft rounded corners, and a thin slightly-raised 1px border (a faint top highlight + faint bottom shadow to suggest a raised button). Pills should feel like premium HUD chips, not loud buttons:
+- "$${ticker}" in a pill
+- "${multiplier}x" — keep this as the dominant element; the pill around it can be larger and more prominent
+- "Entry: $${Math.round((entry_mcap || 0) / 1000)}k  →  Now: $${Math.round((current_mcap || 0) / 1000)}k" (entry and now can each be in their own smaller pill)
+- Small footer text: "${channel_brand}"
+- Token mint PFP rendered as a circular avatar (use the first attached image — this is REQUIRED and must be clearly visible)
 ${caLine}
 ${urlLine}
 
