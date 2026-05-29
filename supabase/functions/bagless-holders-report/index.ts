@@ -1172,6 +1172,19 @@ serve(withRunLog('bagless-holders-report', async (req) => {
         }
     }
 
+    // Stamp telegram_insider_token_lifecycle.holders_refreshed_at so the
+    // no-lube-orchestrate Big Picture eligibility gate can unblock. This is
+    // the column it reads; if we don't write it here nothing else does, and
+    // the public-channel re-sighting flow can never trigger.
+    try {
+      await supabaseForMesh
+        .from('telegram_insider_token_lifecycle')
+        .update({ holders_refreshed_at: new Date().toISOString() })
+        .eq('token_mint', tokenMint);
+    } catch (e) {
+      console.warn('[bagless] stamp holders_refreshed_at failed (non-fatal):', (e as Error).message);
+    }
+
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
