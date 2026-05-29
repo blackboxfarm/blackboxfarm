@@ -147,7 +147,7 @@ serve(async (req) => {
     let baselineSource: 'insiders' | 'post_log' | 'none' = 'none';
     const { data: lcRow } = await supabase
       .from('telegram_insider_token_lifecycle')
-      .select('entry_market_cap, token_symbol, creator_wallet, creator_status, holders_refreshed_at, blackbox_harvested_at, mesh_hydrated_at')
+      .select('entry_market_cap, token_symbol, creator_wallet, creator_status, holders_refreshed_at, blackbox_harvested_at, mesh_hydrated_at, created_at, first_called_at')
       .eq('token_mint', mint)
       .maybeSingle();
 
@@ -185,6 +185,34 @@ serve(async (req) => {
       }
       if (eligibilityBlockers.length) {
         console.log('[no-lube-orchestrate] big_picture not_eligible', { mint, blockers: eligibilityBlockers });
+        // Safety valve: if the token has been sitting waiting on enrichment
+        // for more than 15 minutes, raise a single system_alert so a stalled
+        // holders / mesh / blackbox pipeline becomes visible instead of
+        // silently blocking Public posts forever.
+        try {
+          const enrichmentOnly = eligibilityBlockers.every((b) =>
+            b === 'holders_not_refreshed' || b === 'blackbox_not_harvested' || b === 'mesh_not_hydrated'
+          );
+          const firstSeen = lcRow?.first_called_at || lcRow?.created_at;
+          const ageMs = firstSeen ? Date.now() - new Date(firstSeen).getTime() : 0;
+          if (enrichmentOnly && ageMs > 15 * 60 * 1000) {
+            const stuckGate = eligibilityBlockers.sort().join(',');
+            const alertKey = `no_lube_orchestrate.bigpicture_enrichment_stalled.${stuckGate}`;
+            await supabase
+              .from('system_alerts')
+              .upsert({
+                alert_key: alertKey,
+                severity: 'warn',
+                source: 'no-lube-orchestrate',
+                message: `Big Picture blocked by enrichment gates for >15min: ${stuckGate}`,
+                context: { mint, blockers: eligibilityBlockers, age_minutes: Math.round(ageMs / 60000), first_seen: firstSeen },
+                last_seen_at: new Date().toISOString(),
+                resolved_at: null,
+              }, { onConflict: 'alert_key' });
+          }
+        } catch (e) {
+          console.warn('[no-lube-orchestrate] safety-valve alert write failed (non-fatal):', (e as Error).message);
+        }
         return jsonResp({
           ok: true, flow: 'skipped', skipped: true,
           reason: 'big_picture_not_eligible_yet',
