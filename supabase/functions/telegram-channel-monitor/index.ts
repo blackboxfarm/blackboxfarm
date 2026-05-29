@@ -2092,6 +2092,29 @@ serve(withRunLog('telegram-channel-monitor', async (req) => {
                     raw_message: messageText.substring(0, 1000),
                     contains_ape: keywordResult.hasHighConviction,
                     price_at_call: currentTokenData?.price,
+                    market_cap_at_call: (() => {
+                      // Parse Entry MC / Market Cap out of the raw Insiders
+                      // message body so lock_entry_mcap can compute the
+                      // multiplier the next time this token is seen.
+                      const txt = messageText || '';
+                      const parseShort = (raw: string | null | undefined): number | null => {
+                        if (!raw) return null;
+                        const s = raw.replace(/[\s,$]/g, '');
+                        const m = s.match(/^(\d+(?:\.\d+)?)([kKmMbB]?)$/);
+                        if (!m) return null;
+                        const n = parseFloat(m[1]);
+                        if (!Number.isFinite(n)) return null;
+                        const suf = m[2].toLowerCase();
+                        const mult = suf === 'k' ? 1_000 : suf === 'm' ? 1_000_000 : suf === 'b' ? 1_000_000_000 : 1;
+                        return n * mult;
+                      };
+                      const vals: number[] = [];
+                      const mEntry = txt.match(/Entry\s*MC\s*[:=]\s*\$?([\d.,]+\s*[kKmMbB]?)/i);
+                      const vEntry = parseShort(mEntry?.[1] ?? null); if (vEntry) vals.push(vEntry);
+                      const mMc = txt.match(/Market\s*Cap\s*[:=]\s*\$?([\d.,]+\s*[kKmMbB]?)/i);
+                      const vMc = parseShort(mMc?.[1] ?? null); if (vMc) vals.push(vMc);
+                      return vals.length ? Math.min(...vals) : null;
+                    })(),
                     mint_age_minutes: currentTokenData?.ageMinutes,
                     buy_tier: currentRuleResult.matchedRule?.name || (currentRuleResult.buyAmount > 50 ? 'large' : 'standard'),
                     buy_amount_usd: currentRuleResult.buyAmount || null,
