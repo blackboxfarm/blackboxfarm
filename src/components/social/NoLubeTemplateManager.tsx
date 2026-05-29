@@ -44,14 +44,14 @@ type TplRow = {
 };
 
 const DEFAULT_SAFE_ZONES = {
-  mint_pfp: { x: 60, y: 140, w: 140, h: 140, shape: 'circle' },
+  mint_pfp: { x: 40, y: 50, w: 110, h: 110, shape: 'circle' },
   ticker: {
-    x: 220, y: 150, w: 820, h: 80,
-    plaque: { shape: 'pill', fill: '#000000', opacity: 0.55, pad_x: 24, pad_y: 10, text_color: '#22d3ee' },
+    x: 160, y: 55, w: 500, h: 56, align: 'left',
+    plaque: { shape: 'rect', radius: 10, fill: '#000000', opacity: 0.6, pad_x: 18, pad_y: 8, text_color: '#22d3ee' },
   },
   ca: {
-    x: 220, y: 240, w: 820, h: 48,
-    plaque: { shape: 'pill', fill: '#000000', opacity: 0.6, pad_x: 20, pad_y: 8, text_color: '#ffffff' },
+    x: 160, y: 118, w: 500, h: 40, align: 'left',
+    plaque: { shape: 'rect', radius: 8, fill: '#000000', opacity: 0.55, pad_x: 14, pad_y: 6, text_color: '#ffffff' },
   },
   multiplier: { x: 60, y: 320, w: 200, h: 110 },
   entry_label: {
