@@ -17901,6 +17901,7 @@ export type Database = {
           kyc_last_attempt_at: string | null
           kyc_status: string
           last_milestone_at: string | null
+          last_resighting_swept_at: string | null
           launchpad: string | null
           lifespan_minutes: number | null
           mesh_decision_trace: Json | null
@@ -17961,6 +17962,7 @@ export type Database = {
           kyc_last_attempt_at?: string | null
           kyc_status?: string
           last_milestone_at?: string | null
+          last_resighting_swept_at?: string | null
           launchpad?: string | null
           lifespan_minutes?: number | null
           mesh_decision_trace?: Json | null
@@ -18021,6 +18023,7 @@ export type Database = {
           kyc_last_attempt_at?: string | null
           kyc_status?: string
           last_milestone_at?: string | null
+          last_resighting_swept_at?: string | null
           launchpad?: string | null
           lifespan_minutes?: number | null
           mesh_decision_trace?: Json | null
