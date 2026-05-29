@@ -699,7 +699,7 @@ serve(async (req) => {
       try {
         const { data: meshRow } = await supabase.rpc('upsert_mesh_entry_mcap', {
           p_mint: mint,
-          p_symbol: symbol ?? null,
+          p_symbol: ticker ?? null,
           p_name: name ?? null,
           p_observed_mcap: mcUsd,
           p_source: 'blackbox',
