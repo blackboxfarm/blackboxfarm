@@ -81,6 +81,61 @@ function shortPath(url: string): string {
   try { return new URL(url).pathname; } catch { return url.slice(0, 40); }
 }
 
+// ── Per-endpoint circuit breaker ─────────────────────────────────────────────
+// Solscan's /v2.0/account/transfer endpoint chronically 504s on heavy wallets.
+// After N consecutive 504/timeout failures within FAIL_WINDOW_MS we trip the
+// breaker for COOLDOWN_MS, returning a fast synthetic 504 so callers fall
+// through to their Helius / scrape fallback instead of waiting 8s per call.
+const CB_FAIL_THRESHOLD = 3;
+const CB_FAIL_WINDOW_MS = 5 * 60_000;   // 5 minutes
+const CB_COOLDOWN_MS    = 15 * 60_000;  // 15 minutes
+interface CBState { failures: number[]; openUntil: number; }
+const circuitState = new Map<string, CBState>();
+
+function cbGet(path: string): CBState {
+  let s = circuitState.get(path);
+  if (!s) { s = { failures: [], openUntil: 0 }; circuitState.set(path, s); }
+  return s;
+}
+
+function cbIsOpen(path: string): boolean {
+  const s = cbGet(path);
+  return Date.now() < s.openUntil;
+}
+
+function cbRecordFailure(path: string) {
+  const s = cbGet(path);
+  const now = Date.now();
+  s.failures = s.failures.filter(t => now - t <= CB_FAIL_WINDOW_MS);
+  s.failures.push(now);
+  if (s.failures.length >= CB_FAIL_THRESHOLD) {
+    s.openUntil = now + CB_COOLDOWN_MS;
+    s.failures = [];
+    console.warn(`[Solscan][circuit-breaker] OPEN for ${path} — cooldown ${Math.round(CB_COOLDOWN_MS / 60_000)}m (too many 504/timeout)`);
+  }
+}
+
+function cbRecordSuccess(path: string) {
+  const s = cbGet(path);
+  if (s.failures.length || s.openUntil) {
+    s.failures = [];
+    s.openUntil = 0;
+  }
+}
+
+export function getSolscanCircuitState() {
+  const out: Record<string, { open: boolean; openUntilMs: number; recentFailures: number }> = {};
+  const now = Date.now();
+  for (const [path, s] of circuitState.entries()) {
+    out[path] = {
+      open: now < s.openUntil,
+      openUntilMs: Math.max(0, s.openUntil - now),
+      recentFailures: s.failures.filter(t => now - t <= CB_FAIL_WINDOW_MS).length,
+    };
+  }
+  return out;
+}
+
 async function waitForSlot() {
   const now = Date.now();
   // Drop timestamps outside the window
@@ -139,6 +194,21 @@ export async function solscanFetch(url: string, opts: SolscanFetchOptions = {}):
     }
   }
 
+  // Circuit breaker short-circuit (skip cache miss + network)
+  if (cbIsOpen(path)) {
+    const remainingMs = cbGet(path).openUntil - Date.now();
+    logCall({
+      endpoint_path: path,
+      function_name: callerName,
+      http_status: 504,
+      duration_ms: 0,
+      from_cache: false,
+      error_message: `circuit-open (cooldown ${Math.round(remainingMs / 1000)}s)`,
+      mint_or_address: addr,
+    });
+    return { ok: false, status: 504, body: { error: 'circuit-open', cooldown_ms: remainingMs }, fromCache: false };
+  }
+
   await waitForSlot();
   const start = Date.now();
   requestTimestamps.push(start);
@@ -150,6 +220,7 @@ export async function solscanFetch(url: string, opts: SolscanFetchOptions = {}):
     const ms = Date.now() - start;
     const msg = e instanceof Error ? e.message : String(e);
     console.warn(`[Solscan] GET ${shortPath(url)} hit=net status=ERR ms=${ms} rpm=${requestTimestamps.length}/${MAX_RPM} err="${msg}"`);
+    cbRecordFailure(path);
     logCall({
       endpoint_path: path,
       function_name: callerName,
@@ -165,6 +236,13 @@ export async function solscanFetch(url: string, opts: SolscanFetchOptions = {}):
   const text = await resp.text();
   const ms = Date.now() - start;
   console.log(`[Solscan] GET ${shortPath(url)} hit=net status=${resp.status} ms=${ms} rpm=${requestTimestamps.length}/${MAX_RPM}`);
+
+  // Update circuit breaker based on outcome
+  if (resp.status === 504 || resp.status === 502 || resp.status === 503) {
+    cbRecordFailure(path);
+  } else if (resp.ok) {
+    cbRecordSuccess(path);
+  }
 
   if (cacheTtlMs > 0 && resp.ok) {
     responseCache.set(cacheKey, { ts: Date.now(), ttl: cacheTtlMs, status: resp.status, body: text });
