@@ -480,6 +480,7 @@ export const TEMPLATE_VARIABLES = [
   { var: '{blackboxScore}', desc: 'No Lube — BlackBox Score 0-100' },
   { var: '{mc}', desc: 'No Lube — market cap (consensus across bots)' },
   { var: '{mcChange}', desc: 'No Lube — market cap % change vs 24h' },
+  { var: '{mcEntry}', desc: 'No Lube — entry market cap (locked floor from first sighting)' },
   { var: '{fdv}', desc: 'No Lube — fully diluted valuation' },
   { var: '{vol24h}', desc: 'No Lube — 24h volume' },
   { var: '{vol1h}', desc: 'No Lube — 1h volume' },
