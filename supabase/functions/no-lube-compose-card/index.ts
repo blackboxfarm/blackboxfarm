@@ -35,6 +35,7 @@ const corsHeaders = {
 const CARD_W = 1024;
 const CARD_H = 640;
 const DEFAULT_FONT_URL = 'https://github.com/googlefonts/RobotoSlab/raw/main/fonts/ttf/RobotoSlab-Bold.ttf';
+const REGULAR_FONT_URL = 'https://github.com/googlefonts/RobotoSlab/raw/main/fonts/ttf/RobotoSlab-Regular.ttf';
 
 const fontCache = new Map<string, Uint8Array>();
 async function loadFont(url: string): Promise<Uint8Array> {
@@ -105,7 +106,13 @@ type Plaque = {
   border_width?: number;
   text_color?: string;
 };
-type SafeZone = { x: number; y: number; w: number; h: number; shape?: string; plaque?: Plaque };
+type SafeZone = {
+  x: number; y: number; w: number; h: number;
+  shape?: string;
+  plaque?: Plaque;
+  align?: 'left' | 'center' | 'right';
+  font_url?: string;
+};
 
 function hexToRgba(hex: string, opacity = 1): number {
   const h = hex.replace('#', '');
@@ -169,11 +176,16 @@ function drawTextInZone(
   const textColor = plaque?.text_color ? hexToRgba(plaque.text_color, 1) : color;
   const size = pickFontSize(text, textMaxW, textMaxH, baseSize);
   const rendered = Image.renderText(font, size, text, textColor);
+  const align = zone.align ?? 'center';
 
   if (plaque) {
     const plaqueW = Math.min(zone.w, rendered.width + padX * 2);
     const plaqueH = Math.min(zone.h, rendered.height + padY * 2);
-    const px = zone.x + Math.round((zone.w - plaqueW) / 2);
+    const px = align === 'left'
+      ? zone.x
+      : align === 'right'
+        ? zone.x + (zone.w - plaqueW)
+        : zone.x + Math.round((zone.w - plaqueW) / 2);
     const py = zone.y + Math.round((zone.h - plaqueH) / 2);
     const fillRGBA = hexToRgba(plaque.fill ?? '#000000', plaque.opacity ?? 0.55);
     const radius = plaque.shape === 'rect'
@@ -183,7 +195,11 @@ function drawTextInZone(
     drawRoundedRect(canvas, px, py, plaqueW, plaqueH, radius, fillRGBA, borderRGBA, plaque.border_width ?? 0);
   }
 
-  const dx = zone.x + Math.max(0, Math.round((zone.w - rendered.width) / 2));
+  const dx = align === 'left'
+    ? zone.x + padX
+    : align === 'right'
+      ? zone.x + zone.w - rendered.width - padX
+      : zone.x + Math.max(0, Math.round((zone.w - rendered.width) / 2));
   const dy = zone.y + Math.max(0, Math.round((zone.h - rendered.height) / 2));
   canvas.composite(rendered, dx, dy);
 }
@@ -320,6 +336,15 @@ serve(async (req) => {
 
     const zones = (tpl.safe_zones || {}) as Record<string, SafeZone>;
     const font = await loadFont(tpl.font_url || DEFAULT_FONT_URL);
+    const regularFont = await loadFont(REGULAR_FONT_URL).catch(() => font);
+
+    // Helper that picks per-zone font_url override (falls back to bold).
+    const zoneFont = async (z?: SafeZone) => {
+      if (z?.font_url) {
+        try { return await loadFont(z.font_url); } catch { return font; }
+      }
+      return font;
+    };
 
     // 3. Mint PFP into circle zone.
     if (zones.mint_pfp && token_image_url) {
@@ -373,11 +398,16 @@ serve(async (req) => {
     }
 
     // 5. Fixed text overlays — STRICT, never AI'd.
-    if (zones.ticker) drawTextInZone(canvas, font, `$${ticker}`, zones.ticker, 0x22d3ceff, 72);
+    if (zones.ticker) {
+      const f = await zoneFont(zones.ticker);
+      drawTextInZone(canvas, f, `$${ticker}`, zones.ticker, 0x22d3ceff, 72);
+    }
     if (zones.ca && tpl.show_ca !== false) {
       // Show full CA when zone is tall enough; otherwise fall back to short.
       const caText = (zones.ca.h >= 40) ? mint : caShort(mint);
-      drawTextInZone(canvas, font, caText, zones.ca, 0xffffffff, 36);
+      // CA defaults to REGULAR weight (not bold) unless zone overrides.
+      const f = zones.ca.font_url ? await zoneFont(zones.ca) : regularFont;
+      drawTextInZone(canvas, f, caText, zones.ca, 0xffffffff, 28);
     }
     if (zones.multiplier) {
       drawMultiplierInZone(canvas, font, Number(multiplier), zones.multiplier, 0xfacc15ff, 110);
