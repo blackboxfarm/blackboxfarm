@@ -1,0 +1,2 @@
+UPDATE public.telegram_insider_token_lifecycle SET entry_market_cap = 26500, updated_at = now() WHERE token_mint = 'C6JtdWhR45tvYMrnvcd5xmp61BdGDUMc43m4qg7apump';
+UPDATE public.holders_intel_seen_tokens SET entry_mcap_usd = 26500 WHERE token_mint = 'C6JtdWhR45tvYMrnvcd5xmp61BdGDUMc43m4qg7apump';
