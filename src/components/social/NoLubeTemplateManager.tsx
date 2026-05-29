@@ -44,12 +44,12 @@ type TplRow = {
 };
 
 const DEFAULT_SAFE_ZONES = {
-  mint_pfp: { x: 70, y: 80, w: 220, h: 220, shape: 'circle' },
+  mint_pfp: { x: 70, y: 180, w: 220, h: 220, shape: 'circle' },
   ticker: {
-    x: 160, y: 55, w: 500, h: 56, align: 'left',
+    x: 285, y: 155, w: 500, h: 56, align: 'left',
     plaque: { shape: 'rect', radius: 10, fill: '#000000', opacity: 0.6, pad_x: 18, pad_y: 8, text_color: '#22d3ee' },
   },
-  multiplier: { x: 60, y: 320, w: 200, h: 110 },
+  multiplier: { x: 290, y: 320, w: 200, h: 110 },
   entry_label: {
     x: 60, y: 470, w: 180, h: 32,
     plaque: { shape: 'pill', fill: '#000000', opacity: 0.55, pad_x: 12, pad_y: 4, text_color: '#94a3b8' },
@@ -66,7 +66,7 @@ const DEFAULT_SAFE_ZONES = {
     x: 280, y: 510, w: 180, h: 90,
     plaque: { shape: 'rect', fill: '#000000', opacity: 0.6, pad_x: 14, pad_y: 10, radius: 8, border_color: '#4ade80', border_width: 2, text_color: '#4ade80' },
   },
-  character: { x: 680, y: 60, w: 340, h: 560 },
+  character: { x: 680, y: 210, w: 340, h: 410 },
   show_url: {
     x: 30, y: 600, w: 964, h: 32,
     plaque: { shape: 'pill', fill: '#000000', opacity: 0.5, pad_x: 16, pad_y: 4, text_color: '#cbd5e1' },
