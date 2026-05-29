@@ -1,0 +1,1 @@
+ALTER TABLE public.telegram_insider_token_lifecycle ADD COLUMN IF NOT EXISTS last_resighting_swept_at timestamptz;
