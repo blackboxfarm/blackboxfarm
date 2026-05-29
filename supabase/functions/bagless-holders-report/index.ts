@@ -1087,20 +1087,30 @@ serve(withRunLog('bagless-holders-report', async (req) => {
       source: 'holders_query',
     });
 
-    // Upsert into holders_intel_seen_tokens — every scan grows the intelligence layer
-    await assertDbWrite(
-      supabaseForMesh.from('holders_intel_seen_tokens').upsert({
-        token_mint: tokenMint,
-        symbol: tokenSymbol || null,
-        name: tokenName || null,
-        last_seen_at: new Date().toISOString(),
-        times_seen: 1, // Will increment via ON CONFLICT if supported, otherwise just marks seen
-        market_cap_at_discovery: inferredMarketCapUSD || null,
-        health_grade: healthGrade || null,
-      }, { onConflict: 'token_mint' }),
-      'holders_intel_seen_tokens',
-      'UPSERT',
-    );
+    // MESH-FIRST: route through upsert_mesh_entry_mcap so Entry MC is only
+    // lowered within the 30-min discovery window from an authorized source.
+    // Later price dumps observed via /holders cannot corrupt Entry MC.
+    {
+      const { error: meshErr } = await supabaseForMesh.rpc('upsert_mesh_entry_mcap', {
+        p_mint: tokenMint,
+        p_symbol: tokenSymbol || null,
+        p_name: tokenName || null,
+        p_observed_mcap: inferredMarketCapUSD || null,
+        p_source: 'holdersintel',
+        p_observed_at: new Date().toISOString(),
+      });
+      if (meshErr) {
+        console.error('[bagless] mesh upsert failed:', meshErr.message);
+        throw new Error(`mesh upsert failed: ${meshErr.message}`);
+      }
+      // Stamp health_grade separately — RPC focuses on entry/timestamps.
+      if (healthGrade) {
+        await supabaseForMesh
+          .from('holders_intel_seen_tokens')
+          .update({ health_grade: healthGrade })
+          .eq('token_mint', tokenMint);
+      }
+    }
     console.log(`[bagless] ✅ Upserted ${tokenMint.slice(0,8)} into seen_tokens`);
 
     // 🪣 Hydrate pumpfun_watchlist with this scan's decision data so the admin
