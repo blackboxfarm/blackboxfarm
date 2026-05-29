@@ -1,34 +1,36 @@
-## Why the Public channel has gone silent
+# Plan: Demo post + ordering + multiplier audit
 
-Public posts are not a separate ingestion path — they only fire from the **re-sighting / milestone flow** in `no-lube-orchestrate`. Yes, we DO track the gain factor (`ratio = current_mcap / entry_market_cap`) and we only fire 2x, 3x, 4x… milestones (`Math.floor(ratio)` must exceed `prev.last_multiplier`). That logic is fine.
+## 1. Demo Big Picture post → Private (luna_dusk_Private)
 
-The blocker is one step earlier in the pipeline.
+- Pick a real recently-ingested token that has full enrichment (mesh + holders complete) so the demo renders with real data, not placeholders.
+- Call `no-lube-compose` with `template_key = luna_dusk_Private`, `channel = private`, `force = true` to bypass cooldowns/dedupe.
+- Pipe result through `no-lube-orchestrate` (or directly post via the private push path) so the rendered card goes to the Private TG channel only.
+- Confirm in `no_lube_post_log` that `channel = 'private'` and `tg_message_id` is set, and that `token_image_url` resolved from a live source (Helius/Dex), not the fallback.
 
-### Evidence from the DB (last 36h)
+## 2. Snapshot-first, Big Picture later
 
-- Re-sighting events per hour collapsed from ~190/hr on May 27 23:00 → **0/hr from May 28 ~21:00 onward**.
-- Snapshots are still flowing fine (Phase 1).
-- Every single new token since 21:56 May 28 has a `snapshot` row but **zero `big_picture` rows**.
-- Lifecycle rows for every one of those tokens show:
-  - `creator_status = resolved` ✓
-  - `blackbox_harvested_at` ✓
-  - `holders_refreshed_at` = **NULL** ✗
-  - `mesh_hydrated_at` = **NULL** ✗
+Current state: `no-lube-orchestrate` decides per-event which card to compose; on first ingest it tries Big Picture immediately if gates pass, otherwise nothing fires until re-sighting.
 
-### Why this kills Public posts
+Change to a two-phase sequence per new token:
+- **Phase A — Snapshot (fast)**: on ingest, always compose + push `snapshot` template immediately using whatever data is available (price, mcap, dev, basic socials). No wait on mesh/holders.
+- **Phase B — Big Picture (deferred)**: schedule a follow-up Big Picture pass that fires once `holders_refreshed_at` AND `mesh_hydrated_at` are stamped (or after a max-wait, e.g. 8 min, whichever first). Implemented either by:
+  - a small `pending_big_picture` queue table with `enqueued_at`, polled by an existing cron, OR
+  - a self-rescheduling `pg_net.http_post` chain inside `no-lube-orchestrate` (cheaper, no new table).
+- Guarantee ordering: Big Picture compose checks that the snapshot for the same `(mint, channel)` was posted first; if not, posts snapshot inline before Big Picture.
 
-`no-lube-orchestrate` gates the Big-Picture post on `holders_refreshed_at` + `mesh_hydrated_at` + `blackbox_harvested_at`. With holders/mesh missing, the orchestrator returns `big_picture_not_eligible_yet` forever. Re-sighting (the ONLY path that posts to Public) requires `hasBigPicture === true`, so it can never trigger. No big_picture → no re-sighting → no public post.
+## 3. 2x / 4x multiplier trigger audit
 
-The 2x/3x/4x detector is healthy; it's just never reached because no token graduates past the snapshot phase.
+Investigate end-to-end why multiplier-triggered milestone images may not be firing:
+- Query `telegram_insider_token_lifecycle` for rows where `entry_market_cap` is NULL or 0 — those can never compute a multiplier.
+- Check the re-sighting handler in `no-lube-orchestrate`: confirm `current_mcap` is being read from a live source (Dex cache) at re-sight time, not from a stale snapshot, and that `Math.floor(current / entry) > last_multiplier` actually updates `last_multiplier`.
+- Verify the milestone branch calls `compose-card` with the milestone template (not snapshot) and that `multiplier` is passed into the template vars.
+- Check `no_lube_post_log` for any rows with `kind = 'milestone'` in the last 7 days; if zero, the trigger path is dead.
+- Report findings; fix the broken link (likely either entry_market_cap not being seeded on first post, or last_multiplier never being persisted back).
 
-## Plan
+## Deliverables
 
-1. **Confirm root cause** — check `bagless-holders-report` and the mesh-hydration cron logs for the cutoff window (~21:56 UTC May 28). Likely a Helius quota wall, a deploy regression, or the cron stopped firing.
-2. **Restart / fix the holders refresher** so `holders_refreshed_at` and `mesh_hydrated_at` get stamped again. (Most likely a single edge function or pg_cron job that needs re-enabling, an API-key rotation, or a fix to a thrown error.)
-3. **Backfill the stuck queue** — re-run `bagless-holders-report` for the ~15 lifecycle rows created since 21:56 May 28 so they catch up to Big-Picture and become eligible for re-sighting.
-4. **Add a safety valve** in `no-lube-orchestrate`: if a token is older than N minutes and only the holders/mesh gates are blocking it, surface a single warning row in `system_alerts` (or similar) so this never silently stalls Public again.
-5. (Optional, separate) clean up `channel = NULL` on historical `no_lube_post_log` rows where `tg_message_id` proves a Public push happened, so the Process tab analytics are accurate.
+- One demo Big Picture post visible in the Private TG channel.
+- Orchestrator refactored so every new token gets Snapshot → Big Picture in that order.
+- Written diagnosis of the multiplier trigger path with the specific broken step identified and patched.
 
-No changes to the 2x/3x/4x milestone logic — that's working as designed.
-
-Awaiting **Plan Approved** before I dig into logs and patch the holders/mesh stage.
+Awaiting **Plan Approved** before any code or DB changes.
