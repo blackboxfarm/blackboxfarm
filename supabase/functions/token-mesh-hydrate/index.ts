@@ -556,6 +556,20 @@ async function handle(req: Request): Promise<Response> {
     overallOk ? null : 'too few enrichments succeeded',
     overallOk ? 'value_present' : 'fetch_failed');
 
+  // Stamp telegram_insider_token_lifecycle.mesh_hydrated_at so the
+  // no-lube-orchestrate Big Picture eligibility gate can advance. We stamp
+  // on overallOk; partial runs leave the row untouched so a retry can fix it.
+  if (overallOk) {
+    try {
+      await supabase
+        .from('telegram_insider_token_lifecycle')
+        .update({ mesh_hydrated_at: new Date().toISOString() })
+        .eq('token_mint', mint);
+    } catch (e) {
+      console.warn('[token-mesh-hydrate] stamp mesh_hydrated_at failed (non-fatal):', (e as Error).message);
+    }
+  }
+
   return new Response(
     JSON.stringify({
       ok: overallOk,
