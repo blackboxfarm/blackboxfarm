@@ -117,13 +117,15 @@ serve(async (req) => {
     // Threshold + leaks min mcap from global profile
     let threshold = 2.0;
     let leaksMinMcap = 75000;
+    let backlogMaxAgeMin = 30;
     const { data: gprof } = await supabase
       .from('no_lube_global_profile')
-      .select('multiplier_threshold, leaks_min_mcap')
+      .select('multiplier_threshold, leaks_min_mcap, backlog_max_age_min')
       .eq('id', 'singleton')
       .maybeSingle();
     if (gprof?.multiplier_threshold) threshold = Number(gprof.multiplier_threshold) || 2.0;
     if ((gprof as any)?.leaks_min_mcap != null) leaksMinMcap = Number((gprof as any).leaks_min_mcap) || 75000;
+    if ((gprof as any)?.backlog_max_age_min != null) backlogMaxAgeMin = Number((gprof as any).backlog_max_age_min) || 30;
 
     // Last successful post for this mint (carries times_posted + last_multiplier)
     const { data: prevRows } = await supabase
@@ -154,6 +156,22 @@ serve(async (req) => {
       .select('entry_market_cap, token_symbol, creator_wallet, creator_status, holders_refreshed_at, blackbox_harvested_at, mesh_hydrated_at, created_at, first_called_at')
       .eq('token_mint', mint)
       .maybeSingle();
+
+    // ---- BACKLOG AGE GATE ----
+    // Ignore lifecycle rows older than backlogMaxAgeMin from first_called_at.
+    // Stops the safety-sweep cron from re-firing snapshot/big_picture/leaks
+    // for old dead carcasses the system already moved past.
+    const calledAtMs = lcRow?.first_called_at ? new Date(lcRow.first_called_at).getTime() : null;
+    const ageMin = calledAtMs ? (Date.now() - calledAtMs) / 60000 : null;
+    if (ageMin != null && ageMin > backlogMaxAgeMin) {
+      return jsonResp({
+        ok: true, flow: 'skipped', skipped: true,
+        reason: 'backlog_ignored',
+        first_called_at: lcRow!.first_called_at,
+        age_minutes: Math.round(ageMin),
+        backlog_max_age_min: backlogMaxAgeMin,
+      });
+    }
 
     // ---- STRICT ELIGIBILITY GATE ----
     // Two-phase: SNAPSHOT fires fast with only minimal lifecycle row + entry mcap,
