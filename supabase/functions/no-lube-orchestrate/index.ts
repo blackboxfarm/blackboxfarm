@@ -160,14 +160,16 @@ serve(async (req) => {
       .maybeSingle();
 
     // ---- BACKLOG AGE GATE ----
-    // Ignore lifecycle rows older than backlogMaxAgeMin from first_called_at.
-    // Stops the safety-sweep cron from re-firing snapshot/big_picture/leaks
-    // for old dead carcasses the system already moved past.
+    // Ignore lifecycle rows older than backlogMaxAgeMin from first_called_at
+    // ONLY for first-touch posts (no snapshot/big_picture yet). Stops the
+    // safety-sweep cron from re-firing a first snapshot for old dead carcasses
+    // the system already moved past. Re-sighting / multiplier posts MUST
+    // bypass this gate — a token that pumps to 6x 90 minutes after first
+    // call is still very much a multiplier worth posting.
     const calledAtMs = lcRow?.first_called_at ? new Date(lcRow.first_called_at).getTime() : null;
     const ageMin = calledAtMs ? (Date.now() - calledAtMs) / 60000 : null;
-    // Legacy-brag bypasses the backlog age gate by design — it's intentionally
-    // targeting tokens past the 48h freshness window.
-    if (!isLegacyBrag && !isFastPost && ageMin != null && ageMin > backlogMaxAgeMin) {
+    const isFirstTouch = !hasSnapshot && !hasBigPicture;
+    if (!isLegacyBrag && !isFastPost && isFirstTouch && ageMin != null && ageMin > backlogMaxAgeMin) {
       return jsonResp({
         ok: true, flow: 'skipped', skipped: true,
         reason: 'backlog_ignored',
