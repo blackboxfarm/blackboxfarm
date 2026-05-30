@@ -54,7 +54,7 @@ serve(async (req) => {
   let requestedMint: string | null = null;
 
   try {
-    const { mint, force, fast_post } = await req.json();
+    const { mint, force, fast_post, insiders_milestone } = await req.json();
     requestedMint = typeof mint === 'string' ? mint : null;
     if (!mint || typeof mint !== 'string') {
       return new Response(JSON.stringify({ ok: false, error: 'mint required' }), {
@@ -108,6 +108,7 @@ serve(async (req) => {
       const r = await invoke(`${supabaseUrl}/functions/v1/no-lube-orchestrate`, serviceKey, {
         mint,
         source: fast_post ? 'insiders-fast-post' : 'insiders-ingest',
+        insiders_milestone: insiders_milestone ?? null,
       }, 60000);
       orchestrate = { ok: r.ok, status: r.status, body: r.json };
     } catch (e) {

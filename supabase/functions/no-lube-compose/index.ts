@@ -17,7 +17,10 @@ const corsHeaders = {
 };
 
 const FRESH_MS = 2 * 60 * 1000;
-const DASH = '—';
+// Spec: any {var} we cannot resolve renders as the literal word "pending" so
+// operators can see at a glance which fields the mesh has filled in at this
+// stage of enrichment. DASH is intentionally a word, not an em-dash.
+const DASH = 'pending';
 
 const ICON = {
   momentum: { strong: '🚀', moderate: '➡️', fading: '📉', dash: DASH },
@@ -342,9 +345,10 @@ serve(async (req) => {
     }
     const channel: 'default' | 'public' | 'private' =
       rawChannel === 'public' || rawChannel === 'private' ? rawChannel : 'default';
-    const kind: 'snapshot' | 'big_picture' | 'leaks' =
+    const kind: 'snapshot' | 'big_picture' | 'leaks' | 'intel_update' =
       rawKind === 'snapshot' ? 'snapshot'
       : rawKind === 'leaks' ? 'leaks'
+      : rawKind === 'intel_update' ? 'intel_update'
       : 'big_picture';
     const multiplierNum = typeof rawMultiplier === 'number' && isFinite(rawMultiplier) && rawMultiplier > 0
       ? rawMultiplier : null;
@@ -357,12 +361,14 @@ serve(async (req) => {
     const primaryTemplateName =
       kind === 'snapshot' ? 'no_lube_snapshot_private'
       : kind === 'leaks' ? 'no_lube_leaks_public'
+      : kind === 'intel_update' ? 'no_lube_intel_update_private'
       : (channel === 'public' ? 'no_lube_public'
          : channel === 'private' ? 'no_lube_private'
          : 'no_lube');
     const fallbackTemplateName =
       kind === 'snapshot' ? 'no_lube_private'
       : kind === 'leaks' ? 'no_lube_snapshot_private'
+      : kind === 'intel_update' ? 'no_lube_snapshot_private'
       : null;
 
     const supabase = createClient(
@@ -459,10 +465,14 @@ serve(async (req) => {
         .maybeSingle();
       tplText = fb?.template_text || null;
     }
-    // Hard-coded snapshot/leaks fallback if no template at all exists yet.
-    if (!tplText && (kind === 'snapshot' || kind === 'leaks')) {
+    // Hard-coded snapshot/leaks/intel_update fallback if no template exists yet.
+    if (!tplText && (kind === 'snapshot' || kind === 'leaks' || kind === 'intel_update')) {
+      const header =
+        kind === 'leaks' ? '💧 *LEAK* — {ticker}\n'
+        : kind === 'intel_update' ? '🛰 *INTEL UPDATE* — {ticker}\n'
+        : '⚡ *SNAPSHOT* — {ticker}\n';
       tplText =
-        (kind === 'leaks' ? '💧 *LEAK* — {ticker}\n' : '⚡ *SNAPSHOT* — {ticker}\n') +
+        header +
         '`{ca}`\n\n' +
         '💰 MC: {mc}  ·  Entry: {mcEntry}\n' +
         '💧 LP: {lp}  ·  📊 24h Vol: {vol24h}\n' +
@@ -978,7 +988,7 @@ serve(async (req) => {
       // Snapshot-only: surface the token's mint image so orchestrate/push can
       // attach it as the Telegram photo header. Big-picture posts get their
       // header from the AI-rendered card pipeline instead.
-      image_url: (kind === 'snapshot' || kind === 'leaks') && useMintImageOnSnapshot ? tokenImageUrl : null,
+      image_url: (kind === 'snapshot' || kind === 'leaks' || kind === 'intel_update') && useMintImageOnSnapshot ? tokenImageUrl : null,
       token_image_url: tokenImageUrl,
       banner_url: bannerUrl,
       banner_source: bannerSource,

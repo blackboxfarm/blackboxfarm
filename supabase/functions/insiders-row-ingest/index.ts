@@ -70,6 +70,38 @@ serve(async (req) => {
 
   const apiErrors: string[] = [];
 
+  // ---- ADOPT-FROM-INSIDERS ----
+  // When the incoming Insiders message is a MILESTONE post for a token we
+  // don't have yet (or already have but never posted), we parse their
+  // multiplier + entry/current MC and forward it to no-lube-orchestrate so
+  // the first post lands on the matching tier (2x → Private; ≥3x → Private +
+  // Public). Enrichment continues normally in the background.
+  const parseShortNum = (raw: string | null | undefined): number | null => {
+    if (!raw) return null;
+    const s = String(raw).replace(/[\s,$]/g, '');
+    const m = s.match(/^(\d+(?:\.\d+)?)([kKmMbB]?)$/);
+    if (!m) return null;
+    const n = parseFloat(m[1]);
+    if (!Number.isFinite(n)) return null;
+    const suf = m[2].toLowerCase();
+    const mult = suf === 'k' ? 1_000 : suf === 'm' ? 1_000_000 : suf === 'b' ? 1_000_000_000 : 1;
+    return n * mult;
+  };
+  let insidersMilestone: { multiplier: number; entry_mcap: number | null; current_mcap: number | null } | null = null;
+  if (rawMessage && /MILESTONE/i.test(rawMessage)) {
+    const mX = rawMessage.match(/MILESTONE:?\s*([\d.]+)\s*X/i);
+    const multiplier = mX ? parseFloat(mX[1]) : NaN;
+    if (Number.isFinite(multiplier) && multiplier >= 2) {
+      const mEntry = rawMessage.match(/Entry\s*MC\s*[:=]\s*\$?([\d.,]+\s*[kKmMbB]?)/i);
+      const mCurr = rawMessage.match(/(?:Current\s*MC|Market\s*Cap)\s*[:=]\s*\$?([\d.,]+\s*[kKmMbB]?)/i);
+      insidersMilestone = {
+        multiplier,
+        entry_mcap: parseShortNum(mEntry?.[1] ?? null),
+        current_mcap: parseShortNum(mCurr?.[1] ?? null),
+      };
+    }
+  }
+
   // 0. DB-first cache.
   const cache = await lookupKnownToken(supabase, mint);
   console.log(`[insiders-row-ingest] ${symbol || mint.slice(0,8)} cache hit=${cache.hit} sources=${cache.hitSources.join(',')}`);
@@ -183,7 +215,12 @@ serve(async (req) => {
 
   // 4. Fire downstream pipelines. All fire-and-forget — we return fast.
   //    no-lube-ingest will read the row and decide whether to post.
-  invokeFn(supabaseUrl, serviceKey, 'no-lube-ingest', { mint });
+  //    Adopt-from-Insiders payload is forwarded so orchestrate can route
+  //    the first post straight to the matching tier.
+  invokeFn(supabaseUrl, serviceKey, 'no-lube-ingest', {
+    mint,
+    insiders_milestone: insidersMilestone,
+  });
 
   // If dev_wallet is still in_process, fire background KYC genealogy walk
   // so the next compose (2x/3x repost) can include the missing pieces.

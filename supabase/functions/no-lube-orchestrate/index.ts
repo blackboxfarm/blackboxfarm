@@ -65,7 +65,7 @@ function isTerminalDead(rows: Array<{ verdict_class: string | null; price_change
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
-    const { mint, source_message_id, source, flow_hint } = await req.json();
+    const { mint, source_message_id, source, flow_hint, insiders_milestone } = await req.json();
     if (!mint || typeof mint !== 'string') {
       return new Response(JSON.stringify({ ok: false, error: 'mint required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -73,6 +73,15 @@ serve(async (req) => {
     }
     const isLegacyBrag = source === 'legacy-sweeper' || flow_hint === 'legacy_brag';
     const isFastPost = source === 'insiders-fast-post' || flow_hint === 'fast_post';
+    // Adopt-from-Insiders: when Insiders posts a MILESTONE for a token we
+    // missed, the upstream ingest forwards their stats so we can route the
+    // first post straight to the matching tier (2x → Private, ≥3x → Private+Public).
+    const adoptedMultiplier =
+      insiders_milestone && typeof insiders_milestone === 'object' &&
+      isFinite(Number((insiders_milestone as any).multiplier)) &&
+      Number((insiders_milestone as any).multiplier) >= 2
+        ? Number((insiders_milestone as any).multiplier)
+        : null;
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -287,7 +296,7 @@ serve(async (req) => {
       opts: {
         image_url?: string | null;
         cta?: { text: string; url: string } | null;
-        kind?: 'snapshot' | 'big_picture' | 'leaks';
+        kind?: 'snapshot' | 'big_picture' | 'leaks' | 'intel_update';
         reply_to_message_id?: number | null;
       } = {},
     ) => {
@@ -487,17 +496,31 @@ serve(async (req) => {
 
     const ratio = probeMcap / baseMcap;
     if (ratio < threshold) {
+      // ---- INTEL UPDATE (sub-2x re-sighting) ----
+      // Fire a Private "Intel Update" post on every sub-2x re-sighting so the
+      // operator can see the token is still in play. Public Leak still fires
+      // its one-shot when MC crosses leaksMinMcap.
+      const intelUpdate = await composeAndPush('private', mint, ratio, { kind: 'intel_update' });
+      if (intelUpdate.ok && intelUpdate.pushed && intelUpdate.mcap != null) {
+        await stampPost(intelUpdate.logId, {
+          // Do NOT advance last_multiplier across an integer band — the milestone
+          // gate at 2x/3x/... still needs to fire when we cross it later.
+          times_posted: (prev.times_posted ?? 1) + 1,
+          last_mcap_at_post: intelUpdate.mcap,
+          last_multiplier: prev.last_multiplier ?? null,
+        });
+      }
       const leaks = await maybeFireLeaks(probeMcap);
       return jsonResp({
         ok: true,
-        flow: 'skipped',
-        skipped: true,
+        flow: 'intel_update',
+        skipped: false,
         reason: 'below_multiplier_threshold',
         threshold,
         base_mcap: baseMcap,
         current_mcap: probeMcap,
         ratio,
-        public_leaks: leaks,
+        results: { private: intelUpdate, public_leaks: leaks },
       });
     }
 
@@ -509,9 +532,12 @@ serve(async (req) => {
     // While the price hovers in the same milestone band we stay silent so
     // the channel doesn't repeat "2.1x / 2.2x / 2.1x" over and over.
     const currentMilestone = Math.floor(ratio);
-    const prevMilestone = prev.last_multiplier != null
+    // When Insiders feeds us a MILESTONE for a token we missed, treat their
+    // multiplier as the floor we've already posted so the gate doesn't trip.
+    const adoptedFloor = adoptedMultiplier != null ? Math.floor(adoptedMultiplier) - 1 : null;
+    const prevMilestone = prev?.last_multiplier != null
       ? Math.floor(Number(prev.last_multiplier))
-      : 1; // first re-sighting baseline = 1x band
+      : (adoptedFloor != null ? adoptedFloor : 1); // first re-sighting baseline = 1x band
     // Legacy-brag bypasses the integer milestone gate — the legacy sweeper
     // already enforced its own upward-progression gate (last_multiplier *
     // legacy_progress_step) before dispatching.
@@ -598,13 +624,23 @@ serve(async (req) => {
       return null;
     };
 
-    const publicTpl = await loadTemplate('public', pubProfile?.language || null);
-    const privateTpl = await loadTemplate('private', privProfile?.language || null);
+    // ---- TIER ROUTING ----
+    // Spec: 2x → Private only. ≥3x → Private + Public. Legacy brag still posts
+    // to both because the legacy sweeper is reserved for big-number callbacks.
+    const includePublic = isLegacyBrag || currentMilestone >= 3;
 
-    // Render both cards in parallel (independent calls).
+    const privateTpl = await loadTemplate('private', privProfile?.language || null);
+    const publicTpl = includePublic
+      ? await loadTemplate('public', pubProfile?.language || null)
+      : null;
+
+    // Render cards in parallel (independent calls). Skip the public render when
+    // we're not going to post to the public channel this tick.
     const [privateImageUrl, publicImageUrl] = await Promise.all([
       renderCard('private', privateTpl, privProfile, 'Premium Insiders'),
-      renderCard('public', publicTpl, pubProfile, pubProfile?.telegram_chat_title || 'No Lube Alpha'),
+      includePublic
+        ? renderCard('public', publicTpl, pubProfile, pubProfile?.telegram_chat_title || 'No Lube Alpha')
+        : Promise.resolve(null),
     ]);
 
     const privateResult = await composeAndPush('private', mint, multiplier, {
@@ -612,14 +648,16 @@ serve(async (req) => {
     });
 
     const publicCta = buildPublicCta();
-    const publicResult = await composeAndPush('public', mint, multiplier, {
-      image_url: publicImageUrl,
-      cta: publicCta,
-    });
+    const publicResult = includePublic
+      ? await composeAndPush('public', mint, multiplier, {
+          image_url: publicImageUrl,
+          cta: publicCta,
+        })
+      : { ok: true, channel: 'public' as const, pushed: false, eligible: false, block_reason: 'public_below_3x_threshold', logId: null, mcap: null };
 
     if (privateResult.ok && privateResult.pushed && privateResult.mcap != null) {
       await stampPost(privateResult.logId, {
-        times_posted: (prev.times_posted ?? 1) + 1,
+        times_posted: (prev?.times_posted ?? 1) + 1,
         last_mcap_at_post: privateResult.mcap,
         last_multiplier: multiplier,
       });
@@ -631,7 +669,7 @@ serve(async (req) => {
     }
     if (publicResult.ok && publicResult.pushed && publicResult.mcap != null) {
       await stampPost(publicResult.logId, {
-        times_posted: (prev.times_posted ?? 1) + 1,
+        times_posted: (prev?.times_posted ?? 1) + 1,
         last_mcap_at_post: publicResult.mcap,
         last_multiplier: multiplier,
       });
