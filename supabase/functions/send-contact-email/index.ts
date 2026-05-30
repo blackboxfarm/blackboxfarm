@@ -136,32 +136,7 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    // Send Telegram notification to BlackBox group
-    const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN");
-    if (ticket && botToken) {
-      try {
-        // Look up BlackBox group chat ID from telegram_message_targets
-        const { data: targets } = await supabaseAdmin
-          .from("telegram_message_targets")
-          .select("chat_id")
-          .eq("label", "BLACKBOX")
-          .limit(1);
-        
-        const chatId = targets?.[0]?.chat_id;
-        if (chatId) {
-          const priorityEmoji = priority === "critical" ? "🔴" : priority === "high" ? "🟠" : priority === "medium" ? "🟡" : "🟢";
-          const tgMessage = `🎫 <b>New Ticket #${ticketNum}</b> | ${priorityEmoji} ${priority.toUpperCase()} | ${safeCategory}\n<b>From:</b> ${safeName} (${safeEmail})\n<b>Subject:</b> ${safeSubject}\n\n${safeMessage.slice(0, 200)}${message.length > 200 ? "…" : ""}`;
-          
-          await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: chatId, text: tgMessage, parse_mode: "HTML" }),
-          });
-        }
-      } catch (tgErr) {
-        console.warn("Failed to send TG notification:", tgErr);
-      }
-    }
+    console.warn("BLACKBOX Telegram muted — contact ticket alert logged only", { ticket_number: ticketNum });
 
     // Send notification to support team (using escaped values in HTML)
     const supportEmail = await resend.emails.send({
