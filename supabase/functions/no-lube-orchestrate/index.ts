@@ -496,17 +496,31 @@ serve(async (req) => {
 
     const ratio = probeMcap / baseMcap;
     if (ratio < threshold) {
+      // ---- INTEL UPDATE (sub-2x re-sighting) ----
+      // Fire a Private "Intel Update" post on every sub-2x re-sighting so the
+      // operator can see the token is still in play. Public Leak still fires
+      // its one-shot when MC crosses leaksMinMcap.
+      const intelUpdate = await composeAndPush('private', mint, ratio, { kind: 'intel_update' });
+      if (intelUpdate.ok && intelUpdate.pushed && intelUpdate.mcap != null) {
+        await stampPost(intelUpdate.logId, {
+          // Do NOT advance last_multiplier across an integer band — the milestone
+          // gate at 2x/3x/... still needs to fire when we cross it later.
+          times_posted: (prev.times_posted ?? 1) + 1,
+          last_mcap_at_post: intelUpdate.mcap,
+          last_multiplier: prev.last_multiplier ?? null,
+        });
+      }
       const leaks = await maybeFireLeaks(probeMcap);
       return jsonResp({
         ok: true,
-        flow: 'skipped',
-        skipped: true,
+        flow: 'intel_update',
+        skipped: false,
         reason: 'below_multiplier_threshold',
         threshold,
         base_mcap: baseMcap,
         current_mcap: probeMcap,
         ratio,
-        public_leaks: leaks,
+        results: { private: intelUpdate, public_leaks: leaks },
       });
     }
 
