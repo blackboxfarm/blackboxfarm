@@ -20,7 +20,7 @@ import {
   type TemplateName,
 } from '@/lib/share-template';
 
-export type NoLubeChannelKind = 'default' | 'public' | 'private' | 'snapshot';
+export type NoLubeChannelKind = 'default' | 'public' | 'leaks' | 'private' | 'snapshot';
 
 export const NO_LUBE_LANGUAGES: { code: string; label: string }[] = [
   { code: 'en', label: 'English' },
@@ -38,7 +38,7 @@ export const NO_LUBE_LANGUAGES: { code: string; label: string }[] = [
 ];
 
 interface ChannelProfile {
-  kind: 'default' | 'public' | 'private' | 'snapshot';
+  kind: NoLubeChannelKind;
   telegram_chat_id: string | null;
   telegram_chat_title: string | null;
   telegram_chat_username: string | null;
@@ -93,7 +93,10 @@ export function NoLubeChannelPanel({
       // Snapshot is a post-kind, not its own channel — it always rides the
       // Private channel's chat config. Load the private profile for display so
       // the operator can see where snapshot posts will be delivered.
-      const profileKey = kind === 'snapshot' ? 'private' : kind;
+      const profileKey =
+        kind === 'snapshot' ? 'private'
+        : kind === 'leaks' ? 'public'
+        : kind;
       const { data, error } = await (supabase as any)
         .from('no_lube_channel_profiles')
         .select('*')
@@ -109,6 +112,7 @@ export function NoLubeChannelPanel({
           tab_nickname:
             kind === 'default' ? 'Default'
             : kind === 'public' ? 'Public Channel'
+            : kind === 'leaks' ? 'Leaks Post (Public)'
             : kind === 'snapshot' ? 'Snapshot Post (Private)'
             : 'Private Channel',
           telegram_link: '',
