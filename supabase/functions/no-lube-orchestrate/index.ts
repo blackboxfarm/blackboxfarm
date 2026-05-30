@@ -509,7 +509,10 @@ serve(async (req) => {
     const prevMilestone = prev.last_multiplier != null
       ? Math.floor(Number(prev.last_multiplier))
       : 1; // first re-sighting baseline = 1x band
-    if (currentMilestone <= prevMilestone) {
+    // Legacy-brag bypasses the integer milestone gate — the legacy sweeper
+    // already enforced its own upward-progression gate (last_multiplier *
+    // legacy_progress_step) before dispatching.
+    if (!isLegacyBrag && currentMilestone <= prevMilestone) {
       return jsonResp({
         ok: true,
         flow: 'skipped',
@@ -617,6 +620,11 @@ serve(async (req) => {
         last_mcap_at_post: privateResult.mcap,
         last_multiplier: multiplier,
       });
+      if (isLegacyBrag && privateResult.logId) {
+        await supabase.from('no_lube_post_log')
+          .update({ post_kind: 'legacy_brag' })
+          .eq('id', privateResult.logId);
+      }
     }
     if (publicResult.ok && publicResult.pushed && publicResult.mcap != null) {
       await stampPost(publicResult.logId, {
@@ -624,11 +632,16 @@ serve(async (req) => {
         last_mcap_at_post: publicResult.mcap,
         last_multiplier: multiplier,
       });
+      if (isLegacyBrag && publicResult.logId) {
+        await supabase.from('no_lube_post_log')
+          .update({ post_kind: 'legacy_brag' })
+          .eq('id', publicResult.logId);
+      }
     }
 
     return jsonResp({
       ok: true,
-      flow: 're_sighting',
+      flow: isLegacyBrag ? 'legacy_brag' : 're_sighting',
       threshold,
       baseline_source: baselineSource,
       base_mcap: baseMcap,
