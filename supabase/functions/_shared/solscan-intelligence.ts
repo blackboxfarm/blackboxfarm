@@ -310,6 +310,16 @@ export async function solscanCheckAccountLabel(
   walletAddress: string,
   apiErrors: string[] = []
 ): Promise<{ label: string | null; isCex: boolean; tags: string[] }> {
+  // Dictionary short-circuit — if we already know this is a CEX hot wallet,
+  // skip the Solscan call entirely. Cuts /v2.0/account/detail volume hard.
+  try {
+    const { getCexName } = await import('./cex-wallets.ts');
+    const known = getCexName(walletAddress);
+    if (known) {
+      return { label: known, isCex: true, tags: [] };
+    }
+  } catch { /* non-fatal */ }
+
   const scrapeFallback = async () => {
     const scraped = await solscanScrapeFundingInfo(walletAddress, apiErrors);
     const label = scraped.fundedByLabel || null;
@@ -345,6 +355,11 @@ export async function solscanCheckAccountLabel(
     if (!resp.ok) {
       await logger.complete(resp.status, `Solscan ${resp.status}`);
       apiErrors.push(formatSolscanApiError('Solscan account/detail', resp.status, ''));
+      // Fail fast on rate-limit / quota / circuit-open — let caller fall through
+      // to Helius without burning time on the scrape fallback.
+      if (resp.status === 429 || resp.status === 403 || resp.status === 504) {
+        return { label: null, isCex: false, tags: [] };
+      }
       return await scrapeFallback();
     }
     await logger.complete(resp.status);
