@@ -1,0 +1,1 @@
+UPDATE public.holders_intel_templates SET is_active = true, updated_at = now() WHERE template_name = 'no_lube_leaks_public';
