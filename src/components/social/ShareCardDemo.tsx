@@ -35,6 +35,7 @@ import { NoLubeProfileHeader } from './NoLubeProfileHeader';
 import { NoLubeRecentSightings } from './NoLubeRecentSightings';
 import { NoLubeTemplateManager } from './NoLubeTemplateManager';
 import { NoLubeArchivePanel } from './NoLubeArchivePanel';
+import { NoLubeDailiesPanel } from './NoLubeDailiesPanel';
 
 interface CronStatus {
   schedulersActive: number;
@@ -690,6 +691,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                       <TabsTrigger value="templates">🎯 Templates</TabsTrigger>
                       <TabsTrigger value="assets">🎨 Asset Library</TabsTrigger>
                       <TabsTrigger value="archive">📦 Archive</TabsTrigger>
+                      <TabsTrigger value="dailies">🏆 Dailies</TabsTrigger>
                     </TabsList>
                     {(['default', 'public', 'private', 'snapshot'] as const).map(kind => {
                       const tname: TemplateName =
@@ -720,6 +722,9 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                     </TabsContent>
                     <TabsContent value="archive" className="space-y-4 pt-3">
                       <NoLubeArchivePanel />
+                    </TabsContent>
+                    <TabsContent value="dailies" className="space-y-4 pt-3">
+                      <NoLubeDailiesPanel />
                     </TabsContent>
                   </Tabs>
                 </>
