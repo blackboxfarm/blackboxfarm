@@ -65,7 +65,7 @@ function isTerminalDead(rows: Array<{ verdict_class: string | null; price_change
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
-    const { mint, source_message_id, source, flow_hint } = await req.json();
+    const { mint, source_message_id, source, flow_hint, insiders_milestone } = await req.json();
     if (!mint || typeof mint !== 'string') {
       return new Response(JSON.stringify({ ok: false, error: 'mint required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -73,6 +73,15 @@ serve(async (req) => {
     }
     const isLegacyBrag = source === 'legacy-sweeper' || flow_hint === 'legacy_brag';
     const isFastPost = source === 'insiders-fast-post' || flow_hint === 'fast_post';
+    // Adopt-from-Insiders: when Insiders posts a MILESTONE for a token we
+    // missed, the upstream ingest forwards their stats so we can route the
+    // first post straight to the matching tier (2x → Private, ≥3x → Private+Public).
+    const adoptedMultiplier =
+      insiders_milestone && typeof insiders_milestone === 'object' &&
+      isFinite(Number((insiders_milestone as any).multiplier)) &&
+      Number((insiders_milestone as any).multiplier) >= 2
+        ? Number((insiders_milestone as any).multiplier)
+        : null;
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
