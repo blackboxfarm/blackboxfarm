@@ -11679,6 +11679,7 @@ export type Database = {
         Row: {
           id: string
           language: string
+          leaks_min_mcap: number
           multiplier_threshold: number
           snapshot_use_mint_image: boolean
           style: string
@@ -11687,6 +11688,7 @@ export type Database = {
         Insert: {
           id?: string
           language?: string
+          leaks_min_mcap?: number
           multiplier_threshold?: number
           snapshot_use_mint_image?: boolean
           style?: string
@@ -11695,6 +11697,7 @@ export type Database = {
         Update: {
           id?: string
           language?: string
+          leaks_min_mcap?: number
           multiplier_threshold?: number
           snapshot_use_mint_image?: boolean
           style?: string

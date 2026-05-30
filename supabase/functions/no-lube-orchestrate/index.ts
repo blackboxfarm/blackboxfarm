@@ -114,14 +114,16 @@ serve(async (req) => {
       }
     }
 
-    // Threshold from global profile
+    // Threshold + leaks min mcap from global profile
     let threshold = 2.0;
+    let leaksMinMcap = 75000;
     const { data: gprof } = await supabase
       .from('no_lube_global_profile')
-      .select('multiplier_threshold')
+      .select('multiplier_threshold, leaks_min_mcap')
       .eq('id', 'singleton')
       .maybeSingle();
     if (gprof?.multiplier_threshold) threshold = Number(gprof.multiplier_threshold) || 2.0;
+    if ((gprof as any)?.leaks_min_mcap != null) leaksMinMcap = Number((gprof as any).leaks_min_mcap) || 75000;
 
     // Last successful post for this mint (carries times_posted + last_multiplier)
     const { data: prevRows } = await supabase
@@ -134,9 +136,11 @@ serve(async (req) => {
     const allPrev = prevRows || [];
     const snapshotPost = allPrev.find((r: any) => r.post_kind === 'snapshot') || null;
     const bigPicturePosts = allPrev.filter((r: any) => r.post_kind === 'big_picture' || r.post_kind === 'milestone' || r.post_kind == null);
+    const leaksPost = allPrev.find((r: any) => r.post_kind === 'leaks') || null;
     const prev = bigPicturePosts[0] || null;
     const hasSnapshot = !!snapshotPost;
     const hasBigPicture = !!prev;
+    const hasLeaks = !!leaksPost;
     const isFirstSighting = !hasBigPicture; // first big_picture = first "real" sighting
 
     // FIRST-SEEN mcap = the Insiders scrape's entry_market_cap. This is the
@@ -259,7 +263,7 @@ serve(async (req) => {
       opts: {
         image_url?: string | null;
         cta?: { text: string; url: string } | null;
-        kind?: 'snapshot' | 'big_picture';
+        kind?: 'snapshot' | 'big_picture' | 'leaks';
         reply_to_message_id?: number | null;
       } = {},
     ) => {
@@ -316,6 +320,28 @@ serve(async (req) => {
       );
     };
 
+    // ---- LEAKS FORK ----
+    // Tokens that don't (yet) qualify for the 2x public re-sighting still get
+    // a public "Leak" post once MC crosses leaksMinMcap (default $75k). One-shot
+    // per mint: tracked via post_kind='leaks' in no_lube_post_log.
+    const maybeFireLeaks = async (currentMcap: number | null): Promise<any | null> => {
+      if (hasLeaks) return null;
+      if (currentMcap == null || !isFinite(currentMcap) || currentMcap < leaksMinMcap) return null;
+      const publicCta = buildPublicCta();
+      const res = await composeAndPush('public', mint, null, {
+        kind: 'leaks',
+        cta: publicCta,
+      });
+      if (res.ok && res.pushed && res.mcap != null) {
+        await stampPost(res.logId, {
+          times_posted: 1,
+          last_mcap_at_post: res.mcap,
+          last_multiplier: null,
+        });
+      }
+      return res;
+    };
+
     // ---- PHASE 1: SNAPSHOT (fast first-touch, Private only, no image) ----
     if (!hasSnapshot && !hasBigPicture) {
       const result = await composeAndPush('private', mint, null, { kind: 'snapshot' });
@@ -326,13 +352,14 @@ serve(async (req) => {
           last_multiplier: null,
         });
       }
+      const leaks = await maybeFireLeaks(result.mcap);
       return jsonResp({
         ok: true,
         flow: 'snapshot',
         threshold,
         baseline_source: baselineSource,
         base_mcap: firstMcap,
-        results: { private: result },
+        results: { private: result, public_leaks: leaks },
       });
     }
 
@@ -352,6 +379,7 @@ serve(async (req) => {
           last_multiplier: null,
         });
       }
+      const leaks = await maybeFireLeaks(result.mcap);
       return jsonResp({
         ok: true,
         flow: 'big_picture',
@@ -359,7 +387,7 @@ serve(async (req) => {
         baseline_source: baselineSource,
         base_mcap: firstMcap,
         replied_to: snapshotMsgId,
-        results: { private: result },
+        results: { private: result, public_leaks: leaks },
       });
     }
 
@@ -435,6 +463,7 @@ serve(async (req) => {
 
     const ratio = probeMcap / baseMcap;
     if (ratio < threshold) {
+      const leaks = await maybeFireLeaks(probeMcap);
       return jsonResp({
         ok: true,
         flow: 'skipped',
@@ -444,6 +473,7 @@ serve(async (req) => {
         base_mcap: baseMcap,
         current_mcap: probeMcap,
         ratio,
+        public_leaks: leaks,
       });
     }
 
