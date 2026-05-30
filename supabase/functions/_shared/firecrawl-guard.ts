@@ -119,6 +119,14 @@ export async function handleFirecrawlError(
  * Fire admin alert when we self-throttle
  */
 async function fireThrottleAlert(callerName: string, callCount: number) {
+  // Suppress noisy self-throttle alerts for callers we've intentionally muted.
+  // Solscan v2 is disabled — its Firecrawl fallback is a no-op now, but in case
+  // a stale invocation still trips the guard, we don't want to spam admin.
+  const MUTED_CALLERS = new Set(['solscan-intelligence']);
+  if (MUTED_CALLERS.has(callerName)) {
+    console.log(`[FirecrawlGuard] self-throttle alert suppressed for muted caller=${callerName} (calls=${callCount})`);
+    return;
+  }
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
