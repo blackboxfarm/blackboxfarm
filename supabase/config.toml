@@ -594,3 +594,18 @@ verify_jwt = false
 
 [functions.holders-intel-archive-batch]
 verify_jwt = false
+
+[functions.leaderboard-html]
+verify_jwt = false
+
+[functions.leaderboard-render]
+verify_jwt = false
+
+[functions.leaderboard-regenerate-bg]
+verify_jwt = false
+
+[functions.leaderboard-daily-builder]
+verify_jwt = false
+
+[functions.leaderboard-post]
+verify_jwt = false

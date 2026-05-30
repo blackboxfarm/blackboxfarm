@@ -1,0 +1,87 @@
+// leaderboard-render — screenshots leaderboard-html into PNGs for public + private,
+// uploads to storage, updates the run row.
+
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'npm:@supabase/supabase-js@2';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+const BUCKET = 'no-lube-rendered-cards';
+
+async function screenshot(targetUrl: string): Promise<Uint8Array> {
+  const browserlessUrl = Deno.env.get('BROWSERLESS_URL');
+  const browserlessToken = Deno.env.get('BROWSERLESS_TOKEN');
+  if (!browserlessUrl || !browserlessToken) {
+    throw new Error('BROWSERLESS_URL or BROWSERLESS_TOKEN missing');
+  }
+  const res = await fetch(`${browserlessUrl.replace(/\/$/, '')}/screenshot?token=${browserlessToken}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url: targetUrl,
+      options: { fullPage: false, type: 'png', clip: { x: 0, y: 0, width: 1200, height: 1500 } },
+      viewport: { width: 1200, height: 1500, deviceScaleFactor: 1 },
+      waitForTimeout: 2500,
+      gotoOptions: { waitUntil: 'networkidle0', timeout: 30000 },
+    }),
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`browserless ${res.status}: ${t.slice(0, 200)}`);
+  }
+  const buf = await res.arrayBuffer();
+  return new Uint8Array(buf);
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
+  try {
+    const { run_id } = await req.json();
+    if (!run_id) throw new Error('run_id required');
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabase = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+
+    const htmlBase = `${supabaseUrl}/functions/v1/leaderboard-html?run_id=${run_id}`;
+    const variants: Array<'public' | 'private'> = ['public', 'private'];
+    const out: Record<string, string> = {};
+    for (const v of variants) {
+      const png = await screenshot(`${htmlBase}&variant=${v}`);
+      const filename = `leaderboard/${run_id}_${v}_${Date.now()}.png`;
+      const { error: upErr } = await supabase.storage.from(BUCKET)
+        .upload(filename, png, { contentType: 'image/png', upsert: false });
+      if (upErr) throw new Error(`upload ${v}: ${upErr.message}`);
+      const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(filename);
+      out[v] = pub.publicUrl;
+    }
+
+    await supabase.from('leaderboard_daily_runs').update({
+      image_public_url: out.public,
+      image_private_url: out.private,
+      status: 'rendered',
+      rendered_at: new Date().toISOString(),
+      error: null,
+    }).eq('id', run_id);
+
+    return new Response(JSON.stringify({ ok: true, ...out }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (e: any) {
+    console.error('[leaderboard-render] fatal', e);
+    try {
+      const body = await req.clone().json().catch(() => ({}));
+      if (body?.run_id) {
+        const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+        await supabase.from('leaderboard_daily_runs').update({
+          status: 'failed', error: String(e?.message || e),
+        }).eq('id', body.run_id);
+      }
+    } catch {}
+    return new Response(JSON.stringify({ ok: false, error: String(e?.message || e) }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});

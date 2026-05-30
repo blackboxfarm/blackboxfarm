@@ -1,87 +1,72 @@
-## What this fixes
+## Daily Multiplier Leaderboard — per-profile, "No Lube" first
 
-Two distinct problems with the current sweeper behavior:
+### Goal
+At each profile's local day-rollover (No Lube = 04:00 Toronto, covering the prior 06:00→06:00 Toronto window), generate a Top 20 leaderboard of tokens **first called inside that window**, ranked by **peak multiplier** achieved during the window. Render a branded 2×10 pill image (Public + Private variants) and post to that profile's X account.
 
-1. The primary sweeper re-enriches and re-orchestrates flat tokens just because they're past 2x. We only want enrichment + a fresh post when the multiplier has **actually advanced upward** since the last post (e.g. 4x → 6x), because enrichment is time-sensitive and pointless on a stalled token.
-2. The primary sweeper hard-stops at 48h. We want long-tail visibility: tokens that keep climbing past 48h should still produce posts — but framed as **"look what we called"** marketing, not as fresh-fomo alerts. This reinforces the value of private-tier subscriptions.
+### Data model
 
----
+**1. `leaderboard_profiles`** (reusable template per persona)
+- `id` (text, pk) e.g. `no_lube`
+- `profile_id` → link to `no_lube_global_profile` / future personas
+- `display_name`, `handle_public`, `handle_private`
+- `day_start_hour` (int, 0–23) — e.g. 6
+- `timezone` (text) — e.g. `America/Toronto`
+- `post_offset_hours` (int) — e.g. 22 (post at 04:00 next day = window_end − 2h… stored as absolute post hour: `post_hour` 0–23 = 4)
+- `background_asset_url`, `accent_hex`, `font_family`
+- `post_targets` jsonb — `{ x_public: true, x_private: true }`
+- `enabled` bool
 
-## Step 1 — Make the primary sweeper progression-gated (not just 2x-gated)
+**2. `leaderboard_daily_runs`**
+- `id`, `profile_id`, `window_start_utc`, `window_end_utc`, `local_date` (date in profile tz)
+- `status` (pending / rendered / posted / failed)
+- `entries` jsonb — array of 20 `{ rank, mint, ticker, image_url, multiplier, called_at_mcap, ath_mcap, called_at_ts }`
+- `image_public_url`, `image_private_url`
+- `x_post_id_public`, `x_post_id_private`
+- `created_at`
+- Unique on `(profile_id, local_date)`
 
-File: `supabase/functions/no-lube-milestone-sweeper/index.ts`
+### Edge functions
 
-Replace the static `MULTIPLIER_THRESHOLD = 2.0` gate with an **upward-progression** check:
+**`leaderboard-daily-builder`** (cron, runs hourly)
+- For each enabled profile, compute current local time in tz. If local hour == `post_hour` and no row exists for prior `local_date` → build.
+- Query `telegram_insider_token_lifecycle` for tokens where `first_called_at` ∈ [window_start_utc, window_end_utc), profile-scoped.
+- Compute multiplier = `peak_market_cap / entry_market_cap`, sort desc, take top 20.
+- Resolve ticker + mint image (existing token metadata helpers).
+- Insert `leaderboard_daily_runs` row.
+- Invoke `leaderboard-render`.
 
-- Select `last_multiplier` (from the most recent `no_lube_post_log` row for that mint) alongside the existing lifecycle fields.
-- Eligibility now requires:
-  - `first_called_at` within freshness window (30 min) — unchanged
-  - `peak_multiplier >= 2.0` (still need to have crossed the first milestone at least once)
-  - **AND** `peak_multiplier >= last_multiplier * PROGRESS_STEP` where `PROGRESS_STEP = 1.5` (configurable on `no_lube_global_profile`)
-  - If no prior multiplier post exists, treat `last_multiplier = 1.0` so the first 2x still fires
-- Only when eligibility passes do we call `no-lube-orchestrate` (which itself triggers re-enrichment via the ingest chain).
+**`leaderboard-render`**
+- Takes run_id, profile.
+- Builds an HTML/SVG template (2 columns × 10 pills, 10° / 10px rounded corners, mint image circle bordered, `#RANK · $TICKER · 50x · called @ $Xk · ATH $Yk`).
+- Two background variants from profile: Public + Private. Regenerate-background button in UI calls AI image gen for new bg, saves to `leaderboard_profiles.background_asset_url` (public/private split).
+- Renders to PNG via existing rendering path (similar to no-lube post images), uploads to storage, stores both URLs on run row.
 
-Result: flat tokens are not re-touched. A token that went 4x and is still at 4x is ignored. The moment it hits ~6x, it gets one enrichment + one post, then waits for the next step up.
+**`leaderboard-post`**
+- Posts public PNG to public X account, private PNG to private X account, using existing No Lube X posting path. Stores message ids.
 
----
+### Cron
+- Hourly `leaderboard-daily-builder` (pg_cron + pg_net).
 
-## Step 2 — New "legacy brag" sweeper for 48h+ winners
+### UI — Super Admin → No Lube tab, new sub `dailies`
+- Profile editor card: day_start_hour, tz, post_hour, X handles (public/private), accent, font.
+- **Background mockup panel** (Public + Private side-by-side):
+  - Current background preview with the 2×10 pill grid overlaid (live preview using latest run or stub data)
+  - **"Regenerate background"** button per variant — calls AI image gen with profile-specific prompt, updates `background_asset_url`.
+- Recent runs list with thumbnails, status, "Re-render", "Re-post" buttons.
+- Layout template is profile-driven, so adding another persona later just needs a new `leaderboard_profiles` row.
 
-New file: `supabase/functions/no-lube-legacy-sweeper/index.ts`
+### Brand/content rules
+- Ticker sanitized via `sanitizeTickerForTwitter` for any caption.
+- Caption: "🏆 No Lube Daily Top 20 — {local_date}\nBest multiplier calls 6am→6am Toronto.\n#Solana #NoLube" (public) / private variant references subscriber-only framing.
+- Image only, no spoilery mint addresses in caption (avoid bot loops per Thin Formatting memory).
 
-Purpose: find tokens that were called more than 48h ago and have **continued to climb** since their last post, and fire a retrospective marketing post.
+### Technical details
+- Use `assertDbWrite` for every insert/update (Zero Tolerance memory).
+- Timezone math via `Intl.DateTimeFormat` with `timeZone` option in edge runtime; window_start = today-in-tz at `day_start_hour` minus 24h; window_end = today-in-tz at `day_start_hour`.
+- Idempotent: unique `(profile_id, local_date)` prevents double posts.
+- Image gen: reuse existing AI image gateway used by other no-lube assets; transparent overlay PNG composited on background server-side (sharp/skia) inside `leaderboard-render`.
+- All new edge functions guarded by `function_toggles` row so they can be disabled instantly.
 
-Selection logic:
-- Pull lifecycle rows where `first_called_at` is between 48h and `LEGACY_MAX_AGE_DAYS` (default 30 days) ago.
-- Join most-recent `no_lube_post_log` row (any kind) per mint to get `last_multiplier` and `last_posted_at`.
-- Require `last_posted_at` older than `LEGACY_MIN_GAP_HOURS` (default 24h) — no spam.
-- Fetch current mcap (live, via existing price fetch path used by orchestrate).
-- Require `current_mcap / entry_market_cap >= last_multiplier * LEGACY_PROGRESS_STEP` (default 1.5) AND `current_mcap >= LEGACY_MIN_MCAP` (default $250k — drop dead carcasses).
-- Cap at `LEGACY_MAX_MINTS_PER_RUN` (default 10) per tick.
-
-Action per eligible mint:
-- Call `no-lube-orchestrate` with `{ mint, source: 'legacy-sweeper', flow_hint: 'legacy_brag' }`.
-- Orchestrate routes this to a new `legacy_brag` post kind (see Step 3) instead of the normal `big_picture` flow.
-- Stamp `last_legacy_swept_at` on the lifecycle row.
-
-Cadence: separate cron entry, runs every 30 min (much slower than the primary 2–5 min sweeper — these posts are marketing, not signals).
-
----
-
-## Step 3 — `legacy_brag` post kind in orchestrate
-
-File: `supabase/functions/no-lube-orchestrate/index.ts`
-
-- When `source === 'legacy-sweeper'` (or `flow_hint === 'legacy_brag'`):
-  - Skip the freshness/dead-token guards that block normal flow.
-  - Compose against a new template kind `legacy_brag` (template lives in `no_lube_templates`, seeded separately by the user via the admin UI — not in this plan).
-  - Variables exposed to the template: `{entry_mcap}`, `{current_mcap}`, `{multiplier}`, `{days_since_call}`, `{token_symbol}`.
-  - Route to BOTH `PRIVATE` and `PUBLIC` channels (the marketing message is valuable in both — private gets "you were here", public gets "you missed out, subscribe").
-  - Log to `no_lube_post_log` with `post_kind = 'legacy_brag'` so it doesn't collide with snapshot/big_picture counters.
-
----
-
-## Step 4 — Database & cron wiring
-
-DB migration:
-- Add `last_legacy_swept_at TIMESTAMPTZ` to `telegram_insider_token_lifecycle`.
-- Add columns to `no_lube_global_profile`: `progress_step NUMERIC DEFAULT 1.5`, `legacy_min_mcap NUMERIC DEFAULT 250000`, `legacy_min_gap_hours INT DEFAULT 24`, `legacy_max_age_days INT DEFAULT 30`, `legacy_progress_step NUMERIC DEFAULT 1.5`.
-- Extend `post_kind` allowed values to include `'legacy_brag'` (if there's a CHECK constraint).
-
-Cron:
-- Add `pg_cron` entry for `no-lube-legacy-sweeper` at `*/30 * * * *`.
-
----
-
-## Out of scope
-
-- Template authoring (you'll seed the `legacy_brag` template via the admin UI once the kind exists).
-- Any change to the existing 30-min backlog gate inside orchestrate — it stays as a safety net for the normal flow, and is bypassed only for `legacy-sweeper` source.
-- No change to `no-lube-ingest` — enrichment is still triggered via orchestrate's existing path; the gate is just stricter about when orchestrate runs.
-
-## Files touched
-
-1. `supabase/functions/no-lube-milestone-sweeper/index.ts` — progression-gate logic
-2. `supabase/functions/no-lube-legacy-sweeper/index.ts` — NEW
-3. `supabase/functions/no-lube-orchestrate/index.ts` — `legacy_brag` branch
-4. New migration — lifecycle column, global profile columns, cron schedule
+### Out of scope (future)
+- Weekly / monthly leaderboards (same template, different window).
+- Telegram channel mirror (template already supports `post_targets`; wire later).
