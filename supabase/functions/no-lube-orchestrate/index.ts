@@ -532,9 +532,12 @@ serve(async (req) => {
     // While the price hovers in the same milestone band we stay silent so
     // the channel doesn't repeat "2.1x / 2.2x / 2.1x" over and over.
     const currentMilestone = Math.floor(ratio);
-    const prevMilestone = prev.last_multiplier != null
+    // When Insiders feeds us a MILESTONE for a token we missed, treat their
+    // multiplier as the floor we've already posted so the gate doesn't trip.
+    const adoptedFloor = adoptedMultiplier != null ? Math.floor(adoptedMultiplier) - 1 : null;
+    const prevMilestone = prev?.last_multiplier != null
       ? Math.floor(Number(prev.last_multiplier))
-      : 1; // first re-sighting baseline = 1x band
+      : (adoptedFloor != null ? adoptedFloor : 1); // first re-sighting baseline = 1x band
     // Legacy-brag bypasses the integer milestone gate — the legacy sweeper
     // already enforced its own upward-progression gate (last_multiplier *
     // legacy_progress_step) before dispatching.
