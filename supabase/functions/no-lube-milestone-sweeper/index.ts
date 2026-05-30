@@ -54,17 +54,17 @@ serve(async (req) => {
       if (candidates.length >= MAX_MINTS_PER_RUN * 2) break;
     }
 
-    // Cooldown + freshness + UPWARD-PROGRESSION gate.
-    // A retry only has value when:
-    //   (a) token is still in its freshness window (first_called_at within 30 min), AND
-    //   (b) peak_multiplier has actually advanced upward since the last posted multiplier
-    //       (e.g. last post was 4x, peak is now >= 4x * PROGRESS_STEP = 6x).
-    // Enrichment is time-sensitive — we DO NOT want to re-enrich a flat token just
-    // because it once crossed 2x. Wait for it to progress, then enrich + post.
-    const FRESHNESS_MIN = 30;
+    // Cooldown + UPWARD-PROGRESSION gate.
+    // A retry only has value when peak_multiplier has actually advanced upward
+    // since the last posted multiplier (e.g. last post was 4x, peak is now >=
+    // 4x * PROGRESS_STEP = 6x). The upward-progression gate by itself prevents
+    // flat-token re-enrichment — no separate freshness window needed. Tokens
+    // routinely take >30 min to pump (XCAT hit 6x at ~85 min), and a tight
+    // freshness window was silently killing every legitimate multiplier post.
+    const FRESHNESS_HOURS = RESIGHT_LOOKBACK_HOURS; // match lookback (48h)
     const FIRST_MULTIPLIER_THRESHOLD = 2.0; // first multiplier post always at 2x
     const cutoff = new Date(Date.now() - PER_MINT_COOLDOWN_SECS * 1000).toISOString();
-    const freshnessCutoff = new Date(Date.now() - FRESHNESS_MIN * 60 * 1000).toISOString();
+    const freshnessCutoff = new Date(Date.now() - FRESHNESS_HOURS * 3600 * 1000).toISOString();
 
     // Load global PROGRESS_STEP (configurable on no_lube_global_profile).
     let progressStep = 1.5;
