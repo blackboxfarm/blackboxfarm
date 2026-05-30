@@ -20,7 +20,7 @@ import {
   type TemplateName,
 } from '@/lib/share-template';
 
-export type NoLubeChannelKind = 'default' | 'public' | 'private' | 'snapshot';
+export type NoLubeChannelKind = 'default' | 'public' | 'leaks' | 'private' | 'snapshot';
 
 export const NO_LUBE_LANGUAGES: { code: string; label: string }[] = [
   { code: 'en', label: 'English' },
