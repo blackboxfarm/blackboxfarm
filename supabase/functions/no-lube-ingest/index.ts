@@ -193,22 +193,17 @@ serve(async (req) => {
       steps.holders = { ok: true, dispatched: true };
     } catch (e) { steps.holders = { ok: false, error: (e as Error).message }; }
 
-    // 5. Hand off to orchestrate — it owns private/public posting + milestone gate.
-    let orchestrate: any = null;
-    try {
-      const r = await invoke(`${supabaseUrl}/functions/v1/no-lube-orchestrate`, serviceKey, { mint, source: 'insiders-ingest' }, 60000);
-      orchestrate = { ok: r.ok, status: r.status, body: r.json };
-    } catch (e) {
-      orchestrate = { ok: false, error: (e as Error).message };
-    }
-
-    await supabase
-      .from('telegram_insider_token_lifecycle')
-      .update({
-        ingest_status: 'enriched',
-        ingest_completed_at: now(),
-      })
-      .eq('token_mint', mint);
+    await assertUpdate(
+      supabase
+        .from('telegram_insider_token_lifecycle')
+        .update({
+          ingest_status: orchestrate?.ok ? 'enriched' : 'failed',
+          ingest_completed_at: now(),
+          ingest_last_error: orchestrate?.ok ? null : JSON.stringify(orchestrate).slice(0, 500),
+        })
+        .eq('token_mint', mint),
+      'telegram_insider_token_lifecycle',
+    );
 
     return new Response(
       JSON.stringify({
@@ -223,6 +218,23 @@ serve(async (req) => {
     );
   } catch (e: any) {
     console.error('[no-lube-ingest] fatal', e);
+    if (requestedMint) {
+      try {
+        await assertUpdate(
+          supabase
+            .from('telegram_insider_token_lifecycle')
+            .update({
+              ingest_status: 'failed',
+              ingest_completed_at: new Date().toISOString(),
+              ingest_last_error: String(e?.message || e).slice(0, 500),
+            })
+            .eq('token_mint', requestedMint),
+          'telegram_insider_token_lifecycle',
+        );
+      } catch (markErr) {
+        console.error('[no-lube-ingest] failed to mark row failed', markErr);
+      }
+    }
     return new Response(JSON.stringify({ ok: false, error: String(e?.message || e) }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
