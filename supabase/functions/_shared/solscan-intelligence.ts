@@ -131,6 +131,14 @@ async function solscanScrapeFundingInfoWithFirecrawl(
   walletAddress: string,
   apiErrors: string[] = []
 ): Promise<{ fundedByLabel: string | null; fundedByWallet: string | null }> {
+  // Solscan v2 is DISABLED — do not fall through to Firecrawl scrape of solscan.io.
+  // This was burning Firecrawl credits and spamming firecrawl_self_throttle alerts.
+  // Callers should use Helius/DexScreener resolution paths instead.
+  void walletAddress;
+  void apiErrors;
+  return { fundedByLabel: null, fundedByWallet: null };
+
+  // eslint-disable-next-line no-unreachable
   const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY');
   if (!firecrawlKey) {
     apiErrors.push('FIRECRAWL_API_KEY not configured for Solscan scrape fallback');
