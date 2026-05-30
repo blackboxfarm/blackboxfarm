@@ -5,6 +5,9 @@
  */
 
 import { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { assertInsert, assertUpdate } from "./db-assert.ts";
+
+const MUTED_TARGET_LABELS = new Set(["BLACKBOX"]);
 
 export interface TelegramTarget {
   id: string;
@@ -71,11 +74,13 @@ async function sendToTarget(
       return { target, success: false, error: data?.error || "Unknown error" };
     }
 
-    // Update last_used_at
-    await supabase
-      .from("telegram_message_targets")
-      .update({ last_used_at: new Date().toISOString() })
-      .eq("id", target.id);
+    await assertUpdate(
+      supabase
+        .from("telegram_message_targets")
+        .update({ last_used_at: new Date().toISOString() })
+        .eq("id", target.id),
+      "telegram_message_targets",
+    );
 
     return { target, success: true };
   } catch (e) {
@@ -94,15 +99,24 @@ async function logDelivery(
   sourceFunction?: string
 ): Promise<void> {
   try {
-    await supabase.from('notification_delivery_log').insert({
-      channel: 'telegram',
-      target_id: target.id,
-      target_label: target.label,
-      status: result.success ? 'delivered' : 'failed',
-      error_message: result.error?.slice(0, 500) || null,
-      message_preview: messagePreview.slice(0, 200),
-      source_function: sourceFunction || null,
-    });
+    await assertInsert(
+      supabase.from('notification_delivery_log').insert({
+        channel: 'telegram',
+        recipient: target.label,
+        status: result.success ? 'delivered' : 'failed',
+        error_message: result.error?.slice(0, 500) || null,
+        delivered_at: result.success ? new Date().toISOString() : null,
+        response_body: JSON.stringify({
+          target_id: target.id,
+          target_label: target.label,
+          chat_id: target.chat_id,
+          resolved_name: target.resolved_name,
+          source_function: sourceFunction || null,
+          message_preview: messagePreview.slice(0, 200),
+        }).slice(0, 5000),
+      }),
+      'notification_delivery_log',
+    );
   } catch (e) {
     console.warn('[telegram-broadcast] Failed to log delivery:', e);
   }
