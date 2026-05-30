@@ -90,21 +90,32 @@ serve(withRunLog('bagless-holders-report', async (req) => {
     // ============================================
     // PARALLEL API FETCHES
     // ============================================
-    const [solscanResult, dexResult, insidersResult] = await Promise.all([
-      fetchSolscanMarkets(tokenMint),
+    // DexScreener-first: only fall back to Solscan markets when DexScreener
+    // returns zero pool addresses. Solscan Pro CU quota is the bottleneck.
+    const [dexResult, insidersResult] = await Promise.all([
       fetchDexScreenerData(tokenMint),
       fetchRugCheckInsiders(tokenMint)
     ]);
-    
-    // Merge pool addresses from Solscan
-    for (const addr of solscanResult.poolAddresses) {
-      allPoolAddresses.add(addr);
-    }
-    
-    // Merge pool addresses from DexScreener
+
+    // Merge pool addresses from DexScreener (primary source)
     for (const addr of dexResult.pairAddresses) {
       allPoolAddresses.add(addr);
       dexScreenerPairAddresses.add(addr);
+    }
+
+    let solscanResult: { poolAddresses: Set<string>; verifiedLPAccount: string | null; verifiedLPSource: string | null } = {
+      poolAddresses: new Set(),
+      verifiedLPAccount: null,
+      verifiedLPSource: null,
+    };
+    if (allPoolAddresses.size === 0) {
+      console.log('[bagless] DexScreener returned 0 pools — falling back to Solscan markets');
+      solscanResult = await fetchSolscanMarkets(tokenMint);
+      for (const addr of solscanResult.poolAddresses) {
+        allPoolAddresses.add(addr);
+      }
+    } else {
+      console.log(`[bagless] Skipping Solscan markets — DexScreener provided ${allPoolAddresses.size} pool(s)`);
     }
     
     launchpadInfo = dexResult.launchpadInfo;
