@@ -114,14 +114,16 @@ serve(async (req) => {
       }
     }
 
-    // Threshold from global profile
+    // Threshold + leaks min mcap from global profile
     let threshold = 2.0;
+    let leaksMinMcap = 75000;
     const { data: gprof } = await supabase
       .from('no_lube_global_profile')
-      .select('multiplier_threshold')
+      .select('multiplier_threshold, leaks_min_mcap')
       .eq('id', 'singleton')
       .maybeSingle();
     if (gprof?.multiplier_threshold) threshold = Number(gprof.multiplier_threshold) || 2.0;
+    if ((gprof as any)?.leaks_min_mcap != null) leaksMinMcap = Number((gprof as any).leaks_min_mcap) || 75000;
 
     // Last successful post for this mint (carries times_posted + last_multiplier)
     const { data: prevRows } = await supabase
@@ -134,9 +136,11 @@ serve(async (req) => {
     const allPrev = prevRows || [];
     const snapshotPost = allPrev.find((r: any) => r.post_kind === 'snapshot') || null;
     const bigPicturePosts = allPrev.filter((r: any) => r.post_kind === 'big_picture' || r.post_kind === 'milestone' || r.post_kind == null);
+    const leaksPost = allPrev.find((r: any) => r.post_kind === 'leaks') || null;
     const prev = bigPicturePosts[0] || null;
     const hasSnapshot = !!snapshotPost;
     const hasBigPicture = !!prev;
+    const hasLeaks = !!leaksPost;
     const isFirstSighting = !hasBigPicture; // first big_picture = first "real" sighting
 
     // FIRST-SEEN mcap = the Insiders scrape's entry_market_cap. This is the
