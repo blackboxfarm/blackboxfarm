@@ -342,22 +342,28 @@ serve(async (req) => {
     }
     const channel: 'default' | 'public' | 'private' =
       rawChannel === 'public' || rawChannel === 'private' ? rawChannel : 'default';
-    const kind: 'snapshot' | 'big_picture' = rawKind === 'snapshot' ? 'snapshot' : 'big_picture';
+    const kind: 'snapshot' | 'big_picture' | 'leaks' =
+      rawKind === 'snapshot' ? 'snapshot'
+      : rawKind === 'leaks' ? 'leaks'
+      : 'big_picture';
     const multiplierNum = typeof rawMultiplier === 'number' && isFinite(rawMultiplier) && rawMultiplier > 0
       ? rawMultiplier : null;
     const multiplierLabel = multiplierNum
       ? (Number.isInteger(multiplierNum) ? `${multiplierNum}x` : `${multiplierNum.toFixed(1)}x`)
       : '';
     const multiplierLine = multiplierNum ? `🚀 RE-SIGHTING: ${multiplierLabel}` : '';
-    // Snapshot kind uses a dedicated minimal template (private only). Fallback to
-    // the standard private template if the snapshot template isn't configured.
+    // Snapshot/Leaks use dedicated minimal templates. Fallback chains exist so a
+    // missing template never blocks a post.
     const primaryTemplateName =
-      kind === 'snapshot'
-        ? 'no_lube_snapshot_private'
-        : (channel === 'public' ? 'no_lube_public'
-           : channel === 'private' ? 'no_lube_private'
-           : 'no_lube');
-    const fallbackTemplateName = kind === 'snapshot' ? 'no_lube_private' : null;
+      kind === 'snapshot' ? 'no_lube_snapshot_private'
+      : kind === 'leaks' ? 'no_lube_leaks_public'
+      : (channel === 'public' ? 'no_lube_public'
+         : channel === 'private' ? 'no_lube_private'
+         : 'no_lube');
+    const fallbackTemplateName =
+      kind === 'snapshot' ? 'no_lube_private'
+      : kind === 'leaks' ? 'no_lube_snapshot_private'
+      : null;
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
