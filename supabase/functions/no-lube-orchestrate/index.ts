@@ -624,13 +624,23 @@ serve(async (req) => {
       return null;
     };
 
-    const publicTpl = await loadTemplate('public', pubProfile?.language || null);
-    const privateTpl = await loadTemplate('private', privProfile?.language || null);
+    // ---- TIER ROUTING ----
+    // Spec: 2x → Private only. ≥3x → Private + Public. Legacy brag still posts
+    // to both because the legacy sweeper is reserved for big-number callbacks.
+    const includePublic = isLegacyBrag || currentMilestone >= 3;
 
-    // Render both cards in parallel (independent calls).
+    const privateTpl = await loadTemplate('private', privProfile?.language || null);
+    const publicTpl = includePublic
+      ? await loadTemplate('public', pubProfile?.language || null)
+      : null;
+
+    // Render cards in parallel (independent calls). Skip the public render when
+    // we're not going to post to the public channel this tick.
     const [privateImageUrl, publicImageUrl] = await Promise.all([
       renderCard('private', privateTpl, privProfile, 'Premium Insiders'),
-      renderCard('public', publicTpl, pubProfile, pubProfile?.telegram_chat_title || 'No Lube Alpha'),
+      includePublic
+        ? renderCard('public', publicTpl, pubProfile, pubProfile?.telegram_chat_title || 'No Lube Alpha')
+        : Promise.resolve(null),
     ]);
 
     const privateResult = await composeAndPush('private', mint, multiplier, {
@@ -638,14 +648,16 @@ serve(async (req) => {
     });
 
     const publicCta = buildPublicCta();
-    const publicResult = await composeAndPush('public', mint, multiplier, {
-      image_url: publicImageUrl,
-      cta: publicCta,
-    });
+    const publicResult = includePublic
+      ? await composeAndPush('public', mint, multiplier, {
+          image_url: publicImageUrl,
+          cta: publicCta,
+        })
+      : { ok: true, channel: 'public' as const, pushed: false, eligible: false, block_reason: 'public_below_3x_threshold', logId: null, mcap: null };
 
     if (privateResult.ok && privateResult.pushed && privateResult.mcap != null) {
       await stampPost(privateResult.logId, {
-        times_posted: (prev.times_posted ?? 1) + 1,
+        times_posted: (prev?.times_posted ?? 1) + 1,
         last_mcap_at_post: privateResult.mcap,
         last_multiplier: multiplier,
       });
@@ -657,7 +669,7 @@ serve(async (req) => {
     }
     if (publicResult.ok && publicResult.pushed && publicResult.mcap != null) {
       await stampPost(publicResult.logId, {
-        times_posted: (prev.times_posted ?? 1) + 1,
+        times_posted: (prev?.times_posted ?? 1) + 1,
         last_mcap_at_post: publicResult.mcap,
         last_multiplier: multiplier,
       });
