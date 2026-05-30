@@ -63,8 +63,18 @@ serve(async (req) => {
     // freshness window was silently killing every legitimate multiplier post.
     const FRESHNESS_HOURS = RESIGHT_LOOKBACK_HOURS; // match lookback (48h)
     const FIRST_MULTIPLIER_THRESHOLD = 2.0; // first multiplier post always at 2x
-    const cutoff = new Date(Date.now() - PER_MINT_COOLDOWN_SECS * 1000).toISOString();
-    const freshnessCutoff = new Date(Date.now() - FRESHNESS_HOURS * 3600 * 1000).toISOString();
+    // CRITICAL: compare with Date objects, not strings. Postgres returns
+    // "2026-05-30 12:57:32.417+00" (space separator) while JS toISOString()
+    // returns "2026-05-30T12:57:32.417Z" (T separator). String comparison
+    // is broken because space (0x20) < T (0x54), which silently killed
+    // every multiplier post.
+    const cutoffMs = Date.now() - PER_MINT_COOLDOWN_SECS * 1000;
+    const freshnessCutoffMs = Date.now() - FRESHNESS_HOURS * 3600 * 1000;
+    const tsMs = (v: unknown): number => {
+      if (!v) return 0;
+      const t = new Date(String(v)).getTime();
+      return isFinite(t) ? t : 0;
+    };
 
     // Load global PROGRESS_STEP (configurable on no_lube_global_profile).
     let progressStep = 1.5;
@@ -105,8 +115,10 @@ serve(async (req) => {
       .filter((m) => {
         const row = lcByMint.get(m);
         if (!row) return false;
-        if (row.last_resighting_swept_at && row.last_resighting_swept_at >= cutoff) return false;
-        if (!row.first_called_at || row.first_called_at < freshnessCutoff) return false;
+        const sweptMs = tsMs(row.last_resighting_swept_at);
+        if (sweptMs && sweptMs >= cutoffMs) return false;
+        const firstMs = tsMs(row.first_called_at);
+        if (!firstMs || firstMs < freshnessCutoffMs) return false;
         const entry = Number(row.entry_market_cap) || 0;
         const peakMcap = Number(row.peak_market_cap) || 0;
         const peakMult = Number(row.peak_multiplier) || 0;
