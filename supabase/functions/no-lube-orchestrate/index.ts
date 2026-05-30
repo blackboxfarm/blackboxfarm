@@ -320,6 +320,28 @@ serve(async (req) => {
       );
     };
 
+    // ---- LEAKS FORK ----
+    // Tokens that don't (yet) qualify for the 2x public re-sighting still get
+    // a public "Leak" post once MC crosses leaksMinMcap (default $75k). One-shot
+    // per mint: tracked via post_kind='leaks' in no_lube_post_log.
+    const maybeFireLeaks = async (currentMcap: number | null): Promise<any | null> => {
+      if (hasLeaks) return null;
+      if (currentMcap == null || !isFinite(currentMcap) || currentMcap < leaksMinMcap) return null;
+      const publicCta = buildPublicCta();
+      const res = await composeAndPush('public', mint, null, {
+        kind: 'leaks',
+        cta: publicCta,
+      });
+      if (res.ok && res.pushed && res.mcap != null) {
+        await stampPost(res.logId, {
+          times_posted: 1,
+          last_mcap_at_post: res.mcap,
+          last_multiplier: null,
+        });
+      }
+      return res;
+    };
+
     // ---- PHASE 1: SNAPSHOT (fast first-touch, Private only, no image) ----
     if (!hasSnapshot && !hasBigPicture) {
       const result = await composeAndPush('private', mint, null, { kind: 'snapshot' });
@@ -330,13 +352,14 @@ serve(async (req) => {
           last_multiplier: null,
         });
       }
+      const leaks = await maybeFireLeaks(result.mcap);
       return jsonResp({
         ok: true,
         flow: 'snapshot',
         threshold,
         baseline_source: baselineSource,
         base_mcap: firstMcap,
-        results: { private: result },
+        results: { private: result, public_leaks: leaks },
       });
     }
 
@@ -356,6 +379,7 @@ serve(async (req) => {
           last_multiplier: null,
         });
       }
+      const leaks = await maybeFireLeaks(result.mcap);
       return jsonResp({
         ok: true,
         flow: 'big_picture',
@@ -363,7 +387,7 @@ serve(async (req) => {
         baseline_source: baselineSource,
         base_mcap: firstMcap,
         replied_to: snapshotMsgId,
-        results: { private: result },
+        results: { private: result, public_leaks: leaks },
       });
     }
 
