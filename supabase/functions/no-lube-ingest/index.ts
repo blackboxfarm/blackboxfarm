@@ -114,18 +114,19 @@ serve(async (req) => {
       orchestrate = { ok: false, error: (e as Error).message };
     }
 
+    await assertUpdate(
+      supabase
+        .from('telegram_insider_token_lifecycle')
+        .update({
+          ingest_status: orchestrate?.ok ? 'enriched' : 'failed',
+          ingest_completed_at: now(),
+          ingest_last_error: orchestrate?.ok ? null : JSON.stringify(orchestrate).slice(0, 500),
+        })
+        .eq('token_mint', mint),
+      'telegram_insider_token_lifecycle',
+    );
+
     if (fast_post) {
-      await assertUpdate(
-        supabase
-          .from('telegram_insider_token_lifecycle')
-          .update({
-            ingest_status: orchestrate?.ok ? 'enriched' : 'failed',
-            ingest_completed_at: now(),
-            ingest_last_error: orchestrate?.ok ? null : JSON.stringify(orchestrate).slice(0, 500),
-          })
-          .eq('token_mint', mint),
-        'telegram_insider_token_lifecycle',
-      );
       return new Response(JSON.stringify({ ok: true, mint, ticker: lc.token_symbol, fast_post: true, orchestrate }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -192,18 +193,6 @@ serve(async (req) => {
       }).catch((e) => console.warn('[no-lube-ingest] holders dispatch failed:', (e as Error).message));
       steps.holders = { ok: true, dispatched: true };
     } catch (e) { steps.holders = { ok: false, error: (e as Error).message }; }
-
-    await assertUpdate(
-      supabase
-        .from('telegram_insider_token_lifecycle')
-        .update({
-          ingest_status: orchestrate?.ok ? 'enriched' : 'failed',
-          ingest_completed_at: now(),
-          ingest_last_error: orchestrate?.ok ? null : JSON.stringify(orchestrate).slice(0, 500),
-        })
-        .eq('token_mint', mint),
-      'telegram_insider_token_lifecycle',
-    );
 
     return new Response(
       JSON.stringify({
