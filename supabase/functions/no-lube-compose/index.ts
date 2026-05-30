@@ -978,7 +978,7 @@ serve(async (req) => {
       // Snapshot-only: surface the token's mint image so orchestrate/push can
       // attach it as the Telegram photo header. Big-picture posts get their
       // header from the AI-rendered card pipeline instead.
-      image_url: kind === 'snapshot' && useMintImageOnSnapshot ? tokenImageUrl : null,
+      image_url: (kind === 'snapshot' || kind === 'leaks') && useMintImageOnSnapshot ? tokenImageUrl : null,
       token_image_url: tokenImageUrl,
       banner_url: bannerUrl,
       banner_source: bannerSource,
