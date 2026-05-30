@@ -18,6 +18,7 @@ const corsHeaders = {
 };
 
 const HARVEST_WINDOW_MS = 30_000;
+const BLACKBOX_GROUP_MUTED = true;
 
 // Post via MTProto (system_reset user account) in Markdown — trader bots
 // (Trojan/Phanes/GMGN/Rick) ignore bot-sourced messages as anti-spam, so the
@@ -191,6 +192,11 @@ serve(async (req) => {
 
     // ---- PROBE: manual probe — pick latest insider CA, post, wait, harvest ----
     if (action === 'probe') {
+      if (BLACKBOX_GROUP_MUTED) {
+        return new Response(JSON.stringify({ ok: true, skipped: true, reason: 'muted: BLACKBOX kill-switch' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
       const { data: cfg } = await supabase
         .from('blackbox_channel_config')
         .select('role, chat_id')
