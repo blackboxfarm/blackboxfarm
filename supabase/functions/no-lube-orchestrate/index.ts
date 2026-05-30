@@ -117,13 +117,15 @@ serve(async (req) => {
     // Threshold + leaks min mcap from global profile
     let threshold = 2.0;
     let leaksMinMcap = 75000;
+    let backlogMaxAgeMin = 30;
     const { data: gprof } = await supabase
       .from('no_lube_global_profile')
-      .select('multiplier_threshold, leaks_min_mcap')
+      .select('multiplier_threshold, leaks_min_mcap, backlog_max_age_min')
       .eq('id', 'singleton')
       .maybeSingle();
     if (gprof?.multiplier_threshold) threshold = Number(gprof.multiplier_threshold) || 2.0;
     if ((gprof as any)?.leaks_min_mcap != null) leaksMinMcap = Number((gprof as any).leaks_min_mcap) || 75000;
+    if ((gprof as any)?.backlog_max_age_min != null) backlogMaxAgeMin = Number((gprof as any).backlog_max_age_min) || 30;
 
     // Last successful post for this mint (carries times_posted + last_multiplier)
     const { data: prevRows } = await supabase
