@@ -352,18 +352,7 @@ Deno.serve(withRunLog('family-discovery-engine', async (req) => {
           `⏰ ${new Date().toLocaleString('en-US', { timeZone: 'UTC' })} UTC`,
         ].filter(Boolean).join('\n');
 
-        try {
-          const { data: tgTargets } = await supabase
-            .from('telegram_message_targets').select('id, chat_id, label, resolved_name').eq('label', 'BLACKBOX');
-          for (const target of (tgTargets || [])) {
-            await supabase.functions.invoke('telegram-mtproto-auth', {
-              body: { action: 'send_message', chatId: Number(target.chat_id), message: tgMessage },
-            });
-            await supabase.from('telegram_message_targets').update({ last_used_at: new Date().toISOString() }).eq('id', target.id);
-          }
-        } catch (tgErr) {
-          console.warn('[FamilyDiscovery] TG broadcast failed:', tgErr);
-        }
+        console.warn('[FamilyDiscovery] BLACKBOX Telegram muted — family intel alert logged only', { preview: tgMessage.slice(0, 200) });
       }
 
       totalFamiliesProcessed++;
