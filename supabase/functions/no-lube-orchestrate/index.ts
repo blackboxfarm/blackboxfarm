@@ -296,7 +296,7 @@ serve(async (req) => {
       opts: {
         image_url?: string | null;
         cta?: { text: string; url: string } | null;
-        kind?: 'snapshot' | 'big_picture' | 'leaks';
+        kind?: 'snapshot' | 'big_picture' | 'leaks' | 'intel_update';
         reply_to_message_id?: number | null;
       } = {},
     ) => {
