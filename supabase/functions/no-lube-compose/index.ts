@@ -459,10 +459,10 @@ serve(async (req) => {
         .maybeSingle();
       tplText = fb?.template_text || null;
     }
-    // Hard-coded snapshot fallback if no template at all exists yet.
-    if (!tplText && kind === 'snapshot') {
+    // Hard-coded snapshot/leaks fallback if no template at all exists yet.
+    if (!tplText && (kind === 'snapshot' || kind === 'leaks')) {
       tplText =
-        '⚡ *SNAPSHOT* — {ticker}\n' +
+        (kind === 'leaks' ? '💧 *LEAK* — {ticker}\n' : '⚡ *SNAPSHOT* — {ticker}\n') +
         '`{ca}`\n\n' +
         '💰 MC: {mc}  ·  Entry: {mcEntry}\n' +
         '💧 LP: {lp}  ·  📊 24h Vol: {vol24h}\n' +
