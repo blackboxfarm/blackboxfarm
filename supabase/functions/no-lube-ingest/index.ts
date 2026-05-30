@@ -136,10 +136,13 @@ serve(async (req) => {
       const r = await invoke(`${supabaseUrl}/functions/v1/token-mesh-hydrate`, serviceKey, { mint, surface: 'no-lube-ingest' }, 25000);
       steps.mesh = { ok: r.ok, status: r.status };
       if (r.ok) {
-        await supabase
-          .from('telegram_insider_token_lifecycle')
-          .update({ mesh_hydrated_at: now() })
-          .eq('token_mint', mint);
+        await assertUpdate(
+          supabase
+            .from('telegram_insider_token_lifecycle')
+            .update({ mesh_hydrated_at: now() })
+            .eq('token_mint', mint),
+          'telegram_insider_token_lifecycle',
+        );
       }
     } catch (e) { steps.mesh = { ok: false, error: (e as Error).message }; }
 
@@ -150,10 +153,13 @@ serve(async (req) => {
       const r = await invoke(`${supabaseUrl}/functions/v1/creator-wallet-resolver`, serviceKey, { tokenMint: mint }, 30000);
       steps.creator = { ok: r.ok, status: r.status, resolved: r.json?.resolved };
       if (r.ok) {
-        await supabase
-          .from('telegram_insider_token_lifecycle')
-          .update({ dev_wallet_resolved_at: now() })
-          .eq('token_mint', mint);
+        await assertUpdate(
+          supabase
+            .from('telegram_insider_token_lifecycle')
+            .update({ dev_wallet_resolved_at: now() })
+            .eq('token_mint', mint),
+          'telegram_insider_token_lifecycle',
+        );
       }
     } catch (e) { steps.creator = { ok: false, error: (e as Error).message }; }
 
@@ -165,10 +171,13 @@ serve(async (req) => {
       const r = await invoke(`${supabaseUrl}/functions/v1/blackbox-tick`, serviceKey, { mint, source: 'no-lube-ingest' }, 30000);
       steps.blackbox = { ok: r.ok, status: r.status };
       if (r.ok) {
-        await supabase
-          .from('telegram_insider_token_lifecycle')
-          .update({ blackbox_harvested_at: now() })
-          .eq('token_mint', mint);
+        await assertUpdate(
+          supabase
+            .from('telegram_insider_token_lifecycle')
+            .update({ blackbox_harvested_at: now() })
+            .eq('token_mint', mint),
+          'telegram_insider_token_lifecycle',
+        );
       }
     } catch (e) { steps.blackbox = { ok: false, error: (e as Error).message }; }
 
