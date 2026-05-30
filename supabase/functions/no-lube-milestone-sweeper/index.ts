@@ -65,7 +65,7 @@ serve(async (req) => {
     const freshnessCutoff = new Date(Date.now() - FRESHNESS_MIN * 60 * 1000).toISOString();
     const { data: lcRows } = await supabase
       .from('telegram_insider_token_lifecycle')
-      .select('token_mint, last_resighting_swept_at, first_called_at, entry_market_cap, last_known_mcap')
+      .select('token_mint, last_resighting_swept_at, first_called_at, entry_market_cap, peak_market_cap, peak_multiplier')
       .in('token_mint', candidates);
     const lcByMint = new Map<string, any>(
       (lcRows || []).map((r: any) => [r.token_mint, r])
@@ -80,9 +80,10 @@ serve(async (req) => {
         if (!row.first_called_at || row.first_called_at < freshnessCutoff) return false;
         // Multiplier gate — only retry if mcap has actually moved 2x+
         const entry = Number(row.entry_market_cap) || 0;
-        const live = Number(row.last_known_mcap) || 0;
-        if (!entry || !live) return false;
-        if (live / entry < MULTIPLIER_THRESHOLD) return false;
+        const peakMcap = Number(row.peak_market_cap) || 0;
+        const peakMult = Number(row.peak_multiplier) || 0;
+        const mult = peakMult > 0 ? peakMult : (entry > 0 && peakMcap > 0 ? peakMcap / entry : 0);
+        if (mult < MULTIPLIER_THRESHOLD) return false;
         return true;
       })
       .slice(0, MAX_MINTS_PER_RUN);
