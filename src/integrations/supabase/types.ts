@@ -11677,6 +11677,7 @@ export type Database = {
       }
       no_lube_global_profile: {
         Row: {
+          backlog_max_age_min: number
           id: string
           language: string
           leaks_min_mcap: number
@@ -11686,6 +11687,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          backlog_max_age_min?: number
           id?: string
           language?: string
           leaks_min_mcap?: number
@@ -11695,6 +11697,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          backlog_max_age_min?: number
           id?: string
           language?: string
           leaks_min_mcap?: number

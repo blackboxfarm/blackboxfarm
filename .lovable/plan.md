@@ -1,50 +1,49 @@
-# Plaques under text zones in No-Lube cards
+## Problem
 
-## What changes visually
-- Every text zone gets an optional **plaque** drawn behind the text (rounded rect, semi-opaque fill, optional 1–2px border) so lettering stops getting eaten by the background art.
-- Plaque shape per zone:
-  - `ticker`, `ca`, `show_url` → **lengthwise pill** (rounded, wide)
-  - `entry_value`, `current_value` → **square** with border
-  - `entry_label`, `current_label` → small pill matching the square's width above
-  - `multiplier` → no plaque change (lives over character art already), just text fix
-- Zones widened so the **full 44-char wallet address** fits in white at a readable size:
-  - `ticker.w`: 500 → **820**
-  - `ca.w`: 500 → **820**, height 30 → **44**, CA rendered in **full** (no `6…6` shortening) in white
-- Multiplier text: `30X` → `30x` (small lowercase x kept proportional to the digits, ~70% the digit cap height, baseline-aligned).
+Right now `no-lube-orchestrate` will process **any** lifecycle row the safety-sweep cron hands it, regardless of when the token was first called by Insiders. That means:
 
-## How plaques are configured
-Extend `safe_zones[zone]` schema with optional plaque fields — backward compatible (any zone without them renders as today):
-```
-{ x, y, w, h, shape?,
-  plaque?: {
-    shape: 'pill' | 'rect',
-    fill: '#000000',        // hex, alpha applied via opacity
-    opacity: 0.55,
-    pad_x: 18, pad_y: 8,    // plaque grows beyond text bbox
-    radius: 999,            // 999 = full pill, else px
-    border_color?: '#ffffff',
-    border_width?: 0,
-    text_color?: '#ffffff'  // overrides hard-coded color when set
-  }
+- 6 Leaks just posted to Public in the last 3 minutes for old backlog tokens (zinc…, Ehvs…, ahkw…, 23Y1…, 7bK4…, 4TWm…).
+- Dead 2000+ min tokens (`9p7hL1F7…`, `25t3wviw…`, `6nQNtHjph…`, `3K5Ct5wn…`) keep getting re-attempted as `big_picture` composes — the terminal-dead guard needs 3 dead rows in a row, but each safety-sweep run keeps creating fresh attempts before that threshold trips.
+
+## Fix: hard backlog cutoff
+
+At the very top of `no-lube-orchestrate/index.ts`, immediately after we load the lifecycle row, add one check:
+
+```ts
+const BACKLOG_MAX_AGE_MIN = 30; // ignore anything older than 30 min from first_called_at
+const calledAt = lcRow?.first_called_at ? new Date(lcRow.first_called_at).getTime() : null;
+const ageMin = calledAt ? (Date.now() - calledAt) / 60000 : null;
+if (ageMin != null && ageMin > BACKLOG_MAX_AGE_MIN) {
+  return jsonResp({
+    ok: true, flow: 'skipped', skipped: true,
+    reason: 'backlog_ignored',
+    first_called_at: lcRow.first_called_at,
+    age_minutes: Math.round(ageMin),
+  });
 }
 ```
-`drawTextInZone` is rewritten to: pick font size → measure rendered text → draw plaque rounded-rect first (filled + optional border) → composite text on top. Plaque is centered on the zone, sized to `text + pad_x*2 / text + pad_y*2`, clipped to zone bounds.
 
-## Defaults seeded for new templates
-`DEFAULT_SAFE_ZONES` in the Template Manager updated with the new widths and plaque presets so freshly uploaded templates look right out of the box. Existing templates keep their JSON until the admin edits them (they can paste the new JSON or hit a "Reset zones to default" button — already exists conceptually via the JSON textarea).
+This single gate stops **every** downstream path — snapshot, big_picture, Leaks fork, and re-sighting probes — before they cost any DexScreener / Helius / Telegram calls. Nothing else changes.
+
+### Why 30 minutes
+
+- Insiders-row-ingest fires within seconds via the postgres trigger.
+- The 2-min safety-sweep cron catches anything the trigger missed within a few minutes.
+- 30 min is a comfortable buffer for genuinely fresh tokens but cleanly excludes the 2000-min-old dead carcasses the sweep keeps re-touching.
+
+### Configurable
+
+Store the cutoff on `no_lube_global_profile` as `backlog_max_age_min` (numeric, default 30) so you can tune it from the admin UI later without redeploying. Read it once alongside `multiplier_threshold` / `leaks_min_mcap`.
 
 ## Files touched
-- `supabase/functions/no-lube-compose-card/index.ts`
-  - New `drawRoundedRect(canvas, x, y, w, h, radius, fillRGBA, borderRGBA?, borderW?)` helper (pixel loop, alpha-blend; ImageScript has no native rounded-rect, so a small per-pixel routine using `Image.fill` rectangles + 4 corner masks).
-  - `drawTextInZone` accepts plaque config, draws it before text, returns nothing.
-  - Multiplier formatter: digits + lowercase `x` rendered as two separate `renderText` calls, x sized at ~0.7× and bottom-aligned to the digit baseline.
-  - CA rendering: drop `caShort()` call when zone height ≥ 40 (full mint fits); render at size that exactly fits zone width.
-- `src/components/social/NoLubeTemplateManager.tsx`
-  - `DEFAULT_SAFE_ZONES` updated (widths, heights, plaque blocks).
-  - `TplRow.safe_zones` type extended with optional `plaque` field.
 
-## Out of scope (for now)
-- Uploaded mid-layer PNG overlays with z-index. Not needed — computed plaques cover the legibility problem and stay responsive to text length. If you later want hero brand art (e.g., a stylized HIVEFORGE plate), we add a separate `overlay_layers[]` array with `{url, x, y, w, h, z}` in the same JSON.
+- `supabase/functions/no-lube-orchestrate/index.ts` — add the gate + read new config column.
+- One migration adding `no_lube_global_profile.backlog_max_age_min numeric NOT NULL DEFAULT 30`.
 
-## After deploy
-Open the Luna Dusk template, paste the new default JSON (or I can write a one-shot migration to patch the existing 3–4 templates), regenerate a test card, you tweak colors/opacity from the JSON editor live.
+## Out of scope
+
+- No template / push / compose changes.
+- No DB cleanup of old pending rows — the gate just makes orchestrate ignore them; they sit quietly in `telegram_insider_token_lifecycle` doing nothing.
+- No change to the dead-token 3-strike rule (becomes moot because backlog never reaches it).
+
+Reply **Plan Approved** to implement.
