@@ -65,12 +65,13 @@ function isTerminalDead(rows: Array<{ verdict_class: string | null; price_change
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
-    const { mint, source_message_id } = await req.json();
+    const { mint, source_message_id, source, flow_hint } = await req.json();
     if (!mint || typeof mint !== 'string') {
       return new Response(JSON.stringify({ ok: false, error: 'mint required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+    const isLegacyBrag = source === 'legacy-sweeper' || flow_hint === 'legacy_brag';
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -163,7 +164,9 @@ serve(async (req) => {
     // for old dead carcasses the system already moved past.
     const calledAtMs = lcRow?.first_called_at ? new Date(lcRow.first_called_at).getTime() : null;
     const ageMin = calledAtMs ? (Date.now() - calledAtMs) / 60000 : null;
-    if (ageMin != null && ageMin > backlogMaxAgeMin) {
+    // Legacy-brag bypasses the backlog age gate by design — it's intentionally
+    // targeting tokens past the 48h freshness window.
+    if (!isLegacyBrag && ageMin != null && ageMin > backlogMaxAgeMin) {
       return jsonResp({
         ok: true, flow: 'skipped', skipped: true,
         reason: 'backlog_ignored',
