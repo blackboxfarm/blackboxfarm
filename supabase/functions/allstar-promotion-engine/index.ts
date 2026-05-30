@@ -386,48 +386,9 @@ Deno.serve(withRunLog('allstar-promotion-engine', async (req) => {
       }
     }
 
-    // ═══ Step 6: TG alert if promotions happened ═══
+    // ═══ Step 6: BLACKBOX TG alerts are hard-muted; log only. ═══
     if (results.promoted > 0) {
-      try {
-        const { data: tgTargets } = await supabase
-          .from('telegram_message_targets')
-          .select('chat_id')
-          .eq('label', 'BLACKBOX')
-          .eq('is_active', true);
-
-        if (tgTargets && tgTargets.length > 0) {
-          const lines = [
-            `⭐ <b>Allstar Promotion Engine</b>`,
-            ``,
-            `📊 <b>${results.promoted}</b> new devs promoted`,
-            `⬆️ <b>${results.upgraded}</b> existing devs upgraded`,
-            `⏭️ <b>${results.skipped}</b> duplicates skipped`,
-            ``,
-          ];
-
-          const topPromoted = newCreators.slice(0, 5).map(w => {
-            const t = creatorMap.get(w)!;
-            return `  • <code>${w.slice(0, 8)}...</code> → T${mcapToTier(t.market_cap || 0)} via $${t.symbol} (MCap $${Math.round(t.market_cap || 0).toLocaleString()})`;
-          });
-          lines.push(...topPromoted);
-
-          if (results.errors.length > 0) {
-            lines.push(``, `⚠️ ${results.errors.length} errors`);
-          }
-
-          for (const target of tgTargets) {
-            await supabase.functions.invoke('telegram-mtproto-auth', {
-              body: { action: 'send_message', chat_id: target.chat_id, message: lines.join('\n'), parse_mode: 'HTML' },
-            }).catch(e => console.error('[AllstarPromotion] TG error:', e));
-          }
-
-          await supabase.from('telegram_message_targets')
-            .update({ last_used_at: new Date().toISOString() })
-            .eq('label', 'BLACKBOX');
-        }
-      } catch (e) {
-        console.error('[AllstarPromotion] TG broadcast error:', e);
-      }
+      console.warn('[AllstarPromotion] BLACKBOX Telegram muted — promotion alert logged only');
     }
 
     const summary = `Promoted ${results.promoted}, upgraded ${results.upgraded}, skipped ${results.skipped}, errors: ${results.errors.length}`;

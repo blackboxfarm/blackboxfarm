@@ -14,6 +14,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { assertUpdate } from '../_shared/db-assert.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -50,8 +51,11 @@ serve(async (req) => {
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, serviceKey);
 
+  let requestedMint: string | null = null;
+
   try {
-    const { mint, force } = await req.json();
+    const { mint, force, fast_post } = await req.json();
+    requestedMint = typeof mint === 'string' ? mint : null;
     if (!mint || typeof mint !== 'string') {
       return new Response(JSON.stringify({ ok: false, error: 'mint required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -77,7 +81,7 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      if (lc.ingest_status === 'enriching' && lc.ingest_started_at) {
+      if (!fast_post && lc.ingest_status === 'enriching' && lc.ingest_started_at) {
         const ageMs = Date.now() - new Date(lc.ingest_started_at).getTime();
         if (ageMs < 5 * 60 * 1000) {
           return new Response(JSON.stringify({ ok: true, skipped: 'in_progress' }), {
@@ -87,23 +91,59 @@ serve(async (req) => {
       }
     }
 
-    await supabase
-      .from('telegram_insider_token_lifecycle')
-      .update({ ingest_status: 'enriching', ingest_started_at: new Date().toISOString(), ingest_last_error: null })
-      .eq('token_mint', mint);
+    await assertUpdate(
+      supabase
+        .from('telegram_insider_token_lifecycle')
+        .update({ ingest_status: 'enriching', ingest_started_at: new Date().toISOString(), ingest_last_error: null })
+        .eq('token_mint', mint),
+      'telegram_insider_token_lifecycle',
+    );
 
     const steps: Record<string, any> = {};
     const now = () => new Date().toISOString();
+
+    // POST FIRST. Enrichment must never block the snapshot/private post.
+    let orchestrate: any = null;
+    try {
+      const r = await invoke(`${supabaseUrl}/functions/v1/no-lube-orchestrate`, serviceKey, {
+        mint,
+        source: fast_post ? 'insiders-fast-post' : 'insiders-ingest',
+      }, 60000);
+      orchestrate = { ok: r.ok, status: r.status, body: r.json };
+    } catch (e) {
+      orchestrate = { ok: false, error: (e as Error).message };
+    }
+
+    await assertUpdate(
+      supabase
+        .from('telegram_insider_token_lifecycle')
+        .update({
+          ingest_status: orchestrate?.ok ? 'enriched' : 'failed',
+          ingest_completed_at: now(),
+          ingest_last_error: orchestrate?.ok ? null : JSON.stringify(orchestrate).slice(0, 500),
+        })
+        .eq('token_mint', mint),
+      'telegram_insider_token_lifecycle',
+    );
+
+    if (fast_post) {
+      return new Response(JSON.stringify({ ok: true, mint, ticker: lc.token_symbol, fast_post: true, orchestrate }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // 1. Mesh probe — already-known wallets, prior tokens, sister mints
     try {
       const r = await invoke(`${supabaseUrl}/functions/v1/token-mesh-hydrate`, serviceKey, { mint, surface: 'no-lube-ingest' }, 25000);
       steps.mesh = { ok: r.ok, status: r.status };
       if (r.ok) {
-        await supabase
-          .from('telegram_insider_token_lifecycle')
-          .update({ mesh_hydrated_at: now() })
-          .eq('token_mint', mint);
+        await assertUpdate(
+          supabase
+            .from('telegram_insider_token_lifecycle')
+            .update({ mesh_hydrated_at: now() })
+            .eq('token_mint', mint),
+          'telegram_insider_token_lifecycle',
+        );
       }
     } catch (e) { steps.mesh = { ok: false, error: (e as Error).message }; }
 
@@ -114,10 +154,13 @@ serve(async (req) => {
       const r = await invoke(`${supabaseUrl}/functions/v1/creator-wallet-resolver`, serviceKey, { tokenMint: mint }, 30000);
       steps.creator = { ok: r.ok, status: r.status, resolved: r.json?.resolved };
       if (r.ok) {
-        await supabase
-          .from('telegram_insider_token_lifecycle')
-          .update({ dev_wallet_resolved_at: now() })
-          .eq('token_mint', mint);
+        await assertUpdate(
+          supabase
+            .from('telegram_insider_token_lifecycle')
+            .update({ dev_wallet_resolved_at: now() })
+            .eq('token_mint', mint),
+          'telegram_insider_token_lifecycle',
+        );
       }
     } catch (e) { steps.creator = { ok: false, error: (e as Error).message }; }
 
@@ -129,10 +172,13 @@ serve(async (req) => {
       const r = await invoke(`${supabaseUrl}/functions/v1/blackbox-tick`, serviceKey, { mint, source: 'no-lube-ingest' }, 30000);
       steps.blackbox = { ok: r.ok, status: r.status };
       if (r.ok) {
-        await supabase
-          .from('telegram_insider_token_lifecycle')
-          .update({ blackbox_harvested_at: now() })
-          .eq('token_mint', mint);
+        await assertUpdate(
+          supabase
+            .from('telegram_insider_token_lifecycle')
+            .update({ blackbox_harvested_at: now() })
+            .eq('token_mint', mint),
+          'telegram_insider_token_lifecycle',
+        );
       }
     } catch (e) { steps.blackbox = { ok: false, error: (e as Error).message }; }
 
@@ -148,23 +194,6 @@ serve(async (req) => {
       steps.holders = { ok: true, dispatched: true };
     } catch (e) { steps.holders = { ok: false, error: (e as Error).message }; }
 
-    // 5. Hand off to orchestrate — it owns private/public posting + milestone gate.
-    let orchestrate: any = null;
-    try {
-      const r = await invoke(`${supabaseUrl}/functions/v1/no-lube-orchestrate`, serviceKey, { mint, source: 'insiders-ingest' }, 60000);
-      orchestrate = { ok: r.ok, status: r.status, body: r.json };
-    } catch (e) {
-      orchestrate = { ok: false, error: (e as Error).message };
-    }
-
-    await supabase
-      .from('telegram_insider_token_lifecycle')
-      .update({
-        ingest_status: 'enriched',
-        ingest_completed_at: now(),
-      })
-      .eq('token_mint', mint);
-
     return new Response(
       JSON.stringify({
         ok: true,
@@ -178,6 +207,23 @@ serve(async (req) => {
     );
   } catch (e: any) {
     console.error('[no-lube-ingest] fatal', e);
+    if (requestedMint) {
+      try {
+        await assertUpdate(
+          supabase
+            .from('telegram_insider_token_lifecycle')
+            .update({
+              ingest_status: 'failed',
+              ingest_completed_at: new Date().toISOString(),
+              ingest_last_error: String(e?.message || e).slice(0, 500),
+            })
+            .eq('token_mint', requestedMint),
+          'telegram_insider_token_lifecycle',
+        );
+      } catch (markErr) {
+        console.error('[no-lube-ingest] failed to mark row failed', markErr);
+      }
+    }
     return new Response(JSON.stringify({ ok: false, error: String(e?.message || e) }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

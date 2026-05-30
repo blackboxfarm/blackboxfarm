@@ -56,6 +56,27 @@ serve(async (req) => {
     }
   }
 
+  const { data: stuckRows } = await supabase
+    .from('telegram_insider_token_lifecycle')
+    .select('token_mint, token_symbol, ingest_started_at')
+    .eq('ingest_status', 'enriching')
+    .lt('ingest_started_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
+    .order('ingest_started_at', { ascending: true })
+    .limit(50);
+
+  const stuckRecovery: Array<{ mint: string; symbol: string | null; ok: boolean; error?: string }> = [];
+  for (const row of stuckRows || []) {
+    try {
+      const { error } = await supabase.functions.invoke('no-lube-ingest', {
+        body: { mint: row.token_mint, force: true, fast_post: true },
+      });
+      if (error) throw error;
+      stuckRecovery.push({ mint: row.token_mint, symbol: row.token_symbol, ok: true });
+    } catch (e: any) {
+      stuckRecovery.push({ mint: row.token_mint, symbol: row.token_symbol, ok: false, error: e?.message || String(e) });
+    }
+  }
+
   // Snapshot coverage stats so the cron history shows progress over time
   const { data: cov } = await supabase
     .from('telegram_insider_token_lifecycle')
@@ -74,7 +95,7 @@ serve(async (req) => {
   console.log('[orchestrator] coverage:', coverage);
 
   return new Response(
-    JSON.stringify({ ok: true, results, coverage, ranAt: new Date().toISOString() }),
+    JSON.stringify({ ok: true, results, stuckRecovery, coverage, ranAt: new Date().toISOString() }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
   );
 });

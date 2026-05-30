@@ -72,6 +72,7 @@ serve(async (req) => {
       });
     }
     const isLegacyBrag = source === 'legacy-sweeper' || flow_hint === 'legacy_brag';
+    const isFastPost = source === 'insiders-fast-post' || flow_hint === 'fast_post';
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -166,7 +167,7 @@ serve(async (req) => {
     const ageMin = calledAtMs ? (Date.now() - calledAtMs) / 60000 : null;
     // Legacy-brag bypasses the backlog age gate by design — it's intentionally
     // targeting tokens past the 48h freshness window.
-    if (!isLegacyBrag && ageMin != null && ageMin > backlogMaxAgeMin) {
+    if (!isLegacyBrag && !isFastPost && ageMin != null && ageMin > backlogMaxAgeMin) {
       return jsonResp({
         ok: true, flow: 'skipped', skipped: true,
         reason: 'backlog_ignored',

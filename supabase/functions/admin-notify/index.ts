@@ -5,6 +5,8 @@ import { Resend } from "npm:resend@2.0.0";
 
 // Inlined broadcast function to avoid import issues
 async function broadcastToBlackBox(supabase: SupabaseClient, message: string) {
+  console.warn('[admin-notify] BLACKBOX Telegram muted — dropping message, database/email only.');
+  return [{ target: { label: 'BLACKBOX' }, success: false, error: 'muted: BLACKBOX kill-switch' }];
 
   const { data: targets, error } = await supabase
     .from("telegram_message_targets")
