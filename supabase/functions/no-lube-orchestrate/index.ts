@@ -263,7 +263,7 @@ serve(async (req) => {
       opts: {
         image_url?: string | null;
         cta?: { text: string; url: string } | null;
-        kind?: 'snapshot' | 'big_picture';
+        kind?: 'snapshot' | 'big_picture' | 'leaks';
         reply_to_message_id?: number | null;
       } = {},
     ) => {
