@@ -54,19 +54,37 @@ serve(async (req) => {
       if (candidates.length >= MAX_MINTS_PER_RUN * 2) break;
     }
 
-    // Cooldown filter via lifecycle row.
+    // Cooldown + freshness + multiplier gate via lifecycle row.
+    // A retry only has value when:
+    //   (a) the token is still in its freshness window (first_called_at within 30 min), AND
+    //   (b) the live mcap is already at >= 2x entry — i.e. a real multiplier post is owed.
+    // Older or flat tokens are abandoned permanently — the moment has passed.
+    const FRESHNESS_MIN = 30;
+    const MULTIPLIER_THRESHOLD = 2.0;
     const cutoff = new Date(Date.now() - PER_MINT_COOLDOWN_SECS * 1000).toISOString();
+    const freshnessCutoff = new Date(Date.now() - FRESHNESS_MIN * 60 * 1000).toISOString();
     const { data: lcRows } = await supabase
       .from('telegram_insider_token_lifecycle')
-      .select('token_mint, last_resighting_swept_at')
+      .select('token_mint, last_resighting_swept_at, first_called_at, entry_market_cap, peak_market_cap, peak_multiplier')
       .in('token_mint', candidates);
-    const lastSweptByMint = new Map<string, string | null>(
-      (lcRows || []).map((r: any) => [r.token_mint, r.last_resighting_swept_at])
+    const lcByMint = new Map<string, any>(
+      (lcRows || []).map((r: any) => [r.token_mint, r])
     );
     const eligible = candidates
       .filter((m) => {
-        const last = lastSweptByMint.get(m);
-        return !last || last < cutoff;
+        const row = lcByMint.get(m);
+        if (!row) return false;
+        // Cooldown
+        if (row.last_resighting_swept_at && row.last_resighting_swept_at >= cutoff) return false;
+        // Freshness — drop anything older than 30 min from first sighting
+        if (!row.first_called_at || row.first_called_at < freshnessCutoff) return false;
+        // Multiplier gate — only retry if mcap has actually moved 2x+
+        const entry = Number(row.entry_market_cap) || 0;
+        const peakMcap = Number(row.peak_market_cap) || 0;
+        const peakMult = Number(row.peak_multiplier) || 0;
+        const mult = peakMult > 0 ? peakMult : (entry > 0 && peakMcap > 0 ? peakMcap / entry : 0);
+        if (mult < MULTIPLIER_THRESHOLD) return false;
+        return true;
       })
       .slice(0, MAX_MINTS_PER_RUN);
 

@@ -88,13 +88,10 @@ export async function alertOnApiAuthFailure(
     `🔧 Action: Check/rotate the **${serviceName.toUpperCase()}** API key in Supabase secrets.`,
   ].filter(Boolean).join('\n');
 
-  try {
-    const { broadcastToTelegram } = await import("./telegram-broadcast.ts");
-    await broadcastToTelegram(supabase, message, ['BLACKBOX'], 0);
-    console.log(`[ApiAlert] Sent TG alert for ${serviceName} ${httpStatus} (escalation: ${state?.escalationCount || 0})`);
-  } catch (e) {
-    console.error(`[ApiAlert] Failed to send TG alert:`, e);
-  }
+  // Telegram broadcast intentionally disabled — admin alerts are dashboard-only.
+  // Keep `message` available for the DB insert below for parity with the old payload.
+  void message;
+  console.log(`[ApiAlert] Recorded ${serviceName} ${httpStatus} (escalation: ${state?.escalationCount || 0}) — TG broadcast suppressed`);
 
   try {
     await supabase.from('admin_notifications').insert({
