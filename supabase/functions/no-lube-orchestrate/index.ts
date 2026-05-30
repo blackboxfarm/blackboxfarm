@@ -463,6 +463,7 @@ serve(async (req) => {
 
     const ratio = probeMcap / baseMcap;
     if (ratio < threshold) {
+      const leaks = await maybeFireLeaks(probeMcap);
       return jsonResp({
         ok: true,
         flow: 'skipped',
@@ -472,6 +473,7 @@ serve(async (req) => {
         base_mcap: baseMcap,
         current_mcap: probeMcap,
         ratio,
+        public_leaks: leaks,
       });
     }
 
