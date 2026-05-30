@@ -157,6 +157,22 @@ serve(async (req) => {
       .eq('token_mint', mint)
       .maybeSingle();
 
+    // ---- BACKLOG AGE GATE ----
+    // Ignore lifecycle rows older than backlogMaxAgeMin from first_called_at.
+    // Stops the safety-sweep cron from re-firing snapshot/big_picture/leaks
+    // for old dead carcasses the system already moved past.
+    const calledAtMs = lcRow?.first_called_at ? new Date(lcRow.first_called_at).getTime() : null;
+    const ageMin = calledAtMs ? (Date.now() - calledAtMs) / 60000 : null;
+    if (ageMin != null && ageMin > backlogMaxAgeMin) {
+      return jsonResp({
+        ok: true, flow: 'skipped', skipped: true,
+        reason: 'backlog_ignored',
+        first_called_at: lcRow!.first_called_at,
+        age_minutes: Math.round(ageMin),
+        backlog_max_age_min: backlogMaxAgeMin,
+      });
+    }
+
     // ---- STRICT ELIGIBILITY GATE ----
     // Two-phase: SNAPSHOT fires fast with only minimal lifecycle row + entry mcap,
     // BIG_PICTURE fires after enrichment completes (holders + blackbox + mesh).
