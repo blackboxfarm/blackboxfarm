@@ -11681,7 +11681,12 @@ export type Database = {
           id: string
           language: string
           leaks_min_mcap: number
+          legacy_max_age_days: number
+          legacy_min_gap_hours: number
+          legacy_min_mcap: number
+          legacy_progress_step: number
           multiplier_threshold: number
+          progress_step: number
           snapshot_use_mint_image: boolean
           style: string
           updated_at: string
@@ -11691,7 +11696,12 @@ export type Database = {
           id?: string
           language?: string
           leaks_min_mcap?: number
+          legacy_max_age_days?: number
+          legacy_min_gap_hours?: number
+          legacy_min_mcap?: number
+          legacy_progress_step?: number
           multiplier_threshold?: number
+          progress_step?: number
           snapshot_use_mint_image?: boolean
           style?: string
           updated_at?: string
@@ -11701,7 +11711,12 @@ export type Database = {
           id?: string
           language?: string
           leaks_min_mcap?: number
+          legacy_max_age_days?: number
+          legacy_min_gap_hours?: number
+          legacy_min_mcap?: number
+          legacy_progress_step?: number
           multiplier_threshold?: number
+          progress_step?: number
           snapshot_use_mint_image?: boolean
           style?: string
           updated_at?: string
@@ -17948,6 +17963,7 @@ export type Database = {
           kyc_label: string | null
           kyc_last_attempt_at: string | null
           kyc_status: string
+          last_legacy_swept_at: string | null
           last_milestone_at: string | null
           last_resighting_swept_at: string | null
           launchpad: string | null
@@ -18009,6 +18025,7 @@ export type Database = {
           kyc_label?: string | null
           kyc_last_attempt_at?: string | null
           kyc_status?: string
+          last_legacy_swept_at?: string | null
           last_milestone_at?: string | null
           last_resighting_swept_at?: string | null
           launchpad?: string | null
@@ -18070,6 +18087,7 @@ export type Database = {
           kyc_label?: string | null
           kyc_last_attempt_at?: string | null
           kyc_status?: string
+          last_legacy_swept_at?: string | null
           last_milestone_at?: string | null
           last_resighting_swept_at?: string | null
           launchpad?: string | null
