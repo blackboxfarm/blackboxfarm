@@ -9777,6 +9777,134 @@ export type Database = {
           },
         ]
       }
+      leaderboard_daily_runs: {
+        Row: {
+          created_at: string
+          entries: Json
+          entry_count: number
+          error: string | null
+          id: string
+          image_private_url: string | null
+          image_public_url: string | null
+          local_date: string
+          posted_at: string | null
+          profile_id: string
+          rendered_at: string | null
+          status: string
+          tg_private_message_id: number | null
+          tg_public_message_id: number | null
+          updated_at: string
+          window_end_utc: string
+          window_start_utc: string
+        }
+        Insert: {
+          created_at?: string
+          entries?: Json
+          entry_count?: number
+          error?: string | null
+          id?: string
+          image_private_url?: string | null
+          image_public_url?: string | null
+          local_date: string
+          posted_at?: string | null
+          profile_id: string
+          rendered_at?: string | null
+          status?: string
+          tg_private_message_id?: number | null
+          tg_public_message_id?: number | null
+          updated_at?: string
+          window_end_utc: string
+          window_start_utc: string
+        }
+        Update: {
+          created_at?: string
+          entries?: Json
+          entry_count?: number
+          error?: string | null
+          id?: string
+          image_private_url?: string | null
+          image_public_url?: string | null
+          local_date?: string
+          posted_at?: string | null
+          profile_id?: string
+          rendered_at?: string | null
+          status?: string
+          tg_private_message_id?: number | null
+          tg_public_message_id?: number | null
+          updated_at?: string
+          window_end_utc?: string
+          window_start_utc?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leaderboard_daily_runs_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leaderboard_profiles: {
+        Row: {
+          accent_hex: string
+          bg_private_prompt: string | null
+          bg_private_url: string | null
+          bg_public_prompt: string | null
+          bg_public_url: string | null
+          brand_tagline: string | null
+          channel_name_filter: string | null
+          created_at: string
+          day_start_hour: number
+          display_name: string
+          enabled: boolean
+          id: string
+          post_hour: number
+          post_to_tg_private: boolean
+          post_to_tg_public: boolean
+          timezone: string
+          updated_at: string
+        }
+        Insert: {
+          accent_hex?: string
+          bg_private_prompt?: string | null
+          bg_private_url?: string | null
+          bg_public_prompt?: string | null
+          bg_public_url?: string | null
+          brand_tagline?: string | null
+          channel_name_filter?: string | null
+          created_at?: string
+          day_start_hour?: number
+          display_name: string
+          enabled?: boolean
+          id: string
+          post_hour?: number
+          post_to_tg_private?: boolean
+          post_to_tg_public?: boolean
+          timezone?: string
+          updated_at?: string
+        }
+        Update: {
+          accent_hex?: string
+          bg_private_prompt?: string | null
+          bg_private_url?: string | null
+          bg_public_prompt?: string | null
+          bg_public_url?: string | null
+          brand_tagline?: string | null
+          channel_name_filter?: string | null
+          created_at?: string
+          day_start_hour?: number
+          display_name?: string
+          enabled?: boolean
+          id?: string
+          post_hour?: number
+          post_to_tg_private?: boolean
+          post_to_tg_public?: boolean
+          timezone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       login_history: {
         Row: {
           alert_id: string | null
