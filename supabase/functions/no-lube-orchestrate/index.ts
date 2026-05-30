@@ -173,46 +173,14 @@ serve(async (req) => {
         });
       }
     } else {
-      // BIG_PICTURE / milestone path: full enrichment required
-      if (!lcRow?.creator_wallet) eligibilityBlockers.push('creator_unresolved');
-      if (lcRow?.creator_status && !['resolved', 'kyc_resolved', 'no_kyc_reachable', 'unresolvable'].includes(String(lcRow.creator_status))) {
-        eligibilityBlockers.push(`creator_status_${lcRow.creator_status}`);
-      }
-      if (!hasBigPicture) {
-        if (!lcRow?.holders_refreshed_at) eligibilityBlockers.push('holders_not_refreshed');
-        if (!lcRow?.blackbox_harvested_at) eligibilityBlockers.push('blackbox_not_harvested');
-        if (!lcRow?.mesh_hydrated_at) eligibilityBlockers.push('mesh_not_hydrated');
-      }
+      // BIG_PICTURE / milestone path:
+      // Per protocol every Insiders-called token must get a Big Picture follow-up
+      // to Private regardless of multiplier. Missing creator / holders / blackbox
+      // / mesh data render as "In Process" in the template — they do NOT block
+      // the post. Only the lifecycle row + entry mcap are required (already
+      // checked above on the snapshot path; re-check here for direct calls).
       if (eligibilityBlockers.length) {
         console.log('[no-lube-orchestrate] big_picture not_eligible', { mint, blockers: eligibilityBlockers });
-        // Safety valve: if the token has been sitting waiting on enrichment
-        // for more than 15 minutes, raise a single system_alert so a stalled
-        // holders / mesh / blackbox pipeline becomes visible instead of
-        // silently blocking Public posts forever.
-        try {
-          const enrichmentOnly = eligibilityBlockers.every((b) =>
-            b === 'holders_not_refreshed' || b === 'blackbox_not_harvested' || b === 'mesh_not_hydrated'
-          );
-          const firstSeen = lcRow?.first_called_at || lcRow?.created_at;
-          const ageMs = firstSeen ? Date.now() - new Date(firstSeen).getTime() : 0;
-          if (enrichmentOnly && ageMs > 15 * 60 * 1000) {
-            const stuckGate = eligibilityBlockers.sort().join(',');
-            const alertKey = `no_lube_orchestrate.bigpicture_enrichment_stalled.${stuckGate}`;
-            await supabase
-              .from('system_alerts')
-              .upsert({
-                alert_key: alertKey,
-                severity: 'warn',
-                source: 'no-lube-orchestrate',
-                message: `Big Picture blocked by enrichment gates for >15min: ${stuckGate}`,
-                context: { mint, blockers: eligibilityBlockers, age_minutes: Math.round(ageMs / 60000), first_seen: firstSeen },
-                last_seen_at: new Date().toISOString(),
-                resolved_at: null,
-              }, { onConflict: 'alert_key' });
-          }
-        } catch (e) {
-          console.warn('[no-lube-orchestrate] safety-valve alert write failed (non-fatal):', (e as Error).message);
-        }
         return jsonResp({
           ok: true, flow: 'skipped', skipped: true,
           reason: 'big_picture_not_eligible_yet',
