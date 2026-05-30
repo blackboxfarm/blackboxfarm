@@ -65,12 +65,13 @@ function isTerminalDead(rows: Array<{ verdict_class: string | null; price_change
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
-    const { mint, source_message_id } = await req.json();
+    const { mint, source_message_id, source, flow_hint } = await req.json();
     if (!mint || typeof mint !== 'string') {
       return new Response(JSON.stringify({ ok: false, error: 'mint required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+    const isLegacyBrag = source === 'legacy-sweeper' || flow_hint === 'legacy_brag';
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -163,7 +164,9 @@ serve(async (req) => {
     // for old dead carcasses the system already moved past.
     const calledAtMs = lcRow?.first_called_at ? new Date(lcRow.first_called_at).getTime() : null;
     const ageMin = calledAtMs ? (Date.now() - calledAtMs) / 60000 : null;
-    if (ageMin != null && ageMin > backlogMaxAgeMin) {
+    // Legacy-brag bypasses the backlog age gate by design — it's intentionally
+    // targeting tokens past the 48h freshness window.
+    if (!isLegacyBrag && ageMin != null && ageMin > backlogMaxAgeMin) {
       return jsonResp({
         ok: true, flow: 'skipped', skipped: true,
         reason: 'backlog_ignored',
@@ -506,7 +509,10 @@ serve(async (req) => {
     const prevMilestone = prev.last_multiplier != null
       ? Math.floor(Number(prev.last_multiplier))
       : 1; // first re-sighting baseline = 1x band
-    if (currentMilestone <= prevMilestone) {
+    // Legacy-brag bypasses the integer milestone gate — the legacy sweeper
+    // already enforced its own upward-progression gate (last_multiplier *
+    // legacy_progress_step) before dispatching.
+    if (!isLegacyBrag && currentMilestone <= prevMilestone) {
       return jsonResp({
         ok: true,
         flow: 'skipped',
@@ -614,6 +620,11 @@ serve(async (req) => {
         last_mcap_at_post: privateResult.mcap,
         last_multiplier: multiplier,
       });
+      if (isLegacyBrag && privateResult.logId) {
+        await supabase.from('no_lube_post_log')
+          .update({ post_kind: 'legacy_brag' })
+          .eq('id', privateResult.logId);
+      }
     }
     if (publicResult.ok && publicResult.pushed && publicResult.mcap != null) {
       await stampPost(publicResult.logId, {
@@ -621,11 +632,16 @@ serve(async (req) => {
         last_mcap_at_post: publicResult.mcap,
         last_multiplier: multiplier,
       });
+      if (isLegacyBrag && publicResult.logId) {
+        await supabase.from('no_lube_post_log')
+          .update({ post_kind: 'legacy_brag' })
+          .eq('id', publicResult.logId);
+      }
     }
 
     return jsonResp({
       ok: true,
-      flow: 're_sighting',
+      flow: isLegacyBrag ? 'legacy_brag' : 're_sighting',
       threshold,
       baseline_source: baselineSource,
       base_mcap: baseMcap,
