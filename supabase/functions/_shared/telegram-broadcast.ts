@@ -144,10 +144,6 @@ export async function broadcastToTelegram(
   delayMs: number = DEFAULT_MESSAGE_DELAY_MS,
   sourceFunction?: string
 ): Promise<BroadcastResult[]> {
-  // Initial delay to prevent rapid-fire spam when called in loops
-  console.log(`[telegram-broadcast] Initial 2s cooldown before sending...`);
-  await sleep(2000);
-
   const targets = await getTelegramTargets(supabase, labels);
 
   if (targets.length === 0) {
@@ -155,13 +151,35 @@ export async function broadcastToTelegram(
     return [];
   }
 
-  console.log(`[telegram-broadcast] Broadcasting to ${targets.length} target(s) with ${delayMs}ms delay:`, 
-    targets.map(t => t.label).join(", "));
+  const mutedResults: BroadcastResult[] = [];
+  const activeTargets: TelegramTarget[] = [];
+  for (const target of targets) {
+    if (MUTED_TARGET_LABELS.has(String(target.label || '').toUpperCase())) {
+      const result = { target, success: false, error: 'muted: BLACKBOX kill-switch' };
+      mutedResults.push(result);
+      await logDelivery(supabase, target, result, message, sourceFunction);
+      console.warn(`[telegram-broadcast] MUTED ${target.label}: BLACKBOX kill-switch`);
+    } else {
+      activeTargets.push(target);
+    }
+  }
 
-  const results: BroadcastResult[] = [];
+  if (activeTargets.length === 0) {
+    console.log("[telegram-broadcast] All targets muted; no Telegram send attempted.");
+    return mutedResults;
+  }
 
-  for (let i = 0; i < targets.length; i++) {
-    const target = targets[i];
+  // Initial delay to prevent rapid-fire spam when called in loops
+  console.log(`[telegram-broadcast] Initial 2s cooldown before sending...`);
+  await sleep(2000);
+
+  console.log(`[telegram-broadcast] Broadcasting to ${activeTargets.length} target(s) with ${delayMs}ms delay:`, 
+    activeTargets.map(t => t.label).join(", "));
+
+  const results: BroadcastResult[] = [...mutedResults];
+
+  for (let i = 0; i < activeTargets.length; i++) {
+    const target = activeTargets[i];
     
     // Add delay between messages (skip delay for first message)
     if (i > 0 && delayMs > 0) {
