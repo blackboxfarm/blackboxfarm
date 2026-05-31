@@ -42,10 +42,15 @@ function htmlDoc(opts: {
   const padded = entries.slice(0, 20);
   while (padded.length < 20) padded.push(null);
 
-  const pillsHtml = padded.map((e, i) => {
+  const medals = ['🥇', '🥈', '🥉'];
+
+  const renderRow = (e: any, i: number) => {
     const rank = i + 1;
+    const rankCell = rank <= 3
+      ? `<div class="medal">${medals[rank - 1]}</div>`
+      : `<div class="rank">${rank}</div>`;
     if (!e) {
-      return `<div class="pill pill-empty"><div class="rank">#${rank}</div><div class="empty-slot">—</div></div>`;
+      return `<div class="row row-empty">${rankCell}<div class="avatar empty"></div><div class="ticker muted-empty">—</div><div class="num muted-empty">—</div><div class="arrow muted-empty">→</div><div class="num muted-empty">—</div><div class="mult muted-empty">—</div></div>`;
     }
     const ticker = esc(e.ticker || e.token_symbol || 'TOKEN');
     const mult = fmtMult(Number(e.multiplier));
@@ -53,68 +58,69 @@ function htmlDoc(opts: {
     const ath = fmtMcap(Number(e.ath_mcap));
     const img = e.image_url ? esc(e.image_url) : '';
     const initials = ticker.slice(0, 2).toUpperCase();
-    return `
-    <div class="pill">
-      <div class="rank">#${rank}</div>
-      <div class="avatar" style="${img ? `background-image:url('${img}')` : ''}">
-        ${img ? '' : `<span>${esc(initials)}</span>`}
-      </div>
-      <div class="body">
-        <div class="row1">
-          <span class="ticker">$${ticker}</span>
-          <span class="mult">${esc(mult)}</span>
-        </div>
-        <div class="row2">
-          <span class="muted">called</span> ${esc(called)} <span class="arr">→</span> <span class="muted">ATH</span> ${esc(ath)}
-        </div>
-      </div>
+    const multClass = rank === 1 ? 'mult mult-gold' : rank === 3 ? 'mult mult-bronze' : 'mult';
+    return `<div class="row">
+      ${rankCell}
+      <div class="avatar" style="${img ? `background-image:url('${img}')` : ''}">${img ? '' : `<span>${esc(initials)}</span>`}</div>
+      <div class="ticker">$${ticker}</div>
+      <div class="num">${esc(called)}</div>
+      <div class="arrow">→</div>
+      <div class="num">${esc(ath)}</div>
+      <div class="${multClass}">${esc(mult)}</div>
     </div>`;
-  }).join('');
+  };
+
+  const leftCol = padded.slice(0, 10).map((e, i) => renderRow(e, i)).join('');
+  const rightCol = padded.slice(10, 20).map((e, i) => renderRow(e, i + 10)).join('');
 
   const bgCss = bgUrl
-    ? `background-image: linear-gradient(rgba(0,0,0,.55), rgba(0,0,0,.75)), url('${esc(bgUrl)}'); background-size: cover; background-position: center;`
-    : `background: radial-gradient(1200px 800px at 20% 0%, #0e1b2c 0%, #050a14 60%, #02050b 100%);`;
+    ? `background-image: linear-gradient(rgba(0,0,0,.65), rgba(0,0,0,.85)), url('${esc(bgUrl)}'); background-size: cover; background-position: center;`
+    : `background: #050505;`;
 
   return `<!doctype html>
 <html><head><meta charset="utf-8"><title>${esc(title)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Inter:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
   *{box-sizing:border-box}
-  html,body{margin:0;padding:0;width:1200px;height:1500px;font-family:'Space Grotesk',system-ui,sans-serif;color:#e6f6ff}
-  .canvas{width:1200px;height:1500px;${bgCss};padding:48px 56px 56px;display:flex;flex-direction:column;position:relative;overflow:hidden}
-  .header{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:24px}
-  h1{font-size:54px;margin:0;letter-spacing:-1px;text-shadow:0 0 24px rgba(34,211,238,.35)}
-  .accent{color:${esc(accent)}}
-  .sub{margin-top:6px;color:#9fc5d8;font-size:20px;font-family:'JetBrains Mono',monospace}
-  .badge{padding:8px 14px;border-radius:999px;border:1px solid rgba(34,211,238,.4);background:rgba(34,211,238,.08);font-size:14px;font-family:'JetBrains Mono',monospace;color:${esc(accent)};text-transform:uppercase;letter-spacing:1px}
-  .grid{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:14px;align-content:start}
-  .pill{display:flex;align-items:center;gap:14px;padding:12px 16px;border-radius:18px;background:rgba(8,18,32,.72);border:1px solid rgba(255,255,255,.08);box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 6px 20px rgba(0,0,0,.45);min-height:78px}
-  .pill-empty{opacity:.35}
-  .rank{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:18px;color:${esc(accent)};min-width:42px}
-  .avatar{width:54px;height:54px;border-radius:50%;background-color:#0a1626;background-size:cover;background-position:center;border:2px solid ${esc(accent)};box-shadow:0 0 18px rgba(34,211,238,.35);display:flex;align-items:center;justify-content:center;flex:none}
-  .avatar span{font-weight:700;color:${esc(accent)};font-size:18px;font-family:'JetBrains Mono',monospace}
-  .body{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0}
-  .row1{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
-  .ticker{font-weight:700;font-size:20px;letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
-  .mult{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:24px;color:${esc(accent)};text-shadow:0 0 10px rgba(34,211,238,.45)}
-  .row2{font-family:'JetBrains Mono',monospace;font-size:13px;color:#bcd4e2}
-  .muted{color:#6f8a9d;text-transform:uppercase;letter-spacing:.5px;font-size:11px;margin-right:2px}
-  .arr{color:${esc(accent)};margin:0 6px}
-  .footer{margin-top:18px;display:flex;justify-content:space-between;align-items:center;font-family:'JetBrains Mono',monospace;font-size:13px;color:#6f8a9d}
-  .v-tag{padding:6px 10px;border:1px solid rgba(255,255,255,.15);border-radius:6px;text-transform:uppercase;letter-spacing:2px;color:${esc(accent)}}
+  html,body{margin:0;padding:0;width:1920px;height:1080px;font-family:'Inter',system-ui,sans-serif;color:#fff;-webkit-font-smoothing:antialiased}
+  .canvas{width:1920px;height:1080px;${bgCss};padding:48px 60px 40px;display:flex;flex-direction:column;position:relative;overflow:hidden}
+  .title{text-align:center;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:96px;line-height:1;letter-spacing:2px;color:${esc(accent)};text-shadow:0 4px 24px rgba(0,0,0,.8), 0 0 40px ${esc(accent)}33}
+  .subtitle{text-align:center;font-size:36px;font-weight:500;margin-top:8px;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.9)}
+  .panel{flex:1;margin-top:32px;border:3px solid ${esc(accent)};border-radius:24px;background:rgba(0,0,0,.78);padding:28px 40px;display:grid;grid-template-columns:1fr 1fr;gap:48px;box-shadow:0 0 60px rgba(0,0,0,.7), inset 0 0 30px rgba(0,0,0,.5)}
+  .col{display:flex;flex-direction:column}
+  .head{display:grid;grid-template-columns:48px 70px 1fr 130px 30px 130px 90px;align-items:center;gap:12px;padding:0 4px 12px;border-bottom:1px solid rgba(255,255,255,.18);color:#9ca3af;font-size:18px;font-weight:500;letter-spacing:.5px}
+  .head .h-token{grid-column:1 / span 3}
+  .rows{display:flex;flex-direction:column;justify-content:space-between;flex:1;padding-top:8px}
+  .row{display:grid;grid-template-columns:48px 70px 1fr 130px 30px 130px 90px;align-items:center;gap:12px;padding:10px 4px;font-size:26px;font-weight:700}
+  .row-empty{opacity:.25}
+  .rank{font-size:22px;color:#9ca3af;font-weight:700;text-align:center}
+  .medal{font-size:38px;text-align:center;line-height:1}
+  .avatar{width:58px;height:58px;border-radius:50%;background:#1a1a1a;background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.1)}
+  .avatar.empty{opacity:.4}
+  .avatar span{font-size:18px;font-weight:800;color:#9ca3af;font-family:'Inter',sans-serif}
+  .ticker{font-size:28px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.5px}
+  .num{font-size:26px;font-weight:700;color:#fff;text-align:right;font-variant-numeric:tabular-nums}
+  .arrow{color:${esc(accent)};font-size:24px;text-align:center;font-weight:800}
+  .mult{font-size:30px;font-weight:800;color:#fff;text-align:right;font-variant-numeric:tabular-nums}
+  .mult-gold{color:${esc(accent)}}
+  .mult-bronze{color:#cd7f32}
+  .muted-empty{color:#4b5563}
 </style></head>
 <body><div class="canvas">
-  <div class="header">
-    <div>
-      <h1>🏆 <span class="accent">TOP 20</span> CALLS</h1>
-      <div class="sub">${esc(subtitle)}</div>
+  <div class="title">${esc(title)}</div>
+  <div class="subtitle">${esc(subtitle)}</div>
+  <div class="panel">
+    <div class="col">
+      <div class="head"><div class="h-token">Token</div><div>Called MC</div><div></div><div>Peak MC</div><div style="text-align:right">Multiplier</div></div>
+      <div class="rows">${leftCol}</div>
     </div>
-    <div class="badge">${esc(brand)}</div>
+    <div class="col">
+      <div class="head"><div class="h-token">Token</div><div>Called MC</div><div></div><div>Peak MC</div><div style="text-align:right">Multiplier</div></div>
+      <div class="rows">${rightCol}</div>
+    </div>
   </div>
-  <div class="grid">${pillsHtml}</div>
-  <div class="footer"><span>blackbox.farm</span><span class="v-tag">${variant}</span></div>
 </div></body></html>`;
 }
 
@@ -145,10 +151,16 @@ serve(async (req) => {
       .maybeSingle();
 
     const bgUrl = variant === 'private' ? profile?.bg_private_url : profile?.bg_public_url;
-    const subtitle = `${run.local_date} · 6am→6am window · ${(run.entries as any[])?.length || 0} qualifying calls`;
+    // Pretty date: "May 29"
+    let prettyDate = run.local_date as string;
+    try {
+      const d = new Date(`${run.local_date}T12:00:00Z`);
+      prettyDate = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
+    } catch {}
+    const brandUpper = (profile?.brand_tagline || profile?.display_name || 'INSIDER ACCESS').toUpperCase();
     const html = htmlDoc({
-      title: `${profile?.display_name || 'Leaderboard'} — ${run.local_date}`,
-      subtitle,
+      title: `${brandUpper} DAILY RECAP`,
+      subtitle: prettyDate,
       accent: profile?.accent_hex || '#22d3ee',
       bgUrl: bgUrl || null,
       entries: (run.entries as any[]) || [],
