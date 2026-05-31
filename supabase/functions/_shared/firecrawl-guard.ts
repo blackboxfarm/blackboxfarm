@@ -119,31 +119,7 @@ export async function handleFirecrawlError(
  * Fire admin alert when we self-throttle
  */
 async function fireThrottleAlert(callerName: string, callCount: number) {
-  // Suppress noisy self-throttle alerts for callers we've intentionally muted.
-  // Solscan v2 is disabled — its Firecrawl fallback is a no-op now, but in case
-  // a stale invocation still trips the guard, we don't want to spam admin.
-  const MUTED_CALLERS = new Set(['solscan-intelligence']);
-  if (MUTED_CALLERS.has(callerName)) {
-    console.log(`[FirecrawlGuard] self-throttle alert suppressed for muted caller=${callerName} (calls=${callCount})`);
-    return;
-  }
-  try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    await supabase.from('admin_notifications').insert({
-      notification_type: 'firecrawl_self_throttle',
-      title: `⚠️ WARNING: Firecrawl self-throttled by ${callerName}`,
-      message: `${callCount} Firecrawl calls in 1 minute triggered internal rate limiter.\nCaller: ${callerName}\nCooldown: ${THROTTLE_COOLDOWN_MS / 1000}s\n\nThis is a protective measure to avoid burning credits. If legitimate, consider increasing the budget.`,
-      metadata: {
-        caller: callerName,
-        calls_in_window: callCount,
-        cooldown_ms: THROTTLE_COOLDOWN_MS,
-      },
-    });
-  } catch (e) {
-    console.error('[FirecrawlGuard] Failed to send throttle alert:', e);
-  }
+  // 🔕 Hard-muted: self-throttle is a protective measure, not an incident.
+  // Visible in logs only — no admin_notifications spam.
+  console.log(`[FirecrawlGuard] self-throttle (muted) caller=${callerName} calls=${callCount}`);
 }
