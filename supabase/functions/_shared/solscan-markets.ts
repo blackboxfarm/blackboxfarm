@@ -1,3 +1,11 @@
+// ⚠️ DEPRECATED — no longer called by bagless-holders-report.
+// LP wallets are now identified per-holder by detectLP() via program-id
+// match (KNOWN_DEX_PROGRAMS / BONDING_CURVE_PROGRAMS) against the holder's
+// accountOwner. The AMM pool's token vault is always the biggest holder
+// and its accountOwner is the DEX program — no Solscan call needed.
+// File retained for legacy callers; do not reintroduce into the
+// holders-report path (consumes Pro CU quota and triggers 429 alerts).
+//
 // Solscan Markets API utilities
 import { KNOWN_DEX_PROGRAMS, BONDING_CURVE_PROGRAMS } from "./lp-detection.ts";
 import { createApiLogger } from "./api-logger.ts";
