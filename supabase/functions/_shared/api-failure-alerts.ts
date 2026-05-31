@@ -76,7 +76,11 @@ export async function alertOnApiAuthFailure(
   const statusEmoji = httpStatus === 401 ? '🔑' : httpStatus === 403 ? '🚫' : '⚠️';
   const statusLabel = httpStatus === 401 ? 'UNAUTHORIZED' : httpStatus === 403 ? 'FORBIDDEN' : 'RATE LIMITED';
 
+  // Traceable alert ID — bake into every TG/email/SMS message + admin_notifications.metadata.trace_id
+  const traceId = `[fn=${functionName || 'unknown'}][svc=${serviceName}][ep=${endpoint}][code=${httpStatus}]`;
+
   const message = [
+    traceId,
     `${escalationPrefix}${statusEmoji} **API ${statusLabel}: ${serviceName.toUpperCase()}**`,
     ``,
     `**Status:** ${httpStatus}`,
@@ -97,9 +101,9 @@ export async function alertOnApiAuthFailure(
   try {
     await supabase.from('admin_notifications').insert({
       notification_type: escalationPrefix ? 'api_failure_escalation' : 'api_auth_failure',
-      title: `${escalationPrefix}${statusEmoji} ${serviceName} API ${statusLabel}`,
-      message: `${serviceName} returned ${httpStatus} on ${endpoint}. ${errorBody?.slice(0, 100) || 'Check API key.'}`,
-      metadata: { service: serviceName, status: httpStatus, endpoint, function: functionName, error: errorBody?.slice(0, 200), escalation: state?.escalationCount || 0 },
+      title: `${traceId} ${escalationPrefix}${statusEmoji} ${serviceName} API ${statusLabel}`,
+      message: `${traceId} ${serviceName} returned ${httpStatus} on ${endpoint}. ${errorBody?.slice(0, 100) || 'Check API key.'}`,
+      metadata: { trace_id: traceId, service: serviceName, status: httpStatus, endpoint, function: functionName, error: errorBody?.slice(0, 200), escalation: state?.escalationCount || 0 },
     });
   } catch (e) {
     console.error(`[ApiAlert] Failed to write admin notification:`, e);
@@ -177,7 +181,9 @@ export async function alertOnApifyCreditFailure(
     ? body.split('\n')[0].slice(0, 100)
     : (httpStatus === 402 ? 'Payment required' : `HTTP ${httpStatus}`);
 
+  const traceId = `[fn=${functionName || 'unknown'}][svc=apify][ep=${endpoint}][code=${httpStatus}]`;
   const sms = [
+    traceId,
     `🚨 APIFY FUNDS BLOCKED`,
     `Status: ${httpStatus}`,
     `Fn: ${functionName || 'unknown'}`,
@@ -198,9 +204,9 @@ export async function alertOnApifyCreditFailure(
   try {
     await supabase.from('admin_notifications').insert({
       notification_type: 'apify_funds_blocked',
-      title: `🚨 Apify funds blocked (${httpStatus})`,
-      message: `${reasonLine} — pipeline paused for 60 min. ${queuePending.toLocaleString()} community resolutions queued.`,
-      metadata: { status: httpStatus, endpoint, function: functionName, error: errorBody?.slice(0, 300), pauseUntil, queuePending },
+      title: `${traceId} 🚨 Apify funds blocked (${httpStatus})`,
+      message: `${traceId} ${reasonLine} — pipeline paused for 60 min. ${queuePending.toLocaleString()} community resolutions queued.`,
+      metadata: { trace_id: traceId, status: httpStatus, endpoint, function: functionName, error: errorBody?.slice(0, 300), pauseUntil, queuePending },
     });
   } catch (e) {
     console.warn('[ApifyCreditAlert] admin_notifications insert failed:', (e as Error).message);
