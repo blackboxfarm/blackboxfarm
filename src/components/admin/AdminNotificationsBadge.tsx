@@ -222,7 +222,7 @@ export function AdminNotificationsBadge() {
   };
 
   const archiveNotification = async (id: string) => {
-    await (supabase.from('admin_notifications' as any).update({ is_archived: true }).eq('id', id) as any);
+    await (supabase.from('admin_notifications' as any).delete().eq('id', id) as any);
     setNotifications((prev) => prev.filter((n) => n.id !== id));
     setUnreadCount((prev) => {
       const wasUnread = notifications.find((n) => n.id === id && !n.is_read);
@@ -236,11 +236,11 @@ export function AdminNotificationsBadge() {
       const inMem = getTabNotifs();
       if (!inMem || inMem.length === 0) return;
     }
-    const confirmMsg = `Archive ALL ${total} alerts in "${activeTab}"? This cannot be undone from the UI.`;
+    const confirmMsg = `Delete ALL ${total} alerts in "${activeTab}"? This is permanent.`;
     if (!window.confirm(confirmMsg)) return;
 
-    // Server-side bulk archive — covers EVERY matching row, not just what's loaded
-    let q = (supabase.from('admin_notifications' as any).update({ is_archived: true }).eq('is_archived', false) as any);
+    // Server-side bulk delete — covers EVERY matching row, not just what's loaded
+    let q = (supabase.from('admin_notifications' as any).delete().eq('is_archived', false) as any);
     if (activeTab === 'signups') q = q.in('notification_type', SIGNUP_TYPES);
     else if (activeTab === 'transactions') q = q.in('notification_type', TRANSACTION_TYPES);
     else if (activeTab === 'tickets') q = q.in('notification_type', TICKET_TYPES);
@@ -251,7 +251,7 @@ export function AdminNotificationsBadge() {
       toast({ title: 'Clear failed', description: error.message, variant: 'destructive' });
       return;
     }
-    toast({ title: 'Cleared', description: `Archived ${total} alerts in ${activeTab}.` });
+    toast({ title: 'Cleared', description: `Deleted ${total} alerts in ${activeTab}.` });
     await fetchNotifications();
   };
 
