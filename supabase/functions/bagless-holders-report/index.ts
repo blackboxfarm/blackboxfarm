@@ -6,7 +6,6 @@ import { writeEarlyWarnings, generateWarningsFromHoldersData, generatePatternWar
 import { detectLP, type LPDetectionResult, type LaunchpadInfo } from "../_shared/lp-detection.ts"
 import { fetchDexScreenerData } from "../_shared/dexscreener-api.ts"
 import { fetchCreatorInfo } from "../_shared/creator-api.ts"
-import { fetchSolscanMarkets } from "../_shared/solscan-markets.ts"
 import { fetchRugCheckInsiders, type InsidersGraphResult } from "../_shared/rugcheck-insiders.ts"
 import { assertDbWrite } from "../_shared/db-assert.ts"
 import { 
@@ -90,8 +89,11 @@ serve(withRunLog('bagless-holders-report', async (req) => {
     // ============================================
     // PARALLEL API FETCHES
     // ============================================
-    // DexScreener-first: only fall back to Solscan markets when DexScreener
-    // returns zero pool addresses. Solscan Pro CU quota is the bottleneck.
+    // DexScreener gives us pool/pair addresses. The LP wallet itself is
+    // identified per-holder by detectLP() via program-id match against
+    // KNOWN_DEX_PROGRAMS / BONDING_CURVE_PROGRAMS — the AMM pool's token
+    // vault is always the biggest holder and its accountOwner is the DEX
+    // program. No Solscan call needed.
     const [dexResult, insidersResult] = await Promise.all([
       fetchDexScreenerData(tokenMint),
       fetchRugCheckInsiders(tokenMint)
@@ -103,19 +105,10 @@ serve(withRunLog('bagless-holders-report', async (req) => {
       dexScreenerPairAddresses.add(addr);
     }
 
-    let solscanResult: { poolAddresses: Set<string>; verifiedLPAccount: string | null; verifiedLPSource: string | null } = {
-      poolAddresses: new Set(),
-      verifiedLPAccount: null,
-      verifiedLPSource: null,
-    };
     if (allPoolAddresses.size === 0) {
-      console.log('[bagless] DexScreener returned 0 pools — falling back to Solscan markets');
-      solscanResult = await fetchSolscanMarkets(tokenMint);
-      for (const addr of solscanResult.poolAddresses) {
-        allPoolAddresses.add(addr);
-      }
+      console.log('[bagless] DexScreener returned 0 pools — relying on per-holder program-id LP detection (top holder w/ AMM owner = LP)');
     } else {
-      console.log(`[bagless] Skipping Solscan markets — DexScreener provided ${allPoolAddresses.size} pool(s)`);
+      console.log(`[bagless] DexScreener provided ${allPoolAddresses.size} pool(s); per-holder program-id check will confirm`);
     }
     
     launchpadInfo = dexResult.launchpadInfo;
