@@ -26,12 +26,12 @@ import {
   type RawPost,
 } from '../_shared/vulture-classify.ts';
 import {
-import { meteredAiFetch } from '../_shared/ai-meter.ts';
   buildDissentPrompt,
   computeDissentScore,
   preflagDissent,
   type DissentSignal,
 } from '../_shared/dissent-classify.ts';
+import { meteredAiFetch } from '../_shared/ai-meter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
