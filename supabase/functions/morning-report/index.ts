@@ -138,11 +138,16 @@ Deno.serve(withRunLog('morning-report', async (req) => {
 
       for (const log of apiLogs) {
         if (log.response_status === 429) {
+          // Skip Solscan 429s — Pro monthly Compute Units are exhausted; quota-exhausted is
+          // not an incident worth alerting on (visible on the provider dashboard instead).
+          if (log.service_name === 'solscan') continue;
           const key = `${log.service_name}:${log.endpoint}:429`;
           if (!rlGrouped[key]) rlGrouped[key] = { service: log.service_name, endpoint: log.endpoint, status: 429, count: 0 };
           rlGrouped[key].count++;
         }
         if (log.response_status === 401 || log.response_status === 403) {
+          // Solscan 401/403 are also quota-exhaustion symptoms — suppress.
+          if (log.service_name === 'solscan') continue;
           const key = `${log.service_name}:${log.endpoint}:${log.response_status}`;
           if (!authGrouped[key]) authGrouped[key] = { service: log.service_name, endpoint: log.endpoint, status: log.response_status, count: 0 };
           authGrouped[key].count++;
