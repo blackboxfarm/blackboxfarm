@@ -20,7 +20,7 @@ const corsHeaders = {
 
 const HARVEST_WINDOW_SEC = 15;
 const SOLANA_RE = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
-const BLACKBOX_GROUP_MUTED = true;
+const BLACKBOX_GROUP_MUTED = false;
 
 async function sendViaHoldersIntel(chatId: number, text: string): Promise<number | null> {
   const token = Deno.env.get("TELEGRAM_HOLDERSINTEL_BOT_TOKEN");
@@ -440,22 +440,6 @@ serve(async (req) => {
         .single(),
         'blackbox_aggregator_runs',
       );
-
-      if (BLACKBOX_GROUP_MUTED) {
-        await assertUpdate(
-          supabase.from('blackbox_aggregator_runs').update({
-            ca_posted_at: new Date().toISOString(),
-            ca_post_message_id: null,
-            status: 'failed',
-            error_message: 'muted: BLACKBOX kill-switch',
-          }).eq('id', run.id),
-          'blackbox_aggregator_runs',
-        );
-        summary.created++;
-        postedThisTick++;
-        console.warn(`[blackbox-tick] MUTED BLACKBOX bait post for ${call.token_mint}`);
-        continue;
-      }
 
       // 1a) Post the bare CA via MTProto (as the system_reset user account).
       //     This is the bait that trader bots (Trojan/Phanes/GMGN/Rick/etc.)
