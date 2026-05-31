@@ -17,11 +17,16 @@ async function screenshot(targetUrl: string): Promise<Uint8Array> {
   if (!browserlessUrl || !browserlessToken) {
     throw new Error('BROWSERLESS_URL or BROWSERLESS_TOKEN missing');
   }
+  // Pre-fetch HTML and pass as inline html to Browserless — avoids URL/auth quirks
+  // that caused Chrome to render the response as source text instead of HTML.
+  const htmlRes = await fetch(targetUrl);
+  if (!htmlRes.ok) throw new Error(`html fetch ${htmlRes.status}`);
+  const html = await htmlRes.text();
   const res = await fetch(`${browserlessUrl.replace(/\/$/, '')}/screenshot?token=${browserlessToken}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      url: targetUrl,
+      html,
       options: { fullPage: false, type: 'png', clip: { x: 0, y: 0, width: 1920, height: 1080 } },
       viewport: { width: 1920, height: 1080, deviceScaleFactor: 1 },
       waitForTimeout: 2500,
