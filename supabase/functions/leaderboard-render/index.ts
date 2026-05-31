@@ -22,8 +22,8 @@ async function screenshot(targetUrl: string): Promise<Uint8Array> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       url: targetUrl,
-      options: { fullPage: false, type: 'png', clip: { x: 0, y: 0, width: 1200, height: 1500 } },
-      viewport: { width: 1200, height: 1500, deviceScaleFactor: 1 },
+      options: { fullPage: false, type: 'png', clip: { x: 0, y: 0, width: 1920, height: 1080 } },
+      viewport: { width: 1920, height: 1080, deviceScaleFactor: 1 },
       waitForTimeout: 2500,
       gotoOptions: { waitUntil: 'networkidle0', timeout: 30000 },
     }),
