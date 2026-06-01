@@ -115,6 +115,9 @@ Deno.serve(withRunLog('morning-report', async (req) => {
         };
 
         // Generate alerts for high failure rates
+        // Skip Solscan: 429/401/403 here are quota-exhaustion, not an incident
+        // (visible on the provider dashboard; suppressed in rate-limit block below too).
+        if (svc === 'solscan') continue;
         if (failRate >= 50 && total >= 5) {
           alerts.push({
             level: failRate >= 90 ? 'critical' : 'warning',
