@@ -7904,6 +7904,30 @@ export type Database = {
         }
         Relationships: []
       }
+      fx_rates_daily: {
+        Row: {
+          base: string
+          date: string
+          fetched_at: string
+          quote: string
+          rate: number
+        }
+        Insert: {
+          base: string
+          date: string
+          fetched_at?: string
+          quote: string
+          rate: number
+        }
+        Update: {
+          base?: string
+          date?: string
+          fetched_at?: string
+          quote?: string
+          rate?: number
+        }
+        Relationships: []
+      }
       gallery_style_categories: {
         Row: {
           color: string | null
@@ -12316,6 +12340,184 @@ export type Database = {
         }
         Relationships: []
       }
+      profile_subscription_configs: {
+        Row: {
+          base_currency: string
+          bot_secret_name: string
+          bot_username: string | null
+          central_wallet_pubkey: string | null
+          central_wallet_secret_encrypted: string | null
+          created_at: string
+          display_currencies: string[]
+          display_name: string
+          expiry_copy: string | null
+          is_active: boolean
+          private_chat_id: string | null
+          profile_key: string
+          updated_at: string
+          welcome_copy: string | null
+        }
+        Insert: {
+          base_currency?: string
+          bot_secret_name: string
+          bot_username?: string | null
+          central_wallet_pubkey?: string | null
+          central_wallet_secret_encrypted?: string | null
+          created_at?: string
+          display_currencies?: string[]
+          display_name: string
+          expiry_copy?: string | null
+          is_active?: boolean
+          private_chat_id?: string | null
+          profile_key: string
+          updated_at?: string
+          welcome_copy?: string | null
+        }
+        Update: {
+          base_currency?: string
+          bot_secret_name?: string
+          bot_username?: string | null
+          central_wallet_pubkey?: string | null
+          central_wallet_secret_encrypted?: string | null
+          created_at?: string
+          display_currencies?: string[]
+          display_name?: string
+          expiry_copy?: string | null
+          is_active?: boolean
+          private_chat_id?: string | null
+          profile_key?: string
+          updated_at?: string
+          welcome_copy?: string | null
+        }
+        Relationships: []
+      }
+      profile_subscription_tiers: {
+        Row: {
+          created_at: string
+          discount_pct: number
+          is_active: boolean
+          price_fiat: number
+          profile_key: string
+          sort_order: number
+          tier_months: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          discount_pct?: number
+          is_active?: boolean
+          price_fiat: number
+          profile_key: string
+          sort_order?: number
+          tier_months: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          discount_pct?: number
+          is_active?: boolean
+          price_fiat?: number
+          profile_key?: string
+          sort_order?: number
+          tier_months?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_subscription_tiers_profile_key_fkey"
+            columns: ["profile_key"]
+            isOneToOne: false
+            referencedRelation: "profile_subscription_configs"
+            referencedColumns: ["profile_key"]
+          },
+        ]
+      }
+      profile_subscriptions: {
+        Row: {
+          base_currency: string
+          country: string | null
+          created_at: string
+          expires_at: string | null
+          id: string
+          invite_link: string | null
+          language: string | null
+          paid_at: string | null
+          payment_wallet_pubkey: string
+          payment_wallet_secret_encrypted: string
+          price_fiat: number
+          profile_key: string
+          quote_window_expires_at: string
+          quoted_sol: number
+          sol_price_at_order: number | null
+          status: string
+          sweep_tx_signature: string | null
+          swept_at: string | null
+          telegram_user_id: number
+          telegram_username: string | null
+          tier_months: number
+          tx_signature: string | null
+          updated_at: string
+        }
+        Insert: {
+          base_currency: string
+          country?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          invite_link?: string | null
+          language?: string | null
+          paid_at?: string | null
+          payment_wallet_pubkey: string
+          payment_wallet_secret_encrypted: string
+          price_fiat: number
+          profile_key: string
+          quote_window_expires_at?: string
+          quoted_sol: number
+          sol_price_at_order?: number | null
+          status?: string
+          sweep_tx_signature?: string | null
+          swept_at?: string | null
+          telegram_user_id: number
+          telegram_username?: string | null
+          tier_months: number
+          tx_signature?: string | null
+          updated_at?: string
+        }
+        Update: {
+          base_currency?: string
+          country?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          invite_link?: string | null
+          language?: string | null
+          paid_at?: string | null
+          payment_wallet_pubkey?: string
+          payment_wallet_secret_encrypted?: string
+          price_fiat?: number
+          profile_key?: string
+          quote_window_expires_at?: string
+          quoted_sol?: number
+          sol_price_at_order?: number | null
+          status?: string
+          sweep_tx_signature?: string | null
+          swept_at?: string | null
+          telegram_user_id?: number
+          telegram_username?: string | null
+          tier_months?: number
+          tx_signature?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_subscriptions_profile_key_fkey"
+            columns: ["profile_key"]
+            isOneToOne: false
+            referencedRelation: "profile_subscription_configs"
+            referencedColumns: ["profile_key"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_scan_reason: string | null
@@ -16460,6 +16662,32 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      subscription_reminder_log: {
+        Row: {
+          kind: string
+          sent_at: string
+          subscription_id: string
+        }
+        Insert: {
+          kind: string
+          sent_at?: string
+          subscription_id: string
+        }
+        Update: {
+          kind?: string
+          sent_at?: string
+          subscription_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_reminder_log_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "profile_subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       super_admin_docs: {
         Row: {
