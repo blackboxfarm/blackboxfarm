@@ -238,7 +238,7 @@ export async function solscanFetch(url: string, opts: SolscanFetchOptions = {}):
   console.log(`[Solscan] GET ${shortPath(url)} hit=net status=${resp.status} ms=${ms} rpm=${requestTimestamps.length}/${MAX_RPM}`);
 
   // Update circuit breaker based on outcome
-  if (resp.status === 504 || resp.status === 502 || resp.status === 503) {
+  if (resp.status === 504 || resp.status === 502 || resp.status === 503 || resp.status === 429 || resp.status === 401 || resp.status === 403) {
     cbRecordFailure(path);
   } else if (resp.ok) {
     cbRecordSuccess(path);
