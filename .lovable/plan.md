@@ -1,31 +1,44 @@
-Diagnosis:
-- The original MP4 is uploading successfully to `_source/...`.
-- The conversion is not completing afterward: there is no GIF upload request and no DB insert for the new asset.
-- Existing earlier rows `dancer1` and `dancer2` are still MP4 rows, meaning the previous path likely inserted raw MP4s before conversion was added.
-- The current browser-side `ffmpeg.wasm` conversion can hang silently or take too long, leaving the UI stuck on “Converting MP4 → GIF…” with no final result.
+## Diagnosis
 
-Plan:
-1. Add conversion timeout + visible failure
-   - Wrap `convertMp4ToGif()` with a timeout so it cannot spin forever.
-   - If conversion fails/times out, show a clear toast and reset the button state.
-   - Do not insert a broken MP4 row as a GIF asset.
+The "→ Convert to GIF" button does run, but it reuses the same browser `ffmpeg.wasm` pipeline that was already broken. It downloads the MP4, then calls `convertMp4ToGif()` which hangs in wasm and trips the 120s timeout. Result: a `Convert failed: GIF conversion timed out` toast (often missed) and zero new rows. Database confirms: only `dancer6.mp4` exists, no GIFs.
 
-2. Add progress/debug status in the UI
-   - Show stages: uploading source MP4, loading converter, converting, uploading GIF, saving asset.
-   - Add console logs only around conversion failures/status so future stuck reports are diagnosable.
+The client-side wasm route is not viable on this hardware/browser combo. We need server-side conversion.
 
-3. Make conversion faster and safer
-   - Lower emergency defaults to 240px, 8fps, 3s for admin asset previews unless changed later.
-   - Use simpler GIF settings to reduce wasm freeze risk.
+## Plan — move MP4→GIF to a Supabase Edge Function
 
-4. Clean up stuck/legacy rows
-   - Identify current `no_lube_assets` rows whose `storage_path` ends in `.mp4`.
-   - Either remove them from the asset library or mark/repair them, so the library only contains real image/GIF assets.
+### 1. New edge function `mp4-to-gif`
+- Input: `{ storage_path: string, category: string, name: string, tags?: string[], language?: string, width?: number, fps?: number, seconds?: number }`
+- Steps:
+  1. Auth check (super-admin only).
+  2. Download MP4 from `no-lube-assets` bucket via service role.
+  3. Run ffmpeg (static binary fetched at cold start, or use `https://deno.land/x/ffmpeg` / call a hosted converter). Preferred: bundle a small ffmpeg static wasm in Deno using `@ffmpeg.wasm/main` server-side, OR shell out to a hosted conversion API. We'll use Deno + `ffmpeg-static`-style approach via a Docker-free path: call a hosted service (e.g. cloudconvert) if a key is configured, otherwise reject with a clear error.
+  4. Upload `out.gif` to `no-lube-assets/{category}/{stamp}-{slug}.gif`.
+  5. Insert new `no_lube_assets` row with `notes = converted_from=<source path>`.
+  6. Return `{ id, public_url }`.
 
-5. Optional fallback if browser GIF still fails
-   - Keep the uploaded MP4 under `_source/` and add a visible “source saved, conversion failed” message, so nothing disappears silently.
+Implementation note: simplest reliable Deno-side path is to use the **CloudConvert API** (or similar) since Deno edge runtime has no native ffmpeg. We'll add a `CLOUDCONVERT_API_KEY` secret. If you'd rather not use a 3rd party, alternative is to deploy a small Fly.io/Render worker — but that's outside Lovable scope.
 
-Expected result:
-- MP4 uploads either produce a real `.gif` row in the library or fail visibly with a reason.
-- No more indefinite “Converting…” state.
-- Existing MP4 entries are cleaned up so the library reflects real GIF/image assets only.
+### 2. Rewire the button
+- `convertRowToGif()` in `NoLubeAssetLibrary.tsx` stops doing wasm work.
+- It calls `supabase.functions.invoke('mp4-to-gif', { body: {...}} )`.
+- Shows spinner while pending; toast success/failure based on response.
+- On success, calls `load()` to refresh the grid.
+
+### 3. Same path for new uploads
+- `handleUpload()` (when `keepMp4=false`) uploads the MP4 to `_source/...` then invokes `mp4-to-gif` instead of running wasm. Removes the 120s wasm timeout entirely.
+
+### 4. Cleanup
+- Remove `getFFmpeg`, `convertMp4ToGif`, `withTimeout` from the component (dead code).
+- Drop the `@ffmpeg/ffmpeg` + `@ffmpeg/util` imports.
+
+### 5. Secret required
+- `CLOUDCONVERT_API_KEY` (or equivalent). I will prompt you to add it before deploying the function.
+
+## Decision needed
+
+Pick the conversion backend:
+- **A. CloudConvert API** (recommended, ~$0.01/min, reliable, fast). Needs API key.
+- **B. Self-hosted ffmpeg worker** (Fly.io/Render). Free-ish but you maintain it; outside this project.
+- **C. Keep client-side but switch to a different lib (`gif.js` from a `<video>` element + canvas)**. Pure browser, no server, but slower and lower quality than ffmpeg.
+
+Reply with **A**, **B**, or **C** (plus "Plan Approved") and I'll implement.
