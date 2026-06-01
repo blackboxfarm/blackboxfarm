@@ -609,3 +609,12 @@ verify_jwt = false
 
 [functions.leaderboard-post]
 verify_jwt = false
+
+[functions.profile-subscription-bot-webhook]
+verify_jwt = false
+
+[functions.profile-subscription-poll]
+verify_jwt = false
+
+[functions.profile-subscription-renewal-tick]
+verify_jwt = false
