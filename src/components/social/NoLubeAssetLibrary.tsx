@@ -201,7 +201,7 @@ export function NoLubeAssetLibrary() {
               {converting ? 'Converting MP4 → GIF…' : (uploading ? 'Uploading…' : 'Upload')}
             </Button>
             <span className="text-[10px] text-muted-foreground">
-              MP4 supported — auto-converted to GIF (480px, 12fps, capped 6s). Original MP4 kept under _source/.
+              MP4 supported — auto-converted to GIF (320px, 10fps, capped 4s, single-pass). Original MP4 kept under _source/. Tip: trim/shrink MP4 before upload for fastest conversion.
             </span>
           </div>
         </CardContent>
