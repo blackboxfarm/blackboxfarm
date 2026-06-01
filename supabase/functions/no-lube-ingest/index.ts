@@ -54,7 +54,7 @@ serve(async (req) => {
   let requestedMint: string | null = null;
 
   try {
-    const { mint, force, fast_post, insiders_milestone, source_message_id } = await req.json();
+    const { mint, force, fast_post, insiders_milestone } = await req.json();
     requestedMint = typeof mint === 'string' ? mint : null;
     if (!mint || typeof mint !== 'string') {
       return new Response(JSON.stringify({ ok: false, error: 'mint required' }), {
@@ -109,7 +109,6 @@ serve(async (req) => {
         mint,
         source: fast_post ? 'insiders-fast-post' : 'insiders-ingest',
         insiders_milestone: insiders_milestone ?? null,
-        source_message_id: source_message_id ?? null,
       }, 60000);
       orchestrate = { ok: r.ok, status: r.status, body: r.json };
     } catch (e) {

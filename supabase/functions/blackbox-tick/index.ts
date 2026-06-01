@@ -218,23 +218,7 @@ function composeDigest(args: {
   const tgUrl = pickFirst<string>('telegram_url');
   const web = pickFirst<string>('website_url');
 
-  // Format a 24h percent change. For extreme moves (>= +1000% or <= -90%)
-  // a raw percent reads like a typo ("+553916%"), so we collapse it to a
-  // multiplier ("+27.6x 24h") which matches how the rest of the card talks
-  // about gains. Always label the timeframe so the value can't be confused
-  // with a lifetime move.
-  const fmtChange = (n: number | null) => {
-    if (n == null || !isFinite(n)) return '';
-    const abs = Math.abs(n);
-    if (abs >= 1000) {
-      // 1 + n/100 = price multiplier vs 24h ago
-      const mult = 1 + n / 100;
-      const sign = mult >= 1 ? '+' : '';
-      return ` (${sign}${mult.toFixed(mult >= 100 ? 0 : 1)}x 24h)`;
-    }
-    const sign = n >= 0 ? '+' : '';
-    return ` (${sign}${n.toFixed(abs < 10 ? 1 : 0)}% 24h)`;
-  };
+  const fmtChange = (n: number | null) => n == null ? '' : ` (${n >= 0 ? '+' : ''}${n.toFixed(0)}%)`;
 
   // ── Derived signals ──
   // Momentum: weighted blend of 1h + 24h change
@@ -601,13 +585,9 @@ serve(async (req) => {
 
       // Legacy composeDigest path retired — the No Lube orchestrator now owns
       // all routing (Private on first sight, Private + Public on re-sight ≥ Nx).
-      // NOTE: We only record replies_collected here. Final status flip happens
-      // AFTER orchestrate so a failed dispatch doesn't leave us with an
-      // invalid CHECK-constraint status (the previous 'handed_off' value was
-      // not in the allowed list and threw, causing the run to be marked
-      // 'failed' and the orchestrate dispatch below to be skipped).
       await assertUpdate(
         supabase.from('blackbox_aggregator_runs').update({
+          status: 'handed_off',
           replies_collected: saved,
         }).eq('id', run.id),
         'blackbox_aggregator_runs',
@@ -638,31 +618,11 @@ serve(async (req) => {
         });
         if (orchErr) {
           console.warn('[blackbox-tick] no-lube-orchestrate error', orchErr);
-          await assertUpdate(
-            supabase.from('blackbox_aggregator_runs').update({
-              status: 'failed',
-              error_message: `orchestrate error: ${orchErr.message || String(orchErr)}`,
-            }).eq('id', run.id),
-            'blackbox_aggregator_runs',
-          );
         } else {
           summary.published++;
-          await assertUpdate(
-            supabase.from('blackbox_aggregator_runs').update({
-              status: 'posted',
-            }).eq('id', run.id),
-            'blackbox_aggregator_runs',
-          );
         }
       } catch (e) {
         console.warn('[blackbox-tick] no-lube-orchestrate dispatch failed', e);
-        await assertUpdate(
-          supabase.from('blackbox_aggregator_runs').update({
-            status: 'failed',
-            error_message: `orchestrate dispatch threw: ${(e as Error).message}`,
-          }).eq('id', run.id),
-          'blackbox_aggregator_runs',
-        );
       }
     }
   } catch (e: any) {
