@@ -12,6 +12,7 @@ import { EmojiPickerPopover } from '@/components/admin/telegram/EmojiPickerPopov
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { NoLubeProcessPanel } from './NoLubeProcessPanel';
+import { SubscriptionAdminPanel } from './subscriptions/SubscriptionAdminPanel';
 
 import {
   DEFAULT_TEMPLATES,
@@ -514,10 +515,14 @@ export function NoLubeChannelPanel({
       <TabsList>
         <TabsTrigger value="compose">Compose &amp; Settings</TabsTrigger>
         <TabsTrigger value="process">Process</TabsTrigger>
+        <TabsTrigger value="subs">💳 Subscriptions</TabsTrigger>
       </TabsList>
       <TabsContent value="compose">{body}</TabsContent>
       <TabsContent value="process">
         <NoLubeProcessPanel />
+      </TabsContent>
+      <TabsContent value="subs">
+        <SubscriptionAdminPanel profileKey="no_lube" displayName="No Lube" />
       </TabsContent>
     </Tabs>
   );
