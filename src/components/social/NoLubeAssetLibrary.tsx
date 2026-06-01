@@ -93,6 +93,11 @@ export function NoLubeAssetLibrary() {
   const [notes, setNotes] = useState('');
   const [converting, setConverting] = useState(false);
   const [stage, setStage] = useState<string>('');
+  // User-tunable conversion controls
+  const [gifWidth, setGifWidth] = useState<number>(240);
+  const [gifFps, setGifFps] = useState<number>(8);
+  const [gifSeconds, setGifSeconds] = useState<number>(3);
+  const [keepMp4, setKeepMp4] = useState<boolean>(false);
 
   const load = async () => {
     setLoading(true);
@@ -123,31 +128,41 @@ export function NoLubeAssetLibrary() {
       let mp4SourcePath: string | null = null;
 
       if (isMp4) {
-        setStage('uploading source MP4');
-        // 1) Keep the original MP4 as the source of truth.
-        mp4SourcePath = `_source/${category}/${stamp}-${slug}.mp4`;
-        const { error: srcErr } = await supabase.storage.from('no-lube-assets').upload(mp4SourcePath, file, {
-          contentType: 'video/mp4', upsert: false,
-        });
-        if (srcErr) throw srcErr;
+        if (keepMp4) {
+          // Store MP4 directly — no conversion. Browser renders via <video>.
+          ext = 'mp4';
+          uploadBlob = file;
+        } else {
+          setStage('uploading source MP4');
+          mp4SourcePath = `_source/${category}/${stamp}-${slug}.mp4`;
+          const { error: srcErr } = await supabase.storage.from('no-lube-assets').upload(mp4SourcePath, file, {
+            contentType: 'video/mp4', upsert: false,
+          });
+          if (srcErr) throw srcErr;
 
-        // 2) Convert in-browser to GIF.
-        setConverting(true);
-        try {
-          uploadBlob = await withTimeout(
-            convertMp4ToGif(file, { onStage: setStage }),
-            120_000,
-            'GIF conversion'
-          );
-          console.log('[no-lube] GIF produced, bytes=', (uploadBlob as Blob).size);
-        } finally { setConverting(false); setStage(''); }
-        ext = 'gif';
+          setConverting(true);
+          try {
+            uploadBlob = await withTimeout(
+              convertMp4ToGif(file, {
+                width: gifWidth, fps: gifFps, maxSeconds: gifSeconds,
+                onStage: setStage,
+              }),
+              120_000,
+              'GIF conversion'
+            );
+            console.log('[no-lube] GIF produced, bytes=', (uploadBlob as Blob).size);
+          } finally { setConverting(false); setStage(''); }
+          ext = 'gif';
+        }
       }
 
-      setStage('uploading gif');
+      setStage(isMp4 && keepMp4 ? 'uploading mp4' : (isMp4 ? 'uploading gif' : 'uploading'));
       const path = `${category}/${stamp}-${slug}.${ext}`;
       const { error: upErr } = await supabase.storage.from('no-lube-assets').upload(path, uploadBlob, {
-        contentType: isMp4 ? 'image/gif' : (file.type || 'image/png'), upsert: false,
+        contentType: isMp4
+          ? (keepMp4 ? 'video/mp4' : 'image/gif')
+          : (file.type || 'image/png'),
+        upsert: false,
       });
       if (upErr) throw upErr;
       const { data: pub } = supabase.storage.from('no-lube-assets').getPublicUrl(path);
@@ -226,13 +241,45 @@ export function NoLubeAssetLibrary() {
             <Label className="text-xs">Notes</Label>
             <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="optional usage hints for the AI prompt" />
           </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end border-t border-border/40 pt-3">
+            <div className="md:col-span-2 flex items-center gap-2">
+              <input
+                id="keep-mp4" type="checkbox" checked={keepMp4}
+                onChange={e => setKeepMp4(e.target.checked)}
+                className="h-4 w-4 accent-pink-600"
+              />
+              <Label htmlFor="keep-mp4" className="text-xs cursor-pointer">
+                Store MP4 directly (skip GIF conversion)
+              </Label>
+            </div>
+            <div>
+              <Label className="text-xs">GIF width (px)</Label>
+              <Input type="number" min={120} max={640} step={20}
+                value={gifWidth} disabled={keepMp4}
+                onChange={e => setGifWidth(Math.max(80, Math.min(800, Number(e.target.value) || 240)))} />
+            </div>
+            <div>
+              <Label className="text-xs">FPS</Label>
+              <Input type="number" min={4} max={20} step={1}
+                value={gifFps} disabled={keepMp4}
+                onChange={e => setGifFps(Math.max(2, Math.min(24, Number(e.target.value) || 8)))} />
+            </div>
+            <div>
+              <Label className="text-xs">Max seconds</Label>
+              <Input type="number" min={1} max={10} step={1}
+                value={gifSeconds} disabled={keepMp4}
+                onChange={e => setGifSeconds(Math.max(1, Math.min(15, Number(e.target.value) || 3)))} />
+            </div>
+          </div>
           <div className="flex items-center gap-3">
             <Button onClick={handleUpload} disabled={uploading || !file || !name.trim()} className="bg-pink-600 hover:bg-pink-700">
               {(uploading || converting) ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Upload className="h-3 w-3 mr-1" />}
               {converting ? `Converting MP4 → GIF… ${stage}` : (uploading ? (stage || 'Uploading…') : 'Upload')}
             </Button>
             <span className="text-[10px] text-muted-foreground">
-              MP4 → GIF (240px, 8fps, capped 3s, single-pass). 120s timeout. Watch the browser console for [ffmpeg] logs. Trim/shrink MP4 before upload for fastest conversion.
+              {keepMp4
+                ? 'MP4 will be stored as-is (no conversion). Fast & reliable; rendered via <video>.'
+                : `MP4 → GIF (${gifWidth}px, ${gifFps}fps, capped ${gifSeconds}s). 120s timeout. See console for [ffmpeg] logs.`}
             </span>
           </div>
         </CardContent>
@@ -252,8 +299,13 @@ export function NoLubeAssetLibrary() {
               <Card key={r.id} className={`bg-card/60 ${r.enabled ? 'border-pink-500/40' : 'border-border opacity-50'}`}>
                 <CardContent className="p-2 space-y-2">
                   {r.public_url && (
-                    <img src={r.public_url} alt={r.name}
-                         className="w-full h-24 object-cover rounded border border-border" />
+                    /\.mp4$/i.test(r.storage_path) ? (
+                      <video src={r.public_url} muted loop autoPlay playsInline
+                        className="w-full h-24 object-cover rounded border border-border" />
+                    ) : (
+                      <img src={r.public_url} alt={r.name}
+                        className="w-full h-24 object-cover rounded border border-border" />
+                    )
                   )}
                   <div className="text-xs font-mono truncate" title={r.name}>{r.name}</div>
                   <div className="flex flex-wrap gap-1">
