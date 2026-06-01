@@ -4,8 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { toast as sonnerToast } from "sonner";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -13,10 +11,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, RefreshCw, Search } from "lucide-react";
+import { ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { HoldersIntelTweetCard, type ArchiveRow } from "./HoldersIntelTweetCard";
+import heroImage from "@/assets/token-archive-hero.jpg";
 
-const PAGE_SIZES = [50, 100, 250, 500] as const;
+const PAGE_SIZES = [100, 250, 500] as const;
 type PageSize = (typeof PAGE_SIZES)[number];
 
 const ARCHIVE_COLUMNS =
@@ -28,15 +27,10 @@ export function TokenArchive() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0); // zero-based
-  const [pageSize, setPageSize] = useState<PageSize>(50);
+  const [pageSize, setPageSize] = useState<PageSize>(100);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [triggerFilter, setTriggerFilter] = useState<string>("all");
-  const [backfillBusy, setBackfillBusy] = useState(false);
-  const [backfillOffset, setBackfillOffset] = useState<number | null>(null);
-  const [backfillLog, setBackfillLog] = useState<Array<{
-    ts: string; mode: string; summary: string; nextOffsetId: number | null;
-  }>>([]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -90,128 +84,54 @@ export function TokenArchive() {
     [page, totalPages]
   );
 
-  async function runBackfill(dryRun: boolean) {
-    setBackfillBusy(true);
-    try {
-      const mode = dryRun ? "dryrun" : "apply";
-      const { data, error } = await supabase.functions.invoke("backfill-archive-from-tg", {
-        body: {
-          mode,
-          pages: 5,
-          pageSize: 100,
-          offsetId: backfillOffset ?? undefined,
-        },
-      });
-      if (error) throw error;
-      const d: any = data || {};
-      setBackfillOffset(d.nextOffsetId ?? null);
-      const summary = `scanned ${d.msgsScanned ?? 0} · proposals ${d.proposals ?? 0} · written ${d.proposalsWritten ?? 0} · skip noMint=${d.skippedNoMint ?? 0} noMatch=${d.skippedNoMatch ?? 0} noStats=${d.skippedNoStats ?? 0} dup=${d.skippedDuplicate ?? 0}`;
-      sonnerToast.success(`TG backfill (${mode})`, {
-        description: summary + ` · nextOffset=${d.nextOffsetId ?? "—"}`,
-        duration: 20000,
-      });
-      setBackfillLog((prev) => [
-        { ts: new Date().toLocaleTimeString(), mode, summary, nextOffsetId: d.nextOffsetId ?? null },
-        ...prev,
-      ].slice(0, 10));
-    } catch (e: any) {
-      sonnerToast.error("Backfill failed", { description: e?.message || String(e), duration: 20000 });
-      setBackfillLog((prev) => [
-        { ts: new Date().toLocaleTimeString(), mode: dryRun ? "dryrun" : "apply", summary: `ERROR: ${e?.message || e}`, nextOffsetId: null },
-        ...prev,
-      ].slice(0, 10));
-    } finally {
-      setBackfillBusy(false);
-    }
-  }
-
-  async function runSample() {
-    setBackfillBusy(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("backfill-archive-from-tg", {
-        body: { mode: "sample", sampleN: 5, offsetId: backfillOffset ?? undefined },
-      });
-      if (error) throw error;
-      const d: any = data || {};
-      const lines = (d.samples || []).map((s: any) =>
-        `#${s.messageId} (${s.date}) mint=${s.mintFound ?? "—"}\n${(s.rawText || "").slice(0, 400)}`
-      ).join("\n\n---\n\n");
-      sonnerToast.message("TG sample", {
-        description: `Fetched ${(d.samples || []).length} raw messages — see Backfill Log for full text`,
-        duration: 20000,
-      });
-      setBackfillLog((prev) => [
-        { ts: new Date().toLocaleTimeString(), mode: "sample", summary: lines || "(no text)", nextOffsetId: d.nextOffsetId ?? null },
-        ...prev,
-      ].slice(0, 10));
-    } catch (e: any) {
-      sonnerToast.error("Sample failed", { description: e?.message || String(e), duration: 20000 });
-    } finally {
-      setBackfillBusy(false);
-    }
-  }
-
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">📚 Token Archive</h2>
-          <p className="text-sm text-muted-foreground">
-            Every Manual X post we&apos;ve published, rendered as it appeared on @HoldersIntel. Newest first.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="bg-green-500/20 text-green-400">
-            {total.toLocaleString()} archived
+      {/* Hero */}
+      <section className="relative overflow-hidden rounded-2xl border border-border/60">
+        <img
+          src={heroImage}
+          alt="Token Archive — BlackBox Farm intelligence vault"
+          className="absolute inset-0 w-full h-full object-cover"
+          width={1920}
+          height={1080}
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/70 to-background/30" />
+        <div className="relative z-10 p-6 md:p-10 max-w-3xl">
+          <Badge className="mb-3 bg-primary/20 text-primary border-primary/40">
+            🗄 Searchable Intelligence Archive
           </Badge>
-          <Button onClick={runSample} size="sm" variant="ghost" disabled={backfillBusy}>
-            TG Sample
-          </Button>
-          <Button onClick={() => runBackfill(true)} size="sm" variant="outline" disabled={backfillBusy}>
-            {backfillBusy ? "Working…" : "TG Dry-run → Queue"}
-          </Button>
-          {backfillOffset != null && (
-            <Badge variant="outline" className="text-xs">
-              next offset: {backfillOffset}
-              <button
-                className="ml-2 underline opacity-70 hover:opacity-100"
-                onClick={() => setBackfillOffset(null)}
-                type="button"
-              >
-                reset
-              </button>
+          <h2 className="text-2xl md:text-4xl font-bold tracking-tight">
+            <span className="bg-gradient-to-r from-primary to-yellow-400 bg-clip-text text-transparent">
+              {total.toLocaleString()}
+            </span>{" "}
+            notable tokens, forensically archived.
+          </h2>
+          <p className="mt-3 text-sm md:text-base text-muted-foreground leading-relaxed">
+            A curated blend of the <span className="text-primary font-semibold">DexScreener Top 100</span> and the{" "}
+            <span className="text-yellow-400 font-semibold">BlackBox Top 200</span> — every notable Solana
+            token we&apos;ve flagged, scored and published to{" "}
+            <span className="text-sky-400">@HoldersIntel</span> over the last 12+ months. Search any
+            ticker, mint or name. Replay the exact card we posted, jump to the Bubblemap, or trace the
+            holders. This is the vault.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2 text-xs">
+            <Badge variant="outline" className="bg-green-500/10 text-green-400 border-green-500/30">
+              {total.toLocaleString()} archived
             </Badge>
-          )}
-          <Button onClick={load} size="sm" variant="outline" disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-        </div>
-      </div>
-
-      {backfillLog.length > 0 && (
-        <div className="rounded-md border border-border bg-muted/30 p-2 text-xs space-y-1 max-h-64 overflow-auto">
-          <div className="font-semibold flex items-center justify-between">
-            <span>Backfill Log (last {backfillLog.length})</span>
-            <button className="text-muted-foreground hover:text-foreground" onClick={() => setBackfillLog([])}>clear</button>
+            <Badge variant="outline" className="bg-sky-500/10 text-sky-300 border-sky-500/30">
+              DexScreener Top 100
+            </Badge>
+            <Badge variant="outline" className="bg-yellow-500/10 text-yellow-300 border-yellow-500/30">
+              BlackBox Top 200
+            </Badge>
+            <Badge variant="outline" className="bg-purple-500/10 text-purple-300 border-purple-500/30">
+              12+ months of intel
+            </Badge>
           </div>
-          {backfillLog.map((l, i) => (
-            <details key={i} className="font-mono">
-              <summary className="cursor-pointer">
-                [{l.ts}] {l.mode} · nextOffset={l.nextOffsetId ?? "—"}
-              </summary>
-              <pre className="whitespace-pre-wrap break-words mt-1 pl-3 text-[11px] opacity-90">{l.summary}</pre>
-            </details>
-          ))}
         </div>
-      )}
+      </section>
 
-      <Tabs defaultValue="archive">
-        <TabsList>
-          <TabsTrigger value="archive">Archive</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="archive" className="space-y-4 mt-4">
+      <div className="space-y-4">
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-2">
         <form onSubmit={onSearch} className="flex items-center gap-1">
@@ -288,7 +208,7 @@ export function TokenArchive() {
           No archived posts match your filters yet. Manual posts marked as posted will show up here.
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {rows.map((row) => (
             <HoldersIntelTweetCard key={row.id} row={row} />
           ))}
@@ -303,8 +223,7 @@ export function TokenArchive() {
         onChange={setPage}
         disabled={loading}
       />
-        </TabsContent>
-      </Tabs>
+      </div>
     </div>
   );
 }
@@ -324,18 +243,48 @@ function Pagination({
 }) {
   const atFirst = page <= 0;
   const atLast = page >= totalPages - 1;
+  const pageNumbers = useMemo(() => {
+    // Show a windowed list of page numbers around the current page.
+    const window = 2;
+    const set = new Set<number>();
+    set.add(0);
+    set.add(totalPages - 1);
+    for (let i = page - window; i <= page + window; i++) {
+      if (i >= 0 && i < totalPages) set.add(i);
+    }
+    return Array.from(set).sort((a, b) => a - b);
+  }, [page, totalPages]);
+
   return (
-    <div className="flex items-center justify-between gap-2">
+    <div className="flex flex-wrap items-center justify-between gap-2">
       <div className="text-xs text-muted-foreground">{pageLabel}</div>
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1">
         <Button size="sm" variant="outline" disabled={disabled || atFirst} onClick={() => onChange(0)}>
           <ChevronFirst className="h-4 w-4" />
         </Button>
         <Button size="sm" variant="outline" disabled={disabled || atFirst} onClick={() => onChange(page - 1)}>
-          <ChevronLeft className="h-4 w-4" /> Prev
+          <ChevronLeft className="h-4 w-4" />
         </Button>
+        {pageNumbers.map((p, i) => {
+          const prev = pageNumbers[i - 1];
+          const showEllipsis = prev != null && p - prev > 1;
+          return (
+            <React.Fragment key={p}>
+              {showEllipsis && <span className="px-1 text-xs text-muted-foreground">…</span>}
+              <Button
+                size="sm"
+                variant={p === page ? "default" : "outline"}
+                disabled={disabled}
+                onClick={() => onChange(p)}
+                className="min-w-9"
+              >
+                {p + 1}
+              </Button>
+            </React.Fragment>
+          );
+        })}
         <Button size="sm" variant="outline" disabled={disabled || atLast} onClick={() => onChange(page + 1)}>
-          Next <ChevronRight className="h-4 w-4" />
+          <ChevronRight className="h-4 w-4" />
         </Button>
         <Button size="sm" variant="outline" disabled={disabled || atLast} onClick={() => onChange(totalPages - 1)}>
           <ChevronLast className="h-4 w-4" />
