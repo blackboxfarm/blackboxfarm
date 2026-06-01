@@ -20,7 +20,7 @@ import {
   type TemplateName,
 } from '@/lib/share-template';
 
-export type NoLubeChannelKind = 'default' | 'public' | 'leaks' | 'private' | 'snapshot';
+export type NoLubeChannelKind = 'default' | 'public' | 'leaks' | 'private' | 'snapshot' | 'intel_update';
 
 export const NO_LUBE_LANGUAGES: { code: string; label: string }[] = [
   { code: 'en', label: 'English' },
@@ -94,7 +94,7 @@ export function NoLubeChannelPanel({
       // Private channel's chat config. Load the private profile for display so
       // the operator can see where snapshot posts will be delivered.
       const profileKey =
-        kind === 'snapshot' ? 'private'
+        kind === 'snapshot' || kind === 'intel_update' ? 'private'
         : kind === 'leaks' ? 'public'
         : kind;
       const { data, error } = await (supabase as any)
@@ -114,6 +114,7 @@ export function NoLubeChannelPanel({
             : kind === 'public' ? 'Public Channel'
             : kind === 'leaks' ? 'Leaks Post (Public)'
             : kind === 'snapshot' ? 'Snapshot Post (Private)'
+            : kind === 'intel_update' ? 'Intel Update (Private)'
             : 'Private Channel',
           telegram_link: '',
         },
@@ -177,8 +178,9 @@ export function NoLubeChannelPanel({
     setComposedText(null); setVerdictClass(null); setBlockReason(null); setLogId(null); setEligible(true);
     try {
       // Snapshot (or Big Picture toggled to Snapshot) always targets the Private channel
-      const effectiveKind = kind === 'snapshot' ? 'snapshot' : postKind;
-      const composeChannel = effectiveKind === 'snapshot' ? 'private' : kind;
+      const isOneShotPrivate = kind === 'snapshot' || kind === 'intel_update';
+      const effectiveKind = isOneShotPrivate ? kind : postKind;
+      const composeChannel = isOneShotPrivate ? 'private' : kind;
       const { data, error } = await supabase.functions.invoke('no-lube-compose', {
         body: { mint: m, channel: composeChannel, kind: effectiveKind },
       });
@@ -203,8 +205,8 @@ export function NoLubeChannelPanel({
     if (!composedText) return;
     setIsPushing(true);
     try {
-      const effectiveKind = kind === 'snapshot' ? 'snapshot' : postKind;
-      const pushChannel = effectiveKind === 'snapshot' ? 'private' : kind;
+      const isOneShotPrivate = kind === 'snapshot' || kind === 'intel_update';
+      const pushChannel = isOneShotPrivate ? 'private' : kind;
       const { data, error } = await supabase.functions.invoke('no-lube-push', {
         body: { text: composedText, log_id: logId, channel: pushChannel },
       });
@@ -237,7 +239,7 @@ export function NoLubeChannelPanel({
     <div className="space-y-4">
       {/* Per-tab profile: nickname + Telegram link + chat ID lookup.
           Hidden on snapshot — snapshot inherits the Private channel config. */}
-      {kind !== 'snapshot' && (
+      {kind !== 'snapshot' && kind !== 'intel_update' && (
       <Card className="bg-card/60 border-border">
         <CardContent className="pt-4 space-y-3">
           <div className="flex items-center justify-between">
@@ -362,6 +364,21 @@ export function NoLubeChannelPanel({
         </Card>
       )}
 
+      {kind === 'intel_update' && (
+        <Card className="bg-amber-500/5 border-amber-500/30">
+          <CardContent className="pt-4">
+            <Label className="text-xs font-semibold text-amber-300">
+              🧠 Intel Update — one-time enrichment post
+            </Label>
+            <p className="text-xs text-muted-foreground mt-1">
+              Posted to the <strong>Private</strong> channel <strong>once per token</strong>,
+              after Snapshot/Quick Stats, when deeper intel (insiders, KYC, mesh, dev history)
+              has been mined. Values not yet resolved render as <code>pending</code>.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Template editor + Preview — side-by-side */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
@@ -414,6 +431,7 @@ export function NoLubeChannelPanel({
                 kind === 'default' ? 'No Lube (Default channel)'
                 : kind === 'public' ? (postKind === 'snapshot' ? 'No Lube Private Channel (snapshot)' : 'No Lube Public Channel')
                 : kind === 'snapshot' ? 'No Lube Private Channel (snapshot)'
+                : kind === 'intel_update' ? 'No Lube Private Channel (intel update)'
                 : (postKind === 'snapshot' ? 'No Lube Private Channel (snapshot)' : 'No Lube Private Channel')
               }
             </Label>
@@ -478,6 +496,7 @@ export function NoLubeChannelPanel({
                         kind === 'default' ? 'No Lube'
                         : kind === 'public' ? (postKind === 'snapshot' ? 'Private (snapshot)' : 'Public')
                         : kind === 'snapshot' ? 'Private (snapshot)'
+                        : kind === 'intel_update' ? 'Private (intel update)'
                         : (postKind === 'snapshot' ? 'Private (snapshot)' : 'Private')
                       }</>}
               </Button>
