@@ -687,22 +687,15 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                   <Tabs defaultValue="default" className="w-full">
                     <TabsList>
                       <TabsTrigger value="default">Default</TabsTrigger>
-                      <TabsTrigger value="public">Public Channel</TabsTrigger>
-                      <TabsTrigger value="leaks">💧 Leaks Post</TabsTrigger>
-                      <TabsTrigger value="private">Private Channel</TabsTrigger>
-                      <TabsTrigger value="snapshot">📸 Snapshot Post</TabsTrigger>
+                      <TabsTrigger value="public_group">🌐 Public Channel</TabsTrigger>
+                      <TabsTrigger value="private_group">🔒 Private Channel</TabsTrigger>
                       <TabsTrigger value="templates">🎯 Templates</TabsTrigger>
                       <TabsTrigger value="assets">🎨 Asset Library</TabsTrigger>
                       <TabsTrigger value="archive">📦 Archive</TabsTrigger>
                       <TabsTrigger value="dailies">🏆 Dailies</TabsTrigger>
                     </TabsList>
-                    {(['default', 'public', 'leaks', 'private', 'snapshot'] as const).map(kind => {
-                      const tname: TemplateName =
-                        kind === 'default' ? 'no_lube'
-                        : kind === 'public' ? 'no_lube_public'
-                        : kind === 'leaks' ? 'no_lube_leaks_public'
-                        : kind === 'snapshot' ? 'no_lube_snapshot_private'
-                        : 'no_lube_private';
+                    {(['default'] as const).map(kind => {
+                      const tname: TemplateName = 'no_lube';
                       return (
                         <TabsContent key={kind} value={kind} className="space-y-4 pt-3">
                           <NoLubeChannelPanel
@@ -718,6 +711,62 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                         </TabsContent>
                       );
                     })}
+                    {/* 🌐 PUBLIC group — Public Channel + Leaks Post */}
+                    <TabsContent value="public_group" className="space-y-4 pt-3">
+                      <Tabs defaultValue="public" className="w-full">
+                        <TabsList>
+                          <TabsTrigger value="public">Public Channel</TabsTrigger>
+                          <TabsTrigger value="leaks">💧 Leaks Post</TabsTrigger>
+                        </TabsList>
+                        {(['public', 'leaks'] as const).map(kind => {
+                          const tname: TemplateName = kind === 'public' ? 'no_lube_public' : 'no_lube_leaks_public';
+                          return (
+                            <TabsContent key={kind} value={kind} className="space-y-4 pt-3">
+                              <NoLubeChannelPanel
+                                kind={kind}
+                                templateName={tname}
+                                templateText={templates[tname]}
+                                onTemplateChange={(text) => setTemplates(prev => ({ ...prev, [tname]: text }))}
+                                onSaveTemplate={() => handleSaveTemplate(tname)}
+                                onResetTemplate={() => handleResetTemplate(tname)}
+                                isSaving={isSaving}
+                                previewData={tokenData}
+                              />
+                            </TabsContent>
+                          );
+                        })}
+                      </Tabs>
+                    </TabsContent>
+                    {/* 🔒 PRIVATE group — Private Channel + Snapshot Post + Intel Update */}
+                    <TabsContent value="private_group" className="space-y-4 pt-3">
+                      <Tabs defaultValue="private" className="w-full">
+                        <TabsList>
+                          <TabsTrigger value="private">Private Channel</TabsTrigger>
+                          <TabsTrigger value="snapshot">📸 Snapshot Post</TabsTrigger>
+                          <TabsTrigger value="intel_update">🧠 Intel Update</TabsTrigger>
+                        </TabsList>
+                        {(['private', 'snapshot', 'intel_update'] as const).map(kind => {
+                          const tname: TemplateName =
+                            kind === 'private' ? 'no_lube_private'
+                            : kind === 'snapshot' ? 'no_lube_snapshot_private'
+                            : 'no_lube_intel_update';
+                          return (
+                            <TabsContent key={kind} value={kind} className="space-y-4 pt-3">
+                              <NoLubeChannelPanel
+                                kind={kind}
+                                templateName={tname}
+                                templateText={templates[tname]}
+                                onTemplateChange={(text) => setTemplates(prev => ({ ...prev, [tname]: text }))}
+                                onSaveTemplate={() => handleSaveTemplate(tname)}
+                                onResetTemplate={() => handleResetTemplate(tname)}
+                                isSaving={isSaving}
+                                previewData={tokenData}
+                              />
+                            </TabsContent>
+                          );
+                        })}
+                      </Tabs>
+                    </TabsContent>
                     <TabsContent value="assets" className="space-y-4 pt-3">
                       <NoLubeAssetLibrary />
                     </TabsContent>
