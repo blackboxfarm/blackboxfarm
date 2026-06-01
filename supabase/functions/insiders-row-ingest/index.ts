@@ -30,7 +30,7 @@ const corsHeaders = {
 
 async function invokeFn(supabaseUrl: string, key: string, fn: string, body: unknown) {
   try {
-    await fetch(`${supabaseUrl}/functions/v1/${fn}`, {
+    const p = fetch(`${supabaseUrl}/functions/v1/${fn}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -39,6 +39,18 @@ async function invokeFn(supabaseUrl: string, key: string, fn: string, body: unkn
       },
       body: JSON.stringify(body),
     });
+    // Keep the request alive after we return the HTTP response. Without
+    // waitUntil, Deno tears down the isolate the moment the parent
+    // serve() handler resolves and the downstream POST is never sent —
+    // which is exactly why no-lube-ingest was never invoked for fresh
+    // Insiders rows.
+    // @ts-ignore EdgeRuntime is provided by Supabase Deno runtime
+    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) {
+      // @ts-ignore
+      EdgeRuntime.waitUntil(p.catch((e) => console.warn(`[insiders-row-ingest] ${fn} bg failed:`, (e as Error).message)));
+    } else {
+      await p;
+    }
   } catch (e) {
     console.warn(`[insiders-row-ingest] fire-and-forget ${fn} failed:`, (e as Error).message);
   }
