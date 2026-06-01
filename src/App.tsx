@@ -179,7 +179,7 @@ const App = () => {
                       {/* Legacy admin route → bounce to Super Admin Autopsies tab */}
                       <Route path="/super-admin/autopsy-queue" element={<Navigate to="/super-admin?tab=autopsies" replace />} />
                       <Route path="/tester" element={<TesterFeedbackPage />} />
-                      <Route path="/token-archive" element={<SuperAdminRoute><TokenArchive /></SuperAdminRoute>} />
+                      <Route path="/token-archive" element={<TokenArchive />} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>
