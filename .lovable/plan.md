@@ -1,39 +1,37 @@
-## Stop the Solscan 429 alert spam + add traceable alert IDs
+## Goal
+Let the Asset Library accept MP4 uploads and auto-convert them to animated GIFs so they slot into the existing image-based asset flow (No Lube composer, previews, etc.).
 
-### Step 1 — Add function-level trace IDs to alerts
-Edit `supabase/functions/_shared/api-failure-alerts.ts` and `_shared/api-logger.ts`:
-- Accept a `functionName` parameter (required).
-- Prefix every TG/email/SMS alert message with `[fn=<functionName>][svc=<service>][ep=<endpoint>][code=<status>]`.
-- Write the same tag into `admin_notifications.metadata.trace_id`.
+## Approach
 
-### Step 2 — Redeploy all 29 functions that import the alert stack
-One `supabase--deploy_edge_functions` call with:
-```
-autopsy-community-sweep, backfill-banner-urls, backfill-x-communities,
-breadcrumbs-scanner, dex-paid-checker, dex-top-200, flipit-backfill-tracking,
-flipit-execute, follower-audit, helius-rpc-proxy, scalp-mode-validator,
-insiders-row-ingest, mesh-kyc-deep-search, token-metadata, twitter-tg-hunter,
-x-pinned-community-finder, probe-burns, probe-buybacks, verify-solscan-pro,
-oracle-unified-lookup, twitter-profile-enricher, social-larp-detector,
-no-lube-compose, pumpfun-kol-twitter-scanner, scrape-twitter-posts,
-scrape-installer-x-profiles, lifecycle-scorecard-builder,
-liquidity-lock-checker, solscan-rate-limiter
-```
-This replaces every stale deployed bundle with the kill-switched + traceable version.
+**1. Frontend (`NoLubeAssetLibrary.tsx`)**
+- Widen the file input `accept` to `image/*,video/mp4`.
+- On submit, detect MP4 (by mime/extension). If MP4:
+  - Upload the original MP4 to `no-lube-assets/_source/<path>.mp4` (kept as source of truth).
+  - Call a new edge function `mp4-to-gif` with the storage path.
+  - Receive the generated GIF's public URL + storage path back.
+  - Insert the `no_lube_assets` row pointing `public_url`/`storage_path` at the GIF (so existing render pipeline keeps working), with `notes`/metadata recording the original MP4 path.
+- Show a "Converting…" spinner state during the call.
+- For images, behavior is unchanged.
 
-### Step 3 — Purge stale notification rows
-Migration: `DELETE FROM admin_notifications WHERE notification_type='api_auth_failure' AND metadata->>'service'='solscan';` so Morning Report has nothing old to re-aggregate.
+**2. New edge function `supabase/functions/mp4-to-gif/index.ts`**
+- Input: `{ sourcePath: string, targetName: string, maxWidth?: number, fps?: number, maxSeconds?: number }`.
+- Downloads the MP4 from the `no-lube-assets` bucket via service-role client.
+- Converts to GIF using a WASM ffmpeg build (`@ffmpeg.wasm/main` via esm.sh) with a two-pass palette filter for quality:
+  - `palettegen` → `paletteuse`, scale to `maxWidth` (default 480px), `fps` default 12, cap to `maxSeconds` default 6s to keep files small.
+- Uploads the resulting `.gif` to `no-lube-assets/<category>/<name>.gif`.
+- Returns `{ gifPath, gifUrl, sizeBytes, durationSec }`.
+- Standard CORS + `withRunLog` wrapper, follows the zero-tolerance `assertDbWrite` policy if any DB writes are added (none planned beyond the frontend insert).
 
-### Step 4 — Harden Morning Report
-Edit `supabase/functions/morning-report/index.ts`:
-- Skip `service='solscan'` 429s (quota-exhausted, not an incident).
-- Skip `api_auth_failure` rows in the historical aggregation (already kill-switched at source).
+**3. Storage / config**
+- Confirm `no-lube-assets` bucket allows `video/mp4` and `image/gif` content types (Supabase storage buckets accept any mime by default unless restricted — verify in migration if a mime allowlist exists; add migration to relax if needed).
 
-### Step 5 — Verify
-- Wait 60s, query `admin_notifications` for any new `api_auth_failure` rows post-deploy → expect 0.
-- Watch BlackBox TG 10 min. Any stray alert now carries `[fn=...]` so we can pinpoint the missed function immediately.
+**4. QA**
+- Upload a short MP4 from the Asset Library UI, verify a GIF card appears with animated preview.
+- Confirm the original MP4 is retained under `_source/` for future re-encodes.
 
-### Technical notes
-- No schema changes beyond the one-time DELETE.
-- No frontend changes.
-- `trace_id` becomes the permanent backtrace handle for all future alerts.
+## Out of scope
+- No changes to the composer's prompt logic — it keeps consuming `public_url` (now a GIF).
+- No batch re-encode of existing assets.
+
+## Open question
+- Default GIF settings: **480px wide, 12 fps, max 6 seconds**. OK, or do you want larger/longer (e.g. 640px / 15fps / 10s — bigger files)?

@@ -24,6 +24,41 @@ type AssetRow = {
 
 const CATEGORIES = ['background', 'character', 'frame', 'sticker', 'logo'] as const;
 
+// Lazy-loaded ffmpeg singleton (browser-only).
+let _ffmpegPromise: Promise<any> | null = null;
+async function getFFmpeg() {
+  if (_ffmpegPromise) return _ffmpegPromise;
+  _ffmpegPromise = (async () => {
+    const { FFmpeg } = await import('@ffmpeg/ffmpeg');
+    const { toBlobURL } = await import('@ffmpeg/util');
+    const ff = new FFmpeg();
+    const base = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+    await ff.load({
+      coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript'),
+      wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm'),
+    });
+    return ff;
+  })();
+  return _ffmpegPromise;
+}
+
+async function convertMp4ToGif(file: File, opts: { width?: number; fps?: number; maxSeconds?: number } = {}): Promise<Blob> {
+  const { fetchFile } = await import('@ffmpeg/util');
+  const ff = await getFFmpeg();
+  const width = opts.width ?? 480;
+  const fps = opts.fps ?? 12;
+  const maxSeconds = opts.maxSeconds ?? 6;
+  await ff.writeFile('in.mp4', await fetchFile(file));
+  // Two-pass palette for quality.
+  const vf = `fps=${fps},scale=${width}:-1:flags=lanczos`;
+  await ff.exec(['-t', String(maxSeconds), '-i', 'in.mp4', '-vf', `${vf},palettegen=stats_mode=diff`, '-y', 'palette.png']);
+  await ff.exec(['-t', String(maxSeconds), '-i', 'in.mp4', '-i', 'palette.png', '-lavfi', `${vf} [x]; [x][1:v] paletteuse=dither=bayer:bayer_scale=5`, '-y', 'out.gif']);
+  const data = await ff.readFile('out.gif');
+  const u8 = data as Uint8Array;
+  const buf = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer;
+  return new Blob([buf], { type: 'image/gif' });
+}
+
 export function NoLubeAssetLibrary() {
   const [rows, setRows] = useState<AssetRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -34,6 +69,7 @@ export function NoLubeAssetLibrary() {
   const [language, setLanguage] = useState('en');
   const [file, setFile] = useState<File | null>(null);
   const [notes, setNotes] = useState('');
+  const [converting, setConverting] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -56,22 +92,46 @@ export function NoLubeAssetLibrary() {
     if (!name.trim()) { toast.error('Name required'); return; }
     setUploading(true);
     try {
-      const ext = file.name.split('.').pop() || 'png';
-      const path = `${category}/${Date.now()}-${name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}.${ext}`;
-      const { error: upErr } = await supabase.storage.from('no-lube-assets').upload(path, file, {
-        contentType: file.type || 'image/png', upsert: false,
+      const isMp4 = file.type === 'video/mp4' || /\.mp4$/i.test(file.name);
+      const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const stamp = Date.now();
+      let uploadBlob: Blob = file;
+      let ext = (file.name.split('.').pop() || 'png').toLowerCase();
+      let mp4SourcePath: string | null = null;
+
+      if (isMp4) {
+        // 1) Keep the original MP4 as the source of truth.
+        mp4SourcePath = `_source/${category}/${stamp}-${slug}.mp4`;
+        const { error: srcErr } = await supabase.storage.from('no-lube-assets').upload(mp4SourcePath, file, {
+          contentType: 'video/mp4', upsert: false,
+        });
+        if (srcErr) throw srcErr;
+
+        // 2) Convert in-browser to GIF.
+        setConverting(true);
+        try {
+          uploadBlob = await convertMp4ToGif(file);
+        } finally { setConverting(false); }
+        ext = 'gif';
+      }
+
+      const path = `${category}/${stamp}-${slug}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('no-lube-assets').upload(path, uploadBlob, {
+        contentType: isMp4 ? 'image/gif' : (file.type || 'image/png'), upsert: false,
       });
       if (upErr) throw upErr;
       const { data: pub } = supabase.storage.from('no-lube-assets').getPublicUrl(path);
+      const finalNotes = [notes.trim(), mp4SourcePath ? `mp4_source=${mp4SourcePath}` : '']
+        .filter(Boolean).join(' | ');
       const tagList = tags.split(',').map(t => t.trim()).filter(Boolean);
       const { error: insErr } = await (supabase as any).from('no_lube_assets').insert({
         category, name: name.trim(), tags: tagList,
         language: language.trim() || null,
         storage_path: path, public_url: pub.publicUrl,
-        enabled: true, notes: notes.trim() || null,
+        enabled: true, notes: finalNotes || null,
       });
       if (insErr) throw insErr;
-      toast.success('Asset uploaded');
+      toast.success(isMp4 ? 'MP4 converted to GIF and uploaded' : 'Asset uploaded');
       setName(''); setTags(''); setNotes(''); setFile(null);
       void load();
     } catch (e: any) {
@@ -128,17 +188,22 @@ export function NoLubeAssetLibrary() {
             </div>
             <div>
               <Label className="text-xs">File</Label>
-              <Input type="file" accept="image/*" onChange={e => setFile(e.target.files?.[0] || null)} />
+              <Input type="file" accept="image/*,video/mp4" onChange={e => setFile(e.target.files?.[0] || null)} />
             </div>
           </div>
           <div>
             <Label className="text-xs">Notes</Label>
             <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="optional usage hints for the AI prompt" />
           </div>
-          <Button onClick={handleUpload} disabled={uploading || !file || !name.trim()} className="bg-pink-600 hover:bg-pink-700">
-            {uploading ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Upload className="h-3 w-3 mr-1" />}
-            Upload
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button onClick={handleUpload} disabled={uploading || !file || !name.trim()} className="bg-pink-600 hover:bg-pink-700">
+              {(uploading || converting) ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Upload className="h-3 w-3 mr-1" />}
+              {converting ? 'Converting MP4 → GIF…' : (uploading ? 'Uploading…' : 'Upload')}
+            </Button>
+            <span className="text-[10px] text-muted-foreground">
+              MP4 supported — auto-converted to GIF (480px, 12fps, capped 6s). Original MP4 kept under _source/.
+            </span>
+          </div>
         </CardContent>
       </Card>
 
