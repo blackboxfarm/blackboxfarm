@@ -618,3 +618,6 @@ verify_jwt = false
 
 [functions.profile-subscription-renewal-tick]
 verify_jwt = false
+
+[functions._one-shot-replace-asset]
+verify_jwt = false
