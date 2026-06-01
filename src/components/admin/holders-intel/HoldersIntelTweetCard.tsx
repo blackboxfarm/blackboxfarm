@@ -177,7 +177,6 @@ export function HoldersIntelTweetCard({ row }: { row: ArchiveRow }) {
           />
         </div>
       )}
-      )}
 
       {/* Footer */}
       <footer className="mt-3 pt-3 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500">
