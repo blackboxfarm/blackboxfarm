@@ -1,0 +1,1 @@
+DELETE FROM public.no_lube_assets WHERE storage_path LIKE '%.mp4';
