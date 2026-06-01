@@ -496,6 +496,7 @@ export function NoLubeChannelPanel({
                         kind === 'default' ? 'No Lube'
                         : kind === 'public' ? (postKind === 'snapshot' ? 'Private (snapshot)' : 'Public')
                         : kind === 'snapshot' ? 'Private (snapshot)'
+                        : kind === 'intel_update' ? 'Private (intel update)'
                         : (postKind === 'snapshot' ? 'Private (snapshot)' : 'Private')
                       }</>}
               </Button>
