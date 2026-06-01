@@ -26,12 +26,21 @@ const CATEGORIES = ['background', 'character', 'frame', 'sticker', 'logo'] as co
 
 // Lazy-loaded ffmpeg singleton (browser-only).
 let _ffmpegPromise: Promise<any> | null = null;
-async function getFFmpeg() {
+async function getFFmpeg(onLog?: (msg: string) => void) {
   if (_ffmpegPromise) return _ffmpegPromise;
   _ffmpegPromise = (async () => {
     const { FFmpeg } = await import('@ffmpeg/ffmpeg');
     const { toBlobURL } = await import('@ffmpeg/util');
     const ff = new FFmpeg();
+    ff.on('log', ({ message }: { message: string }) => {
+      // eslint-disable-next-line no-console
+      console.log('[ffmpeg]', message);
+      onLog?.(message);
+    });
+    ff.on('progress', ({ progress }: { progress: number }) => {
+      // eslint-disable-next-line no-console
+      console.log('[ffmpeg] progress', Math.round(progress * 100) + '%');
+    });
     const base = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
     await ff.load({
       coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript'),
@@ -42,21 +51,34 @@ async function getFFmpeg() {
   return _ffmpegPromise;
 }
 
-async function convertMp4ToGif(file: File, opts: { width?: number; fps?: number; maxSeconds?: number } = {}): Promise<Blob> {
+async function convertMp4ToGif(
+  file: File,
+  opts: { width?: number; fps?: number; maxSeconds?: number; onStage?: (s: string) => void } = {}
+): Promise<Blob> {
   const { fetchFile } = await import('@ffmpeg/util');
+  opts.onStage?.('loading ffmpeg');
   const ff = await getFFmpeg();
-  const width = opts.width ?? 320;
-  const fps = opts.fps ?? 10;
-  const maxSeconds = opts.maxSeconds ?? 4;
+  const width = opts.width ?? 240;
+  const fps = opts.fps ?? 8;
+  const maxSeconds = opts.maxSeconds ?? 3;
+  opts.onStage?.('decoding mp4');
   await ff.writeFile('in.mp4', await fetchFile(file));
   // Single-pass split filter: one decode pass instead of two — much faster in wasm.
   const filter = `fps=${fps},scale=${width}:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5`;
+  opts.onStage?.('encoding gif');
   await ff.exec(['-t', String(maxSeconds), '-i', 'in.mp4', '-vf', filter, '-y', 'out.gif']);
   const data = await ff.readFile('out.gif');
   const u8 = data as Uint8Array;
   const buf = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer;
   try { await ff.deleteFile('in.mp4'); await ff.deleteFile('out.gif'); } catch {}
   return new Blob([buf], { type: 'image/gif' });
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms/1000)}s`)), ms);
+    p.then(v => { clearTimeout(t); resolve(v); }, e => { clearTimeout(t); reject(e); });
+  });
 }
 
 export function NoLubeAssetLibrary() {
@@ -70,6 +92,7 @@ export function NoLubeAssetLibrary() {
   const [file, setFile] = useState<File | null>(null);
   const [notes, setNotes] = useState('');
   const [converting, setConverting] = useState(false);
+  const [stage, setStage] = useState<string>('');
 
   const load = async () => {
     setLoading(true);
@@ -100,6 +123,7 @@ export function NoLubeAssetLibrary() {
       let mp4SourcePath: string | null = null;
 
       if (isMp4) {
+        setStage('uploading source MP4');
         // 1) Keep the original MP4 as the source of truth.
         mp4SourcePath = `_source/${category}/${stamp}-${slug}.mp4`;
         const { error: srcErr } = await supabase.storage.from('no-lube-assets').upload(mp4SourcePath, file, {
@@ -110,11 +134,17 @@ export function NoLubeAssetLibrary() {
         // 2) Convert in-browser to GIF.
         setConverting(true);
         try {
-          uploadBlob = await convertMp4ToGif(file);
-        } finally { setConverting(false); }
+          uploadBlob = await withTimeout(
+            convertMp4ToGif(file, { onStage: setStage }),
+            120_000,
+            'GIF conversion'
+          );
+          console.log('[no-lube] GIF produced, bytes=', (uploadBlob as Blob).size);
+        } finally { setConverting(false); setStage(''); }
         ext = 'gif';
       }
 
+      setStage('uploading gif');
       const path = `${category}/${stamp}-${slug}.${ext}`;
       const { error: upErr } = await supabase.storage.from('no-lube-assets').upload(path, uploadBlob, {
         contentType: isMp4 ? 'image/gif' : (file.type || 'image/png'), upsert: false,
@@ -135,8 +165,9 @@ export function NoLubeAssetLibrary() {
       setName(''); setTags(''); setNotes(''); setFile(null);
       void load();
     } catch (e: any) {
+      console.error('[no-lube] upload failed', e);
       toast.error(`Upload failed: ${e.message}`);
-    } finally { setUploading(false); }
+    } finally { setUploading(false); setStage(''); }
   };
 
   const toggleEnabled = async (row: AssetRow) => {
@@ -198,10 +229,10 @@ export function NoLubeAssetLibrary() {
           <div className="flex items-center gap-3">
             <Button onClick={handleUpload} disabled={uploading || !file || !name.trim()} className="bg-pink-600 hover:bg-pink-700">
               {(uploading || converting) ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Upload className="h-3 w-3 mr-1" />}
-              {converting ? 'Converting MP4 → GIF…' : (uploading ? 'Uploading…' : 'Upload')}
+              {converting ? `Converting MP4 → GIF… ${stage}` : (uploading ? (stage || 'Uploading…') : 'Upload')}
             </Button>
             <span className="text-[10px] text-muted-foreground">
-              MP4 supported — auto-converted to GIF (320px, 10fps, capped 4s, single-pass). Original MP4 kept under _source/. Tip: trim/shrink MP4 before upload for fastest conversion.
+              MP4 → GIF (240px, 8fps, capped 3s, single-pass). 120s timeout. Watch the browser console for [ffmpeg] logs. Trim/shrink MP4 before upload for fastest conversion.
             </span>
           </div>
         </CardContent>
