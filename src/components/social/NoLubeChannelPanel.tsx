@@ -364,6 +364,21 @@ export function NoLubeChannelPanel({
         </Card>
       )}
 
+      {kind === 'intel_update' && (
+        <Card className="bg-amber-500/5 border-amber-500/30">
+          <CardContent className="pt-4">
+            <Label className="text-xs font-semibold text-amber-300">
+              🧠 Intel Update — one-time enrichment post
+            </Label>
+            <p className="text-xs text-muted-foreground mt-1">
+              Posted to the <strong>Private</strong> channel <strong>once per token</strong>,
+              after Snapshot/Quick Stats, when deeper intel (insiders, KYC, mesh, dev history)
+              has been mined. Values not yet resolved render as <code>pending</code>.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Template editor + Preview — side-by-side */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
@@ -416,6 +431,7 @@ export function NoLubeChannelPanel({
                 kind === 'default' ? 'No Lube (Default channel)'
                 : kind === 'public' ? (postKind === 'snapshot' ? 'No Lube Private Channel (snapshot)' : 'No Lube Public Channel')
                 : kind === 'snapshot' ? 'No Lube Private Channel (snapshot)'
+                : kind === 'intel_update' ? 'No Lube Private Channel (intel update)'
                 : (postKind === 'snapshot' ? 'No Lube Private Channel (snapshot)' : 'No Lube Private Channel')
               }
             </Label>
