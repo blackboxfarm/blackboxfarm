@@ -20,7 +20,7 @@ import {
   type TemplateName,
 } from '@/lib/share-template';
 
-export type NoLubeChannelKind = 'default' | 'public' | 'leaks' | 'private' | 'snapshot';
+export type NoLubeChannelKind = 'default' | 'public' | 'leaks' | 'private' | 'snapshot' | 'intel_update';
 
 export const NO_LUBE_LANGUAGES: { code: string; label: string }[] = [
   { code: 'en', label: 'English' },
@@ -94,7 +94,7 @@ export function NoLubeChannelPanel({
       // Private channel's chat config. Load the private profile for display so
       // the operator can see where snapshot posts will be delivered.
       const profileKey =
-        kind === 'snapshot' ? 'private'
+        kind === 'snapshot' || kind === 'intel_update' ? 'private'
         : kind === 'leaks' ? 'public'
         : kind;
       const { data, error } = await (supabase as any)
@@ -114,6 +114,7 @@ export function NoLubeChannelPanel({
             : kind === 'public' ? 'Public Channel'
             : kind === 'leaks' ? 'Leaks Post (Public)'
             : kind === 'snapshot' ? 'Snapshot Post (Private)'
+            : kind === 'intel_update' ? 'Intel Update (Private)'
             : 'Private Channel',
           telegram_link: '',
         },
