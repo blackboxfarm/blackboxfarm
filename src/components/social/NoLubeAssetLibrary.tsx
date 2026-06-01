@@ -54,7 +54,9 @@ async function convertMp4ToGif(file: File, opts: { width?: number; fps?: number;
   await ff.exec(['-t', String(maxSeconds), '-i', 'in.mp4', '-vf', `${vf},palettegen=stats_mode=diff`, '-y', 'palette.png']);
   await ff.exec(['-t', String(maxSeconds), '-i', 'in.mp4', '-i', 'palette.png', '-lavfi', `${vf} [x]; [x][1:v] paletteuse=dither=bayer:bayer_scale=5`, '-y', 'out.gif']);
   const data = await ff.readFile('out.gif');
-  return new Blob([data as Uint8Array], { type: 'image/gif' });
+  const u8 = data as Uint8Array;
+  const buf = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer;
+  return new Blob([buf], { type: 'image/gif' });
 }
 
 export function NoLubeAssetLibrary() {
