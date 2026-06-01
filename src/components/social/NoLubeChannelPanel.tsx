@@ -178,8 +178,9 @@ export function NoLubeChannelPanel({
     setComposedText(null); setVerdictClass(null); setBlockReason(null); setLogId(null); setEligible(true);
     try {
       // Snapshot (or Big Picture toggled to Snapshot) always targets the Private channel
-      const effectiveKind = kind === 'snapshot' ? 'snapshot' : postKind;
-      const composeChannel = effectiveKind === 'snapshot' ? 'private' : kind;
+      const isOneShotPrivate = kind === 'snapshot' || kind === 'intel_update';
+      const effectiveKind = isOneShotPrivate ? kind : postKind;
+      const composeChannel = isOneShotPrivate ? 'private' : kind;
       const { data, error } = await supabase.functions.invoke('no-lube-compose', {
         body: { mint: m, channel: composeChannel, kind: effectiveKind },
       });
@@ -204,8 +205,8 @@ export function NoLubeChannelPanel({
     if (!composedText) return;
     setIsPushing(true);
     try {
-      const effectiveKind = kind === 'snapshot' ? 'snapshot' : postKind;
-      const pushChannel = effectiveKind === 'snapshot' ? 'private' : kind;
+      const isOneShotPrivate = kind === 'snapshot' || kind === 'intel_update';
+      const pushChannel = isOneShotPrivate ? 'private' : kind;
       const { data, error } = await supabase.functions.invoke('no-lube-push', {
         body: { text: composedText, log_id: logId, channel: pushChannel },
       });
@@ -238,7 +239,7 @@ export function NoLubeChannelPanel({
     <div className="space-y-4">
       {/* Per-tab profile: nickname + Telegram link + chat ID lookup.
           Hidden on snapshot — snapshot inherits the Private channel config. */}
-      {kind !== 'snapshot' && (
+      {kind !== 'snapshot' && kind !== 'intel_update' && (
       <Card className="bg-card/60 border-border">
         <CardContent className="pt-4 space-y-3">
           <div className="flex items-center justify-between">
