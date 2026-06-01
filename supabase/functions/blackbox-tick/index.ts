@@ -218,7 +218,23 @@ function composeDigest(args: {
   const tgUrl = pickFirst<string>('telegram_url');
   const web = pickFirst<string>('website_url');
 
-  const fmtChange = (n: number | null) => n == null ? '' : ` (${n >= 0 ? '+' : ''}${n.toFixed(0)}%)`;
+  // Format a 24h percent change. For extreme moves (>= +1000% or <= -90%)
+  // a raw percent reads like a typo ("+553916%"), so we collapse it to a
+  // multiplier ("+27.6x 24h") which matches how the rest of the card talks
+  // about gains. Always label the timeframe so the value can't be confused
+  // with a lifetime move.
+  const fmtChange = (n: number | null) => {
+    if (n == null || !isFinite(n)) return '';
+    const abs = Math.abs(n);
+    if (abs >= 1000) {
+      // 1 + n/100 = price multiplier vs 24h ago
+      const mult = 1 + n / 100;
+      const sign = mult >= 1 ? '+' : '';
+      return ` (${sign}${mult.toFixed(mult >= 100 ? 0 : 1)}x 24h)`;
+    }
+    const sign = n >= 0 ? '+' : '';
+    return ` (${sign}${n.toFixed(abs < 10 ? 1 : 0)}% 24h)`;
+  };
 
   // ── Derived signals ──
   // Momentum: weighted blend of 1h + 24h change
