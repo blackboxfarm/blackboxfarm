@@ -445,6 +445,29 @@ Entry: *{mcEntry}*  Age: *{age}*
 🔗 [Chart]({chartUrl}) · [BubbleMap]({bubbleMapUrl}) · [Buy]({buyUrl})
 
 CA: \`{ca}\``,
+
+  no_lube_intel_update: `🧠 *$\{ticker} Intel Update*
+_One-time deep intel — mined after Quick Stats_
+
+👤 *Dev / Creator*
+{devLine}
+🪪 KYC: *{kycLabel}*
+
+👥 *Holders & Health*
+Holders: *{totalHolders}*  Health: *{healthScore}/100*
+Top 10%: *{top10}*
+
+🕵️ *Insiders & Mesh*
+{intelAlert1}
+{intelAlert2}
+
+💰 *Market Snapshot*
+MC: *{mc}* ({mcChange})  Entry: *{mcEntry}*
+VOL: *{vol24h}*  Age: *{age}*
+
+🔗 [Full Report]({intelUrl}) | [BubbleMap]({bubbleMapUrl})
+
+CA: \`{ca}\``,
 };
 
 // Legacy default for backwards compatibility
