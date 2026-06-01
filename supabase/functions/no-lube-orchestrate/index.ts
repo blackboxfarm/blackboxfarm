@@ -150,6 +150,7 @@ serve(async (req) => {
     const snapshotPost = allPrev.find((r: any) => r.post_kind === 'snapshot') || null;
     const bigPicturePosts = allPrev.filter((r: any) => r.post_kind === 'big_picture' || r.post_kind === 'milestone' || r.post_kind == null);
     const leaksPost = allPrev.find((r: any) => r.post_kind === 'leaks') || null;
+    const lastIntelUpdate = allPrev.find((r: any) => r.post_kind === 'intel_update') || null;
     const prev = bigPicturePosts[0] || null;
     const hasSnapshot = !!snapshotPost;
     const hasBigPicture = !!prev;
