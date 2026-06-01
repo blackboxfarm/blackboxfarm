@@ -498,9 +498,30 @@ serve(async (req) => {
     const ratio = probeMcap / baseMcap;
     if (ratio < threshold) {
       // ---- INTEL UPDATE (sub-2x re-sighting) ----
-      // Fire a Private "Intel Update" post on every sub-2x re-sighting so the
-      // operator can see the token is still in play. Public Leak still fires
-      // its one-shot when MC crosses leaksMinMcap.
+      // Throttle: only re-post when (a) >=30 min since the previous Intel
+      // Update for this mint AND (b) mcap moved >=15% vs the last Intel
+      // Update mcap. Without this gate the cron would re-fire on every tick
+      // while the token sits in the same sub-2x band.
+      const INTEL_MIN_INTERVAL_MS = 30 * 60 * 1000;
+      const INTEL_MIN_MCAP_DELTA = 0.15;
+      let intelSkip: string | null = null;
+      if (lastIntelUpdate) {
+        const lastAt = lastIntelUpdate.posted_at || lastIntelUpdate.composed_at;
+        const ageMs = lastAt ? Date.now() - new Date(lastAt).getTime() : Infinity;
+        const lastMc = Number(lastIntelUpdate.last_mcap_at_post ?? lastIntelUpdate.mcap ?? 0);
+        const delta = lastMc > 0 ? Math.abs(probeMcap - lastMc) / lastMc : 1;
+        if (ageMs < INTEL_MIN_INTERVAL_MS) intelSkip = `cooldown_${Math.round(ageMs/1000)}s`;
+        else if (delta < INTEL_MIN_MCAP_DELTA) intelSkip = `mcap_delta_${(delta*100).toFixed(1)}pct`;
+      }
+      if (intelSkip) {
+        const leaks = await maybeFireLeaks(probeMcap);
+        return jsonResp({
+          ok: true, flow: 'intel_update', skipped: true,
+          reason: `intel_update_throttled:${intelSkip}`,
+          threshold, base_mcap: baseMcap, current_mcap: probeMcap, ratio,
+          results: { public_leaks: leaks },
+        });
+      }
       const intelUpdate = await composeAndPush('private', mint, ratio, { kind: 'intel_update' });
       if (intelUpdate.ok && intelUpdate.pushed && intelUpdate.mcap != null) {
         await stampPost(intelUpdate.logId, {
