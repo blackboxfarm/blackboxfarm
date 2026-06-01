@@ -220,6 +220,12 @@ serve(async (req) => {
   invokeFn(supabaseUrl, serviceKey, 'no-lube-ingest', {
     mint,
     insiders_milestone: insidersMilestone,
+    source_message_id: messageId,
+    // The lifecycle row was just set to 'enriching' a few ms ago. Without
+    // fast_post, no-lube-ingest's idempotency guard would return
+    // skipped:'in_progress' and we'd never reach the orchestrator. fast_post
+    // bypasses that guard for the freshly-ingested row.
+    fast_post: true,
   });
 
   // If dev_wallet is still in_process, fire background KYC genealogy walk

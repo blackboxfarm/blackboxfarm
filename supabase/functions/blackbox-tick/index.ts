@@ -601,9 +601,13 @@ serve(async (req) => {
 
       // Legacy composeDigest path retired — the No Lube orchestrator now owns
       // all routing (Private on first sight, Private + Public on re-sight ≥ Nx).
+      // NOTE: We only record replies_collected here. Final status flip happens
+      // AFTER orchestrate so a failed dispatch doesn't leave us with an
+      // invalid CHECK-constraint status (the previous 'handed_off' value was
+      // not in the allowed list and threw, causing the run to be marked
+      // 'failed' and the orchestrate dispatch below to be skipped).
       await assertUpdate(
         supabase.from('blackbox_aggregator_runs').update({
-          status: 'handed_off',
           replies_collected: saved,
         }).eq('id', run.id),
         'blackbox_aggregator_runs',
@@ -634,11 +638,31 @@ serve(async (req) => {
         });
         if (orchErr) {
           console.warn('[blackbox-tick] no-lube-orchestrate error', orchErr);
+          await assertUpdate(
+            supabase.from('blackbox_aggregator_runs').update({
+              status: 'failed',
+              error_message: `orchestrate error: ${orchErr.message || String(orchErr)}`,
+            }).eq('id', run.id),
+            'blackbox_aggregator_runs',
+          );
         } else {
           summary.published++;
+          await assertUpdate(
+            supabase.from('blackbox_aggregator_runs').update({
+              status: 'posted',
+            }).eq('id', run.id),
+            'blackbox_aggregator_runs',
+          );
         }
       } catch (e) {
         console.warn('[blackbox-tick] no-lube-orchestrate dispatch failed', e);
+        await assertUpdate(
+          supabase.from('blackbox_aggregator_runs').update({
+            status: 'failed',
+            error_message: `orchestrate dispatch threw: ${(e as Error).message}`,
+          }).eq('id', run.id),
+          'blackbox_aggregator_runs',
+        );
       }
     }
   } catch (e: any) {
