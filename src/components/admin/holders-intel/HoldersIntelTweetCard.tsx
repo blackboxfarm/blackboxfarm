@@ -59,8 +59,13 @@ function postedAtLabel(iso: string | null): string {
  */
 export function HoldersIntelTweetCard({ row }: { row: ArchiveRow }) {
   const handle = row.posted_handle || "HoldersIntel";
+  // Prefer the real DexScreener banner over the decorated/used variant when present,
+  // so we always show the genuine header image when the project uploaded one.
   const banner =
-    row.decorated_banner_url || row.banner_used_url || row.dex_banner_url || null;
+    row.dex_banner_url || row.decorated_banner_url || row.banner_used_url || null;
+  // If the only image we have is a square mint logo (no real dex header), constrain
+  // its height so it doesn't dominate the card — match a normal banner ratio (~2:1).
+  const isRealBanner = !!row.dex_banner_url || !!row.decorated_banner_url;
   const symbol = row.symbol || "?";
   const name = row.name || "";
   const grade = row.health_grade || "?";
@@ -159,14 +164,19 @@ export function HoldersIntelTweetCard({ row }: { row: ArchiveRow }) {
 
       {/* Banner */}
       {banner && (
-        <div className="mt-3 rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900">
+        <div className="mt-3 rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900 flex items-center justify-center">
           <img
             src={banner}
             alt={`${symbol} banner`}
             loading="lazy"
-            className="w-full h-auto object-contain"
+            className={
+              isRealBanner
+                ? "w-full h-auto object-cover max-h-[320px]"
+                : "h-auto max-h-[180px] w-auto object-contain"
+            }
           />
         </div>
+      )}
       )}
 
       {/* Footer */}

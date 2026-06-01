@@ -28,6 +28,7 @@ export function SiteFooter() {
               <li><Link to="/tgbot" className="hover:text-primary transition-colors">Telegram Bot</Link></li>
               <li><Link to="/bumpbot" className="hover:text-primary transition-colors">Bump Bot</Link></li>
               <li><Link to="/volumebot" className="hover:text-primary transition-colors">Volume Bot</Link></li>
+              <li><Link to="/token-archive" className="hover:text-primary transition-colors">🗄 Token Archive</Link></li>
             </ul>
           </div>
           <div className="space-y-2">
