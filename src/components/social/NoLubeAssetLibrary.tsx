@@ -45,17 +45,17 @@ async function getFFmpeg() {
 async function convertMp4ToGif(file: File, opts: { width?: number; fps?: number; maxSeconds?: number } = {}): Promise<Blob> {
   const { fetchFile } = await import('@ffmpeg/util');
   const ff = await getFFmpeg();
-  const width = opts.width ?? 480;
-  const fps = opts.fps ?? 12;
-  const maxSeconds = opts.maxSeconds ?? 6;
+  const width = opts.width ?? 320;
+  const fps = opts.fps ?? 10;
+  const maxSeconds = opts.maxSeconds ?? 4;
   await ff.writeFile('in.mp4', await fetchFile(file));
-  // Two-pass palette for quality.
-  const vf = `fps=${fps},scale=${width}:-1:flags=lanczos`;
-  await ff.exec(['-t', String(maxSeconds), '-i', 'in.mp4', '-vf', `${vf},palettegen=stats_mode=diff`, '-y', 'palette.png']);
-  await ff.exec(['-t', String(maxSeconds), '-i', 'in.mp4', '-i', 'palette.png', '-lavfi', `${vf} [x]; [x][1:v] paletteuse=dither=bayer:bayer_scale=5`, '-y', 'out.gif']);
+  // Single-pass split filter: one decode pass instead of two — much faster in wasm.
+  const filter = `fps=${fps},scale=${width}:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5`;
+  await ff.exec(['-t', String(maxSeconds), '-i', 'in.mp4', '-vf', filter, '-y', 'out.gif']);
   const data = await ff.readFile('out.gif');
   const u8 = data as Uint8Array;
   const buf = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer;
+  try { await ff.deleteFile('in.mp4'); await ff.deleteFile('out.gif'); } catch {}
   return new Blob([buf], { type: 'image/gif' });
 }
 
