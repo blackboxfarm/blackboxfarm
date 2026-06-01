@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Save, RotateCcw, Eye, Plus, ChevronDown, ChevronRight } from "lucide-react";
 
@@ -117,6 +118,7 @@ export function HoldersIntelTemplateEditor() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [varsOpen, setVarsOpen] = useState(true);
   const [newName, setNewName] = useState("");
+  const [groupTab, setGroupTab] = useState<"private" | "public" | "other">("private");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -188,6 +190,27 @@ export function HoldersIntelTemplateEditor() {
     return <div className="text-center py-8 text-muted-foreground">Loading templates…</div>;
   }
 
+  // Group templates by destination.
+  // Private: Snapshot (Quick Stats) + Intel Update + no_lube_private + legacy no_lube
+  // Public:  Leaks + no_lube_public
+  // Other:   everything else (ads, shares, tg/x adverts, search, posted, etc.)
+  const privateNames = new Set([
+    "no_lube_snapshot_private",
+    "no_lube_intel_update_private",
+    "no_lube_private",
+    "no_lube",
+  ]);
+  const publicNames = new Set([
+    "no_lube_leaks_public",
+    "no_lube_public",
+  ]);
+  const groupOf = (name: string): "private" | "public" | "other" => {
+    if (privateNames.has(name)) return "private";
+    if (publicNames.has(name)) return "public";
+    return "other";
+  };
+  const visibleRows = rows.filter((r) => groupOf(r.template_name) === groupTab);
+
   return (
     <div className="space-y-4 max-w-3xl">
       <div className="flex items-start justify-between gap-3">
@@ -208,6 +231,26 @@ export function HoldersIntelTemplateEditor() {
             <Plus className="h-4 w-4 mr-1" /> Add
           </Button>
         </div>
+      </div>
+
+      <Tabs value={groupTab} onValueChange={(v) => setGroupTab(v as any)}>
+        <TabsList>
+          <TabsTrigger value="private">
+            🔒 Private ({rows.filter(r => groupOf(r.template_name) === "private").length})
+          </TabsTrigger>
+          <TabsTrigger value="public">
+            🌐 Public ({rows.filter(r => groupOf(r.template_name) === "public").length})
+          </TabsTrigger>
+          <TabsTrigger value="other">
+            ⋯ Other ({rows.filter(r => groupOf(r.template_name) === "other").length})
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      <div className="text-xs text-muted-foreground -mt-2">
+        {groupTab === "private" && "Snapshot (Quick Stats), Intel Update, and No-Lube Private — all go to the private Telegram channel."}
+        {groupTab === "public" && "Leaks Post and No-Lube Public — broadcast to the public channel."}
+        {groupTab === "other" && "Ads, shares, search, and legacy templates."}
       </div>
 
       <div className="rounded-lg border border-border/50 bg-card/40">
@@ -232,7 +275,12 @@ export function HoldersIntelTemplateEditor() {
       </div>
 
       <div className="space-y-3">
-        {rows.map((row) => {
+        {visibleRows.length === 0 && (
+          <div className="text-center py-8 text-sm text-muted-foreground rounded-lg border border-dashed border-border/40">
+            No templates in this group yet.
+          </div>
+        )}
+        {visibleRows.map((row) => {
           const text = editedText[row.id] ?? row.template_text;
           const active = editedActive[row.id] ?? row.is_active;
           const dirty = text !== row.template_text || active !== row.is_active;
