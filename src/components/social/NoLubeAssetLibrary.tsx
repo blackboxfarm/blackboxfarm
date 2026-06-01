@@ -93,6 +93,7 @@ export function NoLubeAssetLibrary() {
   const [notes, setNotes] = useState('');
   const [converting, setConverting] = useState(false);
   const [stage, setStage] = useState<string>('');
+  const [convertingId, setConvertingId] = useState<string | null>(null);
   // User-tunable conversion controls
   const [gifWidth, setGifWidth] = useState<number>(240);
   const [gifFps, setGifFps] = useState<number>(8);
@@ -198,6 +199,54 @@ export function NoLubeAssetLibrary() {
     const { error } = await (supabase as any).from('no_lube_assets').delete().eq('id', row.id);
     if (error) { toast.error(error.message); return; }
     setRows(rs => rs.filter(r => r.id !== row.id));
+  };
+
+  const convertRowToGif = async (row: AssetRow) => {
+    if (!/\.mp4$/i.test(row.storage_path)) return;
+    setConvertingId(row.id);
+    setStage('downloading mp4');
+    try {
+      const { data: dl, error: dlErr } = await supabase.storage
+        .from('no-lube-assets').download(row.storage_path);
+      if (dlErr || !dl) throw dlErr || new Error('download failed');
+      const mp4File = new File([dl], 'in.mp4', { type: 'video/mp4' });
+      const gifBlob = await withTimeout(
+        convertMp4ToGif(mp4File, {
+          width: gifWidth, fps: gifFps, maxSeconds: gifSeconds,
+          onStage: setStage,
+        }),
+        120_000,
+        'GIF conversion'
+      );
+      setStage('uploading gif');
+      const stamp = Date.now();
+      const slug = `${row.name}-gif`.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const path = `${row.category}/${stamp}-${slug}.gif`;
+      const { error: upErr } = await supabase.storage.from('no-lube-assets').upload(path, gifBlob, {
+        contentType: 'image/gif', upsert: false,
+      });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from('no-lube-assets').getPublicUrl(path);
+      const { error: insErr } = await (supabase as any).from('no_lube_assets').insert({
+        category: row.category,
+        name: `${row.name}_gif`,
+        tags: row.tags || [],
+        language: row.language,
+        storage_path: path,
+        public_url: pub.publicUrl,
+        enabled: true,
+        notes: `converted_from=${row.storage_path}`,
+      });
+      if (insErr) throw insErr;
+      toast.success('GIF created from MP4');
+      void load();
+    } catch (e: any) {
+      console.error('[no-lube] convert-to-gif failed', e);
+      toast.error(`Convert failed: ${e.message}`);
+    } finally {
+      setConvertingId(null);
+      setStage('');
+    }
   };
 
   return (
@@ -320,6 +369,18 @@ export function NoLubeAssetLibrary() {
                       <Trash2 className="h-3 w-3" />
                     </Button>
                   </div>
+                  {/\.mp4$/i.test(r.storage_path) && (
+                    <Button
+                      size="sm" variant="outline"
+                      className="w-full h-7 text-[10px] border-pink-500/40"
+                      disabled={convertingId === r.id}
+                      onClick={() => convertRowToGif(r)}
+                    >
+                      {convertingId === r.id
+                        ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />{stage || 'converting…'}</>
+                        : '→ Convert to GIF'}
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             ))}
