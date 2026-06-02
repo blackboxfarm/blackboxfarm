@@ -9803,6 +9803,7 @@ export type Database = {
       }
       leaderboard_daily_runs: {
         Row: {
+          caption_text: string | null
           created_at: string
           entries: Json
           entry_count: number
@@ -9811,9 +9812,14 @@ export type Database = {
           image_private_url: string | null
           image_public_url: string | null
           local_date: string
+          pinned_at: string | null
+          pinned_message_id_private: number | null
+          pinned_message_id_public: number | null
           posted_at: string | null
           profile_id: string
+          qualifying_4x_count: number | null
           rendered_at: string | null
+          size_chosen: string | null
           status: string
           tg_private_message_id: number | null
           tg_public_message_id: number | null
@@ -9822,6 +9828,7 @@ export type Database = {
           window_start_utc: string
         }
         Insert: {
+          caption_text?: string | null
           created_at?: string
           entries?: Json
           entry_count?: number
@@ -9830,9 +9837,14 @@ export type Database = {
           image_private_url?: string | null
           image_public_url?: string | null
           local_date: string
+          pinned_at?: string | null
+          pinned_message_id_private?: number | null
+          pinned_message_id_public?: number | null
           posted_at?: string | null
           profile_id: string
+          qualifying_4x_count?: number | null
           rendered_at?: string | null
+          size_chosen?: string | null
           status?: string
           tg_private_message_id?: number | null
           tg_public_message_id?: number | null
@@ -9841,6 +9853,7 @@ export type Database = {
           window_start_utc: string
         }
         Update: {
+          caption_text?: string | null
           created_at?: string
           entries?: Json
           entry_count?: number
@@ -9849,9 +9862,14 @@ export type Database = {
           image_private_url?: string | null
           image_public_url?: string | null
           local_date?: string
+          pinned_at?: string | null
+          pinned_message_id_private?: number | null
+          pinned_message_id_public?: number | null
           posted_at?: string | null
           profile_id?: string
+          qualifying_4x_count?: number | null
           rendered_at?: string | null
+          size_chosen?: string | null
           status?: string
           tg_private_message_id?: number | null
           tg_public_message_id?: number | null
@@ -9869,9 +9887,96 @@ export type Database = {
           },
         ]
       }
+      leaderboard_monthly_runs: {
+        Row: {
+          caption_text: string | null
+          created_at: string
+          entries: Json
+          entry_count: number
+          error: string | null
+          id: string
+          image_private_url: string | null
+          image_public_url: string | null
+          month_label: string
+          month_start_date: string
+          pinned_at: string | null
+          pinned_message_id_private: number | null
+          pinned_message_id_public: number | null
+          posted_at: string | null
+          profile_id: string
+          rendered_at: string | null
+          status: string
+          tg_private_message_id: number | null
+          tg_public_message_id: number | null
+          updated_at: string
+          window_end_utc: string
+          window_start_utc: string
+        }
+        Insert: {
+          caption_text?: string | null
+          created_at?: string
+          entries?: Json
+          entry_count?: number
+          error?: string | null
+          id?: string
+          image_private_url?: string | null
+          image_public_url?: string | null
+          month_label: string
+          month_start_date: string
+          pinned_at?: string | null
+          pinned_message_id_private?: number | null
+          pinned_message_id_public?: number | null
+          posted_at?: string | null
+          profile_id: string
+          rendered_at?: string | null
+          status?: string
+          tg_private_message_id?: number | null
+          tg_public_message_id?: number | null
+          updated_at?: string
+          window_end_utc: string
+          window_start_utc: string
+        }
+        Update: {
+          caption_text?: string | null
+          created_at?: string
+          entries?: Json
+          entry_count?: number
+          error?: string | null
+          id?: string
+          image_private_url?: string | null
+          image_public_url?: string | null
+          month_label?: string
+          month_start_date?: string
+          pinned_at?: string | null
+          pinned_message_id_private?: number | null
+          pinned_message_id_public?: number | null
+          posted_at?: string | null
+          profile_id?: string
+          rendered_at?: string | null
+          status?: string
+          tg_private_message_id?: number | null
+          tg_public_message_id?: number | null
+          updated_at?: string
+          window_end_utc?: string
+          window_start_utc?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leaderboard_monthly_runs_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leaderboard_profiles: {
         Row: {
           accent_hex: string
+          auto_pin_daily: boolean
+          auto_pin_monthly: boolean
+          auto_pin_weekly: boolean
+          auto_unpin_previous: boolean
           bg_private_prompt: string | null
           bg_private_url: string | null
           bg_public_prompt: string | null
@@ -9891,6 +9996,10 @@ export type Database = {
         }
         Insert: {
           accent_hex?: string
+          auto_pin_daily?: boolean
+          auto_pin_monthly?: boolean
+          auto_pin_weekly?: boolean
+          auto_unpin_previous?: boolean
           bg_private_prompt?: string | null
           bg_private_url?: string | null
           bg_public_prompt?: string | null
@@ -9910,6 +10019,10 @@ export type Database = {
         }
         Update: {
           accent_hex?: string
+          auto_pin_daily?: boolean
+          auto_pin_monthly?: boolean
+          auto_pin_weekly?: boolean
+          auto_unpin_previous?: boolean
           bg_private_prompt?: string | null
           bg_private_url?: string | null
           bg_public_prompt?: string | null
@@ -9928,6 +10041,89 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      leaderboard_weekly_runs: {
+        Row: {
+          caption_text: string | null
+          created_at: string
+          entries: Json
+          entry_count: number
+          error: string | null
+          id: string
+          image_private_url: string | null
+          image_public_url: string | null
+          pinned_at: string | null
+          pinned_message_id_private: number | null
+          pinned_message_id_public: number | null
+          posted_at: string | null
+          profile_id: string
+          rendered_at: string | null
+          status: string
+          tg_private_message_id: number | null
+          tg_public_message_id: number | null
+          updated_at: string
+          week_end_date: string
+          week_start_date: string
+          window_end_utc: string
+          window_start_utc: string
+        }
+        Insert: {
+          caption_text?: string | null
+          created_at?: string
+          entries?: Json
+          entry_count?: number
+          error?: string | null
+          id?: string
+          image_private_url?: string | null
+          image_public_url?: string | null
+          pinned_at?: string | null
+          pinned_message_id_private?: number | null
+          pinned_message_id_public?: number | null
+          posted_at?: string | null
+          profile_id: string
+          rendered_at?: string | null
+          status?: string
+          tg_private_message_id?: number | null
+          tg_public_message_id?: number | null
+          updated_at?: string
+          week_end_date: string
+          week_start_date: string
+          window_end_utc: string
+          window_start_utc: string
+        }
+        Update: {
+          caption_text?: string | null
+          created_at?: string
+          entries?: Json
+          entry_count?: number
+          error?: string | null
+          id?: string
+          image_private_url?: string | null
+          image_public_url?: string | null
+          pinned_at?: string | null
+          pinned_message_id_private?: number | null
+          pinned_message_id_public?: number | null
+          posted_at?: string | null
+          profile_id?: string
+          rendered_at?: string | null
+          status?: string
+          tg_private_message_id?: number | null
+          tg_public_message_id?: number | null
+          updated_at?: string
+          week_end_date?: string
+          week_start_date?: string
+          window_end_utc?: string
+          window_start_utc?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leaderboard_weekly_runs_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       login_history: {
         Row: {
