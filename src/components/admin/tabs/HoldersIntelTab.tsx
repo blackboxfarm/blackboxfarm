@@ -26,7 +26,7 @@ const HoldersIntelTemplateEditor = lazy(() => import("@/components/admin/holders
 const TokenArchive = lazy(() => import("@/components/admin/holders-intel/TokenArchive").then(m => ({ default: m.TokenArchive })));
 
 export default function HoldersIntelTab() {
-  const [activeSubTab, setActiveSubTab] = useState("manual-x-posting");
+  const [activeSubTab, setActiveSubTab] = useState("accounts");
 
   return (
     <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
