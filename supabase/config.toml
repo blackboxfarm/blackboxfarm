@@ -621,3 +621,6 @@ verify_jwt = false
 
 [functions.oneshot-replace-asset]
 verify_jwt = false
+
+[functions.profile-subscription-admin]
+verify_jwt = true
