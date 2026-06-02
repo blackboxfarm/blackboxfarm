@@ -1,79 +1,123 @@
 ## Goal
-Eliminate the manual setup steps for per-profile subscription bots. Make the Bot & Channel tab fully self-serve: set the bot-token secret, schedule/pause the two crons, and register the Telegram webhook — all from the UI, reusable for any future profile.
 
-## 1. Bot token secret input (with status)
+Upgrade the No Lube / Insiders leaderboard recaps to include rich text captions (so Telegram pin previews convey the point), smart Top 10 vs Top 20 sizing, plus weekly and monthly recap cadences. All three cadences auto-pin in their channels.
 
-In `SubscriptionAdminPanel.tsx` (Bot & Channel sub-tab), upgrade the existing "Bot token secret name" field into a managed secret control:
+## Current state (so we don't rebuild what exists)
 
-- Shows current secret name (editable text, e.g. `NO_LUBE_BOT_TELEGRAM_API_KEY`)
-- Status pill next to it:
-  - ✅ green check "Stored" if secret exists
-  - ⚠️ amber "Not set" if missing
-- Two buttons: **Set / Update token** (opens a password input + Save) and **Test** (calls Telegram `getMe` to verify the token actually works)
-- Saves token via a new edge function `profile-subscription-set-bot-secret` that uses the Supabase Management API to write the secret under the chosen name
-- Re-checks status after save
+- `leaderboard-daily-builder` runs hourly, fires per `leaderboard_profiles` at `post_hour`, builds Top 20 from `telegram_insider_token_lifecycle`, inserts a `leaderboard_daily_runs` row, then calls `leaderboard-render` + `leaderboard-post`.
+- `leaderboard-post` posts the rendered image to public/private channels via `no-lube-push` with a short caption ("Daily Top 20 · 6am→6am Toronto · N qualifying calls · PUBLIC").
+- No pin step, no weekly/monthly, fixed Top 20, caption is thin (preview shows almost nothing).
 
-A small edge function `profile-subscription-secret-status` returns `{ exists: boolean, valid?: boolean, bot_username?: string }` so the UI can render the green check + bot identity confirmation.
+## What changes
 
-## 2. Cron management (no SQL editor needed)
+### 1. Smart sizing (Top 10 default, Top 20 on busy days)
 
-New "Automation" card in the Bot & Channel sub-tab with two rows:
+In `leaderboard-daily-builder`:
+- After scoring, count entries with `multiplier >= 4`.
+- If `count(>=4x) > 10` → keep Top 20.
+- Else → trim to Top 10.
+- Persist `size_chosen` ('top10' | 'top20') and `qualifying_4x_count` on `leaderboard_daily_runs` so the renderer and poster know.
 
-| Cron | Schedule | Status | Toggle |
-|---|---|---|---|
-| Payment poller | every 1 min | active/paused | switch |
-| Renewal nudger | every 10 min | active/paused | switch |
+`leaderboard-render` already renders whatever entries it gets — pass the trimmed list. No visual change needed beyond the count.
 
-Backed by a new edge function `profile-subscription-cron-admin` with actions:
-- `status` — `SELECT jobname, active FROM cron.job WHERE jobname IN (...)`
-- `install` — runs `cron.schedule(...)` with the correct project URL + anon key for both jobs (idempotent: `cron.unschedule` first if exists)
-- `pause` / `resume` — `UPDATE cron.job SET active = false/true WHERE jobname = ...`
+### 2. Weekly Top 20 (Mondays)
 
-On first load, if jobs don't exist the UI shows a single **"Install crons"** button that runs `install` for both. After that, two toggles control pause/resume. No SQL editor instructions remain in the panel.
+New cron-driven flow inside the same `leaderboard-daily-builder` (or a new sibling `leaderboard-weekly-builder` — see Technical):
+- Trigger: Monday at `post_hour` local for each profile.
+- Window: previous Monday day_start → this Monday day_start (7 days).
+- Always Top 20 (no smart sizing — weekly always has volume).
+- New table row: `leaderboard_weekly_runs` (mirrors daily run shape + `week_start_date`, `week_end_date`).
+- Renders via `leaderboard-render` with a `variant: 'weekly'` flag → header reads "NO LUBE — WEEKLY TOP 20" and shows the date range.
 
-(Requires `pg_cron` + `pg_net` extensions — migration enables them if not already on.)
+### 3. Monthly Top 25 (1st of month)
 
-## 3. Telegram webhook registration
+- Trigger: day 1 at `post_hour` local.
+- Window: previous calendar month, local timezone.
+- Top 25.
+- New table: `leaderboard_monthly_runs` (+ `month_label` like "May 2026").
+- Renders with `variant: 'monthly'` → header "NO LUBE — MONTHLY TOP 25" + month label.
 
-New edge function `profile-subscription-register-webhook`:
-- Loads the bot token from the configured secret name
-- Computes the SHA-256 `secret_token` the existing `profile-subscription-bot-webhook` already validates
-- Calls Telegram `setWebhook` with the deployed function URL + `secret_token` + `allowed_updates`
-- Returns `getWebhookInfo` for confirmation
+### 4. Information-heavy caption (so the pin preview tells the story)
 
-UI: a "Webhook" row showing current status (URL, last error, pending updates) and a **Register / Re-register webhook** button.
+Rewrite the caption builder in `leaderboard-post` (and new weekly/monthly posters, or one shared helper). The first line of the caption is what Telegram shows in the pin banner, so it must be self-explanatory.
 
-## 4. "Setup wizard" for new profiles
+Daily template:
 
-Add a **"⚡ Run setup"** button at the top of the Bot & Channel sub-tab that runs, in order:
-1. Verify config saved (bot username, channel chat_id, secret name)
-2. Check bot token secret → prompt to set if missing
-3. Test token via `getMe`
-4. Install both crons (idempotent)
-5. Register webhook
-6. Send a self-test DM to the configured admin Telegram ID (optional field) confirming "Bot is live"
+```
+🏆 NO LUBE DAILY RECAP — Top {N} · {local_date}
+🥇 #1 ${TICKER1} {mult1}x · $→  $entry → $peak
+🥈 #2 ${TICKER2} {mult2}x · $entry → $peak
+🥉 #3 ${TICKER3} {mult3}x · $entry → $peak
+🔥 {count_4x_plus} calls at 4x+ · {count_10x_plus} at 10x+
+📊 Window: 6am→6am Toronto · {entry_count} qualifying calls
+👀 Full table in the image below.
+```
 
-Each step shows ✅/❌ inline so creating a new profile becomes a 1-click bring-up after the basic fields are filled in.
+Weekly template (first line drives the pin preview):
 
-## Files
+```
+📅 NO LUBE WEEKLY TOP 20 — {week_start} → {week_end}
+🥇 ${T1} {m}x · 🥈 ${T2} {m}x · 🥉 ${T3} {m}x
+🔥 {N_4x_plus} calls at 4x+ this week · biggest call: ${TOP} {topMult}x
+📊 7-day window · {entry_count} qualifying calls
+```
 
-**New edge functions**
-- `supabase/functions/profile-subscription-secret-status/index.ts`
-- `supabase/functions/profile-subscription-set-bot-secret/index.ts`
-- `supabase/functions/profile-subscription-cron-admin/index.ts`
-- `supabase/functions/profile-subscription-register-webhook/index.ts`
+Monthly template:
 
-**Modified**
-- `src/components/social/subscriptions/SubscriptionAdminPanel.tsx` — new Secret control, Automation card, Webhook card, Run setup button
-- `supabase/config.toml` — register the 4 new functions (with `verify_jwt = true`, admin-only)
+```
+🗓️ NO LUBE MONTHLY TOP 25 — {month_label}
+🥇 ${T1} {m}x · 🥈 ${T2} {m}x · 🥉 ${T3} {m}x
+🔥 {N_10x_plus} at 10x+ · biggest: ${TOP} {topMult}x
+📊 Full month · {entry_count} qualifying calls
+```
 
-**Migration**
-- Enable `pg_cron` + `pg_net` extensions if not enabled
-- Optional: add `admin_telegram_id` column to `profile_subscription_configs` for the setup self-test DM
+All captions HTML-safe (escape ticker names). Tickers are obfuscated per existing thin-formatting protocol when posted to channels that pipe to other bots (No Lube channels are end-destinations, so plain `$TICKER` is fine here — same as today's `leaderboard-post`).
 
-## Required from you (one-time only)
-- Approve a **Supabase Management API token** secret (`SUPABASE_MANAGEMENT_API_TOKEN`) so the edge function can write project secrets on your behalf. Without it, the "Set token" button can't store secrets server-side and you'd still have to paste tokens in the Lovable secrets UI. If you'd rather skip this, I'll fall back to the current flow (prompt opens the Lovable Add Secret modal) but still automate crons + webhook.
+### 5. Auto-pin
 
-## Open questions
-1. OK to add the Supabase Management API token secret so the "Set token" button works end-to-end? (Yes = fully automated; No = secret still set via Lovable modal, everything else automated.)
-2. Want the optional `admin_telegram_id` for the setup self-test DM, or skip the self-test?
+After a successful `sendPhoto` in `leaderboard-post` / weekly / monthly, call Telegram `pinChatMessage` with:
+- `chat_id`, `message_id` from the just-sent post
+- `disable_notification: true` (avoid double-notify; the photo post already pinged subscribers)
+
+Store `pinned_at` and `pinned_message_id` on the run row. If a previous recap of the same cadence (daily/weekly/monthly) is still pinned for that chat, call `unpinChatMessage` for the old `message_id` first so only the latest is pinned per cadence.
+
+Optional per-profile toggles on `leaderboard_profiles`:
+- `auto_pin_daily BOOLEAN DEFAULT true`
+- `auto_pin_weekly BOOLEAN DEFAULT true`
+- `auto_pin_monthly BOOLEAN DEFAULT true`
+- `auto_unpin_previous BOOLEAN DEFAULT true`
+
+### 6. Insiders profile parity
+
+Confirm a second row exists in `leaderboard_profiles` for **Insiders** (channel_name_filter = 'insiders', `post_to_tg_*` pointed at the Insiders public + premium chats). If not, seed it. Same builder code services it — different `channel_name_filter` and chat IDs.
+
+## Technical details
+
+**Schema migration (one file):**
+- `leaderboard_daily_runs`: add `size_chosen TEXT`, `qualifying_4x_count INT`, `pinned_message_id BIGINT`, `pinned_at TIMESTAMPTZ`, `caption_text TEXT`.
+- New table `leaderboard_weekly_runs` (id, profile_id, week_start_date, week_end_date, window_start_utc, window_end_utc, entries jsonb, entry_count, status, image_public_url, image_private_url, tg_public_message_id, tg_private_message_id, posted_at, pinned_message_id, pinned_at, caption_text, timestamps). GRANT + RLS to match daily.
+- New table `leaderboard_monthly_runs` (same shape + `month_start_date`, `month_label`).
+- `leaderboard_profiles`: add `auto_pin_daily/weekly/monthly` and `auto_unpin_previous` booleans.
+
+**Edge functions:**
+- Modify `leaderboard-daily-builder`: smart sizing + persist new fields.
+- New `leaderboard-weekly-builder` (runs hourly, fires Monday at `post_hour`).
+- New `leaderboard-monthly-builder` (runs hourly, fires on day 1 at `post_hour`).
+- Modify `leaderboard-post`: rich caption + pin/unpin logic (accept `cadence: 'daily'|'weekly'|'monthly'` and `run_table`).
+- Modify `leaderboard-render`: accept `variant: 'daily'|'weekly'|'monthly'` to swap header text + Top 10/20/25 layout.
+
+**Cron:**
+- Existing hourly cron already triggers `leaderboard-daily-builder`. Add two more `cron.schedule` calls for the weekly and monthly builders (also hourly — each one self-gates on day-of-week / day-of-month + `post_hour`).
+
+**Telegram pin/unpin:**
+- `pinChatMessage` via the same `TELEGRAM_HOLDERSINTEL_BOT_TOKEN` already used by `no-lube-push`. The bot must already be admin in the channels (it is, since it posts there).
+
+## Out of scope
+
+- No UI changes to the super-admin leaderboard panel (it'll show new columns automatically through the existing list view; deeper UI iteration can come after).
+- No change to the rendered image style beyond header text + row count.
+- No change to thin-formatting / obfuscation rules for other bot integrations.
+
+## Open question for approval
+
+The smart sizing threshold is currently "more than 10 calls at 4x+ → Top 20, else Top 10". Confirm `>= 4x` is the cutoff (vs `>= 5x`), and confirm the trigger count of "more than 10" (vs e.g. ">= 8"). Easy to tune in one place.
