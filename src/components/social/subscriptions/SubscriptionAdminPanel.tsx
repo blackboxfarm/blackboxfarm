@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2, Save, RefreshCcw, Wallet, ExternalLink, Plus, Trash2 } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertTriangle, KeyRound, Zap, LinkIcon, Play } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
