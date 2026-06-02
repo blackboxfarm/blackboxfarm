@@ -12,6 +12,7 @@ import { Loader2, Save, RefreshCcw, Wallet, ExternalLink, Plus, Trash2 } from 'l
 import { CheckCircle2, XCircle, AlertTriangle, KeyRound, Zap, LinkIcon, Play, Users, Send, Megaphone } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { ChannelAttritionPanel } from './ChannelAttritionPanel';
 
 interface Props {
   profileKey: string;
@@ -31,6 +32,11 @@ interface SubscriptionConfig {
   central_wallet_pubkey: string | null;
   is_active: boolean;
   admin_telegram_id?: number | null;
+  public_chat_id?: string | null;
+  public_welcome_enabled?: boolean;
+  public_welcome_copy?: string | null;
+  public_welcome_image_url?: string | null;
+  public_welcome_persona?: string | null;
 }
 
 interface Tier {
@@ -68,6 +74,7 @@ export function SubscriptionAdminPanel({ profileKey, displayName }: Props) {
         <TabsTrigger value="affiliates">Affiliates</TabsTrigger>
         <TabsTrigger value="contacts">Contacts &amp; Broadcast</TabsTrigger>
         <TabsTrigger value="treasury">Treasury</TabsTrigger>
+        <TabsTrigger value="attrition">Attrition</TabsTrigger>
       </TabsList>
       <TabsContent value="bot"><BotChannelSettings profileKey={profileKey} displayName={displayName} /></TabsContent>
       <TabsContent value="pricing"><PricingEditor profileKey={profileKey} /></TabsContent>
@@ -75,6 +82,7 @@ export function SubscriptionAdminPanel({ profileKey, displayName }: Props) {
       <TabsContent value="affiliates"><AffiliatesPanel profileKey={profileKey} /></TabsContent>
       <TabsContent value="contacts"><ContactsPanel profileKey={profileKey} /></TabsContent>
       <TabsContent value="treasury"><TreasuryPanel profileKey={profileKey} /></TabsContent>
+      <TabsContent value="attrition"><ChannelAttritionPanel profileKey={profileKey} /></TabsContent>
     </Tabs>
   );
 }
@@ -106,6 +114,11 @@ function BotChannelSettings({ profileKey, displayName }: Props) {
       central_wallet_pubkey: null,
       is_active: false,
       admin_telegram_id: null,
+      public_chat_id: null,
+      public_welcome_enabled: false,
+      public_welcome_copy: '',
+      public_welcome_image_url: '',
+      public_welcome_persona: 'luna_dusk',
     });
     setLoading(false);
   };
@@ -149,6 +162,10 @@ function BotChannelSettings({ profileKey, displayName }: Props) {
             <Input value={cfg.private_chat_id ?? ''} onChange={e => setCfg({ ...cfg, private_chat_id: e.target.value })} placeholder="-100123456789" />
           </div>
           <div>
+            <Label>Public channel chat_id</Label>
+            <Input value={cfg.public_chat_id ?? ''} onChange={e => setCfg({ ...cfg, public_chat_id: e.target.value })} placeholder="-100123456789" />
+          </div>
+          <div>
             <Label>Admin Telegram ID (for setup self-test DM)</Label>
             <Input
               type="number"
@@ -184,6 +201,44 @@ function BotChannelSettings({ profileKey, displayName }: Props) {
         <Button onClick={save} disabled={saving}>
           {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
           Save
+        </Button>
+      </CardContent>
+    </Card>
+    <Card>
+      <CardHeader><CardTitle className="text-base">🌙 Public channel welcome — Luna Dusk</CardTitle></CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Sent by the bot when a real user joins the <b>public</b> channel. Bot must be an admin
+          of the public channel for join events to be received. Supports <code>{'{name}'}</code>
+          and <code>{'{username}'}</code> placeholders.
+        </p>
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={!!cfg.public_welcome_enabled}
+            onCheckedChange={v => setCfg({ ...cfg, public_welcome_enabled: v })}
+          />
+          <span className="text-sm">{cfg.public_welcome_enabled ? 'Enabled — welcoming new public joins' : 'Disabled'}</span>
+        </div>
+        <div>
+          <Label>Welcome copy (HTML; leave blank for the default Luna Dusk greeting)</Label>
+          <Textarea
+            rows={5}
+            placeholder="🌙 {name}, dusk settles in..."
+            value={cfg.public_welcome_copy ?? ''}
+            onChange={e => setCfg({ ...cfg, public_welcome_copy: e.target.value })}
+          />
+        </div>
+        <div>
+          <Label>Welcome image URL (optional)</Label>
+          <Input
+            value={cfg.public_welcome_image_url ?? ''}
+            onChange={e => setCfg({ ...cfg, public_welcome_image_url: e.target.value })}
+            placeholder="https://..."
+          />
+        </div>
+        <Button onClick={save} disabled={saving} size="sm">
+          {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+          Save welcome
         </Button>
       </CardContent>
     </Card>

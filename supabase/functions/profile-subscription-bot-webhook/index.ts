@@ -24,6 +24,123 @@ function safeEq(a: string | null, b: string) {
   return d === 0;
 }
 
+const LUNA_DEFAULT_WELCOME =
+  `🌙 <b>{name}</b>, dusk settles in.\n\n` +
+  `I'm <b>Luna Dusk</b> — gatekeeper of the No Lube wire.\n\n` +
+  `You're now in the public lounge. Watch the feed. When you're ready to step past the velvet rope into the private channel, DM me <code>/start</code> and I'll show you the tiers.`;
+
+async function handleChatMember(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  botToken: string,
+  profileKey: string,
+  update: any,
+) {
+  const cm = update.chat_member;
+  if (!cm) return;
+  const chat = cm.chat;
+  const user = cm.new_chat_member?.user || cm.from;
+  if (!chat?.id || !user?.id) return;
+  if (user.is_bot) return;
+
+  const newStatus = cm.new_chat_member?.status;
+  const oldStatus = cm.old_chat_member?.status;
+  const joined =
+    (newStatus === 'member' || newStatus === 'administrator') &&
+    (oldStatus === 'left' || oldStatus === 'kicked' || !oldStatus);
+  const left = newStatus === 'left' || newStatus === 'kicked' || newStatus === 'banned';
+
+  const chatIdStr = String(chat.id);
+
+  const { data: cfg } = await supabase
+    .from('profile_subscription_configs')
+    .select('public_chat_id,private_chat_id,public_welcome_copy,public_welcome_image_url,public_welcome_enabled,public_welcome_persona')
+    .eq('profile_key', profileKey)
+    .maybeSingle();
+  if (!cfg) return;
+
+  let channelKind: 'public' | 'private' | null = null;
+  if (cfg.public_chat_id && String(cfg.public_chat_id) === chatIdStr) channelKind = 'public';
+  else if (cfg.private_chat_id && String(cfg.private_chat_id) === chatIdStr) channelKind = 'private';
+  if (!channelKind) return;
+
+  const nowIso = new Date().toISOString();
+
+  if (joined) {
+    // Upsert member, only mark joined_at on a brand-new row (the upsert below
+    // won't overwrite an existing joined_at because we route via update-vs-insert).
+    const { data: existing } = await supabase
+      .from('nolube_channel_members')
+      .select('id,left_at')
+      .eq('chat_id', chatIdStr)
+      .eq('telegram_user_id', user.id)
+      .maybeSingle();
+
+    if (!existing) {
+      await supabase.from('nolube_channel_members').insert({
+        profile_key: profileKey,
+        channel_kind: channelKind,
+        chat_id: chatIdStr,
+        telegram_user_id: user.id,
+        username: user.username ?? null,
+        first_name: user.first_name ?? null,
+        last_name: user.last_name ?? null,
+        joined_at: nowIso,
+        is_seed: false,
+        source: 'chat_member_event',
+        last_seen_at: nowIso,
+      });
+    } else {
+      // Re-join: clear left_at, refresh joined_at if previously left.
+      await supabase.from('nolube_channel_members').update({
+        username: user.username ?? null,
+        first_name: user.first_name ?? null,
+        last_name: user.last_name ?? null,
+        left_at: null,
+        ...(existing.left_at ? { joined_at: nowIso } : {}),
+        last_seen_at: nowIso,
+        source: 'chat_member_event',
+      }).eq('id', existing.id);
+    }
+
+    // Luna welcome — public channel only, when enabled.
+    if (channelKind === 'public' && cfg.public_welcome_enabled) {
+      try {
+        const firstName = user.first_name || user.username || 'friend';
+        const copy = (cfg.public_welcome_copy ?? '').trim() || LUNA_DEFAULT_WELCOME;
+        const text = copy.replaceAll('{name}', firstName).replaceAll('{username}', user.username ? '@' + user.username : firstName);
+        if (cfg.public_welcome_image_url) {
+          await tgCall(botToken, 'sendPhoto', {
+            chat_id: chat.id,
+            photo: cfg.public_welcome_image_url,
+            caption: text,
+            parse_mode: 'HTML',
+          });
+        } else {
+          await tgCall(botToken, 'sendMessage', {
+            chat_id: chat.id,
+            text,
+            parse_mode: 'HTML',
+            disable_web_page_preview: true,
+          });
+        }
+        await supabase
+          .from('nolube_channel_members')
+          .update({ welcomed_at: nowIso })
+          .eq('chat_id', chatIdStr)
+          .eq('telegram_user_id', user.id);
+      } catch (e) {
+        console.warn('[bot-webhook] Luna welcome failed:', e);
+      }
+    }
+  } else if (left) {
+    await supabase
+      .from('nolube_channel_members')
+      .update({ left_at: nowIso, last_seen_at: nowIso })
+      .eq('chat_id', chatIdStr)
+      .eq('telegram_user_id', user.id);
+  }
+}
+
 Deno.serve(withRunLog('profile-subscription-bot-webhook', async (req) => {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
   const url = new URL(req.url);
@@ -41,6 +158,17 @@ Deno.serve(withRunLog('profile-subscription-bot-webhook', async (req) => {
 
   const supabase = getSupabaseAdmin();
   const update = await req.json();
+
+  // ---------- chat_member: channel join/leave tracking + Luna welcome ----------
+  if (update.chat_member) {
+    try { await handleChatMember(supabase, botToken!, profileKey!, update); }
+    catch (e) { console.error('[bot-webhook] chat_member handler failed:', e); }
+    return new Response(JSON.stringify({ ok: true }));
+  }
+  if (update.my_chat_member) {
+    // ignored; we only care about user joins/leaves
+    return new Response(JSON.stringify({ ok: true }));
+  }
 
   async function send(t: string, kb?: any) {
     let footer = '';

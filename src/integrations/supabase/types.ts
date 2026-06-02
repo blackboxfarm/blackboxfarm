@@ -12191,6 +12191,181 @@ export type Database = {
         }
         Relationships: []
       }
+      nolube_channel_members: {
+        Row: {
+          channel_kind: string
+          chat_id: string
+          classification_locked: boolean
+          created_at: string
+          first_name: string | null
+          id: string
+          is_seed: boolean
+          joined_at: string
+          last_name: string | null
+          last_seen_at: string
+          left_at: string | null
+          profile_key: string
+          seed_batch_id: string | null
+          source: string
+          telegram_user_id: number
+          updated_at: string
+          username: string | null
+          welcomed_at: string | null
+        }
+        Insert: {
+          channel_kind: string
+          chat_id: string
+          classification_locked?: boolean
+          created_at?: string
+          first_name?: string | null
+          id?: string
+          is_seed?: boolean
+          joined_at?: string
+          last_name?: string | null
+          last_seen_at?: string
+          left_at?: string | null
+          profile_key: string
+          seed_batch_id?: string | null
+          source?: string
+          telegram_user_id: number
+          updated_at?: string
+          username?: string | null
+          welcomed_at?: string | null
+        }
+        Update: {
+          channel_kind?: string
+          chat_id?: string
+          classification_locked?: boolean
+          created_at?: string
+          first_name?: string | null
+          id?: string
+          is_seed?: boolean
+          joined_at?: string
+          last_name?: string | null
+          last_seen_at?: string
+          left_at?: string | null
+          profile_key?: string
+          seed_batch_id?: string | null
+          source?: string
+          telegram_user_id?: number
+          updated_at?: string
+          username?: string | null
+          welcomed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nolube_channel_members_seed_batch_id_fkey"
+            columns: ["seed_batch_id"]
+            isOneToOne: false
+            referencedRelation: "nolube_seed_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nolube_channel_snapshots: {
+        Row: {
+          channel_kind: string
+          chat_id: string
+          id: string
+          notes: string | null
+          organic_active: number
+          organic_joins_window: number
+          organic_leaves_window: number
+          profile_key: string
+          seed_active: number
+          seed_active_batch_id: string | null
+          seed_leaves_window: number
+          total_members: number
+          ts: string
+        }
+        Insert: {
+          channel_kind: string
+          chat_id: string
+          id?: string
+          notes?: string | null
+          organic_active?: number
+          organic_joins_window?: number
+          organic_leaves_window?: number
+          profile_key: string
+          seed_active?: number
+          seed_active_batch_id?: string | null
+          seed_leaves_window?: number
+          total_members?: number
+          ts?: string
+        }
+        Update: {
+          channel_kind?: string
+          chat_id?: string
+          id?: string
+          notes?: string | null
+          organic_active?: number
+          organic_joins_window?: number
+          organic_leaves_window?: number
+          profile_key?: string
+          seed_active?: number
+          seed_active_batch_id?: string | null
+          seed_leaves_window?: number
+          total_members?: number
+          ts?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nolube_channel_snapshots_seed_active_batch_id_fkey"
+            columns: ["seed_active_batch_id"]
+            isOneToOne: false
+            referencedRelation: "nolube_seed_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nolube_seed_batches: {
+        Row: {
+          actual_count: number
+          channel_kind: string
+          chat_id: string
+          created_at: string
+          detected_via: string
+          ended_at: string | null
+          expected_count: number | null
+          id: string
+          notes: string | null
+          profile_key: string
+          started_at: string
+          trigger_rolling_median: number | null
+          trigger_window_joins: number | null
+        }
+        Insert: {
+          actual_count?: number
+          channel_kind: string
+          chat_id: string
+          created_at?: string
+          detected_via: string
+          ended_at?: string | null
+          expected_count?: number | null
+          id?: string
+          notes?: string | null
+          profile_key: string
+          started_at?: string
+          trigger_rolling_median?: number | null
+          trigger_window_joins?: number | null
+        }
+        Update: {
+          actual_count?: number
+          channel_kind?: string
+          chat_id?: string
+          created_at?: string
+          detected_via?: string
+          ended_at?: string | null
+          expected_count?: number | null
+          id?: string
+          notes?: string | null
+          profile_key?: string
+          started_at?: string
+          trigger_rolling_median?: number | null
+          trigger_window_joins?: number | null
+        }
+        Relationships: []
+      }
       notification_delivery_log: {
         Row: {
           channel: string
@@ -12746,6 +12921,11 @@ export type Database = {
           paid_welcome_image_url: string | null
           private_chat_id: string | null
           profile_key: string
+          public_chat_id: string | null
+          public_welcome_copy: string | null
+          public_welcome_enabled: boolean
+          public_welcome_image_url: string | null
+          public_welcome_persona: string
           updated_at: string
           welcome_copy: string | null
           welcome_image_url: string | null
@@ -12776,6 +12956,11 @@ export type Database = {
           paid_welcome_image_url?: string | null
           private_chat_id?: string | null
           profile_key: string
+          public_chat_id?: string | null
+          public_welcome_copy?: string | null
+          public_welcome_enabled?: boolean
+          public_welcome_image_url?: string | null
+          public_welcome_persona?: string
           updated_at?: string
           welcome_copy?: string | null
           welcome_image_url?: string | null
@@ -12806,6 +12991,11 @@ export type Database = {
           paid_welcome_image_url?: string | null
           private_chat_id?: string | null
           profile_key?: string
+          public_chat_id?: string | null
+          public_welcome_copy?: string | null
+          public_welcome_enabled?: boolean
+          public_welcome_image_url?: string | null
+          public_welcome_persona?: string
           updated_at?: string
           welcome_copy?: string | null
           welcome_image_url?: string | null
@@ -24529,6 +24719,25 @@ export type Database = {
           symbol: string | null
           token_mint: string | null
           volume_24h: number | null
+        }
+        Relationships: []
+      }
+      nolube_member_retention: {
+        Row: {
+          channel_kind: string | null
+          chat_id: string | null
+          cohort_size: number | null
+          cohort_week: string | null
+          is_seed: boolean | null
+          profile_key: string | null
+          still_active: number | null
+          surviving_d1: number | null
+          surviving_d14: number | null
+          surviving_d3: number | null
+          surviving_d30: number | null
+          surviving_d60: number | null
+          surviving_d7: number | null
+          surviving_d90: number | null
         }
         Relationships: []
       }
