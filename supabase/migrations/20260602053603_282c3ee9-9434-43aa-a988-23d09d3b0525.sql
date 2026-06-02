@@ -1,0 +1,5 @@
+UPDATE public.profile_subscription_configs
+SET
+  is_active = true,
+  welcome_copy = E'You''re inside the door of <b>All Lubed Up! Alpha</b> — the private side of BlackBox Farm.\n\n<b>What you get</b>\n• 🛢️  Insider 2× / 5× / 10× alerts the moment our mesh flags them — usually minutes before public chats catch on.\n• 🧬  Full dev dossiers: KYC root, prior tickers, ATH history, sister wallets, X handle rotation.\n• 🕸️  Bubble-map links pre-loaded with the forensic layer (Hacker Terminal, X Community panning, Solar Cluster).\n• 📈  Live momentum + holder-quality scores from the HoldersIntel engine, no rate limits.\n• 🤖  Priority queue on the @HoldersIntel bot — your /ca calls jump the line.\n\n<b>How payment works</b>\n1. Tap a plan below.\n2. I''ll DM you a unique Solana deposit address and the exact SOL amount (quoted live, valid 30 min).\n3. Send the SOL. The moment it lands you get a 1-use invite link to the private channel — fully automatic, no human in the loop.\n\nNo refunds, no subscriptions auto-renew, no card on file. Pure SOL, pure access.'
+WHERE profile_key = 'no_lube';
