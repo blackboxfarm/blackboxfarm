@@ -2986,10 +2986,13 @@ async function handleAlerts(chatId: number, telegramUserId: string, args: string
 // (Rick, Maestro, etc.) cannot match the symbol and trigger reply-chain loops.
 
 // ─── Group Chat Auto-Scan: detect pasted CAs and fire mini /risk ───
-async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: string, replyToMsgId?: number) {
+async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: string, replyToMsgId?: number, opts?: { skipActivationCheck?: boolean }) {
   // Check if this group has an activated (paid) installation
-  const activated = await isGroupActivated(chatId);
-  if (!activated) return; // silently ignore unactivated groups
+  // (BlackBox aggregator group bypasses this — it's a system channel, not a customer install.)
+  if (!opts?.skipActivationCheck) {
+    const activated = await isGroupActivated(chatId);
+    if (!activated) return; // silently ignore unactivated groups
+  }
 
   // Read full admin config from DB
   let cfg = { ...DEFAULT_ADMIN_CONFIG };
