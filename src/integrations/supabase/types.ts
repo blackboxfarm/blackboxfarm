@@ -12357,6 +12357,7 @@ export type Database = {
           profile_key: string
           updated_at: string
           welcome_copy: string | null
+          welcome_image_url: string | null
         }
         Insert: {
           admin_telegram_id?: number | null
@@ -12374,6 +12375,7 @@ export type Database = {
           profile_key: string
           updated_at?: string
           welcome_copy?: string | null
+          welcome_image_url?: string | null
         }
         Update: {
           admin_telegram_id?: number | null
@@ -12391,6 +12393,7 @@ export type Database = {
           profile_key?: string
           updated_at?: string
           welcome_copy?: string | null
+          welcome_image_url?: string | null
         }
         Relationships: []
       }
