@@ -269,7 +269,7 @@ Deno.serve(async (req) => {
 
         // 5) webhook
         try {
-          const wr = await handleWebhookRegister(runtimeToken);
+          const wr = await handleWebhookRegister(runtimeToken, profileKey);
           steps.push({ name: 'Webhook registered', ok: true, detail: wr.info?.url });
         } catch (e) {
           steps.push({ name: 'Webhook registered', ok: false, detail: e instanceof Error ? e.message : String(e) });
