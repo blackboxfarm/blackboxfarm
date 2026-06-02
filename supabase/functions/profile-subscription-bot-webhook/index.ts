@@ -42,9 +42,11 @@ Deno.serve(withRunLog('profile-subscription-bot-webhook', async (req) => {
   const update = await req.json();
 
   async function send(t: string, kb?: any) {
+    let footer = '';
+    try { footer = await buildFooter(profileKey!, fromId!, null); } catch { /* non-fatal */ }
     await tgCall(botToken!, 'sendMessage', {
       chat_id: chatId,
-      text: t,
+      text: t + footer,
       parse_mode: 'HTML',
       disable_web_page_preview: true,
       ...(kb ? { reply_markup: kb } : {}),
