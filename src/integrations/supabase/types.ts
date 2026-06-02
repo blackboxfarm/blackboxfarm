@@ -12342,6 +12342,7 @@ export type Database = {
       }
       profile_subscription_configs: {
         Row: {
+          admin_telegram_id: number | null
           base_currency: string
           bot_secret_name: string
           bot_username: string | null
@@ -12358,6 +12359,7 @@ export type Database = {
           welcome_copy: string | null
         }
         Insert: {
+          admin_telegram_id?: number | null
           base_currency?: string
           bot_secret_name: string
           bot_username?: string | null
@@ -12374,6 +12376,7 @@ export type Database = {
           welcome_copy?: string | null
         }
         Update: {
+          admin_telegram_id?: number | null
           base_currency?: string
           bot_secret_name?: string
           bot_username?: string | null
