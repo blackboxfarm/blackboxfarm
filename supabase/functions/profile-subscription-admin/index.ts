@@ -368,7 +368,6 @@ async function handleContactsBroadcast(profileKey: string, body: any, supabase: 
   };
 }
 
-// ---------- Entry ----------
 // ---------- Treasury (Central Wallet) ----------
 
 const FEE_BUFFER_LAMPORTS = 15_000;
