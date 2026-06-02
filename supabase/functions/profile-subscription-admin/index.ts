@@ -442,6 +442,21 @@ Deno.serve(async (req) => {
       case 'contacts_broadcast':
         return json(await handleContactsBroadcast(profileKey, body, supabase));
 
+      case 'treasury_status':
+        return json(await handleTreasuryStatus(profileKey, cfg));
+
+      case 'treasury_generate':
+        return json(await handleTreasuryGenerate(profileKey, cfg, supabase));
+
+      case 'treasury_transactions':
+        return json(await handleTreasuryTransactions(cfg, Number(body.limit ?? 25)));
+
+      case 'treasury_withdraw':
+        return json(await handleTreasuryWithdraw(profileKey, cfg, body, supabase, user.id));
+
+      case 'treasury_withdrawals':
+        return json(await handleTreasuryWithdrawals(profileKey, supabase));
+
       case 'run_setup': {
         const steps: Array<{ name: string; ok: boolean; detail?: string }> = [];
         // 1) config sanity
