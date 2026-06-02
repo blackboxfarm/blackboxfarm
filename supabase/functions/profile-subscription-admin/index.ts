@@ -153,8 +153,8 @@ async function handleWebhookStatus(botToken: string) {
   return { info };
 }
 
-async function handleWebhookRegister(botToken: string) {
-  const url = `${FUNCTIONS_BASE}/profile-subscription-bot-webhook`;
+async function handleWebhookRegister(botToken: string, profileKey: string) {
+  const url = `${FUNCTIONS_BASE}/profile-subscription-bot-webhook?profile=${encodeURIComponent(profileKey)}`;
   const secret_token = await webhookSecret(botToken);
   const res = await tg(botToken, 'setWebhook', {
     url,
@@ -228,7 +228,7 @@ Deno.serve(async (req) => {
         return json(await handleWebhookStatus(body.token ?? getBotToken()));
 
       case 'webhook_register':
-        return json(await handleWebhookRegister(body.token ?? getBotToken()));
+        return json(await handleWebhookRegister(body.token ?? getBotToken(), profileKey));
 
       case 'run_setup': {
         const steps: Array<{ name: string; ok: boolean; detail?: string }> = [];
@@ -269,7 +269,7 @@ Deno.serve(async (req) => {
 
         // 5) webhook
         try {
-          const wr = await handleWebhookRegister(runtimeToken);
+          const wr = await handleWebhookRegister(runtimeToken, profileKey);
           steps.push({ name: 'Webhook registered', ok: true, detail: wr.info?.url });
         } catch (e) {
           steps.push({ name: 'Webhook registered', ok: false, detail: e instanceof Error ? e.message : String(e) });
