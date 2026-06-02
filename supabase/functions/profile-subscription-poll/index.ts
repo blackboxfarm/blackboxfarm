@@ -5,6 +5,8 @@ import {
   getBalanceLamports,
   tgSendDM,
   tgCreateInviteLink,
+  getProfileBotToken,
+  tgCall,
   LAMPORTS_PER_SOL,
 } from '../_shared/profile-subscription.ts';
 
@@ -80,9 +82,32 @@ Deno.serve(withRunLog('profile-subscription-poll', async (req) => {
       const msg =
         `✅ <b>Payment received — ${(balance / LAMPORTS_PER_SOL).toFixed(4)} SOL</b>\n` +
         `Your subscription is active until <b>${expiresAt.toUTCString()}</b>.\n\n` +
-        (inviteLink ? `🔓 Join here: ${inviteLink}\n` : '') +
-        (config?.welcome_copy ? `\n${config.welcome_copy}` : '');
+        (inviteLink ? `🔓 Join here: ${inviteLink}\n` : '');
       try { await tgSendDM(sub.profile_key, sub.telegram_user_id, msg); } catch (e) { console.warn('[poll] DM failed', e); }
+
+      // VIP "you're in" welcome — separate DM so it feels like a moment, not a receipt addendum.
+      if (config?.paid_welcome_copy) {
+        try {
+          const token = await getProfileBotToken(sub.profile_key);
+          if (token) {
+            if (config?.paid_welcome_image_url) {
+              try {
+                await tgCall(token, 'sendPhoto', {
+                  chat_id: sub.telegram_user_id,
+                  photo: config.paid_welcome_image_url,
+                });
+              } catch { /* non-fatal */ }
+            }
+            const body = String(config.paid_welcome_copy).replace(/\{expires_at\}/g, expiresAt.toUTCString());
+            await tgCall(token, 'sendMessage', {
+              chat_id: sub.telegram_user_id,
+              text: body,
+              parse_mode: 'HTML',
+              disable_web_page_preview: true,
+            });
+          }
+        } catch (e) { console.warn('[poll] VIP welcome DM failed', e); }
+      }
 
       // welcome log
       await supabase.from('subscription_reminder_log').upsert({

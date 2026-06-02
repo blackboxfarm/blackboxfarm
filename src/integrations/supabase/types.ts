@@ -12353,6 +12353,8 @@ export type Database = {
           display_name: string
           expiry_copy: string | null
           is_active: boolean
+          paid_welcome_copy: string | null
+          paid_welcome_image_url: string | null
           private_chat_id: string | null
           profile_key: string
           updated_at: string
@@ -12371,6 +12373,8 @@ export type Database = {
           display_name: string
           expiry_copy?: string | null
           is_active?: boolean
+          paid_welcome_copy?: string | null
+          paid_welcome_image_url?: string | null
           private_chat_id?: string | null
           profile_key: string
           updated_at?: string
@@ -12389,6 +12393,8 @@ export type Database = {
           display_name?: string
           expiry_copy?: string | null
           is_active?: boolean
+          paid_welcome_copy?: string | null
+          paid_welcome_image_url?: string | null
           private_chat_id?: string | null
           profile_key?: string
           updated_at?: string
