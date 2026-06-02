@@ -8,6 +8,7 @@ import {
   tgCall,
 } from '../_shared/profile-subscription.ts';
 import { captureAttribution, buildFooter, parseRefFromStart } from '../_shared/affiliate.ts';
+import { touchContact, logContactEvent, setFirstReferrerTgId } from '../_shared/bot-contacts.ts';
 
 async function deriveSecret(botToken: string): Promise<string> {
   const data = new TextEncoder().encode(`subscription-webhook:${botToken}`);
@@ -84,8 +85,11 @@ Deno.serve(withRunLog('profile-subscription-bot-webhook', async (req) => {
     const cbChatId = cb.message?.chat?.id;
     const cbMessageId = cb.message?.message_id;
 
+    try { await touchContact(profileKey, cb.from); } catch (e) { console.warn('[webhook] touchContact(cb) failed', e); }
+
     if (data.startsWith('buy:')) {
       const months = parseInt(data.slice(4), 10);
+      try { await logContactEvent(profileKey, cb.from.id, 'quote_issued', { months }); } catch { /* non-fatal */ }
       let okText = 'Quote sent — check your DMs ✅';
       let errText: string | null = null;
       try {
@@ -142,6 +146,26 @@ Deno.serve(withRunLog('profile-subscription-bot-webhook', async (req) => {
   const isCmd = text.startsWith('/');
   const cmd = isCmd ? text.split(/\s+/)[0].toLowerCase().replace(/@.*$/, '') : '/start';
 
+  // ---- CRM: touch contact + log command ----
+  const refOnStart = cmd === '/start' ? parseRefFromStart(text) : null;
+  try {
+    await touchContact(profileKey, message.from, { referralCode: refOnStart });
+    if (isCmd) await logContactEvent(profileKey, fromId, 'command', { cmd, text: text.slice(0, 256) });
+    if (refOnStart) await logContactEvent(profileKey, fromId, 'ref_link_tapped', { code: refOnStart });
+  } catch (e) { console.warn('[webhook] CRM touch failed', e); }
+
+  // ---- /stop opt-out hygiene ----
+  if (cmd === '/stop' || cmd === '/unsubscribe') {
+    try {
+      await supabase.from('profile_bot_contacts')
+        .update({ opted_out_broadcasts: true, opted_out_at: new Date().toISOString() })
+        .eq('profile_key', profileKey).eq('telegram_user_id', fromId);
+      await logContactEvent(profileKey, fromId, 'opted_out', {});
+    } catch (e) { console.warn('[webhook] opt-out failed', e); }
+    await send('🔕 You won\'t receive broadcast messages anymore. Send /start to re-enable or interact with the bot any time.');
+    return new Response(JSON.stringify({ ok: true }));
+  }
+
   if (cmd === '/help') {
     await send(
       `<b>Commands</b>\n` +
@@ -160,6 +184,9 @@ Deno.serve(withRunLog('profile-subscription-bot-webhook', async (req) => {
       if (ref) {
         try {
           const r = await captureAttribution(profileKey, fromId, ref);
+          if (r.outcome === 'attributed' && r.referrerTelegramId) {
+            try { await setFirstReferrerTgId(profileKey, fromId, r.referrerTelegramId); } catch { /* non-fatal */ }
+          }
           if (r.outcome === 'inactive') {
             await tgCall(botToken!, 'sendMessage', {
               chat_id: chatId,
