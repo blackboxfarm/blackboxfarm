@@ -35,6 +35,7 @@ import { NoLubeProfileHeader } from './NoLubeProfileHeader';
 import { NoLubeTemplateManager } from './NoLubeTemplateManager';
 import { NoLubeArchivePanel } from './NoLubeArchivePanel';
 import { NoLubeDailiesPanel } from './NoLubeDailiesPanel';
+import { NoLubeFlowLog } from './NoLubeFlowLog';
 
 interface CronStatus {
   schedulersActive: number;
@@ -691,6 +692,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                       <TabsTrigger value="assets">🎨 Asset Library</TabsTrigger>
                       <TabsTrigger value="archive">📦 Archive</TabsTrigger>
                       <TabsTrigger value="dailies">🏆 Dailies</TabsTrigger>
+                      <TabsTrigger value="steps_log">📜 Steps Log</TabsTrigger>
                     </TabsList>
                     {(['default'] as const).map(kind => {
                       const tname: TemplateName = 'no_lube';
@@ -776,6 +778,9 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                     </TabsContent>
                     <TabsContent value="dailies" className="space-y-4 pt-3">
                       <NoLubeDailiesPanel />
+                    </TabsContent>
+                    <TabsContent value="steps_log" className="space-y-4 pt-3">
+                      <NoLubeFlowLog />
                     </TabsContent>
                   </Tabs>
                 </>
