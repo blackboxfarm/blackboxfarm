@@ -105,6 +105,12 @@ async function buildForProfile(supabase: any, supabaseUrl: string, anonKey: stri
     .sort((a: any, b: any) => b.multiplier - a.multiplier)
     .slice(0, 20);
 
+  // Smart sizing: Top 10 by default; expand to Top 20 only on busy days
+  // (more than 10 calls hitting 4x+ within the window).
+  const qualifying4xCount = scored.filter((e: any) => e.multiplier >= 4).length;
+  const sizeChosen: 'top10' | 'top20' = qualifying4xCount > 10 ? 'top20' : 'top10';
+  const finalEntries = sizeChosen === 'top20' ? scored.slice(0, 20) : scored.slice(0, 10);
+
   // Resolve mint images (best-effort) via existing token_metadata-style helpers.
   // Try `tokens` table or `pumpfun_tokens` if available.
   if (scored.length) {
@@ -127,8 +133,10 @@ async function buildForProfile(supabase: any, supabaseUrl: string, anonKey: stri
     local_date: targetDate,
     window_start_utc: realStart.toISOString(),
     window_end_utc: realEnd.toISOString(),
-    entries: scored,
-    entry_count: scored.length,
+    entries: finalEntries,
+    entry_count: finalEntries.length,
+    size_chosen: sizeChosen,
+    qualifying_4x_count: qualifying4xCount,
     status: 'pending',
   };
 
