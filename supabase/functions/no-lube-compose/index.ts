@@ -985,10 +985,10 @@ serve(async (req) => {
       block_reason,
       log_id: logId,
       mcap: mcUsd,
-      // Snapshot-only: surface the token's mint image so orchestrate/push can
-      // attach it as the Telegram photo header. Big-picture posts get their
-      // header from the AI-rendered card pipeline instead.
-      image_url: (kind === 'snapshot' || kind === 'leaks' || kind === 'intel_update') && useMintImageOnSnapshot ? tokenImageUrl : null,
+      // Surface the token's mint image so orchestrate/push can attach it as the
+      // Telegram photo header. Applies to snapshot, big_picture (Private),
+      // leaks (Public), and intel_update — gated by snapshot_use_mint_image.
+      image_url: (kind === 'snapshot' || kind === 'big_picture' || kind === 'leaks' || kind === 'intel_update') && useMintImageOnSnapshot ? tokenImageUrl : null,
       token_image_url: tokenImageUrl,
       banner_url: bannerUrl,
       banner_source: bannerSource,
