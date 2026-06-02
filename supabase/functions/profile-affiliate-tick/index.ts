@@ -59,6 +59,48 @@ Deno.serve(withRunLog('profile-affiliate-tick', async (req) => {
     expired += exp?.length ?? 0;
   }
 
-  return new Response(JSON.stringify({ ok: true, activated, deactivated, expired }),
+  // ===== CRM rollup recomputation =====
+  let contacts_synced = 0;
+  const { data: contacts } = await supabase
+    .from('profile_bot_contacts')
+    .select('id, profile_key, telegram_user_id, current_expires_at');
+  for (const c of contacts ?? []) {
+    const isPaid = !!(c.current_expires_at && new Date(c.current_expires_at) > new Date());
+    const { data: code } = await supabase
+      .from('referral_codes')
+      .select('code, status')
+      .eq('profile_key', c.profile_key)
+      .eq('telegram_user_id', c.telegram_user_id)
+      .maybeSingle();
+    const { count: attrTotal } = await supabase
+      .from('referral_attributions')
+      .select('id', { count: 'exact', head: true })
+      .eq('profile_key', c.profile_key)
+      .eq('referrer_telegram_user_id', c.telegram_user_id);
+    const { count: attrPending } = await supabase
+      .from('referral_attributions')
+      .select('id', { count: 'exact', head: true })
+      .eq('profile_key', c.profile_key)
+      .eq('referrer_telegram_user_id', c.telegram_user_id)
+      .eq('status', 'pending');
+    const { count: attrConverted } = await supabase
+      .from('referral_attributions')
+      .select('id', { count: 'exact', head: true })
+      .eq('profile_key', c.profile_key)
+      .eq('referrer_telegram_user_id', c.telegram_user_id)
+      .eq('status', 'converted');
+    await supabase.from('profile_bot_contacts').update({
+      is_currently_paid: isPaid,
+      has_referral_code: !!code,
+      referral_code: code?.code ?? null,
+      referral_code_status: code?.status ?? null,
+      referrals_attributed: attrTotal ?? 0,
+      referrals_pending: attrPending ?? 0,
+      referrals_converted: attrConverted ?? 0,
+    }).eq('id', c.id);
+    contacts_synced++;
+  }
+
+  return new Response(JSON.stringify({ ok: true, activated, deactivated, expired, contacts_synced }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 }));
