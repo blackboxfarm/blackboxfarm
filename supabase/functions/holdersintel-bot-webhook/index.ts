@@ -4613,7 +4613,7 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
           const detectedCA = looksLikeSolanaCA(message.text);
           if (detectedCA) {
             console.log(`[bot] blackbox_group passive auto-scan chat:${chatId} ca:${detectedCA.slice(0,12)}`);
-            await handleGroupAutoScan(chatId, telegramUserId, detectedCA, messageId);
+            await handleGroupAutoScan(chatId, telegramUserId, detectedCA, messageId, { skipActivationCheck: true });
           }
         } catch (e) {
           console.warn('[bot] blackbox_group passive auto-scan failed:', e);
