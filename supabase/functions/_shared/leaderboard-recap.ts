@@ -57,13 +57,14 @@ export function buildRecapCaption(opts: {
   // Pin-preview line (the only line many users will see in the pin banner)
   const headLine = `${headerEmoji} ${upper} ${labelName} — ${dateLabel}`;
 
-  // Podium
-  const podium = entries.slice(0, 3).map((e, i) => {
+  // Full ranked list — every token in the recap
+  const ranked = entries.map((e, i) => {
     const t = (e.ticker || e.token_symbol || 'TOKEN').toUpperCase();
     const mult = fmtMult(Number(e.multiplier));
     const entry = fmtMcap(Number(e.called_at_mcap));
     const peak = fmtMcap(Number(e.ath_mcap));
-    return `${MEDALS[i]} #${i + 1} $${esc(t)}  *${esc(mult)}*  · ${esc(entry)} → ${esc(peak)}`;
+    const prefix = i < 3 ? `${MEDALS[i]} #${i + 1}` : `#${i + 1}`;
+    return `${prefix} $${esc(t)}  *${esc(mult)}*  · ${esc(entry)} → ${esc(peak)}`;
   }).join('\n');
 
   const n4x = entries.filter((e) => Number(e.multiplier) >= 4).length;
@@ -76,7 +77,7 @@ export function buildRecapCaption(opts: {
   const statsLine = `📊 ${esc(windowLabel)} · ${entryCount} qualifying call${entryCount === 1 ? '' : 's'}${variantTag ? ` · ${variantTag}` : ''}`;
   const tailLine = `👀 Full table in the image below.`;
 
-  return [headLine, '', podium, '', biggestLine, statsLine, tailLine]
+  return [headLine, '', ranked, '', biggestLine, statsLine, tailLine]
     .filter((l) => l !== '')
     .join('\n');
 }
