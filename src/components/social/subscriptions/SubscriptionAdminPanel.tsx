@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2, Save, RefreshCcw, Wallet, ExternalLink, Plus, Trash2 } from 'lucide-react';
-import { CheckCircle2, XCircle, AlertTriangle, KeyRound, Zap, LinkIcon, Play } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertTriangle, KeyRound, Zap, LinkIcon, Play, Users, Send, Megaphone } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -65,11 +65,15 @@ export function SubscriptionAdminPanel({ profileKey, displayName }: Props) {
         <TabsTrigger value="bot">Bot &amp; Channel</TabsTrigger>
         <TabsTrigger value="pricing">Pricing</TabsTrigger>
         <TabsTrigger value="subs">Subscribers</TabsTrigger>
+        <TabsTrigger value="affiliates">Affiliates</TabsTrigger>
+        <TabsTrigger value="contacts">Contacts &amp; Broadcast</TabsTrigger>
         <TabsTrigger value="treasury">Treasury</TabsTrigger>
       </TabsList>
       <TabsContent value="bot"><BotChannelSettings profileKey={profileKey} displayName={displayName} /></TabsContent>
       <TabsContent value="pricing"><PricingEditor profileKey={profileKey} /></TabsContent>
       <TabsContent value="subs"><SubscribersTable profileKey={profileKey} /></TabsContent>
+      <TabsContent value="affiliates"><AffiliatesPanel profileKey={profileKey} /></TabsContent>
+      <TabsContent value="contacts"><ContactsPanel profileKey={profileKey} /></TabsContent>
       <TabsContent value="treasury"><TreasuryPanel profileKey={profileKey} /></TabsContent>
     </Tabs>
   );
