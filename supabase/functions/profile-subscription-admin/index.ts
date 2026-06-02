@@ -47,6 +47,57 @@ async function runSql(query: string): Promise<unknown> {
   return mgmt('/database/query', { method: 'POST', body: JSON.stringify({ query }) });
 }
 
+async function handleAffiliateStats(profileKey: string, supabase: any) {
+  if (!profileKey) throw new Error('profile_key required');
+  const { data: codes } = await supabase
+    .from('referral_codes')
+    .select('telegram_user_id, code, status, created_at')
+    .eq('profile_key', profileKey);
+  const { data: credits } = await supabase
+    .from('referral_credits')
+    .select('referrer_telegram_user_id, months_granted, new_expires_at, created_at')
+    .eq('profile_key', profileKey);
+  const { data: attrs } = await supabase
+    .from('referral_attributions')
+    .select('referrer_telegram_user_id, status')
+    .eq('profile_key', profileKey);
+
+  const byUser = new Map<number, any>();
+  for (const c of codes ?? []) {
+    byUser.set(Number(c.telegram_user_id), {
+      telegram_user_id: Number(c.telegram_user_id),
+      code: c.code, status: c.status, created_at: c.created_at,
+      attributions: 0, converted: 0, pending: 0, rejected: 0, expired: 0,
+      months_earned: 0, latest_credit_at: null as string | null,
+    });
+  }
+  for (const a of attrs ?? []) {
+    const u = byUser.get(Number(a.referrer_telegram_user_id));
+    if (!u) continue;
+    u.attributions++;
+    if (a.status === 'converted') u.converted++;
+    else if (a.status === 'pending') u.pending++;
+    else if (a.status === 'rejected') u.rejected++;
+    else if (a.status === 'expired') u.expired++;
+  }
+  for (const c of credits ?? []) {
+    const u = byUser.get(Number(c.referrer_telegram_user_id));
+    if (!u) continue;
+    u.months_earned += Number(c.months_granted || 0);
+    if (!u.latest_credit_at || c.created_at > u.latest_credit_at) u.latest_credit_at = c.created_at;
+  }
+  const rows = Array.from(byUser.values()).sort((a, b) => b.months_earned - a.months_earned || b.converted - a.converted);
+  const totals = {
+    total_codes: rows.length,
+    active_codes: rows.filter(r => r.status === 'active').length,
+    total_attributions: (attrs ?? []).length,
+    total_converted: rows.reduce((s, r) => s + r.converted, 0),
+    total_pending: rows.reduce((s, r) => s + r.pending, 0),
+    total_months_granted: rows.reduce((s, r) => s + r.months_earned, 0),
+  };
+  return { ok: true, totals, rows };
+}
+
 async function listSecrets(): Promise<Array<{ name: string; value?: string }>> {
   return (await mgmt('/secrets')) as Array<{ name: string }>;
 }
