@@ -12544,6 +12544,9 @@ export type Database = {
           affiliate_marketing_copy: string | null
           affiliate_months_per_referral: number
           affiliate_pending_window_days: number
+          affiliate_preamble_interval_hours: number
+          affiliate_preamble_last_posted_at: string | null
+          affiliate_preamble_variants: string[] | null
           base_currency: string
           bot_secret_name: string
           bot_username: string | null
@@ -12569,6 +12572,9 @@ export type Database = {
           affiliate_marketing_copy?: string | null
           affiliate_months_per_referral?: number
           affiliate_pending_window_days?: number
+          affiliate_preamble_interval_hours?: number
+          affiliate_preamble_last_posted_at?: string | null
+          affiliate_preamble_variants?: string[] | null
           base_currency?: string
           bot_secret_name: string
           bot_username?: string | null
@@ -12594,6 +12600,9 @@ export type Database = {
           affiliate_marketing_copy?: string | null
           affiliate_months_per_referral?: number
           affiliate_pending_window_days?: number
+          affiliate_preamble_interval_hours?: number
+          affiliate_preamble_last_posted_at?: string | null
+          affiliate_preamble_variants?: string[] | null
           base_currency?: string
           bot_secret_name?: string
           bot_username?: string | null
