@@ -95,7 +95,7 @@ export const NoLubeFlowLog: React.FC = () => {
     try {
       const { data: lc } = await supabase
         .from('telegram_insider_token_lifecycle')
-        .select('token_mint, token_symbol, channel_name, first_called_at, first_call_message_id, ingest_started_at, ingest_completed_at, ingest_status, ingest_last_error, mesh_hydrated_at, holders_refreshed_at, blackbox_harvested_at')
+        .select('token_mint, token_symbol, channel_name, first_called_at, first_call_message_id, ingest_started_at, ingest_completed_at, ingest_status, ingest_last_error, ingest_latency_ms, mesh_hydrated_at, holders_refreshed_at, blackbox_harvested_at')
         .order('first_called_at', { ascending: false })
         .limit(30);
       const rows = (lc || []) as Lifecycle[];
