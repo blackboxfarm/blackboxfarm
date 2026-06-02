@@ -1,123 +1,122 @@
+# Affiliate / Referral System for the Subscription Bot
+
 ## Goal
 
-Upgrade the No Lube / Insiders leaderboard recaps to include rich text captions (so Telegram pin previews convey the point), smart Top 10 vs Top 20 sizing, plus weekly and monthly recap cadences. All three cadences auto-pin in their channels.
+Let any paid subscriber earn free months by referring friends. Each paid friend = +1 month banked, which auto-extends their `expires_at`. Code only works while the referrer is "live" (paid time OR banked affiliate time remaining). Wire it into the existing `profile-subscription-*` flow and seed marketing copy in welcome DMs + channel preamble posts.
 
-## Current state (so we don't rebuild what exists)
+## How a user experiences it
 
-- `leaderboard-daily-builder` runs hourly, fires per `leaderboard_profiles` at `post_hour`, builds Top 20 from `telegram_insider_token_lifecycle`, inserts a `leaderboard_daily_runs` row, then calls `leaderboard-render` + `leaderboard-post`.
-- `leaderboard-post` posts the rendered image to public/private channels via `no-lube-push` with a short caption ("Daily Top 20 · 6am→6am Toronto · N qualifying calls · PUBLIC").
-- No pin step, no weekly/monthly, fixed Top 20, caption is thin (preview shows almost nothing).
+1. User pays → already gets the VIP welcome DM (existing). We append:
+   - Their personal referral link: `https://t.me/<bot_username>?start=ref_AB12CD`
+   - Their code: `AB12CD`
+   - One-liner: "Every friend who pays = +1 month free, stacked on top of your current expiry."
+2. They share the link on X / TikTok / DM.
+3. Friend taps it → Telegram opens the bot with `/start ref_AB12CD`. The bot webhook captures the code, stores a pending attribution for that `telegram_user_id`, and proceeds with the normal quote flow.
+4. When that friend pays (`profile-subscription-poll` flips them to `paid`):
+   - Look up the pending attribution.
+   - Validate referrer code is currently `active`.
+   - Insert a `referral_credits` row (+1 month, `status='applied'`).
+   - Extend referrer's active subscription `expires_at` by 1 month (or create a `bonus`-source subscription row covering the next month if they're currently expired-but-still-live-via-bank).
+   - DM the referrer: "🎉 {friend_handle} just subscribed — +1 month added. New expiry: …"
+5. Referral code lifecycle:
+   - `active` while `now() < expires_at` OR a future-dated banked credit keeps them live
+   - `inactive` once both run out → friend tapping link still works but bot replies "Referral code expired — ask {handle} to renew." and attribution is NOT stored
+   - Re-subscribing flips the same code back to `active` (codes are permanent per user)
 
-## What changes
+## Schema changes (one migration)
 
-### 1. Smart sizing (Top 10 default, Top 20 on busy days)
+```text
+referral_codes
+  id, profile_key, telegram_user_id, code (6-char A-Z0-9, UNIQUE per profile),
+  status ('active' | 'inactive'), created_at, last_activated_at, last_deactivated_at
+  UNIQUE (profile_key, telegram_user_id)
 
-In `leaderboard-daily-builder`:
-- After scoring, count entries with `multiplier >= 4`.
-- If `count(>=4x) > 10` → keep Top 20.
-- Else → trim to Top 10.
-- Persist `size_chosen` ('top10' | 'top20') and `qualifying_4x_count` on `leaderboard_daily_runs` so the renderer and poster know.
+referral_attributions
+  id, profile_key, referrer_code, referrer_telegram_user_id,
+  referred_telegram_user_id, status ('pending' | 'converted' | 'expired' | 'rejected'),
+  rejection_reason, created_at, converted_at, subscription_id (FK to profile_subscriptions)
+  UNIQUE (profile_key, referred_telegram_user_id)  -- one attribution per friend, first wins
 
-`leaderboard-render` already renders whatever entries it gets — pass the trimmed list. No visual change needed beyond the count.
-
-### 2. Weekly Top 20 (Mondays)
-
-New cron-driven flow inside the same `leaderboard-daily-builder` (or a new sibling `leaderboard-weekly-builder` — see Technical):
-- Trigger: Monday at `post_hour` local for each profile.
-- Window: previous Monday day_start → this Monday day_start (7 days).
-- Always Top 20 (no smart sizing — weekly always has volume).
-- New table row: `leaderboard_weekly_runs` (mirrors daily run shape + `week_start_date`, `week_end_date`).
-- Renders via `leaderboard-render` with a `variant: 'weekly'` flag → header reads "NO LUBE — WEEKLY TOP 20" and shows the date range.
-
-### 3. Monthly Top 25 (1st of month)
-
-- Trigger: day 1 at `post_hour` local.
-- Window: previous calendar month, local timezone.
-- Top 25.
-- New table: `leaderboard_monthly_runs` (+ `month_label` like "May 2026").
-- Renders with `variant: 'monthly'` → header "NO LUBE — MONTHLY TOP 25" + month label.
-
-### 4. Information-heavy caption (so the pin preview tells the story)
-
-Rewrite the caption builder in `leaderboard-post` (and new weekly/monthly posters, or one shared helper). The first line of the caption is what Telegram shows in the pin banner, so it must be self-explanatory.
-
-Daily template:
-
-```
-🏆 NO LUBE DAILY RECAP — Top {N} · {local_date}
-🥇 #1 ${TICKER1} {mult1}x · $→  $entry → $peak
-🥈 #2 ${TICKER2} {mult2}x · $entry → $peak
-🥉 #3 ${TICKER3} {mult3}x · $entry → $peak
-🔥 {count_4x_plus} calls at 4x+ · {count_10x_plus} at 10x+
-📊 Window: 6am→6am Toronto · {entry_count} qualifying calls
-👀 Full table in the image below.
+referral_credits
+  id, profile_key, referrer_telegram_user_id, attribution_id,
+  months_granted (int, default 1), applied_to_subscription_id,
+  new_expires_at, created_at
 ```
 
-Weekly template (first line drives the pin preview):
+Add columns to `profile_subscription_configs`:
+- `affiliate_enabled BOOLEAN DEFAULT true`
+- `affiliate_marketing_copy TEXT` (block appended to paid welcome DM)
+- `affiliate_public_preamble TEXT` (rotated into public channel preambles)
+- `affiliate_private_preamble TEXT` (rotated into private channel preambles)
+- `affiliate_months_per_referral INT DEFAULT 1`
 
+GRANT + RLS to match the rest of `profile_*` tables (service_role only; bot reads via service key).
+
+## Edge function changes
+
+### `profile-subscription-bot-webhook`
+- On `/start ref_XXXXXX`:
+  - Look up `referral_codes` where `code = upper(XXXXXX)` and `profile_key` matches and `status='active'`.
+  - If valid + not the same `telegram_user_id` + no prior attribution for this referred user → upsert `referral_attributions` (`status='pending'`).
+  - If self-referral or already-attributed-elsewhere → store `status='rejected'` with reason.
+  - If code inactive → DM the friend the "ask them to renew" copy, no attribution.
+- Continue normal welcome flow.
+
+### `profile-subscription-poll` (where status flips to `paid`)
+- After the existing `paid` update block:
+  - Generate / ensure a `referral_codes` row for the new paid user (6-char random A-Z0-9, retry on collision). Mark `active`.
+  - Check for a `pending` attribution for `referred_telegram_user_id = sub.telegram_user_id`.
+  - If found and referrer code still `active`:
+    - Find referrer's currently-live subscription (highest `expires_at`).
+    - Bump `expires_at += 1 month`.
+    - Insert `referral_credits` row + flip attribution to `converted`.
+    - DM referrer (use existing `tgSendDM`).
+  - Append affiliate marketing block to the VIP welcome DM (pulled from `affiliate_marketing_copy`, with `{ref_link}` / `{ref_code}` placeholders).
+
+### New `profile-affiliate-tick` (hourly cron)
+- For each profile:
+  - Recompute "live" status per referrer: `active` if `now() < max(expires_at)` across their paid + bonus subs, else `inactive`.
+  - Flip `referral_codes.status` accordingly, stamp `last_activated_at` / `last_deactivated_at`.
+  - Expire `pending` attributions older than 14 days.
+
+### New `profile-affiliate-stats` (admin read-only)
+- Returns per-user totals: code, status, total_referrals, converted, months_earned, current_expiry — feeds the super-admin panel.
+
+### Marketing preamble rotator
+- Lightweight: add an `affiliate` rotation slot to whatever preamble system already drives the No Lube / Insiders channels (or new `profile-affiliate-preamble-post` hourly cron that randomly posts one of N variants from `affiliate_public_preamble` / `affiliate_private_preamble` once every X hours per profile, with last-posted-at gating).
+
+## Copy seeds (admin-editable, defaults shipped in migration)
+
+Paid welcome DM append:
 ```
-📅 NO LUBE WEEKLY TOP 20 — {week_start} → {week_end}
-🥇 ${T1} {m}x · 🥈 ${T2} {m}x · 🥉 ${T3} {m}x
-🔥 {N_4x_plus} calls at 4x+ this week · biggest call: ${TOP} {topMult}x
-📊 7-day window · {entry_count} qualifying calls
+🎁 You're in. Want free months?
+Share your personal link — every friend who subscribes gets you +1 month, stacked on top of your current expiry.
+🔗 {ref_link}
+🔑 Code: {ref_code}
+Post it on X, TikTok, group chats — no cap on how many months you can stack.
 ```
 
-Monthly template:
-
+Public channel preamble (rotated):
 ```
-🗓️ NO LUBE MONTHLY TOP 25 — {month_label}
-🥇 ${T1} {m}x · 🥈 ${T2} {m}x · 🥉 ${T3} {m}x
-🔥 {N_10x_plus} at 10x+ · biggest: ${TOP} {topMult}x
-📊 Full month · {entry_count} qualifying calls
+👀 Members earn free months by inviting friends.
+Subscribe once → get a referral link → +1 month per paid friend, forever stackable.
 ```
 
-All captions HTML-safe (escape ticker names). Tickers are obfuscated per existing thin-formatting protocol when posted to channels that pipe to other bots (No Lube channels are end-destinations, so plain `$TICKER` is fine here — same as today's `leaderboard-post`).
-
-### 5. Auto-pin
-
-After a successful `sendPhoto` in `leaderboard-post` / weekly / monthly, call Telegram `pinChatMessage` with:
-- `chat_id`, `message_id` from the just-sent post
-- `disable_notification: true` (avoid double-notify; the photo post already pinged subscribers)
-
-Store `pinned_at` and `pinned_message_id` on the run row. If a previous recap of the same cadence (daily/weekly/monthly) is still pinned for that chat, call `unpinChatMessage` for the old `message_id` first so only the latest is pinned per cadence.
-
-Optional per-profile toggles on `leaderboard_profiles`:
-- `auto_pin_daily BOOLEAN DEFAULT true`
-- `auto_pin_weekly BOOLEAN DEFAULT true`
-- `auto_pin_monthly BOOLEAN DEFAULT true`
-- `auto_unpin_previous BOOLEAN DEFAULT true`
-
-### 6. Insiders profile parity
-
-Confirm a second row exists in `leaderboard_profiles` for **Insiders** (channel_name_filter = 'insiders', `post_to_tg_*` pointed at the Insiders public + premium chats). If not, seed it. Same builder code services it — different `channel_name_filter` and chat IDs.
-
-## Technical details
-
-**Schema migration (one file):**
-- `leaderboard_daily_runs`: add `size_chosen TEXT`, `qualifying_4x_count INT`, `pinned_message_id BIGINT`, `pinned_at TIMESTAMPTZ`, `caption_text TEXT`.
-- New table `leaderboard_weekly_runs` (id, profile_id, week_start_date, week_end_date, window_start_utc, window_end_utc, entries jsonb, entry_count, status, image_public_url, image_private_url, tg_public_message_id, tg_private_message_id, posted_at, pinned_message_id, pinned_at, caption_text, timestamps). GRANT + RLS to match daily.
-- New table `leaderboard_monthly_runs` (same shape + `month_start_date`, `month_label`).
-- `leaderboard_profiles`: add `auto_pin_daily/weekly/monthly` and `auto_unpin_previous` booleans.
-
-**Edge functions:**
-- Modify `leaderboard-daily-builder`: smart sizing + persist new fields.
-- New `leaderboard-weekly-builder` (runs hourly, fires Monday at `post_hour`).
-- New `leaderboard-monthly-builder` (runs hourly, fires on day 1 at `post_hour`).
-- Modify `leaderboard-post`: rich caption + pin/unpin logic (accept `cadence: 'daily'|'weekly'|'monthly'` and `run_table`).
-- Modify `leaderboard-render`: accept `variant: 'daily'|'weekly'|'monthly'` to swap header text + Top 10/20/25 layout.
-
-**Cron:**
-- Existing hourly cron already triggers `leaderboard-daily-builder`. Add two more `cron.schedule` calls for the weekly and monthly builders (also hourly — each one self-gates on day-of-week / day-of-month + `post_hour`).
-
-**Telegram pin/unpin:**
-- `pinChatMessage` via the same `TELEGRAM_HOLDERSINTEL_BOT_TOKEN` already used by `no-lube-push`. The bot must already be admin in the channels (it is, since it posts there).
+Private channel preamble (rotated):
+```
+💎 Insider perk: your referral link is in your DMs.
+Drop it on X or TikTok — every paid friend = +1 month on your subscription, auto-applied.
+```
 
 ## Out of scope
 
-- No UI changes to the super-admin leaderboard panel (it'll show new columns automatically through the existing list view; deeper UI iteration can come after).
-- No change to the rendered image style beyond header text + row count.
-- No change to thin-formatting / obfuscation rules for other bot integrations.
+- No payouts in SOL/cash — months only.
+- No multi-level (no commission on a referee's later referrals).
+- No public leaderboard UI yet (data is captured; UI can come later).
+- No fraud heuristics beyond same-user / duplicate-attribution guards.
 
-## Open question for approval
+## Open questions
 
-The smart sizing threshold is currently "more than 10 calls at 4x+ → Top 20, else Top 10". Confirm `>= 4x` is the cutoff (vs `>= 5x`), and confirm the trigger count of "more than 10" (vs e.g. ">= 8"). Easy to tune in one place.
+1. Confirm **1 month** per paid referral regardless of the tier the friend bought (1mo / 3mo / 12mo), vs scaling (e.g. friend buys 3mo → referrer gets 3mo)? Plan above = flat 1 month always.
+2. Confirm **14-day** pending-attribution window (friend taps link but delays paying).
+3. Should the referrer's code be shown on every monthly renewal reminder too, or only in the initial welcome DM?
