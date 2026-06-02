@@ -10,6 +10,7 @@ import {
   LAMPORTS_PER_SOL,
 } from '../_shared/profile-subscription.ts';
 import { ensureReferralCode, findLiveSubscription, buildFooter } from '../_shared/affiliate.ts';
+import { recordPaid, recordReferralConversion } from '../_shared/bot-contacts.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -79,6 +80,16 @@ Deno.serve(withRunLog('profile-subscription-poll', async (req) => {
       );
       confirmed++;
 
+      // ===== CRM: record paid event on subscriber's contact =====
+      try {
+        await recordPaid(sub.profile_key, sub.telegram_user_id, {
+          tier_months: sub.tier_months,
+          sol_paid: Number(sub.quoted_sol ?? 0),
+          expires_at: expiresAt.toISOString(),
+          sub_id: sub.id,
+        });
+      } catch (e) { console.warn('[poll] recordPaid failed', e); }
+
       // ===== Affiliate: ensure code for this newly-paid user =====
       let newUserRefCode: string | null = null;
       try {
@@ -139,6 +150,14 @@ Deno.serve(withRunLog('profile-subscription-poll', async (req) => {
                   status: 'converted', converted_at: new Date().toISOString(),
                   subscription_id: sub.id,
                 }).eq('id', attr.id);
+                // CRM: credit the referrer's contact row
+                try {
+                  await recordReferralConversion(sub.profile_key, attr.referrer_telegram_user_id, {
+                    months_granted: months,
+                    referred_tg_id: sub.telegram_user_id,
+                    new_expires_at: newExp.toISOString(),
+                  });
+                } catch (e) { console.warn('[poll] recordReferralConversion failed', e); }
                 // DM the referrer
                 try {
                   const handle = sub.telegram_username ? `@${sub.telegram_username}` : 'a new member';
