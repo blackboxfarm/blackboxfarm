@@ -587,22 +587,92 @@ function SubscribersTable({ profileKey }: { profileKey: string }) {
 
 // ---------- Treasury ----------
 
+interface TreasuryStatus {
+  pubkey: string | null;
+  managed: boolean;
+  label: string | null;
+  generated_at: string | null;
+  balance_lamports: number;
+  balance_sol: number;
+  fee_buffer_lamports: number;
+  balance_error?: string;
+}
+
+interface TreasuryTx {
+  signature: string;
+  block_time: number | null;
+  err: string | null;
+  net_lamports: number;
+  net_sol: number;
+  direction: 'in' | 'out';
+  counterparty: string | null;
+}
+
+interface TreasuryWithdrawal {
+  id: string;
+  to_pubkey: string;
+  lamports: number;
+  signature: string | null;
+  status: string;
+  error: string | null;
+  created_at: string;
+  confirmed_at: string | null;
+}
+
 function TreasuryPanel({ profileKey }: { profileKey: string }) {
-  const [cfg, setCfg] = useState<SubscriptionConfig | null>(null);
-  const [paid, setPaid] = useState<Subscription[]>([]);
+  const [status, setStatus] = useState<TreasuryStatus | null>(null);
+  const [txs, setTxs] = useState<TreasuryTx[]>([]);
+  const [withdrawals, setWithdrawals] = useState<TreasuryWithdrawal[]>([]);
+  const [unswept, setUnswept] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [showWithdraw, setShowWithdraw] = useState(false);
+  const [dest, setDest] = useState('');
+  const [amount, setAmount] = useState('');
+  const [useMax, setUseMax] = useState(false);
+  const [confirmStep, setConfirmStep] = useState(false);
+
+  const call = async (action: string, extra: Record<string, unknown> = {}) => {
+    const { data, error } = await supabase.functions.invoke('profile-subscription-admin', {
+      body: { action, profile_key: profileKey, ...extra },
+    });
+    if (error) throw new Error(error.message);
+    if ((data as any)?.error) throw new Error((data as any).error);
+    return data as any;
+  };
 
   const load = async () => {
     setLoading(true);
-    const [{ data: c }, { data: p }] = await Promise.all([
-      supabase.from('profile_subscription_configs').select('*').eq('profile_key', profileKey).maybeSingle(),
-      supabase.from('profile_subscriptions').select('*').eq('profile_key', profileKey).eq('status', 'paid').is('swept_at', null).limit(100),
-    ]);
-    setCfg(c);
-    setPaid((p ?? []) as Subscription[]);
-    setLoading(false);
+    try {
+      const s = await call('treasury_status');
+      setStatus(s);
+      if (s.pubkey) {
+        const [t, w, { data: u }] = await Promise.all([
+          call('treasury_transactions', { limit: 25 }).catch(() => ({ transactions: [] })),
+          call('treasury_withdrawals').catch(() => ({ rows: [] })),
+          supabase.from('profile_subscriptions').select('*').eq('profile_key', profileKey).eq('status', 'paid').is('swept_at', null).limit(100),
+        ]);
+        setTxs(t.transactions ?? []);
+        setWithdrawals(w.rows ?? []);
+        setUnswept((u ?? []) as Subscription[]);
+      } else {
+        setTxs([]); setWithdrawals([]); setUnswept([]);
+      }
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => { load(); }, [profileKey]);
+
+  const generate = async () => {
+    if (!confirm('Generate a new Solana wallet for this profile? The private key will be encrypted and stored. This cannot be undone.')) return;
+    setBusy(true);
+    try { await call('treasury_generate'); toast.success('Central wallet generated'); await load(); }
+    catch (e: any) { toast.error(e.message); }
+    finally { setBusy(false); }
+  };
 
   const sweep = async (id: string) => {
     const { data, error } = await supabase.functions.invoke('profile-subscription-sweep', { body: { subscription_id: id } });
@@ -612,38 +682,196 @@ function TreasuryPanel({ profileKey }: { profileKey: string }) {
     load();
   };
 
-  const setCentralWallet = async (pubkey: string) => {
-    if (!cfg) return;
-    const { error } = await supabase
-      .from('profile_subscription_configs')
-      .update({ central_wallet_pubkey: pubkey })
-      .eq('profile_key', profileKey);
-    if (error) toast.error(error.message); else { toast.success('Central wallet saved'); load(); }
+  const submitWithdraw = async () => {
+    setBusy(true);
+    try {
+      const res = await call('treasury_withdraw', {
+        destination_pubkey: dest.trim(),
+        amount_sol: useMax ? 'all' : Number(amount),
+        confirm: true,
+      });
+      toast.success(`Sent ${res.sol} SOL — tx ${String(res.signature).slice(0, 8)}…`);
+      setShowWithdraw(false); setConfirmStep(false); setDest(''); setAmount(''); setUseMax(false);
+      await load();
+    } catch (e: any) { toast.error(e.message); }
+    finally { setBusy(false); }
   };
 
-  if (loading || !cfg) return <Loader2 className="h-4 w-4 animate-spin" />;
+  if (loading || !status) return <Loader2 className="h-4 w-4 animate-spin" />;
+
+  const SOL = (lamports: number) => (lamports / 1_000_000_000).toFixed(6);
 
   return (
-    <Card>
-      <CardHeader><CardTitle className="text-base flex items-center gap-2"><Wallet className="h-4 w-4" />Treasury</CardTitle></CardHeader>
-      <CardContent className="space-y-4">
-        <div>
-          <Label>Central sweep wallet (pubkey)</Label>
-          <div className="flex gap-2">
-            <Input
-              defaultValue={cfg.central_wallet_pubkey ?? ''}
-              onBlur={e => e.target.value !== cfg.central_wallet_pubkey && setCentralWallet(e.target.value.trim())}
-              placeholder="Paste a SOL pubkey to receive sweeps"
-            />
-            {cfg.central_wallet_pubkey && (
-              <Button variant="outline" asChild>
-                <a href={`https://solscan.io/account/${cfg.central_wallet_pubkey}`} target="_blank" rel="noreferrer">Solscan</a>
+    <div className="space-y-3">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Wallet className="h-4 w-4" />Central Wallet ({status.label ?? profileKey})
+          </CardTitle>
+          <Button size="sm" variant="ghost" onClick={load}><RefreshCcw className="h-3 w-3" /></Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!status.pubkey && (
+            <div className="text-center space-y-3 py-6">
+              <p className="text-sm text-muted-foreground">No central wallet for this profile yet. Subscription sweeps will fail until one is set.</p>
+              <Button onClick={generate} disabled={busy}>
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                Generate Central Wallet
               </Button>
-            )}
-          </div>
-        </div>
-        <div>
-          <Label>Unswept paid wallets</Label>
+            </div>
+          )}
+
+          {status.pubkey && (
+            <>
+              <div className="space-y-1">
+                <Label className="text-xs">Address</Label>
+                <div className="flex items-center gap-2">
+                  <code className="text-xs bg-muted px-2 py-1 rounded flex-1 break-all">{status.pubkey}</code>
+                  <Button size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(status.pubkey!); toast.success('Copied'); }}>Copy</Button>
+                  <Button size="sm" variant="outline" asChild>
+                    <a href={`https://solscan.io/account/${status.pubkey}`} target="_blank" rel="noreferrer"><ExternalLink className="h-3 w-3" /></a>
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  {status.managed ? <Badge variant="default">Managed</Badge> : <Badge variant="secondary">External</Badge>}
+                  {status.generated_at && <span>Generated {new Date(status.generated_at).toLocaleString()}</span>}
+                </div>
+              </div>
+
+              <div className="flex items-end justify-between gap-3 border rounded p-3">
+                <div>
+                  <Label className="text-xs">Balance</Label>
+                  <div className="text-2xl font-mono">{status.balance_sol.toFixed(6)} SOL</div>
+                  {status.balance_error && <div className="text-xs text-destructive">{status.balance_error}</div>}
+                </div>
+                <div>
+                  <Button
+                    onClick={() => { setShowWithdraw(true); setConfirmStep(false); }}
+                    disabled={!status.managed || status.balance_lamports <= status.fee_buffer_lamports}
+                    title={!status.managed ? 'Externally owned — withdraw from source wallet' : ''}
+                  >
+                    Withdraw
+                  </Button>
+                </div>
+              </div>
+
+              {showWithdraw && (
+                <div className="border rounded p-3 space-y-3 bg-muted/30">
+                  {!confirmStep ? (
+                    <>
+                      <div>
+                        <Label>Destination Solana address</Label>
+                        <Input value={dest} onChange={e => setDest(e.target.value)} placeholder="Solana pubkey" />
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1">
+                          <Label>Amount (SOL)</Label>
+                          <Input type="number" step="0.000001" value={amount} disabled={useMax}
+                            onChange={e => setAmount(e.target.value)} placeholder="0.0" />
+                        </div>
+                        <label className="flex items-center gap-2 text-sm pt-5">
+                          <Switch checked={useMax} onCheckedChange={setUseMax} />
+                          Max (leave fee buffer)
+                        </label>
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <Button variant="ghost" onClick={() => setShowWithdraw(false)}>Cancel</Button>
+                        <Button
+                          onClick={() => setConfirmStep(true)}
+                          disabled={!dest.trim() || (!useMax && (!amount || Number(amount) <= 0))}
+                        >Review</Button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="text-sm space-y-1">
+                        <div>From: <code className="text-xs">{status.pubkey}</code></div>
+                        <div>To: <code className="text-xs break-all">{dest}</code></div>
+                        <div>Amount: <strong>{useMax ? `≈ ${SOL(status.balance_lamports - status.fee_buffer_lamports)} SOL (max)` : `${amount} SOL`}</strong></div>
+                        <div className="text-xs text-muted-foreground">Fee buffer reserved: {status.fee_buffer_lamports} lamports</div>
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <Button variant="ghost" onClick={() => setConfirmStep(false)} disabled={busy}>Back</Button>
+                        <Button variant="destructive" onClick={submitWithdraw} disabled={busy}>
+                          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign &amp; Send'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {status.pubkey && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Recent on-chain activity</CardTitle></CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>When</TableHead>
+                  <TableHead>Dir</TableHead>
+                  <TableHead>Net SOL</TableHead>
+                  <TableHead>Counterparty</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {txs.map(t => (
+                  <TableRow key={t.signature}>
+                    <TableCell className="text-xs">{t.block_time ? new Date(t.block_time * 1000).toLocaleString() : '—'}</TableCell>
+                    <TableCell>{t.direction === 'in' ? '↓' : '↑'}{t.err && ' ✕'}</TableCell>
+                    <TableCell className={t.direction === 'in' ? 'text-green-600' : 'text-orange-600'}>{t.net_sol.toFixed(6)}</TableCell>
+                    <TableCell><code className="text-xs">{t.counterparty?.slice(0, 8) ?? '—'}…</code></TableCell>
+                    <TableCell><a className="text-xs underline" href={`https://solscan.io/tx/${t.signature}`} target="_blank" rel="noreferrer">tx</a></TableCell>
+                  </TableRow>
+                ))}
+                {!txs.length && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground text-sm py-4">No transactions yet.</TableCell></TableRow>}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {status.pubkey && withdrawals.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Withdrawal audit log</CardTitle></CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>When</TableHead>
+                  <TableHead>To</TableHead>
+                  <TableHead>SOL</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {withdrawals.map(w => (
+                  <TableRow key={w.id}>
+                    <TableCell className="text-xs">{new Date(w.created_at).toLocaleString()}</TableCell>
+                    <TableCell><code className="text-xs">{w.to_pubkey.slice(0, 8)}…</code></TableCell>
+                    <TableCell>{(w.lamports / 1_000_000_000).toFixed(6)}</TableCell>
+                    <TableCell>
+                      <Badge variant={w.status === 'confirmed' ? 'default' : w.status === 'failed' ? 'destructive' : 'secondary'}>{w.status}</Badge>
+                      {w.error && <div className="text-xs text-destructive mt-1 break-all">{w.error}</div>}
+                    </TableCell>
+                    <TableCell>{w.signature && <a className="text-xs underline" href={`https://solscan.io/tx/${w.signature}`} target="_blank" rel="noreferrer">tx</a>}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Unswept paid subscription wallets</CardTitle></CardHeader>
+        <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
@@ -654,22 +882,22 @@ function TreasuryPanel({ profileKey }: { profileKey: string }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paid.map(s => (
+              {unswept.map(s => (
                 <TableRow key={s.id}>
                   <TableCell>{s.telegram_username ? `@${s.telegram_username}` : s.telegram_user_id}</TableCell>
                   <TableCell>{s.paid_at ? new Date(s.paid_at).toLocaleDateString() : '—'}</TableCell>
                   <TableCell><code className="text-xs">{s.payment_wallet_pubkey.slice(0, 8)}…</code></TableCell>
-                  <TableCell><Button size="sm" onClick={() => sweep(s.id)}>Sweep</Button></TableCell>
+                  <TableCell><Button size="sm" onClick={() => sweep(s.id)} disabled={!status.pubkey}>Sweep</Button></TableCell>
                 </TableRow>
               ))}
-              {!paid.length && (
+              {!unswept.length && (
                 <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground text-sm py-4">All clean.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
