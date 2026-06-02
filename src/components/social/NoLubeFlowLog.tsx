@@ -145,9 +145,11 @@ export const NoLubeFlowLog: React.FC = () => {
       },
       {
         label: '3. Scraped BlackBox replies',
-        at: t.blackbox_harvested_at || t.mesh_hydrated_at || t.holders_refreshed_at,
-        status: (t.blackbox_harvested_at || t.mesh_hydrated_at) ? 'ok' : 'pending',
-        detail: t.mesh_hydrated_at ? 'mesh hydrated' : (t.holders_refreshed_at ? 'holders only' : undefined),
+        at: t.ingest_completed_at || t.blackbox_harvested_at || t.mesh_hydrated_at || t.holders_refreshed_at,
+        status: t.ingest_completed_at
+          ? (t.ingest_last_error ? 'fail' : 'ok')
+          : 'pending',
+        detail: t.ingest_latency_ms ? `${t.ingest_latency_ms}ms` : (t.ingest_status ?? undefined),
       },
       {
         label: `4. Posted CA to Private${priv?.post_kind ? ` (${priv.post_kind})` : ''}`,
