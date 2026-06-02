@@ -216,6 +216,155 @@ async function handleWebhookRegister(botToken: string, profileKey: string) {
   return { ok: true, set: res, info };
 }
 
+// ---------- Contacts CRM ----------
+
+interface ContactFilter {
+  paid?: 'any' | 'paid_now' | 'ever_paid' | 'never_paid';
+  source?: 'any' | 'organic' | 'referral' | 'unknown';
+  referrer_only?: boolean;
+  search?: string;
+  include_opted_out?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+function applyContactFilter(q: any, profileKey: string, f: ContactFilter) {
+  q = q.eq('profile_key', profileKey);
+  if (!f.include_opted_out) q = q.eq('opted_out_broadcasts', false);
+  switch (f.paid) {
+    case 'paid_now': q = q.eq('is_currently_paid', true); break;
+    case 'ever_paid': q = q.eq('ever_paid', true); break;
+    case 'never_paid': q = q.eq('ever_paid', false); break;
+  }
+  switch (f.source) {
+    case 'organic':
+    case 'referral':
+    case 'unknown':
+      q = q.eq('acquisition_source', f.source); break;
+  }
+  if (f.referrer_only) q = q.eq('has_referral_code', true);
+  if (f.search) {
+    const s = f.search.replace(/[%_]/g, '\\$&');
+    q = q.or(`telegram_username.ilike.%${s}%,first_name.ilike.%${s}%,last_name.ilike.%${s}%`);
+  }
+  return q;
+}
+
+async function handleContactsList(profileKey: string, body: any, supabase: any) {
+  if (!profileKey) throw new Error('profile_key required');
+  const filter: ContactFilter = body.filter ?? {};
+  const limit = Math.min(Math.max(Number(filter.limit ?? 100), 1), 1000);
+  const offset = Math.max(Number(filter.offset ?? 0), 0);
+
+  let countQ = supabase.from('profile_bot_contacts').select('id', { count: 'exact', head: true });
+  countQ = applyContactFilter(countQ, profileKey, filter);
+  const { count } = await countQ;
+
+  let q = supabase.from('profile_bot_contacts').select('*');
+  q = applyContactFilter(q, profileKey, filter);
+  const { data, error } = await q
+    .order('last_seen_at', { ascending: false })
+    .range(offset, offset + limit - 1);
+  if (error) throw error;
+
+  // High-level segments
+  const { data: segs } = await supabase.from('profile_bot_contacts')
+    .select('acquisition_source, ever_paid, is_currently_paid, opted_out_broadcasts, has_referral_code')
+    .eq('profile_key', profileKey);
+  const totals = {
+    all: segs?.length ?? 0,
+    organic: (segs ?? []).filter((x: any) => x.acquisition_source === 'organic').length,
+    referral: (segs ?? []).filter((x: any) => x.acquisition_source === 'referral').length,
+    unknown: (segs ?? []).filter((x: any) => x.acquisition_source === 'unknown').length,
+    ever_paid: (segs ?? []).filter((x: any) => x.ever_paid).length,
+    paid_now: (segs ?? []).filter((x: any) => x.is_currently_paid).length,
+    referrers: (segs ?? []).filter((x: any) => x.has_referral_code).length,
+    opted_out: (segs ?? []).filter((x: any) => x.opted_out_broadcasts).length,
+  };
+
+  return { ok: true, totals, matched: count ?? 0, rows: data ?? [], limit, offset };
+}
+
+async function handleContactsBroadcast(profileKey: string, body: any, supabase: any) {
+  if (!profileKey) throw new Error('profile_key required');
+  const text = String(body.text ?? '').trim();
+  if (!text) throw new Error('text required');
+  if (text.length > 4000) throw new Error('text too long (max 4000 chars)');
+  const filter: ContactFilter = body.filter ?? {};
+  const dryRun = body.confirm !== true;
+  const parseMode = body.parse_mode ?? 'HTML';
+
+  // Resolve audience
+  let q = supabase.from('profile_bot_contacts').select('telegram_user_id, telegram_username');
+  q = applyContactFilter(q, profileKey, { ...filter, limit: 10000, offset: 0 });
+  const { data: recipients, error } = await q.limit(10000);
+  if (error) throw error;
+
+  if (dryRun) {
+    return {
+      ok: true,
+      dry_run: true,
+      recipient_count: recipients?.length ?? 0,
+      sample: (recipients ?? []).slice(0, 5).map((r: any) => r.telegram_username ?? r.telegram_user_id),
+      preview: text,
+      note: 'Re-send with confirm: true to actually send.',
+    };
+  }
+
+  // Resolve bot token
+  const { data: cfg } = await supabase
+    .from('profile_subscription_configs')
+    .select('bot_secret_name')
+    .eq('profile_key', profileKey)
+    .maybeSingle();
+  if (!cfg?.bot_secret_name) throw new Error('bot_secret_name not configured');
+  const token = Deno.env.get(cfg.bot_secret_name);
+  if (!token) throw new Error(`Secret ${cfg.bot_secret_name} not loaded in runtime`);
+
+  const broadcastId = crypto.randomUUID();
+  let sent = 0, failed = 0;
+  const errors: Array<{ tg: number; err: string }> = [];
+  const nowIso = new Date().toISOString();
+
+  // Telegram global cap ~30 msgs/sec across different chats. We pace to ~25/sec.
+  for (const r of recipients ?? []) {
+    try {
+      await tg(token, 'sendMessage', {
+        chat_id: r.telegram_user_id,
+        text,
+        parse_mode: parseMode,
+        disable_web_page_preview: true,
+      });
+      sent++;
+      await supabase.from('profile_bot_contacts')
+        .update({ last_broadcast_at: nowIso })
+        .eq('profile_key', profileKey)
+        .eq('telegram_user_id', r.telegram_user_id);
+      await supabase.from('profile_bot_contact_events').insert({
+        profile_key: profileKey,
+        telegram_user_id: r.telegram_user_id,
+        event_type: 'broadcast_sent',
+        payload: { broadcast_id: broadcastId, chars: text.length },
+      });
+    } catch (e) {
+      failed++;
+      const msg = e instanceof Error ? e.message : String(e);
+      errors.push({ tg: r.telegram_user_id, err: msg.slice(0, 200) });
+    }
+    await new Promise((res) => setTimeout(res, 40));
+  }
+
+  return {
+    ok: true,
+    dry_run: false,
+    broadcast_id: broadcastId,
+    recipient_count: recipients?.length ?? 0,
+    sent,
+    failed,
+    errors: errors.slice(0, 20),
+  };
+}
+
 // ---------- Entry ----------
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -283,6 +432,12 @@ Deno.serve(async (req) => {
 
       case 'affiliate_stats':
         return json(await handleAffiliateStats(profileKey, supabase));
+
+      case 'contacts_list':
+        return json(await handleContactsList(profileKey, body, supabase));
+
+      case 'contacts_broadcast':
+        return json(await handleContactsBroadcast(profileKey, body, supabase));
 
       case 'run_setup': {
         const steps: Array<{ name: string; ok: boolean; detail?: string }> = [];
