@@ -136,21 +136,24 @@ serve(async (req) => {
 
     for (const mint of eligible) {
       try {
-        const r = await fetch(`${supabaseUrl}/functions/v1/no-lube-orchestrate`, {
+        // Go through no-lube-ingest (force:true, no fast_post) so the milestone
+        // post is composed AFTER a fresh enrichment cycle — otherwise the 2x/3x
+        // post would render every holder/health field as "pending".
+        const r = await fetch(`${supabaseUrl}/functions/v1/no-lube-ingest`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${anonKey}`,
-            apikey: anonKey,
+            Authorization: `Bearer ${serviceKey}`,
+            apikey: serviceKey,
           },
-          body: JSON.stringify({ mint, source: 'milestone-sweeper' }),
+          body: JSON.stringify({ mint, force: true }),
         });
         const j = await r.json().catch(() => ({}));
         results.push({
           mint,
           ok: r.ok && j?.ok !== false,
-          flow: j?.flow,
-          reason: j?.reason,
+          flow: j?.orchestrate?.body?.flow,
+          reason: j?.orchestrate?.body?.reason || j?.error,
         });
       } catch (e: any) {
         results.push({ mint, ok: false, reason: `dispatch_error: ${e?.message || e}` });
