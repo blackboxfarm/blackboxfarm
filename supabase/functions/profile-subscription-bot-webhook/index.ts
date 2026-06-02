@@ -7,6 +7,7 @@ import {
   getProfileBotToken,
   tgCall,
 } from '../_shared/profile-subscription.ts';
+import { captureAttribution, buildFooter, parseRefFromStart } from '../_shared/affiliate.ts';
 
 async function deriveSecret(botToken: string): Promise<string> {
   const data = new TextEncoder().encode(`subscription-webhook:${botToken}`);
