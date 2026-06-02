@@ -9893,6 +9893,7 @@ export type Database = {
           created_at: string
           entries: Json
           entry_count: number
+          error: string | null
           id: string
           image_private_url: string | null
           image_public_url: string | null
@@ -9903,6 +9904,7 @@ export type Database = {
           pinned_message_id_public: number | null
           posted_at: string | null
           profile_id: string
+          rendered_at: string | null
           status: string
           tg_private_message_id: number | null
           tg_public_message_id: number | null
@@ -9915,6 +9917,7 @@ export type Database = {
           created_at?: string
           entries?: Json
           entry_count?: number
+          error?: string | null
           id?: string
           image_private_url?: string | null
           image_public_url?: string | null
@@ -9925,6 +9928,7 @@ export type Database = {
           pinned_message_id_public?: number | null
           posted_at?: string | null
           profile_id: string
+          rendered_at?: string | null
           status?: string
           tg_private_message_id?: number | null
           tg_public_message_id?: number | null
@@ -9937,6 +9941,7 @@ export type Database = {
           created_at?: string
           entries?: Json
           entry_count?: number
+          error?: string | null
           id?: string
           image_private_url?: string | null
           image_public_url?: string | null
@@ -9947,6 +9952,7 @@ export type Database = {
           pinned_message_id_public?: number | null
           posted_at?: string | null
           profile_id?: string
+          rendered_at?: string | null
           status?: string
           tg_private_message_id?: number | null
           tg_public_message_id?: number | null
@@ -10042,6 +10048,7 @@ export type Database = {
           created_at: string
           entries: Json
           entry_count: number
+          error: string | null
           id: string
           image_private_url: string | null
           image_public_url: string | null
@@ -10050,6 +10057,7 @@ export type Database = {
           pinned_message_id_public: number | null
           posted_at: string | null
           profile_id: string
+          rendered_at: string | null
           status: string
           tg_private_message_id: number | null
           tg_public_message_id: number | null
@@ -10064,6 +10072,7 @@ export type Database = {
           created_at?: string
           entries?: Json
           entry_count?: number
+          error?: string | null
           id?: string
           image_private_url?: string | null
           image_public_url?: string | null
@@ -10072,6 +10081,7 @@ export type Database = {
           pinned_message_id_public?: number | null
           posted_at?: string | null
           profile_id: string
+          rendered_at?: string | null
           status?: string
           tg_private_message_id?: number | null
           tg_public_message_id?: number | null
@@ -10086,6 +10096,7 @@ export type Database = {
           created_at?: string
           entries?: Json
           entry_count?: number
+          error?: string | null
           id?: string
           image_private_url?: string | null
           image_public_url?: string | null
@@ -10094,6 +10105,7 @@ export type Database = {
           pinned_message_id_public?: number | null
           posted_at?: string | null
           profile_id?: string
+          rendered_at?: string | null
           status?: string
           tg_private_message_id?: number | null
           tg_public_message_id?: number | null
