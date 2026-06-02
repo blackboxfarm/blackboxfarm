@@ -7,6 +7,7 @@ import {
   getProfileBotToken,
   tgCall,
 } from '../_shared/profile-subscription.ts';
+import { captureAttribution, buildFooter, parseRefFromStart } from '../_shared/affiliate.ts';
 
 async function deriveSecret(botToken: string): Promise<string> {
   const data = new TextEncoder().encode(`subscription-webhook:${botToken}`);
@@ -41,9 +42,11 @@ Deno.serve(withRunLog('profile-subscription-bot-webhook', async (req) => {
   const update = await req.json();
 
   async function send(t: string, kb?: any) {
+    let footer = '';
+    try { footer = await buildFooter(profileKey!, fromId!, null); } catch { /* non-fatal */ }
     await tgCall(botToken!, 'sendMessage', {
       chat_id: chatId,
-      text: t,
+      text: t + footer,
       parse_mode: 'HTML',
       disable_web_page_preview: true,
       ...(kb ? { reply_markup: kb } : {}),
@@ -151,6 +154,28 @@ Deno.serve(withRunLog('profile-subscription-bot-webhook', async (req) => {
   }
 
   if (cmd === '/start' || cmd === '/buy' || cmd === '/renew') {
+    // Capture referral code if present on /start
+    if (cmd === '/start') {
+      const ref = parseRefFromStart(text);
+      if (ref) {
+        try {
+          const r = await captureAttribution(profileKey, fromId, ref);
+          if (r.outcome === 'inactive') {
+            await tgCall(botToken!, 'sendMessage', {
+              chat_id: chatId,
+              text: `⚠️ That referral code (<code>${ref}</code>) is currently inactive — the referrer's subscription has lapsed. You can still subscribe below; ask them to renew to reactivate their code.`,
+              parse_mode: 'HTML',
+            });
+          } else if (r.outcome === 'unknown') {
+            await tgCall(botToken!, 'sendMessage', {
+              chat_id: chatId,
+              text: `⚠️ Referral code <code>${ref}</code> not recognized. No worries — pick a plan below.`,
+              parse_mode: 'HTML',
+            });
+          }
+        } catch (e) { console.warn('[webhook] ref capture failed', e); }
+      }
+    }
     const { tiers, cfg } = await buildTierSheet();
     if (!tiers.length) {
       await send('No subscription tiers configured yet. Check back soon.');
