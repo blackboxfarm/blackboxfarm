@@ -12539,6 +12539,11 @@ export type Database = {
       profile_subscription_configs: {
         Row: {
           admin_telegram_id: number | null
+          affiliate_enabled: boolean
+          affiliate_footer_copy: string | null
+          affiliate_marketing_copy: string | null
+          affiliate_months_per_referral: number
+          affiliate_pending_window_days: number
           base_currency: string
           bot_secret_name: string
           bot_username: string | null
@@ -12559,6 +12564,11 @@ export type Database = {
         }
         Insert: {
           admin_telegram_id?: number | null
+          affiliate_enabled?: boolean
+          affiliate_footer_copy?: string | null
+          affiliate_marketing_copy?: string | null
+          affiliate_months_per_referral?: number
+          affiliate_pending_window_days?: number
           base_currency?: string
           bot_secret_name: string
           bot_username?: string | null
@@ -12579,6 +12589,11 @@ export type Database = {
         }
         Update: {
           admin_telegram_id?: number | null
+          affiliate_enabled?: boolean
+          affiliate_footer_copy?: string | null
+          affiliate_marketing_copy?: string | null
+          affiliate_months_per_referral?: number
+          affiliate_pending_window_days?: number
           base_currency?: string
           bot_secret_name?: string
           bot_username?: string | null
@@ -15733,6 +15748,134 @@ export type Database = {
           triggered_by?: string | null
         }
         Relationships: []
+      }
+      referral_attributions: {
+        Row: {
+          converted_at: string | null
+          created_at: string
+          id: string
+          profile_key: string
+          referred_telegram_user_id: number
+          referrer_code: string
+          referrer_telegram_user_id: number
+          rejection_reason: string | null
+          status: string
+          subscription_id: string | null
+        }
+        Insert: {
+          converted_at?: string | null
+          created_at?: string
+          id?: string
+          profile_key: string
+          referred_telegram_user_id: number
+          referrer_code: string
+          referrer_telegram_user_id: number
+          rejection_reason?: string | null
+          status?: string
+          subscription_id?: string | null
+        }
+        Update: {
+          converted_at?: string | null
+          created_at?: string
+          id?: string
+          profile_key?: string
+          referred_telegram_user_id?: number
+          referrer_code?: string
+          referrer_telegram_user_id?: number
+          rejection_reason?: string | null
+          status?: string
+          subscription_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_attributions_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "profile_subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      referral_codes: {
+        Row: {
+          code: string
+          created_at: string
+          id: string
+          last_activated_at: string | null
+          last_deactivated_at: string | null
+          profile_key: string
+          status: string
+          telegram_user_id: number
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          id?: string
+          last_activated_at?: string | null
+          last_deactivated_at?: string | null
+          profile_key: string
+          status?: string
+          telegram_user_id: number
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          id?: string
+          last_activated_at?: string | null
+          last_deactivated_at?: string | null
+          profile_key?: string
+          status?: string
+          telegram_user_id?: number
+        }
+        Relationships: []
+      }
+      referral_credits: {
+        Row: {
+          applied_to_subscription_id: string | null
+          attribution_id: string | null
+          created_at: string
+          id: string
+          months_granted: number
+          new_expires_at: string | null
+          profile_key: string
+          referrer_telegram_user_id: number
+        }
+        Insert: {
+          applied_to_subscription_id?: string | null
+          attribution_id?: string | null
+          created_at?: string
+          id?: string
+          months_granted?: number
+          new_expires_at?: string | null
+          profile_key: string
+          referrer_telegram_user_id: number
+        }
+        Update: {
+          applied_to_subscription_id?: string | null
+          attribution_id?: string | null
+          created_at?: string
+          id?: string
+          months_granted?: number
+          new_expires_at?: string | null
+          profile_key?: string
+          referrer_telegram_user_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_credits_applied_to_subscription_id_fkey"
+            columns: ["applied_to_subscription_id"]
+            isOneToOne: false
+            referencedRelation: "profile_subscriptions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referral_credits_attribution_id_fkey"
+            columns: ["attribution_id"]
+            isOneToOne: false
+            referencedRelation: "referral_attributions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       referral_programs: {
         Row: {
