@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2, Save, RefreshCcw, Wallet, ExternalLink, Plus, Trash2 } from 'lucide-react';
-import { CheckCircle2, XCircle, AlertTriangle, KeyRound, Zap, LinkIcon, Play } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertTriangle, KeyRound, Zap, LinkIcon, Play, Users, Send, Megaphone } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -65,11 +65,15 @@ export function SubscriptionAdminPanel({ profileKey, displayName }: Props) {
         <TabsTrigger value="bot">Bot &amp; Channel</TabsTrigger>
         <TabsTrigger value="pricing">Pricing</TabsTrigger>
         <TabsTrigger value="subs">Subscribers</TabsTrigger>
+        <TabsTrigger value="affiliates">Affiliates</TabsTrigger>
+        <TabsTrigger value="contacts">Contacts &amp; Broadcast</TabsTrigger>
         <TabsTrigger value="treasury">Treasury</TabsTrigger>
       </TabsList>
       <TabsContent value="bot"><BotChannelSettings profileKey={profileKey} displayName={displayName} /></TabsContent>
       <TabsContent value="pricing"><PricingEditor profileKey={profileKey} /></TabsContent>
       <TabsContent value="subs"><SubscribersTable profileKey={profileKey} /></TabsContent>
+      <TabsContent value="affiliates"><AffiliatesPanel profileKey={profileKey} /></TabsContent>
+      <TabsContent value="contacts"><ContactsPanel profileKey={profileKey} /></TabsContent>
       <TabsContent value="treasury"><TreasuryPanel profileKey={profileKey} /></TabsContent>
     </Tabs>
   );
@@ -666,5 +670,333 @@ function TreasuryPanel({ profileKey }: { profileKey: string }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// ---------- Affiliates ----------
+
+interface AffiliateStatsRow {
+  telegram_user_id: number;
+  telegram_username: string | null;
+  code: string;
+  status: string;
+  attributions: number;
+  converted: number;
+  pending: number;
+  months_earned: number;
+  latest_credit_at: string | null;
+}
+
+function AffiliatesPanel({ profileKey }: { profileKey: string }) {
+  const [rows, setRows] = useState<AffiliateStatsRow[]>([]);
+  const [totals, setTotals] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await invokeAdmin({ action: 'affiliate_stats', profile_key: profileKey });
+      setRows(r.rows ?? []);
+      setTotals(r.totals ?? null);
+    } catch (e: any) { toast.error(e.message); }
+    setLoading(false);
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [profileKey]);
+
+  const runBackfill = async () => {
+    setRunning(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('profile-bot-contacts-backfill', { body: {} });
+      if (error) throw new Error(error.message);
+      toast.success(`Backfill: ${JSON.stringify((data as any)?.summary ?? {})}`);
+      load();
+    } catch (e: any) { toast.error(e.message); }
+    setRunning(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2"><Megaphone className="h-4 w-4" />Affiliate Leaderboard</CardTitle>
+          <div className="flex gap-2">
+            <Button size="sm" variant="ghost" onClick={load}><RefreshCcw className="h-4 w-4" /></Button>
+            <Button size="sm" variant="outline" onClick={runBackfill} disabled={running}>
+              {running ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+              Backfill CRM
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {totals && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <Stat label="Codes" value={totals.codes ?? rows.length} />
+              <Stat label="Active codes" value={totals.active_codes ?? rows.filter(r => r.status === 'active').length} />
+              <Stat label="Converted refs" value={totals.converted ?? rows.reduce((a, r) => a + (r.converted ?? 0), 0)} />
+              <Stat label="Months granted" value={totals.months_earned ?? rows.reduce((a, r) => a + (r.months_earned ?? 0), 0)} />
+            </div>
+          )}
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Referrer</TableHead>
+                  <TableHead>Code</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Clicks</TableHead>
+                  <TableHead>Converted</TableHead>
+                  <TableHead>Pending</TableHead>
+                  <TableHead>Months</TableHead>
+                  <TableHead>Last credit</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map(r => (
+                  <TableRow key={r.code}>
+                    <TableCell>{r.telegram_username ? `@${r.telegram_username}` : `id:${r.telegram_user_id}`}</TableCell>
+                    <TableCell><code className="text-xs">{r.code}</code></TableCell>
+                    <TableCell>
+                      <Badge variant={r.status === 'active' ? 'default' : 'outline'}>{r.status}</Badge>
+                    </TableCell>
+                    <TableCell>{r.attributions}</TableCell>
+                    <TableCell>{r.converted}</TableCell>
+                    <TableCell>{r.pending}</TableCell>
+                    <TableCell>{r.months_earned}</TableCell>
+                    <TableCell className="text-xs">{r.latest_credit_at ? new Date(r.latest_credit_at).toLocaleDateString() : '—'}</TableCell>
+                  </TableRow>
+                ))}
+                {!rows.length && (
+                  <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground text-sm py-6">No referral codes yet.</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="border border-border/40 rounded p-2">
+      <div className="text-muted-foreground">{label}</div>
+      <div className="text-lg font-semibold">{value}</div>
+    </div>
+  );
+}
+
+// ---------- Contacts CRM + Broadcast ----------
+
+interface ContactRow {
+  telegram_user_id: number;
+  telegram_username: string | null;
+  first_name: string | null;
+  acquisition_source: string;
+  ever_paid: boolean;
+  is_currently_paid: boolean;
+  total_subscriptions: number;
+  total_months_paid: number;
+  has_referral_code: boolean;
+  referrals_converted: number;
+  referral_months_earned: number;
+  opted_out_broadcasts: boolean;
+  last_seen_at: string | null;
+  current_expires_at: string | null;
+}
+
+function ContactsPanel({ profileKey }: { profileKey: string }) {
+  const [rows, setRows] = useState<ContactRow[]>([]);
+  const [totals, setTotals] = useState<any>(null);
+  const [matched, setMatched] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [paid, setPaid] = useState<'any' | 'paid_now' | 'ever_paid' | 'never_paid'>('any');
+  const [source, setSource] = useState<'any' | 'organic' | 'referral' | 'unknown'>('any');
+  const [referrerOnly, setReferrerOnly] = useState(false);
+  const [search, setSearch] = useState('');
+  const [offset, setOffset] = useState(0);
+  const limit = 100;
+
+  // Broadcast
+  const [text, setText] = useState('');
+  const [dryRun, setDryRun] = useState<any>(null);
+  const [sending, setSending] = useState(false);
+
+  const filter = () => ({
+    paid, source, referrer_only: referrerOnly, search: search || undefined, limit, offset,
+  });
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await invokeAdmin({ action: 'contacts_list', profile_key: profileKey, filter: filter() });
+      setRows(r.rows ?? []);
+      setTotals(r.totals ?? null);
+      setMatched(r.matched ?? 0);
+    } catch (e: any) { toast.error(e.message); }
+    setLoading(false);
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [profileKey, paid, source, referrerOnly, offset]);
+
+  const preview = async () => {
+    if (!text.trim()) { toast.error('Message required'); return; }
+    try {
+      const r = await invokeAdmin({
+        action: 'contacts_broadcast', profile_key: profileKey, filter: filter(), text,
+      });
+      setDryRun(r);
+    } catch (e: any) { toast.error(e.message); }
+  };
+
+  const send = async () => {
+    if (!dryRun) return;
+    if (!confirm(`Send to ${dryRun.recipient_count} users? This cannot be undone.`)) return;
+    setSending(true);
+    try {
+      const r = await invokeAdmin({
+        action: 'contacts_broadcast', profile_key: profileKey, filter: filter(), text, confirm: true,
+      });
+      toast.success(`Sent: ${r.sent}, failed: ${r.failed}`);
+      setText(''); setDryRun(null);
+    } catch (e: any) { toast.error(e.message); }
+    setSending(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2"><Users className="h-4 w-4" />Audience Segments</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {totals && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <Stat label="All" value={totals.all} />
+              <Stat label="Paid now" value={totals.paid_now} />
+              <Stat label="Ever paid" value={totals.ever_paid} />
+              <Stat label="Referrers" value={totals.referrers} />
+              <Stat label="Organic" value={totals.organic} />
+              <Stat label="Referral" value={totals.referral} />
+              <Stat label="Unknown" value={totals.unknown} />
+              <Stat label="Opted out" value={totals.opted_out} />
+            </div>
+          )}
+          <div className="grid sm:grid-cols-4 gap-2">
+            <div>
+              <Label className="text-xs">Paid filter</Label>
+              <select className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+                value={paid} onChange={e => { setOffset(0); setPaid(e.target.value as any); }}>
+                <option value="any">Any</option>
+                <option value="paid_now">Currently paid</option>
+                <option value="ever_paid">Ever paid</option>
+                <option value="never_paid">Never paid</option>
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs">Source</Label>
+              <select className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+                value={source} onChange={e => { setOffset(0); setSource(e.target.value as any); }}>
+                <option value="any">Any</option>
+                <option value="organic">Organic</option>
+                <option value="referral">Referral</option>
+                <option value="unknown">Unknown</option>
+              </select>
+            </div>
+            <div className="flex items-end gap-2">
+              <Switch checked={referrerOnly} onCheckedChange={v => { setOffset(0); setReferrerOnly(v); }} />
+              <span className="text-xs">Referrers only</span>
+            </div>
+            <div>
+              <Label className="text-xs">Search</Label>
+              <div className="flex gap-1">
+                <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="username or name" />
+                <Button size="sm" variant="outline" onClick={() => { setOffset(0); load(); }}>Go</Button>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2"><Send className="h-4 w-4" />Broadcast Composer</CardTitle>
+          <div className="text-xs text-muted-foreground">{matched.toLocaleString()} match current filters</div>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Textarea
+            value={text}
+            onChange={e => { setText(e.target.value); setDryRun(null); }}
+            rows={5}
+            placeholder="HTML allowed. Tip: keep it short — Telegram caps at 4000 chars."
+          />
+          <div className="flex gap-2 items-center">
+            <Button size="sm" onClick={preview} disabled={!text.trim()}>Preview audience</Button>
+            <Button size="sm" variant="default" onClick={send} disabled={!dryRun || sending}>
+              {sending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
+              Send to {dryRun?.recipient_count ?? '?'}
+            </Button>
+            <span className="text-xs text-muted-foreground">Opt-outs are honored automatically.</span>
+          </div>
+          {dryRun && (
+            <div className="text-xs text-muted-foreground border border-border/40 rounded p-2">
+              Dry-run: {dryRun.recipient_count} recipients. Sample:{' '}
+              {(dryRun.sample ?? []).map((s: any) => typeof s === 'string' ? `@${s}` : s).join(', ') || '—'}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Contacts ({matched.toLocaleString()})</CardTitle>
+          <div className="flex gap-1">
+            <Button size="sm" variant="ghost" onClick={() => setOffset(Math.max(0, offset - limit))} disabled={offset === 0}>Prev</Button>
+            <Button size="sm" variant="ghost" onClick={() => setOffset(offset + limit)} disabled={rows.length < limit}>Next</Button>
+            <Button size="sm" variant="ghost" onClick={load}><RefreshCcw className="h-4 w-4" /></Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>User</TableHead>
+                  <TableHead>Source</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Subs</TableHead>
+                  <TableHead>Months</TableHead>
+                  <TableHead>Refs</TableHead>
+                  <TableHead>Last seen</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map(r => (
+                  <TableRow key={r.telegram_user_id}>
+                    <TableCell>
+                      {r.telegram_username ? `@${r.telegram_username}` : (r.first_name ?? `id:${r.telegram_user_id}`)}
+                      {r.opted_out_broadcasts && <Badge variant="outline" className="ml-1 text-xs">opted-out</Badge>}
+                    </TableCell>
+                    <TableCell><Badge variant="outline">{r.acquisition_source}</Badge></TableCell>
+                    <TableCell>
+                      {r.is_currently_paid ? <Badge>paid</Badge> :
+                        r.ever_paid ? <Badge variant="outline">lapsed</Badge> :
+                        <Badge variant="outline">lurker</Badge>}
+                    </TableCell>
+                    <TableCell>{r.total_subscriptions}</TableCell>
+                    <TableCell>{r.total_months_paid}</TableCell>
+                    <TableCell>{r.referrals_converted}/{r.referral_months_earned}mo</TableCell>
+                    <TableCell className="text-xs">{r.last_seen_at ? new Date(r.last_seen_at).toLocaleDateString() : '—'}</TableCell>
+                  </TableRow>
+                ))}
+                {!rows.length && (
+                  <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground text-sm py-6">No contacts match.</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
