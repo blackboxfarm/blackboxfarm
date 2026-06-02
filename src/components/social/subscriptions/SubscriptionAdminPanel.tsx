@@ -114,6 +114,11 @@ function BotChannelSettings({ profileKey, displayName }: Props) {
       central_wallet_pubkey: null,
       is_active: false,
       admin_telegram_id: null,
+      public_chat_id: null,
+      public_welcome_enabled: false,
+      public_welcome_copy: '',
+      public_welcome_image_url: '',
+      public_welcome_persona: 'luna_dusk',
     });
     setLoading(false);
   };
@@ -155,6 +160,10 @@ function BotChannelSettings({ profileKey, displayName }: Props) {
           <div>
             <Label>Private channel chat_id</Label>
             <Input value={cfg.private_chat_id ?? ''} onChange={e => setCfg({ ...cfg, private_chat_id: e.target.value })} placeholder="-100123456789" />
+          </div>
+          <div>
+            <Label>Public channel chat_id</Label>
+            <Input value={cfg.public_chat_id ?? ''} onChange={e => setCfg({ ...cfg, public_chat_id: e.target.value })} placeholder="-100123456789" />
           </div>
           <div>
             <Label>Admin Telegram ID (for setup self-test DM)</Label>
