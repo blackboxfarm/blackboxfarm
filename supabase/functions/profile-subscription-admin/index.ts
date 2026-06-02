@@ -213,7 +213,7 @@ async function handleWebhookRegister(botToken: string, profileKey: string) {
   const res = await tg(botToken, 'setWebhook', {
     url,
     secret_token,
-    allowed_updates: ['message', 'edited_message', 'callback_query'],
+    allowed_updates: ['message', 'edited_message', 'callback_query', 'chat_member', 'my_chat_member'],
   });
   const info = await tg(botToken, 'getWebhookInfo');
   return { ok: true, set: res, info };
