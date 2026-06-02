@@ -25,6 +25,7 @@ type Lifecycle = {
   ingest_completed_at: string | null;
   ingest_status: string | null;
   ingest_last_error: string | null;
+  ingest_latency_ms: number | null;
   mesh_hydrated_at: string | null;
   holders_refreshed_at: string | null;
   blackbox_harvested_at: string | null;
@@ -94,7 +95,7 @@ export const NoLubeFlowLog: React.FC = () => {
     try {
       const { data: lc } = await supabase
         .from('telegram_insider_token_lifecycle')
-        .select('token_mint, token_symbol, channel_name, first_called_at, first_call_message_id, ingest_started_at, ingest_completed_at, ingest_status, ingest_last_error, mesh_hydrated_at, holders_refreshed_at, blackbox_harvested_at')
+        .select('token_mint, token_symbol, channel_name, first_called_at, first_call_message_id, ingest_started_at, ingest_completed_at, ingest_status, ingest_last_error, ingest_latency_ms, mesh_hydrated_at, holders_refreshed_at, blackbox_harvested_at')
         .order('first_called_at', { ascending: false })
         .limit(30);
       const rows = (lc || []) as Lifecycle[];
@@ -144,9 +145,11 @@ export const NoLubeFlowLog: React.FC = () => {
       },
       {
         label: '3. Scraped BlackBox replies',
-        at: t.blackbox_harvested_at || t.mesh_hydrated_at || t.holders_refreshed_at,
-        status: (t.blackbox_harvested_at || t.mesh_hydrated_at) ? 'ok' : 'pending',
-        detail: t.mesh_hydrated_at ? 'mesh hydrated' : (t.holders_refreshed_at ? 'holders only' : undefined),
+        at: t.ingest_completed_at || t.blackbox_harvested_at || t.mesh_hydrated_at || t.holders_refreshed_at,
+        status: t.ingest_completed_at
+          ? (t.ingest_last_error ? 'fail' : 'ok')
+          : 'pending',
+        detail: t.ingest_latency_ms ? `${t.ingest_latency_ms}ms` : (t.ingest_status ?? undefined),
       },
       {
         label: `4. Posted CA to Private${priv?.post_kind ? ` (${priv.post_kind})` : ''}`,
