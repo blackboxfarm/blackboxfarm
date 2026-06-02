@@ -3,12 +3,15 @@
 // post and treats `telegram_insider_token_lifecycle.entry_market_cap` as
 // the immutable baseline for the X-factor math downstream.
 //
-// Steps (best-effort, never blocks the post if any single step fails):
+// Steps (ENRICH FIRST so Private/Public posts have real stats, not "pending"):
 //   1. Mesh probe (token-mesh-hydrate)
 //   2. Dev wallet resolve (creator-wallet-resolver, single-target)
 //   3. Blackbox CA post + bot-reply harvest (blackbox-tick)
-//   4. /holders refresh (bagless-holders-report)
+//   4. /holders refresh (bagless-holders-report) — awaited up to HOLDERS_TIMEOUT_MS
 //   5. no-lube-orchestrate(mint) — handles private vs public + milestone gate
+//
+// Escape hatch: pass { fast_post: true } to skip the enrichment wait and
+// post immediately (used by the orchestrator's stuck-row recovery).
 //
 // Idempotent: ingest_status guards re-entry. Force with { force: true }.
 
@@ -102,37 +105,37 @@ serve(async (req) => {
     const steps: Record<string, any> = {};
     const now = () => new Date().toISOString();
 
-    // POST FIRST. Enrichment must never block the snapshot/private post.
-    let orchestrate: any = null;
-    try {
-      const r = await invoke(`${supabaseUrl}/functions/v1/no-lube-orchestrate`, serviceKey, {
-        mint,
-        source: fast_post ? 'insiders-fast-post' : 'insiders-ingest',
-        insiders_milestone: insiders_milestone ?? null,
-      }, 60000);
-      orchestrate = { ok: r.ok, status: r.status, body: r.json };
-    } catch (e) {
-      orchestrate = { ok: false, error: (e as Error).message };
-    }
-
-    await assertUpdate(
-      supabase
-        .from('telegram_insider_token_lifecycle')
-        .update({
-          ingest_status: orchestrate?.ok ? 'enriched' : 'failed',
-          ingest_completed_at: now(),
-          ingest_last_error: orchestrate?.ok ? null : JSON.stringify(orchestrate).slice(0, 500),
-        })
-        .eq('token_mint', mint),
-      'telegram_insider_token_lifecycle',
-    );
-
+    // FAST PATH: skip enrichment, post immediately. Used by stuck-row recovery
+    // in insiders-pipeline-orchestrator.
     if (fast_post) {
-      return new Response(JSON.stringify({ ok: true, mint, ticker: lc.token_symbol, fast_post: true, orchestrate }), {
+      let orchestrateFast: any = null;
+      try {
+        const r = await invoke(`${supabaseUrl}/functions/v1/no-lube-orchestrate`, serviceKey, {
+          mint,
+          source: 'insiders-fast-post',
+          insiders_milestone: insiders_milestone ?? null,
+        }, 60000);
+        orchestrateFast = { ok: r.ok, status: r.status, body: r.json };
+      } catch (e) {
+        orchestrateFast = { ok: false, error: (e as Error).message };
+      }
+      await assertUpdate(
+        supabase
+          .from('telegram_insider_token_lifecycle')
+          .update({
+            ingest_status: orchestrateFast?.ok ? 'enriched' : 'failed',
+            ingest_completed_at: now(),
+            ingest_last_error: orchestrateFast?.ok ? null : JSON.stringify(orchestrateFast).slice(0, 500),
+          })
+          .eq('token_mint', mint),
+        'telegram_insider_token_lifecycle',
+      );
+      return new Response(JSON.stringify({ ok: true, mint, ticker: lc.token_symbol, fast_post: true, orchestrate: orchestrateFast }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
+    // ───────────── ENRICH FIRST ─────────────
     // 1. Mesh probe — already-known wallets, prior tokens, sister mints
     try {
       const r = await invoke(`${supabaseUrl}/functions/v1/token-mesh-hydrate`, serviceKey, { mint, surface: 'no-lube-ingest' }, 25000);
@@ -170,7 +173,7 @@ serve(async (req) => {
     //    standard window, and merges the harvested socials/security
     //    flags into the mesh.
     try {
-      const r = await invoke(`${supabaseUrl}/functions/v1/blackbox-tick`, serviceKey, { mint, source: 'no-lube-ingest' }, 30000);
+      const r = await invoke(`${supabaseUrl}/functions/v1/blackbox-tick`, serviceKey, { mint, source: 'no-lube-ingest' }, 45000);
       steps.blackbox = { ok: r.ok, status: r.status };
       if (r.ok) {
         await assertUpdate(
@@ -183,17 +186,47 @@ serve(async (req) => {
       }
     } catch (e) { steps.blackbox = { ok: false, error: (e as Error).message }; }
 
-    // 4. /holders refresh — fire-and-forget so the 45s call doesn't hold a DB
-    //    connection while the rest of the ingest chain runs. The report writes
-    //    its own results back to the DB when it completes.
+    // 4. /holders refresh — AWAITED so the post has Top10/health/wallet stats.
+    //    Capped at HOLDERS_TIMEOUT_MS; on timeout we still proceed to post.
+    const HOLDERS_TIMEOUT_MS = 45000;
     try {
-      fetch(`${supabaseUrl}/functions/v1/bagless-holders-report`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}`, 'apikey': serviceKey },
-        body: JSON.stringify({ tokenMint: mint }),
-      }).catch((e) => console.warn('[no-lube-ingest] holders dispatch failed:', (e as Error).message));
-      steps.holders = { ok: true, dispatched: true };
+      const r = await invoke(`${supabaseUrl}/functions/v1/bagless-holders-report`, serviceKey, { tokenMint: mint }, HOLDERS_TIMEOUT_MS);
+      steps.holders = { ok: r.ok, status: r.status };
+      if (r.ok) {
+        await assertUpdate(
+          supabase
+            .from('telegram_insider_token_lifecycle')
+            .update({ holders_refreshed_at: now() })
+            .eq('token_mint', mint),
+          'telegram_insider_token_lifecycle',
+        );
+      }
     } catch (e) { steps.holders = { ok: false, error: (e as Error).message }; }
+
+    // 5. POST — Private + Public now compose against fresh enrichment data.
+    let orchestrate: any = null;
+    try {
+      const r = await invoke(`${supabaseUrl}/functions/v1/no-lube-orchestrate`, serviceKey, {
+        mint,
+        source: 'insiders-ingest',
+        insiders_milestone: insiders_milestone ?? null,
+      }, 60000);
+      orchestrate = { ok: r.ok, status: r.status, body: r.json };
+    } catch (e) {
+      orchestrate = { ok: false, error: (e as Error).message };
+    }
+
+    await assertUpdate(
+      supabase
+        .from('telegram_insider_token_lifecycle')
+        .update({
+          ingest_status: orchestrate?.ok ? 'enriched' : 'failed',
+          ingest_completed_at: now(),
+          ingest_last_error: orchestrate?.ok ? null : JSON.stringify(orchestrate).slice(0, 500),
+        })
+        .eq('token_mint', mint),
+      'telegram_insider_token_lifecycle',
+    );
 
     return new Response(
       JSON.stringify({
