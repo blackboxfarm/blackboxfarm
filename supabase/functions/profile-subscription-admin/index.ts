@@ -1,0 +1,304 @@
+// Per-profile subscription bot self-serve admin.
+// Actions: secret_status, set_secret, cron_status, cron_install, cron_toggle,
+//          webhook_status, webhook_register, test_bot, run_setup
+// Super-admin only.
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+const PROJECT_REF = Deno.env.get('SUPABASE_PROJECT_ID') ?? 'apxauapuusmgwbbzjgfl';
+const MGMT_BASE = `https://api.supabase.com/v1/projects/${PROJECT_REF}`;
+const FUNCTIONS_BASE = `https://${PROJECT_REF}.supabase.co/functions/v1`;
+const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+function mgmtToken(): string {
+  const t = Deno.env.get('SB_ACCESS_TOKEN');
+  if (!t) throw new Error('SB_ACCESS_TOKEN not configured');
+  return t;
+}
+
+async function mgmt(path: string, init: RequestInit = {}) {
+  const r = await fetch(`${MGMT_BASE}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${mgmtToken()}`,
+      'Content-Type': 'application/json',
+      ...(init.headers ?? {}),
+    },
+  });
+  const txt = await r.text();
+  let parsed: unknown = txt;
+  try { parsed = JSON.parse(txt); } catch { /* keep text */ }
+  if (!r.ok) throw new Error(`Management API ${path} failed [${r.status}]: ${txt}`);
+  return parsed;
+}
+
+async function runSql(query: string): Promise<unknown> {
+  return mgmt('/database/query', { method: 'POST', body: JSON.stringify({ query }) });
+}
+
+async function listSecrets(): Promise<Array<{ name: string; value?: string }>> {
+  return (await mgmt('/secrets')) as Array<{ name: string }>;
+}
+
+async function upsertSecret(name: string, value: string) {
+  return mgmt('/secrets', { method: 'POST', body: JSON.stringify([{ name, value }]) });
+}
+
+// ---------- Telegram ----------
+async function tg(token: string, method: string, body: Record<string, unknown> = {}) {
+  const r = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j?.ok) throw new Error(`Telegram ${method} [${r.status}]: ${JSON.stringify(j)}`);
+  return j.result;
+}
+
+async function webhookSecret(botToken: string): Promise<string> {
+  const data = new TextEncoder().encode(`profile-sub-webhook:${botToken}`);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ---------- Cron job names ----------
+const POLL_JOB = (profileKey: string) => `profile-sub-poll-${profileKey}`;
+const RENEW_JOB = (profileKey: string) => `profile-sub-renew-${profileKey}`;
+const POLL_URL = `${FUNCTIONS_BASE}/profile-subscription-poll`;
+const RENEW_URL = `${FUNCTIONS_BASE}/profile-subscription-renewal-tick`;
+
+function cronScheduleSql(jobname: string, schedule: string, url: string): string {
+  // unschedule if exists, then schedule fresh (idempotent)
+  const safeJob = jobname.replace(/'/g, "''");
+  const safeSched = schedule.replace(/'/g, "''");
+  const safeUrl = url.replace(/'/g, "''");
+  const safeAnon = ANON_KEY.replace(/'/g, "''");
+  return `
+    DO $cron$
+    DECLARE
+      jid bigint;
+    BEGIN
+      SELECT jobid INTO jid FROM cron.job WHERE jobname = '${safeJob}';
+      IF jid IS NOT NULL THEN PERFORM cron.unschedule(jid); END IF;
+      PERFORM cron.schedule(
+        '${safeJob}',
+        '${safeSched}',
+        $sql$ SELECT net.http_post(
+          url := '${safeUrl}',
+          headers := '{"Content-Type":"application/json","apikey":"${safeAnon}","Authorization":"Bearer ${safeAnon}"}'::jsonb,
+          body := '{}'::jsonb
+        ); $sql$
+      );
+    END $cron$;
+  `;
+}
+
+// ---------- Handlers ----------
+
+async function handleSecretStatus(secretName: string, _supabase: any) {
+  if (!secretName) return { exists: false };
+  const secrets = await listSecrets();
+  const hit = secrets.find(s => s.name === secretName);
+  return { exists: !!hit };
+}
+
+async function handleSetSecret(secretName: string, value: string) {
+  if (!secretName || !value) throw new Error('secret name and value required');
+  if (!/^[A-Za-z_][A-Za-z0-9_]{0,255}$/.test(secretName)) throw new Error('Invalid secret name');
+  await upsertSecret(secretName, value);
+  return { ok: true };
+}
+
+async function handleTestBot(botToken: string) {
+  const me = await tg(botToken, 'getMe');
+  return { ok: true, bot: { id: me.id, username: me.username, first_name: me.first_name } };
+}
+
+async function handleCronStatus(profileKey: string) {
+  const sql = `SELECT jobname, schedule, active FROM cron.job WHERE jobname IN ('${POLL_JOB(profileKey)}','${RENEW_JOB(profileKey)}');`;
+  const rows = await runSql(sql) as Array<{ jobname: string; schedule: string; active: boolean }>;
+  const find = (n: string) => rows.find(r => r.jobname === n);
+  return {
+    poll: find(POLL_JOB(profileKey)) ?? null,
+    renew: find(RENEW_JOB(profileKey)) ?? null,
+  };
+}
+
+async function handleCronInstall(profileKey: string) {
+  await runSql(cronScheduleSql(POLL_JOB(profileKey), '* * * * *', POLL_URL));
+  await runSql(cronScheduleSql(RENEW_JOB(profileKey), '*/10 * * * *', RENEW_URL));
+  return handleCronStatus(profileKey);
+}
+
+async function handleCronToggle(profileKey: string, which: 'poll' | 'renew', active: boolean) {
+  const jobname = which === 'poll' ? POLL_JOB(profileKey) : RENEW_JOB(profileKey);
+  await runSql(`UPDATE cron.job SET active = ${active ? 'true' : 'false'} WHERE jobname = '${jobname.replace(/'/g, "''")}';`);
+  return handleCronStatus(profileKey);
+}
+
+async function handleWebhookStatus(botToken: string) {
+  const info = await tg(botToken, 'getWebhookInfo');
+  return { info };
+}
+
+async function handleWebhookRegister(botToken: string) {
+  const url = `${FUNCTIONS_BASE}/profile-subscription-bot-webhook`;
+  const secret_token = await webhookSecret(botToken);
+  const res = await tg(botToken, 'setWebhook', {
+    url,
+    secret_token,
+    allowed_updates: ['message', 'edited_message', 'callback_query'],
+  });
+  const info = await tg(botToken, 'getWebhookInfo');
+  return { ok: true, set: res, info };
+}
+
+// ---------- Entry ----------
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  const authHeader = req.headers.get('Authorization') || '';
+  if (!authHeader.startsWith('Bearer ')) return json({ error: 'Missing bearer token' }, 401);
+
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    { global: { headers: { Authorization: authHeader } } },
+  );
+  const { data: { user }, error: userErr } = await supabase.auth.getUser();
+  if (userErr || !user) return json({ error: 'Unauthorized' }, 401);
+  const { data: isSuperAdmin } = await supabase.rpc('has_role', { _user_id: user.id, _role: 'super_admin' });
+  if (!isSuperAdmin) return json({ error: 'Super admin only' }, 403);
+
+  let body: any = {};
+  try { body = await req.json(); } catch { /* allow empty */ }
+  const action: string = body.action;
+  const profileKey: string = body.profile_key;
+
+  try {
+    // Load config (most actions need it)
+    let cfg: any = null;
+    if (profileKey) {
+      const { data } = await supabase
+        .from('profile_subscription_configs')
+        .select('*')
+        .eq('profile_key', profileKey)
+        .maybeSingle();
+      cfg = data;
+    }
+    const getBotToken = (): string => {
+      if (!cfg?.bot_secret_name) throw new Error('Configure bot_secret_name first');
+      const t = Deno.env.get(cfg.bot_secret_name);
+      if (!t) throw new Error(`Secret ${cfg.bot_secret_name} not set on this edge function (deploy will pick it up automatically after Set Token)`);
+      return t;
+    };
+
+    switch (action) {
+      case 'secret_status':
+        return json(await handleSecretStatus(body.secret_name ?? cfg?.bot_secret_name, supabase));
+
+      case 'set_secret':
+        return json(await handleSetSecret(body.secret_name ?? cfg?.bot_secret_name, body.value));
+
+      case 'test_bot':
+        return json(await handleTestBot(body.token ?? getBotToken()));
+
+      case 'cron_status':
+        return json(await handleCronStatus(profileKey));
+
+      case 'cron_install':
+        return json(await handleCronInstall(profileKey));
+
+      case 'cron_toggle':
+        return json(await handleCronToggle(profileKey, body.which, !!body.active));
+
+      case 'webhook_status':
+        return json(await handleWebhookStatus(body.token ?? getBotToken()));
+
+      case 'webhook_register':
+        return json(await handleWebhookRegister(body.token ?? getBotToken()));
+
+      case 'run_setup': {
+        const steps: Array<{ name: string; ok: boolean; detail?: string }> = [];
+        // 1) config sanity
+        const missing: string[] = [];
+        if (!cfg) missing.push('config row');
+        if (!cfg?.bot_secret_name) missing.push('bot_secret_name');
+        if (!cfg?.private_chat_id) missing.push('private_chat_id');
+        steps.push({ name: 'Config saved', ok: missing.length === 0, detail: missing.length ? `Missing: ${missing.join(', ')}` : undefined });
+        if (missing.length) return json({ ok: false, steps });
+
+        // 2) secret exists
+        const sec = await handleSecretStatus(cfg.bot_secret_name, supabase);
+        steps.push({ name: 'Bot token stored', ok: sec.exists });
+        if (!sec.exists) return json({ ok: false, steps });
+
+        // 3) token live (only if it's in *this* runtime; if not, instruct redeploy)
+        const runtimeToken = Deno.env.get(cfg.bot_secret_name);
+        if (!runtimeToken) {
+          steps.push({ name: 'Bot token loaded in runtime', ok: false, detail: 'Secret stored but not yet injected; re-run setup in ~10s.' });
+          return json({ ok: false, steps });
+        }
+        try {
+          const me = await tg(runtimeToken, 'getMe');
+          steps.push({ name: 'Telegram getMe', ok: true, detail: `@${me.username}` });
+        } catch (e) {
+          steps.push({ name: 'Telegram getMe', ok: false, detail: e instanceof Error ? e.message : String(e) });
+          return json({ ok: false, steps });
+        }
+
+        // 4) crons
+        try {
+          await handleCronInstall(profileKey);
+          steps.push({ name: 'Crons installed (poll 1m + renew 10m)', ok: true });
+        } catch (e) {
+          steps.push({ name: 'Crons installed', ok: false, detail: e instanceof Error ? e.message : String(e) });
+        }
+
+        // 5) webhook
+        try {
+          const wr = await handleWebhookRegister(runtimeToken);
+          steps.push({ name: 'Webhook registered', ok: true, detail: wr.info?.url });
+        } catch (e) {
+          steps.push({ name: 'Webhook registered', ok: false, detail: e instanceof Error ? e.message : String(e) });
+        }
+
+        // 6) self-test DM
+        if (cfg.admin_telegram_id) {
+          try {
+            await tg(runtimeToken, 'sendMessage', {
+              chat_id: cfg.admin_telegram_id,
+              text: `✅ <b>${cfg.display_name ?? profileKey}</b> bot is live.\nSetup completed ${new Date().toUTCString()}.`,
+              parse_mode: 'HTML',
+            });
+            steps.push({ name: 'Self-test DM sent', ok: true });
+          } catch (e) {
+            steps.push({ name: 'Self-test DM sent', ok: false, detail: e instanceof Error ? e.message : String(e) });
+          }
+        } else {
+          steps.push({ name: 'Self-test DM sent', ok: true, detail: 'Skipped (no admin_telegram_id)' });
+        }
+
+        return json({ ok: steps.every(s => s.ok), steps });
+      }
+
+      default:
+        return json({ error: `Unknown action: ${action}` }, 400);
+    }
+  } catch (e) {
+    console.error('[profile-subscription-admin]', e);
+    return json({ error: e instanceof Error ? e.message : String(e) }, 500);
+  }
+});
