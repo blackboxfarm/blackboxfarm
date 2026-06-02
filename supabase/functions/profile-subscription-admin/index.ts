@@ -369,6 +369,208 @@ async function handleContactsBroadcast(profileKey: string, body: any, supabase: 
 }
 
 // ---------- Entry ----------
+// ---------- Treasury (Central Wallet) ----------
+
+const FEE_BUFFER_LAMPORTS = 15_000;
+
+function getTreasuryRpc(): Connection {
+  const apiKey = Deno.env.get('HELIUS_API_KEY');
+  const url = apiKey
+    ? `https://mainnet.helius-rpc.com/?api-key=${apiKey}`
+    : 'https://api.mainnet-beta.solana.com';
+  return new Connection(url, 'confirmed');
+}
+
+function isValidPubkey(s: string): boolean {
+  try { new PublicKey(s); return true; } catch { return false; }
+}
+
+async function handleTreasuryStatus(profileKey: string, cfg: any) {
+  if (!profileKey) throw new Error('profile_key required');
+  if (!cfg) throw new Error('Profile config not found');
+  const pubkey = cfg.central_wallet_pubkey as string | null;
+  const managed = !!cfg.central_wallet_secret_encrypted;
+  let balance_lamports = 0;
+  if (pubkey) {
+    try {
+      balance_lamports = await getTreasuryRpc().getBalance(new PublicKey(pubkey));
+    } catch (e) {
+      return {
+        ok: true, pubkey, managed, balance_lamports: 0,
+        label: cfg.central_wallet_label ?? null,
+        generated_at: cfg.central_wallet_generated_at ?? null,
+        balance_error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  }
+  return {
+    ok: true,
+    pubkey,
+    managed,
+    label: cfg.central_wallet_label ?? null,
+    generated_at: cfg.central_wallet_generated_at ?? null,
+    balance_lamports,
+    balance_sol: balance_lamports / LAMPORTS_PER_SOL,
+    fee_buffer_lamports: FEE_BUFFER_LAMPORTS,
+  };
+}
+
+async function handleTreasuryGenerate(profileKey: string, cfg: any, supabase: any) {
+  if (!profileKey) throw new Error('profile_key required');
+  if (!cfg) throw new Error('Profile config not found');
+  if (cfg.central_wallet_pubkey) {
+    throw new Error('Central wallet already set for this profile. Refusing to overwrite.');
+  }
+  const kp = Keypair.generate();
+  const secretB58 = bs58.encode(kp.secretKey);
+  const encrypted = await SecureStorage.encrypt(secretB58);
+  const pubkey = kp.publicKey.toBase58();
+  const label = `${profileKey} Treasury`;
+  const generated_at = new Date().toISOString();
+  const { error } = await supabase
+    .from('profile_subscription_configs')
+    .update({
+      central_wallet_pubkey: pubkey,
+      central_wallet_secret_encrypted: encrypted,
+      central_wallet_generated_at: generated_at,
+      central_wallet_label: label,
+    })
+    .eq('profile_key', profileKey);
+  if (error) throw error;
+  return { ok: true, pubkey, label, generated_at, managed: true };
+}
+
+async function handleTreasuryTransactions(cfg: any, limit: number) {
+  if (!cfg?.central_wallet_pubkey) throw new Error('No central wallet configured');
+  const n = Math.min(Math.max(Number(limit) || 25, 1), 100);
+  const conn = getTreasuryRpc();
+  const pk = new PublicKey(cfg.central_wallet_pubkey);
+  const sigs = await conn.getSignaturesForAddress(pk, { limit: n });
+  // Parse transfers cheaply – just expose what we have from sig listings.
+  // Resolve net SOL delta per tx via getParsedTransactions in one batch.
+  const txList = await conn.getParsedTransactions(
+    sigs.map(s => s.signature),
+    { maxSupportedTransactionVersion: 0 },
+  );
+  const owner = cfg.central_wallet_pubkey as string;
+  const rows = sigs.map((s, i) => {
+    const tx = txList[i];
+    let net_lamports = 0;
+    let counterparty: string | null = null;
+    if (tx?.meta && tx.transaction.message.accountKeys) {
+      const keys = tx.transaction.message.accountKeys.map((k: any) => k.pubkey?.toBase58?.() ?? String(k.pubkey ?? k));
+      const idx = keys.indexOf(owner);
+      if (idx >= 0 && tx.meta.preBalances && tx.meta.postBalances) {
+        net_lamports = tx.meta.postBalances[idx] - tx.meta.preBalances[idx];
+      }
+      // Pick first non-self key as counterparty hint
+      counterparty = keys.find((k: string) => k !== owner) ?? null;
+    }
+    return {
+      signature: s.signature,
+      slot: s.slot,
+      block_time: s.blockTime,
+      err: s.err ? 'failed' : null,
+      net_lamports,
+      net_sol: net_lamports / LAMPORTS_PER_SOL,
+      direction: net_lamports >= 0 ? 'in' : 'out',
+      counterparty,
+    };
+  });
+  return { ok: true, transactions: rows };
+}
+
+async function handleTreasuryWithdraw(
+  profileKey: string, cfg: any, body: any, supabase: any, requestedBy: string,
+) {
+  if (!profileKey) throw new Error('profile_key required');
+  if (!cfg?.central_wallet_pubkey) throw new Error('No central wallet configured');
+  if (!cfg?.central_wallet_secret_encrypted) {
+    throw new Error('This central wallet is externally owned; withdraw must happen from the source wallet.');
+  }
+  const destination: string = String(body.destination_pubkey ?? '').trim();
+  if (!isValidPubkey(destination)) throw new Error('Invalid destination pubkey');
+  if (body.confirm !== true) throw new Error('confirm:true required to send');
+
+  const conn = getTreasuryRpc();
+  const fromKp = Keypair.fromSecretKey(bs58.decode(await SecureStorage.decrypt(cfg.central_wallet_secret_encrypted)));
+  const fromPubkey = fromKp.publicKey.toBase58();
+  if (fromPubkey !== cfg.central_wallet_pubkey) {
+    throw new Error('Encrypted key does not match stored pubkey — refusing to send');
+  }
+
+  const balance = await conn.getBalance(fromKp.publicKey);
+  let lamports: number;
+  if (body.amount === 'all' || body.amount_sol === 'all') {
+    lamports = balance - FEE_BUFFER_LAMPORTS;
+  } else {
+    const sol = Number(body.amount_sol);
+    if (!Number.isFinite(sol) || sol <= 0) throw new Error('amount_sol must be > 0 or "all"');
+    lamports = Math.floor(sol * LAMPORTS_PER_SOL);
+  }
+  if (lamports <= 0) throw new Error('Amount after fee buffer is <= 0');
+  if (lamports > balance - FEE_BUFFER_LAMPORTS) {
+    throw new Error(`Amount exceeds spendable balance (have ${balance} lamports, need ${lamports + FEE_BUFFER_LAMPORTS} incl. buffer)`);
+  }
+
+  // Pre-insert audit row
+  const { data: auditRow, error: auditErr } = await supabase
+    .from('profile_central_wallet_withdrawals')
+    .insert({
+      profile_key: profileKey,
+      from_pubkey: fromPubkey,
+      to_pubkey: destination,
+      lamports,
+      requested_by: requestedBy,
+      status: 'pending',
+    })
+    .select('id')
+    .single();
+  if (auditErr) throw auditErr;
+  const auditId = auditRow.id as string;
+
+  try {
+    const tx = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: fromKp.publicKey,
+        toPubkey: new PublicKey(destination),
+        lamports,
+      }),
+    );
+    const { blockhash } = await conn.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+    tx.feePayer = fromKp.publicKey;
+    tx.sign(fromKp);
+    const signature = await conn.sendRawTransaction(tx.serialize());
+    await conn.confirmTransaction(signature, 'confirmed');
+    await supabase
+      .from('profile_central_wallet_withdrawals')
+      .update({ signature, status: 'confirmed', confirmed_at: new Date().toISOString() })
+      .eq('id', auditId);
+    return { ok: true, signature, lamports, sol: lamports / LAMPORTS_PER_SOL, audit_id: auditId };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await supabase
+      .from('profile_central_wallet_withdrawals')
+      .update({ status: 'failed', error: msg.slice(0, 1000) })
+      .eq('id', auditId);
+    throw new Error(`Withdraw failed: ${msg}`);
+  }
+}
+
+async function handleTreasuryWithdrawals(profileKey: string, supabase: any) {
+  if (!profileKey) throw new Error('profile_key required');
+  const { data, error } = await supabase
+    .from('profile_central_wallet_withdrawals')
+    .select('*')
+    .eq('profile_key', profileKey)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return { ok: true, rows: data ?? [] };
+}
+
+// ---------- Entry ----------
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
