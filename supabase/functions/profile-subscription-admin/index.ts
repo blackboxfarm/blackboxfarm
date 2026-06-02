@@ -3,6 +3,9 @@
 //          webhook_status, webhook_register, test_bot, run_setup
 // Super-admin only.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
+import { Keypair, Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from 'npm:@solana/web3.js@1.87.6';
+import bs58 from 'https://esm.sh/bs58@5.0.0';
+import { SecureStorage } from '../_shared/encryption.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
