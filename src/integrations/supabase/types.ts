@@ -12536,6 +12536,147 @@ export type Database = {
         }
         Relationships: []
       }
+      profile_bot_contact_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: number
+          payload: Json
+          profile_key: string
+          telegram_user_id: number
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: number
+          payload?: Json
+          profile_key: string
+          telegram_user_id: number
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: number
+          payload?: Json
+          profile_key?: string
+          telegram_user_id?: number
+        }
+        Relationships: []
+      }
+      profile_bot_contacts: {
+        Row: {
+          acquisition_source: string
+          created_at: string
+          current_expires_at: string | null
+          ever_paid: boolean
+          first_name: string | null
+          first_paid_at: string | null
+          first_referrer_code: string | null
+          first_referrer_tg_id: number | null
+          first_seen_at: string
+          has_referral_code: boolean
+          id: string
+          is_currently_paid: boolean
+          language_code: string | null
+          last_broadcast_at: string | null
+          last_name: string | null
+          last_paid_at: string | null
+          last_referrer_code: string | null
+          last_seen_at: string
+          opted_out_at: string | null
+          opted_out_broadcasts: boolean
+          profile_key: string
+          referral_code: string | null
+          referral_code_status: string | null
+          referral_months_earned: number
+          referrals_attributed: number
+          referrals_converted: number
+          referrals_pending: number
+          telegram_user_id: number
+          telegram_username: string | null
+          total_dms: number
+          total_months_paid: number
+          total_sol_paid: number
+          total_subscriptions: number
+          updated_at: string
+          utm_payload: string | null
+        }
+        Insert: {
+          acquisition_source?: string
+          created_at?: string
+          current_expires_at?: string | null
+          ever_paid?: boolean
+          first_name?: string | null
+          first_paid_at?: string | null
+          first_referrer_code?: string | null
+          first_referrer_tg_id?: number | null
+          first_seen_at?: string
+          has_referral_code?: boolean
+          id?: string
+          is_currently_paid?: boolean
+          language_code?: string | null
+          last_broadcast_at?: string | null
+          last_name?: string | null
+          last_paid_at?: string | null
+          last_referrer_code?: string | null
+          last_seen_at?: string
+          opted_out_at?: string | null
+          opted_out_broadcasts?: boolean
+          profile_key: string
+          referral_code?: string | null
+          referral_code_status?: string | null
+          referral_months_earned?: number
+          referrals_attributed?: number
+          referrals_converted?: number
+          referrals_pending?: number
+          telegram_user_id: number
+          telegram_username?: string | null
+          total_dms?: number
+          total_months_paid?: number
+          total_sol_paid?: number
+          total_subscriptions?: number
+          updated_at?: string
+          utm_payload?: string | null
+        }
+        Update: {
+          acquisition_source?: string
+          created_at?: string
+          current_expires_at?: string | null
+          ever_paid?: boolean
+          first_name?: string | null
+          first_paid_at?: string | null
+          first_referrer_code?: string | null
+          first_referrer_tg_id?: number | null
+          first_seen_at?: string
+          has_referral_code?: boolean
+          id?: string
+          is_currently_paid?: boolean
+          language_code?: string | null
+          last_broadcast_at?: string | null
+          last_name?: string | null
+          last_paid_at?: string | null
+          last_referrer_code?: string | null
+          last_seen_at?: string
+          opted_out_at?: string | null
+          opted_out_broadcasts?: boolean
+          profile_key?: string
+          referral_code?: string | null
+          referral_code_status?: string | null
+          referral_months_earned?: number
+          referrals_attributed?: number
+          referrals_converted?: number
+          referrals_pending?: number
+          telegram_user_id?: number
+          telegram_username?: string | null
+          total_dms?: number
+          total_months_paid?: number
+          total_sol_paid?: number
+          total_subscriptions?: number
+          updated_at?: string
+          utm_payload?: string | null
+        }
+        Relationships: []
+      }
       profile_subscription_configs: {
         Row: {
           admin_telegram_id: number | null
