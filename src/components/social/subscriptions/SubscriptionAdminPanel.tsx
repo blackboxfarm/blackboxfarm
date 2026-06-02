@@ -100,6 +100,7 @@ function BotChannelSettings({ profileKey, displayName }: Props) {
       display_currencies: ['USD', 'EUR', 'TRY', 'BRL'],
       central_wallet_pubkey: null,
       is_active: false,
+      admin_telegram_id: null,
     });
     setLoading(false);
   };
@@ -118,6 +119,7 @@ function BotChannelSettings({ profileKey, displayName }: Props) {
   if (loading || !cfg) return <Loader2 className="h-4 w-4 animate-spin" />;
 
   return (
+    <div className="space-y-4">
     <Card>
       <CardHeader><CardTitle className="text-base">Bot &amp; Channel</CardTitle></CardHeader>
       <CardContent className="space-y-4">
@@ -130,14 +132,25 @@ function BotChannelSettings({ profileKey, displayName }: Props) {
             <Label>Bot username (without @)</Label>
             <Input value={cfg.bot_username ?? ''} onChange={e => setCfg({ ...cfg, bot_username: e.target.value })} placeholder="NoLubePremiumBot" />
           </div>
-          <div>
-            <Label>Bot token secret name</Label>
-            <Input value={cfg.bot_secret_name} onChange={e => setCfg({ ...cfg, bot_secret_name: e.target.value })} placeholder="NO_LUBE_BOT_TELEGRAM_API_KEY" />
-            <p className="text-xs text-muted-foreground mt-1">Add the bot token to project secrets under this exact name.</p>
+          <div className="sm:col-span-2">
+            <BotSecretControl
+              profileKey={profileKey}
+              secretName={cfg.bot_secret_name}
+              onSecretNameChange={n => setCfg({ ...cfg, bot_secret_name: n })}
+            />
           </div>
           <div>
             <Label>Private channel chat_id</Label>
             <Input value={cfg.private_chat_id ?? ''} onChange={e => setCfg({ ...cfg, private_chat_id: e.target.value })} placeholder="-100123456789" />
+          </div>
+          <div>
+            <Label>Admin Telegram ID (for setup self-test DM)</Label>
+            <Input
+              type="number"
+              value={cfg.admin_telegram_id ?? ''}
+              onChange={e => setCfg({ ...cfg, admin_telegram_id: e.target.value ? Number(e.target.value) : null })}
+              placeholder="123456789"
+            />
           </div>
           <div>
             <Label>Base currency</Label>
@@ -169,6 +182,10 @@ function BotChannelSettings({ profileKey, displayName }: Props) {
         </Button>
       </CardContent>
     </Card>
+    <AutomationCard profileKey={profileKey} />
+    <WebhookCard profileKey={profileKey} />
+    <SetupWizardCard profileKey={profileKey} />
+    </div>
   );
 }
 
