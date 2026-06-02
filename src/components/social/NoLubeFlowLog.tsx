@@ -25,6 +25,7 @@ type Lifecycle = {
   ingest_completed_at: string | null;
   ingest_status: string | null;
   ingest_last_error: string | null;
+  ingest_latency_ms: number | null;
   mesh_hydrated_at: string | null;
   holders_refreshed_at: string | null;
   blackbox_harvested_at: string | null;
