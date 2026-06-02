@@ -12677,6 +12677,48 @@ export type Database = {
         }
         Relationships: []
       }
+      profile_central_wallet_withdrawals: {
+        Row: {
+          confirmed_at: string | null
+          created_at: string
+          error: string | null
+          from_pubkey: string
+          id: string
+          lamports: number
+          profile_key: string
+          requested_by: string | null
+          signature: string | null
+          status: string
+          to_pubkey: string
+        }
+        Insert: {
+          confirmed_at?: string | null
+          created_at?: string
+          error?: string | null
+          from_pubkey: string
+          id?: string
+          lamports: number
+          profile_key: string
+          requested_by?: string | null
+          signature?: string | null
+          status?: string
+          to_pubkey: string
+        }
+        Update: {
+          confirmed_at?: string | null
+          created_at?: string
+          error?: string | null
+          from_pubkey?: string
+          id?: string
+          lamports?: number
+          profile_key?: string
+          requested_by?: string | null
+          signature?: string | null
+          status?: string
+          to_pubkey?: string
+        }
+        Relationships: []
+      }
       profile_subscription_configs: {
         Row: {
           admin_telegram_id: number | null
@@ -12691,6 +12733,8 @@ export type Database = {
           base_currency: string
           bot_secret_name: string
           bot_username: string | null
+          central_wallet_generated_at: string | null
+          central_wallet_label: string | null
           central_wallet_pubkey: string | null
           central_wallet_secret_encrypted: string | null
           created_at: string
@@ -12719,6 +12763,8 @@ export type Database = {
           base_currency?: string
           bot_secret_name: string
           bot_username?: string | null
+          central_wallet_generated_at?: string | null
+          central_wallet_label?: string | null
           central_wallet_pubkey?: string | null
           central_wallet_secret_encrypted?: string | null
           created_at?: string
@@ -12747,6 +12793,8 @@ export type Database = {
           base_currency?: string
           bot_secret_name?: string
           bot_username?: string | null
+          central_wallet_generated_at?: string | null
+          central_wallet_label?: string | null
           central_wallet_pubkey?: string | null
           central_wallet_secret_encrypted?: string | null
           created_at?: string
