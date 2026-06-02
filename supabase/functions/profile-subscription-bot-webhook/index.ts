@@ -59,7 +59,7 @@ Deno.serve(withRunLog('profile-subscription-bot-webhook', async (req) => {
       .order('sort_order', { ascending: true });
     const { data: cfg } = await supabase
       .from('profile_subscription_configs')
-      .select('display_name,base_currency,welcome_copy')
+      .select('display_name,base_currency,welcome_copy,welcome_image_url')
       .eq('profile_key', profileKey)
       .maybeSingle();
     return { tiers: tiers ?? [], cfg };
@@ -163,6 +163,15 @@ Deno.serve(withRunLog('profile-subscription-bot-webhook', async (req) => {
       cmd === '/start'
         ? `👋 <b>Welcome to ${title}</b>\n\n${welcome ? welcome + '\n\n' : ''}Pick a plan below. You'll get a unique SOL deposit address — pay it and you're auto-added to the private channel.`
         : `💎 <b>${title}</b>\n\nPick a plan:`;
+    // Send a header image first if configured (only on /start)
+    if (cmd === '/start' && cfg?.welcome_image_url) {
+      try {
+        await tgCall(botToken!, 'sendPhoto', {
+          chat_id: chatId,
+          photo: cfg.welcome_image_url,
+        });
+      } catch { /* non-fatal */ }
+    }
     await send(intro, tierKeyboard(tiers, baseCurrency));
     return new Response(JSON.stringify({ ok: true }));
   }
