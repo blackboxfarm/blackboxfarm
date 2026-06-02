@@ -230,6 +230,9 @@ Deno.serve(async (req) => {
       case 'webhook_register':
         return json(await handleWebhookRegister(body.token ?? getBotToken(), profileKey));
 
+      case 'affiliate_stats':
+        return json(await handleAffiliateStats(profileKey, supabase));
+
       case 'run_setup': {
         const steps: Array<{ name: string; ok: boolean; detail?: string }> = [];
         // 1) config sanity
