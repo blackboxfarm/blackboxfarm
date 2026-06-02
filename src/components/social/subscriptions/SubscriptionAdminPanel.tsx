@@ -280,6 +280,239 @@ function PricingEditor({ profileKey }: { profileKey: string }) {
   );
 }
 
+// ---------- Bot Secret Control ----------
+
+async function invokeAdmin(body: Record<string, unknown>) {
+  const { data, error } = await supabase.functions.invoke('profile-subscription-admin', { body });
+  if (error) throw new Error(error.message);
+  if ((data as any)?.error) throw new Error((data as any).error);
+  return data as any;
+}
+
+function BotSecretControl({
+  profileKey, secretName, onSecretNameChange,
+}: { profileKey: string; secretName: string; onSecretNameChange: (n: string) => void }) {
+  const [status, setStatus] = useState<'unknown' | 'set' | 'missing'>('unknown');
+  const [bot, setBot] = useState<{ username?: string } | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [token, setToken] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const check = async () => {
+    if (!secretName) { setStatus('unknown'); return; }
+    try {
+      const r = await invokeAdmin({ action: 'secret_status', profile_key: profileKey, secret_name: secretName });
+      setStatus(r.exists ? 'set' : 'missing');
+    } catch (e: any) { toast.error(e.message); }
+  };
+  useEffect(() => { check(); /* eslint-disable-next-line */ }, [secretName, profileKey]);
+
+  const save = async () => {
+    if (!token.trim()) return;
+    setBusy(true);
+    try {
+      await invokeAdmin({ action: 'set_secret', profile_key: profileKey, secret_name: secretName, value: token.trim() });
+      toast.success('Bot token stored. Edge functions will pick it up within a few seconds.');
+      setToken(''); setEditing(false);
+      await check();
+    } catch (e: any) { toast.error(e.message); }
+    setBusy(false);
+  };
+
+  const test = async () => {
+    setBusy(true);
+    try {
+      const r = await invokeAdmin({ action: 'test_bot', profile_key: profileKey });
+      setBot(r.bot);
+      toast.success(`Connected: @${r.bot.username}`);
+    } catch (e: any) { toast.error(e.message); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label className="flex items-center gap-1"><KeyRound className="h-3.5 w-3.5" />Bot token secret</Label>
+      <div className="flex gap-2 items-center">
+        <Input value={secretName} onChange={e => onSecretNameChange(e.target.value)} placeholder="NO_LUBE_BOT_TELEGRAM_API_KEY" />
+        {status === 'set' && <Badge variant="default" className="gap-1"><CheckCircle2 className="h-3 w-3" />Stored</Badge>}
+        {status === 'missing' && <Badge variant="destructive" className="gap-1"><AlertTriangle className="h-3 w-3" />Not set</Badge>}
+      </div>
+      {bot?.username && <p className="text-xs text-muted-foreground">Verified bot: @{bot.username}</p>}
+      {editing ? (
+        <div className="flex gap-2">
+          <Input type="password" placeholder="123456:ABC-DEF..." value={token} onChange={e => setToken(e.target.value)} />
+          <Button size="sm" onClick={save} disabled={busy || !token.trim()}>
+            {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => { setEditing(false); setToken(''); }}>Cancel</Button>
+        </div>
+      ) : (
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+            {status === 'set' ? 'Update token' : 'Set token'}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={test} disabled={busy || status !== 'set'}>
+            {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Test'}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={check}><RefreshCcw className="h-3 w-3" /></Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- Automation (crons) ----------
+
+interface CronRow { jobname: string; schedule: string; active: boolean }
+
+function AutomationCard({ profileKey }: { profileKey: string }) {
+  const [poll, setPoll] = useState<CronRow | null>(null);
+  const [renew, setRenew] = useState<CronRow | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const refresh = async () => {
+    try {
+      const r = await invokeAdmin({ action: 'cron_status', profile_key: profileKey });
+      setPoll(r.poll); setRenew(r.renew);
+    } catch (e: any) { toast.error(e.message); }
+  };
+  useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [profileKey]);
+
+  const install = async () => {
+    setBusy(true);
+    try { await invokeAdmin({ action: 'cron_install', profile_key: profileKey }); toast.success('Crons installed'); await refresh(); }
+    catch (e: any) { toast.error(e.message); }
+    setBusy(false);
+  };
+
+  const toggle = async (which: 'poll' | 'renew', active: boolean) => {
+    try { await invokeAdmin({ action: 'cron_toggle', profile_key: profileKey, which, active }); await refresh(); }
+    catch (e: any) { toast.error(e.message); }
+  };
+
+  const Row = ({ label, schedule, row, which }: { label: string; schedule: string; row: CronRow | null; which: 'poll' | 'renew' }) => (
+    <div className="flex items-center justify-between border border-border/40 rounded p-2">
+      <div>
+        <div className="text-sm font-medium">{label}</div>
+        <div className="text-xs text-muted-foreground">{schedule} {row ? `· ${row.active ? 'active' : 'paused'}` : '· not installed'}</div>
+      </div>
+      <Switch checked={!!row?.active} disabled={!row} onCheckedChange={v => toggle(which, v)} />
+    </div>
+  );
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="text-base flex items-center gap-2"><Zap className="h-4 w-4" />Automation</CardTitle>
+        <Button size="sm" variant="ghost" onClick={refresh}><RefreshCcw className="h-4 w-4" /></Button>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <Row label="Payment poller" schedule="every 1 min" row={poll} which="poll" />
+        <Row label="Renewal nudger / expiry kicker" schedule="every 10 min" row={renew} which="renew" />
+        {(!poll || !renew) && (
+          <Button size="sm" onClick={install} disabled={busy}>
+            {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
+            Install crons
+          </Button>
+        )}
+        {poll && renew && (
+          <Button size="sm" variant="outline" onClick={install} disabled={busy}>
+            {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCcw className="h-4 w-4 mr-1" />}
+            Reinstall
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------- Webhook ----------
+
+function WebhookCard({ profileKey }: { profileKey: string }) {
+  const [info, setInfo] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+
+  const refresh = async () => {
+    try { const r = await invokeAdmin({ action: 'webhook_status', profile_key: profileKey }); setInfo(r.info); }
+    catch (e: any) { /* silent */ }
+  };
+  useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [profileKey]);
+
+  const register = async () => {
+    setBusy(true);
+    try { const r = await invokeAdmin({ action: 'webhook_register', profile_key: profileKey }); setInfo(r.info); toast.success('Webhook registered'); }
+    catch (e: any) { toast.error(e.message); }
+    setBusy(false);
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="text-base flex items-center gap-2"><LinkIcon className="h-4 w-4" />Telegram Webhook</CardTitle>
+        <Button size="sm" variant="ghost" onClick={refresh}><RefreshCcw className="h-4 w-4" /></Button>
+      </CardHeader>
+      <CardContent className="space-y-2 text-sm">
+        {info ? (
+          <>
+            <div><span className="text-muted-foreground">URL:</span> <code className="text-xs break-all">{info.url || '—'}</code></div>
+            <div><span className="text-muted-foreground">Pending updates:</span> {info.pending_update_count ?? 0}</div>
+            {info.last_error_message && <div className="text-destructive text-xs">Last error: {info.last_error_message}</div>}
+          </>
+        ) : <div className="text-muted-foreground text-xs">No webhook info yet.</div>}
+        <Button size="sm" onClick={register} disabled={busy}>
+          {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <LinkIcon className="h-4 w-4 mr-1" />}
+          {info?.url ? 'Re-register webhook' : 'Register webhook'}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------- Setup Wizard ----------
+
+function SetupWizardCard({ profileKey }: { profileKey: string }) {
+  const [running, setRunning] = useState(false);
+  const [steps, setSteps] = useState<Array<{ name: string; ok: boolean; detail?: string }>>([]);
+
+  const run = async () => {
+    setRunning(true); setSteps([]);
+    try {
+      const r = await invokeAdmin({ action: 'run_setup', profile_key: profileKey });
+      setSteps(r.steps ?? []);
+      if (r.ok) toast.success('Setup complete'); else toast.warning('Setup finished with issues');
+    } catch (e: any) { toast.error(e.message); }
+    setRunning(false);
+  };
+
+  return (
+    <Card>
+      <CardHeader><CardTitle className="text-base flex items-center gap-2"><Play className="h-4 w-4" />One-click Setup</CardTitle></CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Verifies config, tests the bot, installs crons, registers the webhook, and sends a self-test DM. Reusable for any profile.
+        </p>
+        <Button onClick={run} disabled={running}>
+          {running ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Zap className="h-4 w-4 mr-1" />}
+          Run setup
+        </Button>
+        {steps.length > 0 && (
+          <ul className="space-y-1 text-sm">
+            {steps.map((s, i) => (
+              <li key={i} className="flex items-start gap-2">
+                {s.ok ? <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" /> : <XCircle className="h-4 w-4 text-destructive mt-0.5" />}
+                <div>
+                  <div>{s.name}</div>
+                  {s.detail && <div className="text-xs text-muted-foreground">{s.detail}</div>}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ---------- Subscribers ----------
 
 function SubscribersTable({ profileKey }: { profileKey: string }) {
