@@ -12,6 +12,7 @@ import { Loader2, Save, RefreshCcw, Wallet, ExternalLink, Plus, Trash2 } from 'l
 import { CheckCircle2, XCircle, AlertTriangle, KeyRound, Zap, LinkIcon, Play, Users, Send, Megaphone } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { ChannelAttritionPanel } from './ChannelAttritionPanel';
 
 interface Props {
   profileKey: string;
@@ -31,6 +32,11 @@ interface SubscriptionConfig {
   central_wallet_pubkey: string | null;
   is_active: boolean;
   admin_telegram_id?: number | null;
+  public_chat_id?: string | null;
+  public_welcome_enabled?: boolean;
+  public_welcome_copy?: string | null;
+  public_welcome_image_url?: string | null;
+  public_welcome_persona?: string | null;
 }
 
 interface Tier {
@@ -68,6 +74,7 @@ export function SubscriptionAdminPanel({ profileKey, displayName }: Props) {
         <TabsTrigger value="affiliates">Affiliates</TabsTrigger>
         <TabsTrigger value="contacts">Contacts &amp; Broadcast</TabsTrigger>
         <TabsTrigger value="treasury">Treasury</TabsTrigger>
+        <TabsTrigger value="attrition">Attrition</TabsTrigger>
       </TabsList>
       <TabsContent value="bot"><BotChannelSettings profileKey={profileKey} displayName={displayName} /></TabsContent>
       <TabsContent value="pricing"><PricingEditor profileKey={profileKey} /></TabsContent>
@@ -75,6 +82,7 @@ export function SubscriptionAdminPanel({ profileKey, displayName }: Props) {
       <TabsContent value="affiliates"><AffiliatesPanel profileKey={profileKey} /></TabsContent>
       <TabsContent value="contacts"><ContactsPanel profileKey={profileKey} /></TabsContent>
       <TabsContent value="treasury"><TreasuryPanel profileKey={profileKey} /></TabsContent>
+      <TabsContent value="attrition"><ChannelAttritionPanel profileKey={profileKey} /></TabsContent>
     </Tabs>
   );
 }
