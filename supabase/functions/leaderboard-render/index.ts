@@ -3,6 +3,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { tableForCadence, RecapCadence } from '../_shared/leaderboard-recap.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -44,13 +45,16 @@ async function screenshot(targetUrl: string): Promise<Uint8Array> {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
-    const { run_id } = await req.json();
+    const { run_id, cadence: rawCadence } = await req.json();
     if (!run_id) throw new Error('run_id required');
+    const cadence: RecapCadence =
+      rawCadence === 'weekly' || rawCadence === 'monthly' ? rawCadence : 'daily';
+    const table = tableForCadence(cadence);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabase = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
-    const htmlBase = `${supabaseUrl}/functions/v1/leaderboard-html?run_id=${run_id}`;
+    const htmlBase = `${supabaseUrl}/functions/v1/leaderboard-html?run_id=${run_id}&cadence=${cadence}`;
     const variants: Array<'public' | 'private'> = ['public', 'private'];
     const out: Record<string, string> = {};
     for (const v of variants) {
@@ -63,7 +67,7 @@ serve(async (req) => {
       out[v] = pub.publicUrl;
     }
 
-    await supabase.from('leaderboard_daily_runs').update({
+    await supabase.from(table).update({
       image_public_url: out.public,
       image_private_url: out.private,
       status: 'rendered',
@@ -78,9 +82,12 @@ serve(async (req) => {
     console.error('[leaderboard-render] fatal', e);
     try {
       const body = await req.clone().json().catch(() => ({}));
+      const cad: RecapCadence =
+        body?.cadence === 'weekly' || body?.cadence === 'monthly' ? body.cadence : 'daily';
+      const tbl = tableForCadence(cad);
       if (body?.run_id) {
         const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-        await supabase.from('leaderboard_daily_runs').update({
+        await supabase.from(tbl).update({
           status: 'failed', error: String(e?.message || e),
         }).eq('id', body.run_id);
       }
