@@ -204,6 +204,44 @@ function BotChannelSettings({ profileKey, displayName }: Props) {
         </Button>
       </CardContent>
     </Card>
+    <Card>
+      <CardHeader><CardTitle className="text-base">🌙 Public channel welcome — Luna Dusk</CardTitle></CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Sent by the bot when a real user joins the <b>public</b> channel. Bot must be an admin
+          of the public channel for join events to be received. Supports <code>{'{name}'}</code>
+          and <code>{'{username}'}</code> placeholders.
+        </p>
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={!!cfg.public_welcome_enabled}
+            onCheckedChange={v => setCfg({ ...cfg, public_welcome_enabled: v })}
+          />
+          <span className="text-sm">{cfg.public_welcome_enabled ? 'Enabled — welcoming new public joins' : 'Disabled'}</span>
+        </div>
+        <div>
+          <Label>Welcome copy (HTML; leave blank for the default Luna Dusk greeting)</Label>
+          <Textarea
+            rows={5}
+            placeholder="🌙 {name}, dusk settles in..."
+            value={cfg.public_welcome_copy ?? ''}
+            onChange={e => setCfg({ ...cfg, public_welcome_copy: e.target.value })}
+          />
+        </div>
+        <div>
+          <Label>Welcome image URL (optional)</Label>
+          <Input
+            value={cfg.public_welcome_image_url ?? ''}
+            onChange={e => setCfg({ ...cfg, public_welcome_image_url: e.target.value })}
+            placeholder="https://..."
+          />
+        </div>
+        <Button onClick={save} disabled={saving} size="sm">
+          {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+          Save welcome
+        </Button>
+      </CardContent>
+    </Card>
     <AutomationCard profileKey={profileKey} />
     <WebhookCard profileKey={profileKey} />
     <SetupWizardCard profileKey={profileKey} />
