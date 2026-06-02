@@ -4,6 +4,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { tableForCadence, RecapCadence } from '../_shared/leaderboard-recap.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -37,10 +38,12 @@ function htmlDoc(opts: {
   entries: Array<any>;
   brand: string;
   variant: 'public' | 'private';
+  size: number;
 }) {
-  const { title, subtitle, accent, bgUrl, entries, brand, variant } = opts;
-  const padded = entries.slice(0, 20);
-  while (padded.length < 20) padded.push(null);
+  const { title, subtitle, accent, bgUrl, entries, brand, variant, size } = opts;
+  const slotCount = size <= 10 ? 10 : size <= 20 ? 20 : 25;
+  const padded = entries.slice(0, slotCount);
+  while (padded.length < slotCount) padded.push(null);
 
   const medals = ['🥇', '🥈', '🥉'];
 
@@ -70,8 +73,9 @@ function htmlDoc(opts: {
     </div>`;
   };
 
-  const leftCol = padded.slice(0, 10).map((e, i) => renderRow(e, i)).join('');
-  const rightCol = padded.slice(10, 20).map((e, i) => renderRow(e, i + 10)).join('');
+  const perCol = Math.ceil(slotCount / 2);
+  const leftCol = padded.slice(0, perCol).map((e, i) => renderRow(e, i)).join('');
+  const rightCol = padded.slice(perCol, slotCount).map((e, i) => renderRow(e, i + perCol)).join('');
 
   const bgCss = bgUrl
     ? `background-image: linear-gradient(rgba(0,0,0,.65), rgba(0,0,0,.85)), url('${esc(bgUrl)}'); background-size: cover; background-position: center;`
@@ -130,6 +134,10 @@ serve(async (req) => {
     const url = new URL(req.url);
     const runId = url.searchParams.get('run_id');
     const variant = (url.searchParams.get('variant') === 'private' ? 'private' : 'public') as 'public' | 'private';
+    const cadenceParam = url.searchParams.get('cadence') || 'daily';
+    const cadence: RecapCadence =
+      cadenceParam === 'weekly' || cadenceParam === 'monthly' ? cadenceParam : 'daily';
+    const table = tableForCadence(cadence);
     if (!runId) {
       return new Response('run_id required', { status: 400 });
     }
@@ -138,8 +146,8 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
     const { data: run, error } = await supabase
-      .from('leaderboard_daily_runs')
-      .select('id, profile_id, local_date, entries, window_start_utc, window_end_utc')
+      .from(table)
+      .select('*')
       .eq('id', runId)
       .maybeSingle();
     if (error || !run) return new Response('run not found', { status: 404 });
@@ -151,21 +159,36 @@ serve(async (req) => {
       .maybeSingle();
 
     const bgUrl = variant === 'private' ? profile?.bg_private_url : profile?.bg_public_url;
-    // Pretty date: "May 29"
-    let prettyDate = run.local_date as string;
-    try {
-      const d = new Date(`${run.local_date}T12:00:00Z`);
-      prettyDate = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
-    } catch {}
+    // Pretty subtitle per cadence
+    let prettyDate = '';
+    if (cadence === 'daily') {
+      prettyDate = String(run.local_date);
+      try {
+        const d = new Date(`${run.local_date}T12:00:00Z`);
+        prettyDate = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
+      } catch {}
+    } else if (cadence === 'weekly') {
+      prettyDate = `${run.week_start_date} → ${run.week_end_date}`;
+    } else {
+      prettyDate = String(run.month_label || run.month_start_date);
+    }
     const brandUpper = (profile?.brand_tagline || profile?.display_name || 'INSIDER ACCESS').toUpperCase();
+    const entriesArr = (run.entries as any[]) || [];
+    const size = entriesArr.length || (cadence === 'monthly' ? 25 : cadence === 'weekly' ? 20 : 10);
+    const titleLabel = cadence === 'weekly'
+      ? `${brandUpper} WEEKLY RECAP`
+      : cadence === 'monthly'
+        ? `${brandUpper} MONTHLY RECAP`
+        : `${brandUpper} DAILY RECAP`;
     const html = htmlDoc({
-      title: `${brandUpper} DAILY RECAP`,
+      title: titleLabel,
       subtitle: prettyDate,
       accent: profile?.accent_hex || '#22d3ee',
       bgUrl: bgUrl || null,
-      entries: (run.entries as any[]) || [],
+      entries: entriesArr,
       brand: profile?.brand_tagline || profile?.display_name || 'No Lube Alpha',
       variant,
+      size,
     });
     return new Response(html, {
       headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
