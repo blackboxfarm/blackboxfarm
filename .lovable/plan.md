@@ -1,122 +1,105 @@
-# Affiliate / Referral System for the Subscription Bot
-
 ## Goal
 
-Let any paid subscriber earn free months by referring friends. Each paid friend = +1 month banked, which auto-extends their `expires_at`. Code only works while the referrer is "live" (paid time OR banked affiliate time remaining). Wire it into the existing `profile-subscription-*` flow and seed marketing copy in welcome DMs + channel preamble posts.
+Build a per-profile-bot CRM table: every Telegram user who has ever DM'd one of our subscription bots, with full attribution + lifecycle + referral history. This becomes the audience pool for future broadcast/marketing posts.
 
-## How a user experiences it
+## Why a new table
 
-1. User pays → already gets the VIP welcome DM (existing). We append:
-   - Their personal referral link: `https://t.me/<bot_username>?start=ref_AB12CD`
-   - Their code: `AB12CD`
-   - One-liner: "Every friend who pays = +1 month free, stacked on top of your current expiry."
-2. They share the link on X / TikTok / DM.
-3. Friend taps it → Telegram opens the bot with `/start ref_AB12CD`. The bot webhook captures the code, stores a pending attribution for that `telegram_user_id`, and proceeds with the normal quote flow.
-4. When that friend pays (`profile-subscription-poll` flips them to `paid`):
-   - Look up the pending attribution.
-   - Validate referrer code is currently `active`.
-   - Insert a `referral_credits` row (+1 month, `status='applied'`).
-   - Extend referrer's active subscription `expires_at` by 1 month (or create a `bonus`-source subscription row covering the next month if they're currently expired-but-still-live-via-bank).
-   - DM the referrer: "🎉 {friend_handle} just subscribed — +1 month added. New expiry: …"
-5. Referral code lifecycle:
-   - `active` while `now() < expires_at` OR a future-dated banked credit keeps them live
-   - `inactive` once both run out → friend tapping link still works but bot replies "Referral code expired — ask {handle} to renew." and attribution is NOT stored
-   - Re-subscribing flips the same code back to `active` (codes are permanent per user)
+`telegram_bot_interactions` is the main HoldersIntel bot's command log (event stream, no per-user state). The subscription bots (`profile-subscription-bot-webhook`) are a separate system per profile. We need a **per-profile contact list** that rolls up everything we know into one row per `(profile_key, telegram_user_id)`.
 
-## Schema changes (one migration)
+## Schema
+
+One new table `profile_bot_contacts` plus an append-only `profile_bot_contact_events` for the timeline.
 
 ```text
-referral_codes
-  id, profile_key, telegram_user_id, code (6-char A-Z0-9, UNIQUE per profile),
-  status ('active' | 'inactive'), created_at, last_activated_at, last_deactivated_at
-  UNIQUE (profile_key, telegram_user_id)
+profile_bot_contacts                       -- one row per (profile, tg user)
+  id, profile_key, telegram_user_id (UNIQUE with profile_key)
+  telegram_username, first_name, last_name, language_code
+  first_seen_at, last_seen_at, total_dms
 
-referral_attributions
-  id, profile_key, referrer_code, referrer_telegram_user_id,
-  referred_telegram_user_id, status ('pending' | 'converted' | 'expired' | 'rejected'),
-  rejection_reason, created_at, converted_at, subscription_id (FK to profile_subscriptions)
-  UNIQUE (profile_key, referred_telegram_user_id)  -- one attribution per friend, first wins
+  -- attribution
+  acquisition_source        -- 'organic' | 'referral' | 'unknown'
+  first_referrer_code       -- code they originally arrived with (if any)
+  first_referrer_tg_id      -- referrer's telegram user id (if any)
+  last_referrer_code        -- most recent code they tapped
+  utm_payload               -- raw /start payload (for future deeplink params)
 
-referral_credits
-  id, profile_key, referrer_telegram_user_id, attribution_id,
-  months_granted (int, default 1), applied_to_subscription_id,
-  new_expires_at, created_at
+  -- subscription lifecycle (denormalized rollup)
+  ever_paid               BOOLEAN
+  is_currently_paid       BOOLEAN
+  total_subscriptions     INT
+  total_months_paid       INT
+  total_sol_paid          NUMERIC
+  current_expires_at      TIMESTAMPTZ
+  last_paid_at            TIMESTAMPTZ
+  first_paid_at           TIMESTAMPTZ
+
+  -- referrer activity (this user as a referrer)
+  has_referral_code       BOOLEAN
+  referral_code           TEXT
+  referral_code_status    TEXT          -- 'active'|'inactive'|null
+  referrals_attributed    INT           -- friends who tapped their link
+  referrals_converted     INT           -- friends who paid
+  referrals_pending       INT
+  referral_months_earned  INT
+
+  -- comms preferences
+  opted_out_broadcasts    BOOLEAN DEFAULT false
+  last_broadcast_at       TIMESTAMPTZ
+
+  created_at, updated_at
+
+profile_bot_contact_events                 -- append-only timeline
+  id, profile_key, telegram_user_id
+  event_type   -- 'first_dm' | 'command' | 'ref_link_tapped' | 'quote_issued'
+               -- | 'paid' | 'expired' | 'renewed' | 'referred_friend_paid'
+               -- | 'broadcast_sent' | 'opted_out'
+  payload      JSONB    -- command name, ref code, sub_id, msg_id, etc.
+  created_at
 ```
 
-Add columns to `profile_subscription_configs`:
-- `affiliate_enabled BOOLEAN DEFAULT true`
-- `affiliate_marketing_copy TEXT` (block appended to paid welcome DM)
-- `affiliate_public_preamble TEXT` (rotated into public channel preambles)
-- `affiliate_private_preamble TEXT` (rotated into private channel preambles)
-- `affiliate_months_per_referral INT DEFAULT 1`
+Both tables RLS-locked to service_role + super_admin select.
 
-GRANT + RLS to match the rest of `profile_*` tables (service_role only; bot reads via service key).
+## Wiring (3 touch points)
 
-## Edge function changes
+**1. `profile-subscription-bot-webhook`** — on every incoming `message` or `callback_query`:
+   - upsert the contact row (insert if new with `acquisition_source='organic'`, update `last_seen_at`, increment `total_dms`, refresh username/first_name/last_name)
+   - if `/start ref_XXXXXX`: set `last_referrer_code`, set `first_referrer_code` only if null, set `acquisition_source='referral'` if it was 'organic' AND this is the very first interaction; log `ref_link_tapped` event
+   - log `command` event for `/start /buy /renew /status /help`
+   - log `quote_issued` event when a buy button is tapped
 
-### `profile-subscription-bot-webhook`
-- On `/start ref_XXXXXX`:
-  - Look up `referral_codes` where `code = upper(XXXXXX)` and `profile_key` matches and `status='active'`.
-  - If valid + not the same `telegram_user_id` + no prior attribution for this referred user → upsert `referral_attributions` (`status='pending'`).
-  - If self-referral or already-attributed-elsewhere → store `status='rejected'` with reason.
-  - If code inactive → DM the friend the "ask them to renew" copy, no attribution.
-- Continue normal welcome flow.
+**2. `profile-subscription-poll`** — when a subscription flips to `paid`:
+   - update contact: `ever_paid=true`, `is_currently_paid=true`, increment `total_subscriptions`, add `tier_months` to `total_months_paid`, add `quoted_sol` to `total_sol_paid`, set `first_paid_at`/`last_paid_at`/`current_expires_at`
+   - log `paid` event with sub_id
+   - if attribution was applied → on the **referrer's** contact row, increment `referrals_converted` + `referral_months_earned`, log `referred_friend_paid` event
 
-### `profile-subscription-poll` (where status flips to `paid`)
-- After the existing `paid` update block:
-  - Generate / ensure a `referral_codes` row for the new paid user (6-char random A-Z0-9, retry on collision). Mark `active`.
-  - Check for a `pending` attribution for `referred_telegram_user_id = sub.telegram_user_id`.
-  - If found and referrer code still `active`:
-    - Find referrer's currently-live subscription (highest `expires_at`).
-    - Bump `expires_at += 1 month`.
-    - Insert `referral_credits` row + flip attribution to `converted`.
-    - DM referrer (use existing `tgSendDM`).
-  - Append affiliate marketing block to the VIP welcome DM (pulled from `affiliate_marketing_copy`, with `{ref_link}` / `{ref_code}` placeholders).
+**3. `profile-affiliate-tick` (existing hourly cron)** — extend to also recompute rollups:
+   - `is_currently_paid` based on `now() < current_expires_at`
+   - `referral_code` / `referral_code_status` / `referrals_attributed` / `referrals_pending` from the referral tables
+   - covers self-healing for any drift
 
-### New `profile-affiliate-tick` (hourly cron)
-- For each profile:
-  - Recompute "live" status per referrer: `active` if `now() < max(expires_at)` across their paid + bonus subs, else `inactive`.
-  - Flip `referral_codes.status` accordingly, stamp `last_activated_at` / `last_deactivated_at`.
-  - Expire `pending` attributions older than 14 days.
+## Backfill (one-shot)
 
-### New `profile-affiliate-stats` (admin read-only)
-- Returns per-user totals: code, status, total_referrals, converted, months_earned, current_expiry — feeds the super-admin panel.
+A new edge function `profile-bot-contacts-backfill` runs once to populate from existing data:
+- Seed contacts from `profile_subscriptions` (every distinct `telegram_user_id` per profile) → these are guaranteed paid users
+- Seed contacts from `referral_codes` (every referrer)
+- Seed contacts from `referral_attributions` (every referred user)
+- Roll up totals from `profile_subscriptions` and `referral_credits`
+- This will NOT recover historical lurkers who DM'd before the table existed (Telegram doesn't expose that retroactively); the table grows organically from this point forward for those.
 
-### Marketing preamble rotator
-- Lightweight: add an `affiliate` rotation slot to whatever preamble system already drives the No Lube / Insiders channels (or new `profile-affiliate-preamble-post` hourly cron that randomly posts one of N variants from `affiliate_public_preamble` / `affiliate_private_preamble` once every X hours per profile, with last-posted-at gating).
+## Super-admin surface
 
-## Copy seeds (admin-editable, defaults shipped in migration)
+Extend `profile-subscription-admin` with two new actions:
+- `contacts_list` → paginated, filterable (paid/unpaid, referrer-only, source, search by username) — feeds a table UI
+- `contacts_broadcast` → send a message to a filtered segment via the profile's bot, with per-recipient rate limiting (Telegram caps ~30 msgs/sec to different users), records `broadcast_sent` events + bumps `last_broadcast_at`, honors `opted_out_broadcasts`
 
-Paid welcome DM append:
-```
-🎁 You're in. Want free months?
-Share your personal link — every friend who subscribes gets you +1 month, stacked on top of your current expiry.
-🔗 {ref_link}
-🔑 Code: {ref_code}
-Post it on X, TikTok, group chats — no cap on how many months you can stack.
-```
+A new `/stop` command on the bot flips `opted_out_broadcasts=true` and logs the event (CAN-SPAM-style hygiene).
 
-Public channel preamble (rotated):
-```
-👀 Members earn free months by inviting friends.
-Subscribe once → get a referral link → +1 month per paid friend, forever stackable.
-```
+## Out of scope (this round)
 
-Private channel preamble (rotated):
-```
-💎 Insider perk: your referral link is in your DMs.
-Drop it on X or TikTok — every paid friend = +1 month on your subscription, auto-applied.
-```
+- Frontend super-admin UI for browsing/broadcasting — can ship after the data layer is verified. I'll add the JSON endpoints now; we wire a panel in a follow-up.
+- Cross-profile dedupe — contacts are scoped per `profile_key` on purpose (each bot is its own audience).
+- Drip campaigns / scheduling — single-shot broadcasts only for v1.
 
-## Out of scope
+## Open question
 
-- No payouts in SOL/cash — months only.
-- No multi-level (no commission on a referee's later referrals).
-- No public leaderboard UI yet (data is captured; UI can come later).
-- No fraud heuristics beyond same-user / duplicate-attribution guards.
-
-## Open questions
-
-1. Confirm **1 month** per paid referral regardless of the tier the friend bought (1mo / 3mo / 12mo), vs scaling (e.g. friend buys 3mo → referrer gets 3mo)? Plan above = flat 1 month always.
-2. Confirm **14-day** pending-attribution window (friend taps link but delays paying).
-3. Should the referrer's code be shown on every monthly renewal reminder too, or only in the initial welcome DM?
+For the broadcast action: do you want a **dry-run first** (returns recipient count + sample message, requires a second call with `confirm: true` to actually send), or send immediately? I'd recommend dry-run-by-default so we don't fat-finger a 5000-user blast.
