@@ -35,6 +35,8 @@ const MEDALS = ['🥇', '🥈', '🥉'];
  * Uses plain text + light Markdown (the no-lube-push fallback strips Markdown
  * if it fails to parse, so we keep it minimal).
  */
+export type RecapText = { caption: string; followUp?: string };
+
 export function buildRecapCaption(opts: {
   cadence: RecapCadence;
   brand: string;            // e.g. "NO LUBE"  or  "PREMIUM INSIDERS"
@@ -44,7 +46,7 @@ export function buildRecapCaption(opts: {
   entries: RecapEntry[];
   entryCount: number;
   variantTag?: 'PUBLIC' | 'PRIVATE';
-}): string {
+}): RecapText {
   const { cadence, brand, size, dateLabel, windowLabel, entries, entryCount, variantTag } = opts;
   const upper = brand.toUpperCase();
   const headerEmoji = cadence === 'weekly' ? '📅' : cadence === 'monthly' ? '🗓️' : '🏆';
@@ -57,14 +59,16 @@ export function buildRecapCaption(opts: {
   // Pin-preview line (the only line many users will see in the pin banner)
   const headLine = `${headerEmoji} ${upper} ${labelName} — ${dateLabel}`;
 
-  // Podium
-  const podium = entries.slice(0, 3).map((e, i) => {
+  // Full ranked list — every token in the recap
+  const rankedLines = entries.map((e, i) => {
     const t = (e.ticker || e.token_symbol || 'TOKEN').toUpperCase();
     const mult = fmtMult(Number(e.multiplier));
     const entry = fmtMcap(Number(e.called_at_mcap));
     const peak = fmtMcap(Number(e.ath_mcap));
-    return `${MEDALS[i]} #${i + 1} $${esc(t)}  *${esc(mult)}*  · ${esc(entry)} → ${esc(peak)}`;
-  }).join('\n');
+    const prefix = i < 3 ? `${MEDALS[i]} #${i + 1}` : `#${i + 1}`;
+    return `${prefix} $${esc(t)}  *${esc(mult)}*  · ${esc(entry)} → ${esc(peak)}`;
+  });
+  const ranked = rankedLines.join('\n');
 
   const n4x = entries.filter((e) => Number(e.multiplier) >= 4).length;
   const n10x = entries.filter((e) => Number(e.multiplier) >= 10).length;
@@ -76,9 +80,26 @@ export function buildRecapCaption(opts: {
   const statsLine = `📊 ${esc(windowLabel)} · ${entryCount} qualifying call${entryCount === 1 ? '' : 's'}${variantTag ? ` · ${variantTag}` : ''}`;
   const tailLine = `👀 Full table in the image below.`;
 
-  return [headLine, '', podium, '', biggestLine, statsLine, tailLine]
-    .filter((l) => l !== '')
-    .join('\n');
+  // Telegram sendPhoto caption hard limit is 1024 chars. Try to fit the full
+  // ranked list inside the caption; if it would overflow, keep the caption
+  // short (header + biggest/stats — perfect for the pin-preview banner) and
+  // emit the full list as a follow-up text message.
+  const fullCaption = [headLine, '', ranked, '', biggestLine, statsLine, tailLine]
+    .filter((l) => l !== '').join('\n');
+  if (fullCaption.length <= 1024) {
+    return { caption: fullCaption };
+  }
+  const shortCaption = [headLine, '', biggestLine, statsLine, tailLine]
+    .filter((l) => l !== '').join('\n');
+  // Split the ranked list into <=4096-char Telegram message chunks
+  const chunks: string[] = [];
+  let buf = `${headLine}\n\n`;
+  for (const line of rankedLines) {
+    if ((buf + line + '\n').length > 3800) { chunks.push(buf.trimEnd()); buf = ''; }
+    buf += line + '\n';
+  }
+  if (buf.trim()) chunks.push(buf.trimEnd());
+  return { caption: shortCaption, followUp: chunks.join('\n\n— cont. —\n\n') };
 }
 
 /** Pin a message and (optionally) unpin a previously pinned one. */

@@ -55,7 +55,7 @@ serve(async (req) => {
       windowLabel = 'Full month';
     }
 
-    const captionFor = (variant: 'public' | 'private') => buildRecapCaption({
+    const recapFor = (variant: 'public' | 'private') => buildRecapCaption({
       cadence, brand, size, dateLabel, windowLabel,
       entries, entryCount: run.entry_count,
       variantTag: variant === 'private' ? 'PRIVATE' : 'PUBLIC',
@@ -63,7 +63,9 @@ serve(async (req) => {
 
     // Persist the (public) caption text on the run for archival/debug
     try {
-      await supabase.from(table).update({ caption_text: captionFor('public') }).eq('id', run_id);
+      const pub = recapFor('public');
+      const archived = pub.followUp ? `${pub.caption}\n\n${pub.followUp}` : pub.caption;
+      await supabase.from(table).update({ caption_text: archived }).eq('id', run_id);
     } catch {}
 
     // Resolve destination chat IDs (for pin/unpin)
@@ -101,11 +103,12 @@ serve(async (req) => {
     for (const [variant, imageUrl, enabled] of targets) {
       if (!enabled) { out[variant] = { skipped: true }; continue; }
       if (!imageUrl) { out[variant] = { skipped: true, reason: 'no_image' }; continue; }
+      const recap = recapFor(variant);
       const r = await fetch(`${supabaseUrl}/functions/v1/no-lube-push`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anonKey}`, apikey: anonKey },
         body: JSON.stringify({
-          text: captionFor(variant),
+          text: recap.caption,
           channel: variant,
           image_url: imageUrl,
           override: true,
@@ -116,6 +119,26 @@ serve(async (req) => {
       if (out[variant].ok && j?.message_id) {
         const col = variant === 'public' ? 'tg_public_message_id' : 'tg_private_message_id';
         await supabase.from(table).update({ [col]: j.message_id }).eq('id', run_id);
+
+        // Send the full ranked list as a follow-up text message when it
+        // didn't fit inside the photo caption (Top 20 / Top 25 cases).
+        if (recap.followUp) {
+          try {
+            const fr = await fetch(`${supabaseUrl}/functions/v1/no-lube-push`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anonKey}`, apikey: anonKey },
+              body: JSON.stringify({
+                text: recap.followUp,
+                channel: variant,
+                override: true,
+              }),
+            });
+            const fj = await fr.json().catch(() => ({}));
+            out[variant].followup = { ok: fr.ok && fj?.ok !== false, message_id: fj?.message_id };
+          } catch (e: any) {
+            out[variant].followup = { ok: false, error: String(e?.message || e) };
+          }
+        }
 
         // Pin (and rotate off the previous pin for this cadence)
         if (pinFlag && botToken && chatIds[variant]) {
