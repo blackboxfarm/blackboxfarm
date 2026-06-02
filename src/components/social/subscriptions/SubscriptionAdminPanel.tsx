@@ -29,6 +29,7 @@ interface SubscriptionConfig {
   display_currencies: string[];
   central_wallet_pubkey: string | null;
   is_active: boolean;
+  admin_telegram_id?: number | null;
 }
 
 interface Tier {
