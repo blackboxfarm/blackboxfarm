@@ -4598,8 +4598,23 @@ serve(withRunLog('holdersintel-bot-webhook', async (req) => {
         .eq('chat_id', chatId)
         .eq('enabled', true)
         .maybeSingle();
-      if (bbCfg?.role === 'blackbox_group' || bbCfg?.role === 'output_channel') {
-        console.log(`[bot] silent-mode (blackbox ${bbCfg.role}) chat:${chatId} — skipping`);
+      if (bbCfg?.role === 'output_channel') {
+        console.log(`[bot] silent-mode (output_channel) chat:${chatId} — skipping`);
+        return new Response("OK");
+      }
+      if (bbCfg?.role === 'blackbox_group') {
+        // Carve-out: skip command handling + /ca toggle, but still let the
+        // passive auto-CA scanner fire so HoldersIntel posts its wallet-analysis
+        // reply alongside Phanes / Dr. Rick when a bare CA shows up.
+        try {
+          const detectedCA = looksLikeSolanaCA(message.text);
+          if (detectedCA) {
+            console.log(`[bot] blackbox_group passive auto-scan chat:${chatId} ca:${detectedCA.slice(0,12)}`);
+            await handleGroupAutoScan(chatId, telegramUserId, detectedCA, messageId);
+          }
+        } catch (e) {
+          console.warn('[bot] blackbox_group passive auto-scan failed:', e);
+        }
         return new Response("OK");
       }
     } catch (e) {
