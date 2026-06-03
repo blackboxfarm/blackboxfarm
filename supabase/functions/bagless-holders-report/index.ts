@@ -176,8 +176,101 @@ serve(withRunLog('bagless-holders-report', async (req) => {
     // RPC: Get all token accounts
     // ============================================
     let data: any = null;
-    
-    for (const url of rpcEndpoints) {
+
+    // ── PRIMARY PATH: Helius DAS getTokenAccounts (paginated) ──
+    // Public RPCs (and the Helius standard RPC) reject getProgramAccounts on
+    // SPL tokens. The DAS endpoint getTokenAccounts is the supported way to
+    // enumerate every holder of a mint and is paginated.
+    if (heliusApiKey) {
+      try {
+        const heliusUrl = `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`;
+
+        // Pull decimals once via getTokenSupply so we can compute uiAmount.
+        let decimals = 0;
+        try {
+          const supRes = await fetch(heliusUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getTokenSupply', params: [tokenMint] }),
+            signal: AbortSignal.timeout(8000),
+          });
+          const supJson = await supRes.json();
+          decimals = supJson?.result?.value?.decimals ?? 0;
+        } catch (e) {
+          console.log(`[bagless] getTokenSupply failed: ${String(e).slice(0, 120)}`);
+        }
+
+        const synthetic: any[] = [];
+        let cursor: string | undefined = undefined;
+        let pages = 0;
+        const MAX_PAGES = 20; // 20 * 1000 = 20k accounts safety cap
+
+        while (pages < MAX_PAGES) {
+          const body: any = {
+            jsonrpc: '2.0',
+            id: `das-${pages}`,
+            method: 'getTokenAccounts',
+            params: { mint: tokenMint, limit: 1000, ...(cursor ? { cursor } : {}) },
+          };
+          const resp = await fetch(heliusUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(15000),
+          });
+          if (!resp.ok) {
+            const txt = await resp.text().catch(() => '');
+            rpcErrors.push(`helius-das ${resp.status}: ${txt.slice(0, 160)}`);
+            console.log(`[bagless] Helius DAS getTokenAccounts HTTP ${resp.status}: ${txt.slice(0, 160)}`);
+            break;
+          }
+          const json = await resp.json();
+          if (json?.error) {
+            rpcErrors.push(`helius-das error: ${JSON.stringify(json.error).slice(0, 160)}`);
+            console.log(`[bagless] Helius DAS getTokenAccounts error: ${JSON.stringify(json.error).slice(0, 160)}`);
+            break;
+          }
+          const accounts = json?.result?.token_accounts || [];
+          for (const ta of accounts) {
+            const amountRaw = String(ta.amount ?? '0');
+            const uiAmount = decimals > 0
+              ? Number(amountRaw) / Math.pow(10, decimals)
+              : Number(amountRaw);
+            synthetic.push({
+              pubkey: ta.address,
+              account: {
+                owner: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+                data: {
+                  parsed: {
+                    info: {
+                      owner: ta.owner,
+                      tokenAmount: { uiAmount, amount: amountRaw, decimals },
+                    },
+                  },
+                },
+              },
+            });
+          }
+          cursor = json?.result?.cursor;
+          pages++;
+          if (!cursor || accounts.length < 1000) break;
+        }
+
+        if (synthetic.length > 0) {
+          data = { result: synthetic };
+          usedRpc = 'helius-das:getTokenAccounts';
+          console.log(`✅ Helius DAS getTokenAccounts SUCCESS — ${synthetic.length} accounts across ${pages} page(s)`);
+        } else {
+          console.log(`[bagless] Helius DAS returned 0 accounts; falling back to getProgramAccounts`);
+        }
+      } catch (e) {
+        rpcErrors.push(`helius-das exception: ${String(e).slice(0, 160)}`);
+        console.log(`[bagless] Helius DAS exception: ${String(e).slice(0, 160)}`);
+      }
+    }
+
+    // ── FALLBACK: legacy getProgramAccounts loop ──
+    if (!data) for (const url of rpcEndpoints) {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -194,9 +287,16 @@ serve(withRunLog('bagless-holders-report', async (req) => {
             }),
             signal: controller.signal
           });
-          if (!resp.ok) return { result: [] };
+          if (!resp.ok) {
+            const txt = await resp.text().catch(() => '');
+            rpcErrors.push(`${url} HTTP ${resp.status}: ${txt.slice(0, 120)}`);
+            return { result: [] };
+          }
           const json = await resp.json();
-          if (json.error) return { result: [] };
+          if (json.error) {
+            rpcErrors.push(`${url} rpc-error: ${JSON.stringify(json.error).slice(0, 160)}`);
+            return { result: [] };
+          }
           return json;
         };
 
@@ -222,13 +322,15 @@ serve(withRunLog('bagless-holders-report', async (req) => {
           break;
         }
       } catch (e) {
-        rpcErrors.push(String(e));
+        rpcErrors.push(`${url} exception: ${String(e).slice(0, 160)}`);
         continue;
       }
     }
 
     if (!data) {
-      throw new Error(`All RPC endpoints failed. ${rpcErrors.join(' | ')}`);
+      const reason = rpcErrors.length ? rpcErrors.join(' | ') : 'no provider returned results';
+      console.log(`[bagless] All holder providers failed: ${reason}`);
+      throw new Error(`All RPC endpoints failed. ${reason}`);
     }
 
     // ============================================
