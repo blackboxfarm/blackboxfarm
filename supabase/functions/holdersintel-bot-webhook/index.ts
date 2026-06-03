@@ -3015,12 +3015,58 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
   await logUsage(telegramUserId, "/autoscan", ca);
 
   // Parallel: fetch holders data AND cached early warnings
+  // One retry with backoff — Helius/RPC fan-out occasionally returns
+  // "All RPC endpoints failed" on a single attempt and clears on retry.
+  const fetchHolders = async () => {
+    let r = await invokeFunction("bagless-holders-report", { tokenMint: ca });
+    if (!r || r.error) {
+      await new Promise((res) => setTimeout(res, 500));
+      r = await invokeFunction("bagless-holders-report", { tokenMint: ca });
+    }
+    return r;
+  };
   const [holdersData, cachedWarnings] = await Promise.all([
-    invokeFunction("bagless-holders-report", { tokenMint: ca }),
+    fetchHolders(),
     getTokenWarnings(ca, supabase),
   ]);
 
-  if (!holdersData || holdersData.error) return; // silently fail
+  const holdersOk = holdersData && !holdersData.error;
+
+  if (!holdersOk) {
+    // BlackBox aggregator group MUST always see a HoldersIntel reply lined
+    // up alongside Phanes / Rick. For customer-installed groups we keep the
+    // original silent-fail behaviour so paid installs aren't spammed.
+    if (!opts?.skipActivationCheck) return;
+
+    // Tiered fallback: DexScreener-only stats → minimal stub.
+    let symbol: string | null = null;
+    let mcUsd: number | null = null;
+    let liqUsd: number | null = null;
+    try {
+      const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${ca}`);
+      if (dexRes.ok) {
+        const dx = await dexRes.json();
+        const pair = (dx?.pairs || [])
+          .filter((p: any) => p.chainId === 'solana')
+          .sort((a: any, b: any) => (b?.liquidity?.usd || 0) - (a?.liquidity?.usd || 0))[0];
+        if (pair) {
+          symbol = pair.baseToken?.symbol || null;
+          mcUsd = pair.marketCap ?? pair.fdv ?? null;
+          liqUsd = pair?.liquidity?.usd ?? null;
+        }
+      }
+    } catch (_) { /* ignore */ }
+
+    const label = symbol ? obfuscateTicker(symbol) : ca.slice(0, 8) + '...';
+    const lines: string[] = [`⚡ *${label} — Quick Stats*`, ''];
+    if (mcUsd != null) lines.push(`💰 MC: *$${Math.round(mcUsd).toLocaleString()}*`);
+    if (liqUsd != null) lines.push(`💧 Liq: *$${Math.round(liqUsd).toLocaleString()}*`);
+    lines.push(`_Holders snapshot temporarily unavailable — retrying on next tick._`);
+    lines.push(`\n🔗 [Full Report](https://blackbox.farm/holders?token=${ca}) | [BubbleMap](https://blackbox.farm/bubblemap?token=${ca})${TAGLINE}`);
+    console.log(`[bot] blackbox_group reply sent (fallback) chat:${chatId} ca:${ca.slice(0,12)} dexOk:${mcUsd != null}`);
+    await sendMessage(chatId, lines.join('\n'), "Markdown", replyToMsgId);
+    return;
+  }
 
   const symbol = holdersData?.symbol || holdersData?.tokenSymbol || null;
   const health = holdersData?.healthScore?.score ?? holdersData?.stabilityScore ?? null;
@@ -3079,6 +3125,9 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
     TAGLINE;
 
   await sendMessage(chatId, msg, "Markdown", replyToMsgId);
+  if (opts?.skipActivationCheck) {
+    console.log(`[bot] blackbox_group reply sent (full) chat:${chatId} ca:${ca.slice(0,12)}`);
+  }
 
   // Fire-and-forget: write new warnings from this scan (cumulative)
   const newWarnings = generateWarningsFromHoldersData(ca, holdersData, 'autoscan');
