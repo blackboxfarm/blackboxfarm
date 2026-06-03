@@ -152,7 +152,9 @@ Deno.serve(withRunLog('profile-subscription-bot-webhook', async (req) => {
   if (!botToken) return new Response(JSON.stringify({ ok: true, ignored: 'no-bot' }), { status: 200 });
 
   const expected = await deriveSecret(botToken);
-  if (!safeEq(req.headers.get('X-Telegram-Bot-Api-Secret-Token'), expected)) {
+  const provided = req.headers.get('X-Telegram-Bot-Api-Secret-Token');
+  if (!safeEq(provided, expected)) {
+    console.warn(`[bot-webhook] secret mismatch profile=${profileKey} hasHeader=${!!provided} headerLen=${provided?.length ?? 0} expectedLen=${expected.length} — re-run setup to re-register webhook.`);
     return new Response('Unauthorized', { status: 401 });
   }
 
