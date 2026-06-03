@@ -1,76 +1,39 @@
+## Why the bot is silent
 
-## Per-Profile Central Wallet — Generate, Custody, Manage
+The webhook IS firing in BlackBox group (`-1003739469076`) and entering the passive auto-scan path correctly. Logs show:
 
-Today each profile (`no_lube`, etc.) needs a `central_wallet_pubkey` set manually, and there's no internal custody for it. This plan makes Lovable **generate and own** one central wallet per profile, store the encrypted key the same way subscription deposit wallets do (AES-256-GCM via `SecureStorage`), and add a Super Admin panel to view balance, transactions, and withdraw.
-
-### 1. Schema change (single migration)
-
-Extend `profile_subscription_configs` so the central wallet is self-managed:
-
-- `central_wallet_secret_encrypted text` — AES-GCM encrypted secret key (NULL = externally-owned legacy wallet)
-- `central_wallet_generated_at timestamptz`
-- `central_wallet_label text` (e.g. "No Lube Treasury")
-
-Existing rows with a manually-set `central_wallet_pubkey` are left untouched (treated as external/read-only — no withdraw button, only balance).
-
-### 2. New edge functions
-
-| Function | Purpose |
-|---|---|
-| `profile-central-wallet-generate` | Super-admin only. If a profile has no `central_wallet_pubkey`, generate Keypair, encrypt secret, store pubkey + encrypted secret. Refuses to overwrite an existing wallet (must explicitly rotate). |
-| `profile-central-wallet-balance` | Returns live SOL balance via Helius RPC for a given `profile_key`. |
-| `profile-central-wallet-transactions` | Returns last N (default 50) signatures + parsed transfers for the central wallet via Helius. |
-| `profile-central-wallet-withdraw` | Super-admin only. Body: `{ profile_key, destination_pubkey, amount_sol \| "all" }`. Loads encrypted keypair, builds `SystemProgram.transfer`, leaves ≥ `FEE_BUFFER_LAMPORTS` if `all`, signs, sends, confirms, logs to a new `profile_central_wallet_withdrawals` audit table. |
-| `profile-central-wallet-rotate` (optional, deferred) | Generate new wallet, sweep old → new, mark old as retired. Flagged but not built in this pass unless you want it now. |
-
-All four are super-admin-gated via the existing `assertSuperAdmin` pattern used by `profile-subscription-admin`.
-
-### 3. Audit table
-
-`profile_central_wallet_withdrawals`:
-- `profile_key`, `from_pubkey`, `to_pubkey`, `lamports`, `signature`, `requested_by` (admin user id), `status` (`pending|confirmed|failed`), `error`, `created_at`, `confirmed_at`.
-- RLS: select/insert via service_role only; admin UI reads through the admin edge function.
-
-### 4. Super Admin UI
-
-In `SubscriptionAdminPanel.tsx`, add a new **"Treasury"** tab (next to Profiles / Affiliates / Contacts), one card per profile:
-
-```text
-┌───────────────────────────────────────────────────────────┐
-│ no_lube — No Lube Treasury                                │
-│ Address: 9xK…wQ2  [copy] [solscan]                        │
-│ Balance: 4.812 SOL  ($812.34)        [Refresh]            │
-│ ─────────────────────────────────────────────────────────  │
-│ Recent transactions (last 50)                              │
-│   ↓ +0.45 SOL  from 3aB…  2m ago   tx                     │
-│   ↑ −2.00 SOL  to 8nM…   1h ago   tx (withdraw)           │
-│ ─────────────────────────────────────────────────────────  │
-│ [ Withdraw ]   (opens modal: destination, amount, confirm) │
-└───────────────────────────────────────────────────────────┘
+```
+[bot] blackbox_group passive auto-scan chat:-1003739469076 ca:Fyc2fmukseRM
+[bot] bagless-holders-report error (500): {"error":"All RPC endpoints failed. "}
 ```
 
-For profiles with no wallet yet → big **"Generate Central Wallet"** button.
-For legacy externally-owned wallets (only `central_wallet_pubkey` set, no encrypted secret) → balance + tx shown, withdraw button disabled with tooltip "Externally owned — withdraw from source wallet".
+In `handleGroupAutoScan` (line ~3023), when `bagless-holders-report` errors, the function does `return; // silently fail` — so HoldersIntel never sends a reply. The bot's own self-diagnosis (privacy mode / regex / is_ca_only) was a hallucination; the real cause is the Helius/RPC fan-out returning 500 and the handler bailing without a fallback.
 
-Withdraw modal:
-- Destination pubkey (validated as base58 / 32-byte)
-- Amount: SOL input + **"Max (leave fee buffer)"** shortcut
-- Confirmation step showing exact lamports, fee, remaining balance
-- Two-click confirm (no auto-submit)
+## Fix
 
-### 5. Security notes
+### 1. Root cause: `bagless-holders-report` RPC failure
+- Inspect the RPC endpoint list / credit state in `bagless-holders-report` and verify Helius `HELIUS_API_KEY` is loaded and not exhausted.
+- Add one retry with 500 ms backoff across the existing RPC fallback chain before returning 500.
 
-- Encrypted secrets follow the same `SecureStorage` (`ENCRYPTION_KEY`) pattern already used for subscription deposit wallets — **no new secret needed**.
-- All four new endpoints require super-admin JWT; withdraw additionally logs `requested_by`.
-- Raw secret keys never returned to the client. Export-key flow is **not** part of this plan (can add later as a separate gated function if you want a break-glass).
-- Fail-loud DB writes via `assertDbWrite` per the zero-tolerance rule.
+### 2. Never go silent in BlackBox group (`handleGroupAutoScan`)
+Replace the `if (!holdersData || holdersData.error) return;` early-exit with a tiered fallback used **only when invoked with `skipActivationCheck` (i.e. the BlackBox aggregator path)**:
 
-### 6. Out of scope (call out explicitly)
+1. If `bagless-holders-report` fails, try `holders-intel-compose-preview` / DexScreener-only data we already cache (symbol, MC, liq, holders if available).
+2. If that also fails, post a minimal stub:
+   ```
+   ⚡ {TICKER or short CA} — quick stats temporarily unavailable
+   🔗 [Full Report] | [BubbleMap]
+   ```
+   so Phanes / Rick / HoldersIntel all line up in the thread and the operator can see the bot is alive.
+3. Log the failure to `holders_intel_seen_tokens` / existing flow log so it surfaces in the Steps Log panel.
 
-- SPL token (USDC etc.) balances/withdrawals — SOL-only for now.
-- Multi-sig / hardware-wallet custody — single-key custody, same model as subscription wallets.
-- Auto-sweep from central → external cold wallet — manual withdraw only.
+Customer-installed groups (no `skipActivationCheck`) keep current silent-fail behaviour — we don't want to spam paying installs with stubs.
 
-### Open question
+### 3. Verification
+- Re-deploy `holdersintel-bot-webhook` and `bagless-holders-report`.
+- Trigger the BlackBox tick (or paste a CA in the group) and confirm a HoldersIntel reply appears, plus a log line `[bot] blackbox_group reply sent (full|fallback|stub)`.
 
-Do you want a **"Generate now"** button per profile (manual one-time click), or should the migration auto-generate a wallet for every existing active profile on first deploy? Manual is safer; auto is one-click-zero-touch.
+## Out of scope
+- BotFather privacy mode / regex changes — not the actual cause.
+- Any change to customer-install (`channel_installations`) silent-fail behaviour.
+- MTProto reply-scrape pipeline.
