@@ -3125,6 +3125,9 @@ async function handleGroupAutoScan(chatId: number, telegramUserId: string, ca: s
     TAGLINE;
 
   await sendMessage(chatId, msg, "Markdown", replyToMsgId);
+  if (opts?.skipActivationCheck) {
+    console.log(`[bot] blackbox_group reply sent (full) chat:${chatId} ca:${ca.slice(0,12)}`);
+  }
 
   // Fire-and-forget: write new warnings from this scan (cumulative)
   const newWarnings = generateWarningsFromHoldersData(ca, holdersData, 'autoscan');
