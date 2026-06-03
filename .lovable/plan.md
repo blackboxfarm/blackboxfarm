@@ -1,42 +1,28 @@
-## What broke
+Root cause found: Telegram is reaching `profile-subscription-bot-webhook?profile=no_lube`, but every recent update is returning `401 Unauthorized`. That means the bot webhook URL is correct, but the `X-Telegram-Bot-Api-Secret-Token` Telegram sends does not match what the webhook expects.
 
-The bot itself is replying now, but it is replying with the fallback stub because `bagless-holders-report` is failing before it can build the full holder snapshot.
+The mismatch is in code:
+- `profile-subscription-bot-webhook` expects secret = base64url SHA-256 of `subscription-webhook:` + bot token.
+- `profile-subscription-admin` registers Telegram with secret = hex SHA-256 of `profile-sub-webhook:` + bot token.
 
-Current failure signal:
+So setup says “bot is live”, Telegram delivers `/start`, but the webhook rejects the request before it can reply.
 
-```text
-bagless-holders-report error (500): {"error":"All RPC endpoints failed."}
-```
+Plan:
+1. Make both functions use one shared webhook-secret formula.
+   - Use the formula the live webhook already expects: `subscription-webhook:` + bot token, base64url SHA-256.
+   - Update `profile-subscription-admin` registration to generate the same value.
 
-The old working replies had full holder fields because `bagless-holders-report` successfully returned token accounts. The newest replies die because the function now depends on `getProgramAccounts` across RPC endpoints, and all current endpoints are returning empty/error for that call. The fallback I added kept the bot visible, but it did not fix the holder data source.
+2. Add targeted diagnostic logging for future failures.
+   - If a request is rejected, log that it was a secret mismatch without printing the token or secret.
+   - This makes future Telegram failures obvious in logs.
 
-## Repair plan
+3. Redeploy the affected Edge Functions.
+   - Deploy `profile-subscription-admin`.
+   - Deploy `profile-subscription-bot-webhook` if touched for logging.
 
-1. **Fix the real holder snapshot path in `bagless-holders-report`**
-   - Replace the fragile `getProgramAccounts`-only holder fetch with a Helius-first holder fetch path using the configured `HELIUS_API_KEY`.
-   - Use a token-owner/token-account endpoint that is meant for full holder discovery instead of relying on public RPCs that often block or omit `getProgramAccounts`.
-   - Keep the existing RPC fallback only as secondary backup.
+4. Re-register the webhook using the corrected secret.
+   - Use the existing admin action or direct function call to set Telegram’s webhook secret again.
+   - Confirm `getWebhookInfo` points to `profile-subscription-bot-webhook?profile=no_lube`.
 
-2. **Add useful failure logging**
-   - Log which provider failed and why: Helius status/body snippet, public RPC status/error, timeout.
-   - Stop producing blank `All RPC endpoints failed.` errors with no underlying reason.
-
-3. **Restore old-style BlackBox bot output when holder data exists**
-   - Keep the current full report formatting path intact: holders count, health, top 10, distribution bars, full report link, BubbleMap link.
-   - Only use the “snapshot temporarily unavailable” stub when the Helius holder endpoint and every backup source truly fail.
-
-4. **Deploy and verify**
-   - Deploy `bagless-holders-report` and `holdersintel-bot-webhook` if needed.
-   - Test one recent BlackBox mint directly against `bagless-holders-report`.
-   - Confirm logs show holder fetch success and the bot can return a full holder snapshot again.
-
-## Technical notes
-
-- No UI changes.
-- No database migration expected.
-- No new paid service expected; this uses the existing Helius key already present in logs.
-- The fallback reply stays as a safety net, but it should no longer be the normal path.
-
-## Approval needed
-
-Say **Plan Approved** and I’ll implement this directly.
+5. Verify with logs.
+   - Check that new Telegram updates return `200`, not `401`.
+   - The bot should then answer `/start` and public join events again.
