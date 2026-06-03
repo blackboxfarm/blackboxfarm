@@ -122,9 +122,12 @@ async function tg(token: string, method: string, body: Record<string, unknown> =
 }
 
 async function webhookSecret(botToken: string): Promise<string> {
-  const data = new TextEncoder().encode(`profile-sub-webhook:${botToken}`);
+  // MUST match the webhook handler in profile-subscription-bot-webhook.
+  // Handler expects base64url SHA-256 of `subscription-webhook:<bot_token>`.
+  const data = new TextEncoder().encode(`subscription-webhook:${botToken}`);
   const digest = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
 // ---------- Cron job names ----------
