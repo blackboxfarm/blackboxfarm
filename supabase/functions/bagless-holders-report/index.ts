@@ -328,9 +328,14 @@ serve(withRunLog('bagless-holders-report', async (req) => {
     }
 
     if (!data) {
-      const reason = rpcErrors.length ? rpcErrors.join(' | ') : 'no provider returned results';
+      const redact = (s: string) => s.replace(/api-key=[^&\s"')]+/gi, 'api-key=[REDACTED]');
+      const reason = rpcErrors.length ? rpcErrors.map(redact).join(' | ') : 'no provider returned results';
+      const heliusExhausted = /max usage reached|-32429/i.test(reason);
       console.log(`[bagless] All holder providers failed: ${reason}`);
-      throw new Error(`All RPC endpoints failed. ${reason}`);
+      const friendly = heliusExhausted
+        ? 'Helius monthly quota exhausted — top up or rotate HELIUS_API_KEY. Public RPCs block getProgramAccounts.'
+        : `All RPC endpoints failed. ${reason}`;
+      throw new Error(friendly);
     }
 
     // ============================================
