@@ -1,39 +1,42 @@
-## Why the bot is silent
+## What broke
 
-The webhook IS firing in BlackBox group (`-1003739469076`) and entering the passive auto-scan path correctly. Logs show:
+The bot itself is replying now, but it is replying with the fallback stub because `bagless-holders-report` is failing before it can build the full holder snapshot.
 
+Current failure signal:
+
+```text
+bagless-holders-report error (500): {"error":"All RPC endpoints failed."}
 ```
-[bot] blackbox_group passive auto-scan chat:-1003739469076 ca:Fyc2fmukseRM
-[bot] bagless-holders-report error (500): {"error":"All RPC endpoints failed. "}
-```
 
-In `handleGroupAutoScan` (line ~3023), when `bagless-holders-report` errors, the function does `return; // silently fail` — so HoldersIntel never sends a reply. The bot's own self-diagnosis (privacy mode / regex / is_ca_only) was a hallucination; the real cause is the Helius/RPC fan-out returning 500 and the handler bailing without a fallback.
+The old working replies had full holder fields because `bagless-holders-report` successfully returned token accounts. The newest replies die because the function now depends on `getProgramAccounts` across RPC endpoints, and all current endpoints are returning empty/error for that call. The fallback I added kept the bot visible, but it did not fix the holder data source.
 
-## Fix
+## Repair plan
 
-### 1. Root cause: `bagless-holders-report` RPC failure
-- Inspect the RPC endpoint list / credit state in `bagless-holders-report` and verify Helius `HELIUS_API_KEY` is loaded and not exhausted.
-- Add one retry with 500 ms backoff across the existing RPC fallback chain before returning 500.
+1. **Fix the real holder snapshot path in `bagless-holders-report`**
+   - Replace the fragile `getProgramAccounts`-only holder fetch with a Helius-first holder fetch path using the configured `HELIUS_API_KEY`.
+   - Use a token-owner/token-account endpoint that is meant for full holder discovery instead of relying on public RPCs that often block or omit `getProgramAccounts`.
+   - Keep the existing RPC fallback only as secondary backup.
 
-### 2. Never go silent in BlackBox group (`handleGroupAutoScan`)
-Replace the `if (!holdersData || holdersData.error) return;` early-exit with a tiered fallback used **only when invoked with `skipActivationCheck` (i.e. the BlackBox aggregator path)**:
+2. **Add useful failure logging**
+   - Log which provider failed and why: Helius status/body snippet, public RPC status/error, timeout.
+   - Stop producing blank `All RPC endpoints failed.` errors with no underlying reason.
 
-1. If `bagless-holders-report` fails, try `holders-intel-compose-preview` / DexScreener-only data we already cache (symbol, MC, liq, holders if available).
-2. If that also fails, post a minimal stub:
-   ```
-   ⚡ {TICKER or short CA} — quick stats temporarily unavailable
-   🔗 [Full Report] | [BubbleMap]
-   ```
-   so Phanes / Rick / HoldersIntel all line up in the thread and the operator can see the bot is alive.
-3. Log the failure to `holders_intel_seen_tokens` / existing flow log so it surfaces in the Steps Log panel.
+3. **Restore old-style BlackBox bot output when holder data exists**
+   - Keep the current full report formatting path intact: holders count, health, top 10, distribution bars, full report link, BubbleMap link.
+   - Only use the “snapshot temporarily unavailable” stub when the Helius holder endpoint and every backup source truly fail.
 
-Customer-installed groups (no `skipActivationCheck`) keep current silent-fail behaviour — we don't want to spam paying installs with stubs.
+4. **Deploy and verify**
+   - Deploy `bagless-holders-report` and `holdersintel-bot-webhook` if needed.
+   - Test one recent BlackBox mint directly against `bagless-holders-report`.
+   - Confirm logs show holder fetch success and the bot can return a full holder snapshot again.
 
-### 3. Verification
-- Re-deploy `holdersintel-bot-webhook` and `bagless-holders-report`.
-- Trigger the BlackBox tick (or paste a CA in the group) and confirm a HoldersIntel reply appears, plus a log line `[bot] blackbox_group reply sent (full|fallback|stub)`.
+## Technical notes
 
-## Out of scope
-- BotFather privacy mode / regex changes — not the actual cause.
-- Any change to customer-install (`channel_installations`) silent-fail behaviour.
-- MTProto reply-scrape pipeline.
+- No UI changes.
+- No database migration expected.
+- No new paid service expected; this uses the existing Helius key already present in logs.
+- The fallback reply stays as a safety net, but it should no longer be the normal path.
+
+## Approval needed
+
+Say **Plan Approved** and I’ll implement this directly.
