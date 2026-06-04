@@ -22,6 +22,43 @@ const FRESH_MS = 2 * 60 * 1000;
 // stage of enrichment. DASH is intentionally a word, not an em-dash.
 const DASH = 'pending';
 
+// Collapse the "🤖 BlackBox AI" bullet block:
+//   - drop bullets whose content is just "pending"
+//   - if zero real bullets remain, replace the bullets with a single
+//     "(n/a - pending updates)" line so the section is one tidy entry.
+function collapseBlackBoxAi(text: string): string {
+  return text.replace(
+    /(🤖\s*[*_]?BlackBox AI[*_]?\s*\n)((?:•[^\n]*\n?)+)/g,
+    (_m, header, body) => {
+      const lines = body.split('\n').filter((l: string) => l.trim().length > 0);
+      const cleaned = lines
+        .map((l: string) => l.replace(/^•\s*/, '').trim())
+        .filter((c: string) => c && c.toLowerCase() !== 'pending');
+      if (cleaned.length === 0) {
+        return `${header}(n/a - pending updates)\n`;
+      }
+      return `${header}${cleaned.map((c: string) => `• ${c}`).join('\n')}\n`;
+    }
+  );
+}
+
+// Collapse the "🕵️ Developer Intel" block when Funded By / Past Launches /
+// Rugs / Reputation are ALL "pending" — render a single tidy n/a line.
+function collapseDeveloperIntel(text: string): string {
+  return text.replace(
+    /(🕵️\s*[*_]?Developer Intel[*_]?\s*\n)(Funded By:[^\n]*\nPast Launches:[^\n]*\nRugs:[^\n]*\nReputation:[^\n]*)\n?/g,
+    (_m, header, body) => {
+      const vals = body.split('\n').map((l: string) =>
+        l.split(':').slice(1).join(':').trim().toLowerCase()
+      );
+      if (vals.every((v: string) => v === 'pending' || v === '')) {
+        return `${header}(n/a - pending updates)\n`;
+      }
+      return `${header}${body}\n`;
+    }
+  );
+}
+
 const ICON = {
   momentum: { strong: '🚀', moderate: '➡️', fading: '📉', dash: DASH },
   risk: { low: '🟢', med: '🟡', high: '🔴', dead: '☠️', crazy: '🤯', dash: DASH },
@@ -932,6 +969,12 @@ serve(async (req) => {
     };
 
     let text = renderTemplate(tpl, vars);
+
+    // Tidy up the two sections that often render as a wall of "pending":
+    //   - BlackBox AI: drop "• pending" bullets, collapse to one n/a line if empty
+    //   - Developer Intel: collapse to one n/a line when all 4 fields are pending
+    text = collapseBlackBoxAi(text);
+    text = collapseDeveloperIntel(text);
 
     // Optional full re-render translation when channel language is not English.
     // We translate the rendered text wholesale (labels + natural-language) but
