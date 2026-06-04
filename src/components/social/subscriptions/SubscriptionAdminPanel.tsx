@@ -978,6 +978,75 @@ function TreasuryPanel({ profileKey }: { profileKey: string }) {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={showKey} onOpenChange={(o) => { setShowKey(o); if (!o) { setKeyData(null); setRevealConfirm(false); setShowSecretValues(false); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-destructive" />Export Central Wallet Private Key</DialogTitle>
+            <DialogDescription>
+              Anyone with this key controls every SOL in <code className="text-xs">{status?.pubkey?.slice(0,8)}…</code>. Never paste it into Telegram, screenshots, or untrusted wallets.
+            </DialogDescription>
+          </DialogHeader>
+
+          {!keyData ? (
+            <div className="space-y-3">
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" className="mt-1" checked={revealConfirm} onChange={e => setRevealConfirm(e.target.checked)} />
+                <span>I understand this exposes the wallet&apos;s private key in plaintext. I am in a private environment.</span>
+              </label>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setShowKey(false)}>Cancel</Button>
+                <Button variant="destructive" disabled={!revealConfirm || revealing} onClick={exportKey}>
+                  {revealing ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4 mr-1" />}
+                  Reveal Private Key
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Showing secret values</Label>
+                <Button size="sm" variant="ghost" onClick={() => setShowSecretValues(v => !v)}>
+                  {showSecretValues ? <EyeOff className="h-3 w-3 mr-1" /> : <Eye className="h-3 w-3 mr-1" />}
+                  {showSecretValues ? 'Hide' : 'Show'}
+                </Button>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Public Key</Label>
+                <code className="block text-xs bg-muted px-2 py-1 rounded break-all">{keyData.pubkey}</code>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Secret Key (Base58 — Phantom / Solflare import)</Label>
+                <code className="block text-xs bg-muted px-2 py-1 rounded break-all">
+                  {showSecretValues ? keyData.secret_base58 : '•'.repeat(64)}
+                </code>
+                <Button size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(keyData.secret_base58); toast.success('Base58 secret copied'); }}>Copy Base58</Button>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">JSON Array (Solana CLI keypair file)</Label>
+                <code className="block text-xs bg-muted px-2 py-1 rounded break-all max-h-24 overflow-auto">
+                  {showSecretValues ? `[${keyData.json_array.join(',')}]` : '[ hidden ]'}
+                </code>
+                <Button size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(`[${keyData.json_array.join(',')}]`); toast.success('JSON array copied'); }}>Copy JSON</Button>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Seed (32-byte hex)</Label>
+                <code className="block text-xs bg-muted px-2 py-1 rounded break-all">
+                  {showSecretValues ? keyData.seed_hex_32 : '•'.repeat(64)}
+                </code>
+              </div>
+
+              <DialogFooter>
+                <Button onClick={() => setShowKey(false)}>Done</Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
