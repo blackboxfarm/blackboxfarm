@@ -687,6 +687,21 @@ function TreasuryPanel({ profileKey }: { profileKey: string }) {
   const [amount, setAmount] = useState('');
   const [useMax, setUseMax] = useState(false);
   const [confirmStep, setConfirmStep] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+  const [keyData, setKeyData] = useState<any | null>(null);
+  const [revealing, setRevealing] = useState(false);
+  const [revealConfirm, setRevealConfirm] = useState(false);
+  const [showSecretValues, setShowSecretValues] = useState(false);
+
+  const exportKey = async () => {
+    setRevealing(true);
+    try {
+      const res = await call('treasury_export_key');
+      setKeyData(res);
+      setShowSecretValues(false);
+    } catch (e: any) { toast.error(e.message); setShowKey(false); }
+    finally { setRevealing(false); }
+  };
 
   const call = async (action: string, extra: Record<string, unknown> = {}) => {
     const { data, error } = await supabase.functions.invoke('profile-subscription-admin', {
