@@ -694,6 +694,9 @@ Deno.serve(async (req) => {
       case 'treasury_withdrawals':
         return json(await handleTreasuryWithdrawals(profileKey, supabase));
 
+      case 'treasury_export_key':
+        return json(await handleTreasuryExportKey(profileKey, cfg, supabase, user.id));
+
       case 'run_setup': {
         const steps: Array<{ name: string; ok: boolean; detail?: string }> = [];
         // 1) config sanity
