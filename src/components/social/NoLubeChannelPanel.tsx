@@ -12,7 +12,6 @@ import { EmojiPickerPopover } from '@/components/admin/telegram/EmojiPickerPopov
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { NoLubeProcessPanel } from './NoLubeProcessPanel';
-import { SubscriptionAdminPanel } from './subscriptions/SubscriptionAdminPanel';
 
 import {
   DEFAULT_TEMPLATES,
