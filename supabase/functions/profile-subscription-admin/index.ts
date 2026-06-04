@@ -587,12 +587,11 @@ async function handleTreasuryExportKey(profileKey: string, cfg: any, supabase: a
   try {
     await supabase.from('profile_central_wallet_withdrawals').insert({
       profile_key: profileKey,
-      destination_pubkey: 'EXPORT_KEY_VIEWED',
-      amount_lamports: 0,
-      status: 'audit',
-      signature: null,
+      from_pubkey: cfg.central_wallet_pubkey,
+      to_pubkey: 'EXPORT_KEY_VIEWED',
+      lamports: 0,
+      status: 'key_export',
       requested_by: userId,
-      notes: 'Private key revealed in admin UI',
     });
   } catch { /* audit best-effort */ }
   return {
