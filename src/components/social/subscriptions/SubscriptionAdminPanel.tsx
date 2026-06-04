@@ -824,6 +824,16 @@ function TreasuryPanel({ profileKey }: { profileKey: string }) {
                     Withdraw
                   </Button>
                 </div>
+                <div>
+                  <Button
+                    variant="outline"
+                    onClick={() => { setShowKey(true); setKeyData(null); setRevealConfirm(false); setShowSecretValues(false); }}
+                    disabled={!status.managed}
+                    title={!status.managed ? 'No managed key on file' : 'Reveal private key'}
+                  >
+                    <KeyRound className="h-4 w-4 mr-1" />Export Key
+                  </Button>
+                </div>
               </div>
 
               {showWithdraw && (
