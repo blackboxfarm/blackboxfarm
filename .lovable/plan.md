@@ -1,28 +1,75 @@
-Root cause found: Telegram is reaching `profile-subscription-bot-webhook?profile=no_lube`, but every recent update is returning `401 Unauthorized`. That means the bot webhook URL is correct, but the `X-Telegram-Bot-Api-Secret-Token` Telegram sends does not match what the webhook expects.
+All edits happen inside `src/components/social/ShareCardDemo.tsx` (the No Lube tab block, lines ~683–786) and `src/components/social/NoLubeChannelPanel.tsx`. No backend or data changes.
 
-The mismatch is in code:
-- `profile-subscription-bot-webhook` expects secret = base64url SHA-256 of `subscription-webhook:` + bot token.
-- `profile-subscription-admin` registers Telegram with secret = hex SHA-256 of `profile-sub-webhook:` + bot token.
+## New top-level No Lube tab bar
 
-So setup says “bot is live”, Telegram delivers `/start`, but the webhook rejects the request before it can reply.
+From left to right:
 
-Plan:
-1. Make both functions use one shared webhook-secret formula.
-   - Use the formula the live webhook already expects: `subscription-webhook:` + bot token, base64url SHA-256.
-   - Update `profile-subscription-admin` registration to generate the same value.
+1. Default
+2. 🌐 Public Channel
+3. 🔒 Private Channel
+4. 🎯 Templates  ← becomes a parent with sub-tabs
+5. 💳 Subscriptions  ← promoted from inside Private Channel
+6. 🕘 History  ← new parent tab
 
-2. Add targeted diagnostic logging for future failures.
-   - If a request is rejected, log that it was a secret mismatch without printing the token or secret.
-   - This makes future Telegram failures obvious in logs.
+Removed from the top row (folded into the parents above):
+- Asset Library, Archive, Dailies, Steps Log
 
-3. Redeploy the affected Edge Functions.
-   - Deploy `profile-subscription-admin`.
-   - Deploy `profile-subscription-bot-webhook` if touched for logging.
+## Templates parent — 3 sub-tabs
 
-4. Re-register the webhook using the corrected secret.
-   - Use the existing admin action or direct function call to set Telegram’s webhook secret again.
-   - Confirm `getWebhookInfo` points to `profile-subscription-bot-webhook?profile=no_lube`.
+```text
+Templates
+├── 🖼️ Backgrounds     → renders <NoLubeTemplateManager />
+│                        (this is the component that already contains the
+│                         "Active background per channel" section plus the
+│                         background uploader/list)
+├── 🎨 Asset Library    → renders <NoLubeAssetLibrary />
+└── 🏆 Dailies          → renders <NoLubeDailiesPanel />
+```
 
-5. Verify with logs.
-   - Check that new Telegram updates return `200`, not `401`.
-   - The bot should then answer `/start` and public join events again.
+Default sub-tab: Backgrounds.
+
+## History parent — 2 sub-tabs
+
+```text
+History
+├── 📦 Archive    → renders <NoLubeArchivePanel />
+└── 📜 Steps Log  → renders <NoLubeFlowLog />
+```
+
+Default sub-tab: Archive.
+
+## Subscriptions parent (promoted)
+
+The Subscriptions panel currently lives inside `NoLubeChannelPanel` as one of three inner tabs (Compose & Settings / Process / 💳 Subscriptions). It will be lifted out:
+
+- In `ShareCardDemo.tsx`, add a new top-level `TabsContent value="subscriptions"` that renders:
+  `<SubscriptionAdminPanel profileKey="no_lube" displayName="No Lube" />`
+- In `NoLubeChannelPanel.tsx`, remove the `💳 Subscriptions` TabsTrigger and its TabsContent so the inner channel tabs become just "Compose & Settings" and "Process". The `SubscriptionAdminPanel` import is removed.
+- The entire SubscriptionAdminPanel (with its own internal sub-tabs: Bot & Channel, Pricing, Subscribers, Affiliates, Contacts & Broadcast, Treasury, Attrition) moves up as one block — no internal changes to that component.
+
+## Resulting structure
+
+```text
+🐸 No Lube
+├── Default
+├── 🌐 Public Channel        (unchanged: Public Channel / 💧 Leaks Post)
+├── 🔒 Private Channel       (now shows only Compose & Settings / Process
+│                             for Private / Snapshot / Intel Update)
+├── 🎯 Templates
+│   ├── 🖼️ Backgrounds       → NoLubeTemplateManager
+│   ├── 🎨 Asset Library     → NoLubeAssetLibrary
+│   └── 🏆 Dailies           → NoLubeDailiesPanel
+├── 💳 Subscriptions         → SubscriptionAdminPanel (Bot & Channel / Pricing /
+│                              Subscribers / Affiliates / Contacts & Broadcast /
+│                              Treasury / Attrition)
+└── 🕘 History
+    ├── 📦 Archive           → NoLubeArchivePanel
+    └── 📜 Steps Log         → NoLubeFlowLog
+```
+
+## Files touched
+
+- `src/components/social/ShareCardDemo.tsx` — rewrite the No Lube `TabsList` and reorganize `TabsContent` blocks.
+- `src/components/social/NoLubeChannelPanel.tsx` — drop the 💳 Subscriptions inner tab and its import.
+
+No new components, no API changes, no migrations.
