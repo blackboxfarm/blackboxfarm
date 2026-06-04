@@ -1,75 +1,41 @@
-All edits happen inside `src/components/social/ShareCardDemo.tsx` (the No Lube tab block, lines ~683–786) and `src/components/social/NoLubeChannelPanel.tsx`. No backend or data changes.
+## Public Channel Welcome — Upload + Test
 
-## New top-level No Lube tab bar
+Three small changes to the "Public channel welcome — Luna Dusk" card in `SubscriptionAdminPanel.tsx` and one new edge function.
 
-From left to right:
+### 1. Replace image URL field with file upload
 
-1. Default
-2. 🌐 Public Channel
-3. 🔒 Private Channel
-4. 🎯 Templates  ← becomes a parent with sub-tabs
-5. 💳 Subscriptions  ← promoted from inside Private Channel
-6. 🕘 History  ← new parent tab
+- Remove the free-text `https://...` input.
+- Add a file picker (PNG/JPG/WebP, ≤5 MB).
+- On select: upload to existing public `no-lube-assets` bucket under `welcome/{profileKey}/{timestamp}.{ext}` via `supabase.storage.from('no-lube-assets').upload(...)`, get the public URL, save into the same `public_welcome_image_url` column (DB stays unchanged).
+- Show a thumbnail preview if a value exists, with a "Remove image" button (clears the field + saves).
+- Manual URL paste is dropped per request; if someone needs to revert, they can clear and re-upload.
 
-Removed from the top row (folded into the parents above):
-- Asset Library, Archive, Dailies, Steps Log
+### 2. Add nickname input + Test button
 
-## Templates parent — 3 sub-tabs
+- New "Test nickname" input (defaults to "Tester"); used as the `{name}` placeholder when previewing.
+- New "Send test welcome" button. Sends the welcome (current unsaved copy + image) to the admin's Telegram DM (`admin_telegram_id`) so it never spams the public channel. If `admin_telegram_id` is empty, toast an error explaining to set it above first.
 
-```text
-Templates
-├── 🖼️ Backgrounds     → renders <NoLubeTemplateManager />
-│                        (this is the component that already contains the
-│                         "Active background per channel" section plus the
-│                         background uploader/list)
-├── 🎨 Asset Library    → renders <NoLubeAssetLibrary />
-└── 🏆 Dailies          → renders <NoLubeDailiesPanel />
-```
+### 3. New edge function `profile-subscription-test-welcome`
 
-Default sub-tab: Backgrounds.
+Inputs: `{ profile_key, nickname, copy, image_url }`.
+Auth: requires logged-in super_admin (verify via `has_role`).
+Behavior:
+- Loads bot token via `getProfileBotToken(profile_key)` and reads `admin_telegram_id` from `profile_subscription_configs`.
+- Substitutes `{name}` → nickname, `{username}` → `@nickname`, falls back to `LUNA_DEFAULT_WELCOME` if `copy` is blank (same logic as the real handler).
+- If `image_url` provided → `sendPhoto` with caption; else `sendMessage` HTML.
+- Returns `{ ok, telegram_response }` for toast feedback.
 
-## History parent — 2 sub-tabs
+### Technical notes
 
-```text
-History
-├── 📦 Archive    → renders <NoLubeArchivePanel />
-└── 📜 Steps Log  → renders <NoLubeFlowLog />
-```
+- No DB schema change. `public_welcome_image_url` keeps its column type (text URL).
+- The `no-lube-assets` bucket is already public and has super_admin upload policies — no new storage policies needed.
+- Test sends to admin DM only (not public channel) to avoid live spam; nickname is purely a placeholder preview value.
+- Files touched:
+  - `src/components/social/subscriptions/SubscriptionAdminPanel.tsx` (welcome card UI)
+  - `supabase/functions/profile-subscription-test-welcome/index.ts` (new)
 
-Default sub-tab: Archive.
+### Out of scope
 
-## Subscriptions parent (promoted)
-
-The Subscriptions panel currently lives inside `NoLubeChannelPanel` as one of three inner tabs (Compose & Settings / Process / 💳 Subscriptions). It will be lifted out:
-
-- In `ShareCardDemo.tsx`, add a new top-level `TabsContent value="subscriptions"` that renders:
-  `<SubscriptionAdminPanel profileKey="no_lube" displayName="No Lube" />`
-- In `NoLubeChannelPanel.tsx`, remove the `💳 Subscriptions` TabsTrigger and its TabsContent so the inner channel tabs become just "Compose & Settings" and "Process". The `SubscriptionAdminPanel` import is removed.
-- The entire SubscriptionAdminPanel (with its own internal sub-tabs: Bot & Channel, Pricing, Subscribers, Affiliates, Contacts & Broadcast, Treasury, Attrition) moves up as one block — no internal changes to that component.
-
-## Resulting structure
-
-```text
-🐸 No Lube
-├── Default
-├── 🌐 Public Channel        (unchanged: Public Channel / 💧 Leaks Post)
-├── 🔒 Private Channel       (now shows only Compose & Settings / Process
-│                             for Private / Snapshot / Intel Update)
-├── 🎯 Templates
-│   ├── 🖼️ Backgrounds       → NoLubeTemplateManager
-│   ├── 🎨 Asset Library     → NoLubeAssetLibrary
-│   └── 🏆 Dailies           → NoLubeDailiesPanel
-├── 💳 Subscriptions         → SubscriptionAdminPanel (Bot & Channel / Pricing /
-│                              Subscribers / Affiliates / Contacts & Broadcast /
-│                              Treasury / Attrition)
-└── 🕘 History
-    ├── 📦 Archive           → NoLubeArchivePanel
-    └── 📜 Steps Log         → NoLubeFlowLog
-```
-
-## Files touched
-
-- `src/components/social/ShareCardDemo.tsx` — rewrite the No Lube `TabsList` and reorganize `TabsContent` blocks.
-- `src/components/social/NoLubeChannelPanel.tsx` — drop the 💳 Subscriptions inner tab and its import.
-
-No new components, no API changes, no migrations.
+- Changing how the real join-event handler renders the welcome.
+- Sending the test to the public channel itself.
+- Image cropping/resizing.

@@ -94,6 +94,9 @@ function BotChannelSettings({ profileKey, displayName }: Props) {
   const [cfg, setCfg] = useState<SubscriptionConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [testNickname, setTestNickname] = useState('Tester');
+  const [testing, setTesting] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -136,6 +139,67 @@ function BotChannelSettings({ profileKey, displayName }: Props) {
   };
 
   if (loading || !cfg) return <Loader2 className="h-4 w-4 animate-spin" />;
+
+  const uploadWelcomeImage = async (file: File) => {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { toast.error('Max 5 MB'); return; }
+    setUploading(true);
+    try {
+      const ext = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
+      const path = `welcome/${profileKey}/${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from('no-lube-assets').upload(path, file, {
+        cacheControl: '3600',
+        upsert: true,
+        contentType: file.type || undefined,
+      });
+      if (error) throw error;
+      const { data } = supabase.storage.from('no-lube-assets').getPublicUrl(path);
+      const url = data.publicUrl;
+      const next = { ...cfg, public_welcome_image_url: url };
+      setCfg(next);
+      const { error: upErr } = await supabase.from('profile_subscription_configs').upsert(next, { onConflict: 'profile_key' });
+      if (upErr) throw upErr;
+      toast.success('Welcome image uploaded');
+    } catch (e: any) {
+      toast.error(e?.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const clearWelcomeImage = async () => {
+    const next = { ...cfg, public_welcome_image_url: '' };
+    setCfg(next);
+    const { error } = await supabase.from('profile_subscription_configs').upsert(next, { onConflict: 'profile_key' });
+    if (error) { toast.error(error.message); return; }
+    toast.success('Image removed');
+  };
+
+  const sendTestWelcome = async () => {
+    if (!cfg.admin_telegram_id) {
+      toast.error('Set Admin Telegram ID (Bot & Channel section) first — test sends to your DM.');
+      return;
+    }
+    setTesting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('profile-subscription-admin', {
+        body: {
+          action: 'test_public_welcome',
+          profile_key: profileKey,
+          nickname: testNickname || 'Tester',
+          copy: cfg.public_welcome_copy ?? '',
+          image_url: cfg.public_welcome_image_url ?? '',
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success(`Test welcome sent to Telegram ID ${cfg.admin_telegram_id}`);
+    } catch (e: any) {
+      toast.error(e?.message || 'Test failed');
+    } finally {
+      setTesting(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -230,17 +294,66 @@ function BotChannelSettings({ profileKey, displayName }: Props) {
           />
         </div>
         <div>
-          <Label>Welcome image URL (optional)</Label>
-          <Input
-            value={cfg.public_welcome_image_url ?? ''}
-            onChange={e => setCfg({ ...cfg, public_welcome_image_url: e.target.value })}
-            placeholder="https://..."
-          />
+          <Label>Welcome image (optional, max 5 MB)</Label>
+          {cfg.public_welcome_image_url ? (
+            <div className="flex items-start gap-3 mt-1">
+              <img
+                src={cfg.public_welcome_image_url}
+                alt="Welcome preview"
+                className="h-24 w-24 object-cover rounded border"
+              />
+              <div className="flex flex-col gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={clearWelcomeImage}>
+                  <Trash2 className="h-3 w-3 mr-1" /> Remove
+                </Button>
+                <label className="text-xs text-muted-foreground cursor-pointer underline">
+                  Replace…
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    className="hidden"
+                    disabled={uploading}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadWelcomeImage(f); e.currentTarget.value = ''; }}
+                  />
+                </label>
+              </div>
+            </div>
+          ) : (
+            <Input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              disabled={uploading}
+              onChange={e => { const f = e.target.files?.[0]; if (f) uploadWelcomeImage(f); e.currentTarget.value = ''; }}
+            />
+          )}
+          {uploading && <p className="text-xs text-muted-foreground mt-1"><Loader2 className="h-3 w-3 inline animate-spin mr-1" />Uploading…</p>}
         </div>
-        <Button onClick={save} disabled={saving} size="sm">
-          {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
-          Save welcome
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button onClick={save} disabled={saving} size="sm">
+            {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+            Save welcome
+          </Button>
+        </div>
+        <div className="border-t pt-3 mt-2 space-y-2">
+          <Label className="text-xs">Test preview — sent to your admin Telegram DM only</Label>
+          <div className="flex items-end gap-2 flex-wrap">
+            <div className="flex-1 min-w-[160px]">
+              <Label className="text-xs text-muted-foreground">Nickname for {'{name}'} placeholder</Label>
+              <Input
+                value={testNickname}
+                onChange={e => setTestNickname(e.target.value)}
+                placeholder="Tester"
+              />
+            </div>
+            <Button onClick={sendTestWelcome} disabled={testing} size="sm" variant="secondary">
+              {testing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Play className="h-4 w-4 mr-1" />}
+              Send test welcome
+            </Button>
+          </div>
+          {!cfg.admin_telegram_id && (
+            <p className="text-xs text-amber-500">Set Admin Telegram ID above first — the test is DM'd to that ID.</p>
+          )}
+        </div>
       </CardContent>
     </Card>
     <AutomationCard profileKey={profileKey} />

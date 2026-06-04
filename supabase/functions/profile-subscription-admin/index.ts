@@ -654,6 +654,40 @@ Deno.serve(async (req) => {
       case 'test_bot':
         return json(await handleTestBot(body.token ?? getBotToken()));
 
+      case 'test_public_welcome': {
+        const token = getBotToken();
+        const adminId = cfg?.admin_telegram_id;
+        if (!adminId) throw new Error('Set Admin Telegram ID (in Bot & Channel) before testing — the welcome is DM\'d to that ID.');
+        const nickname = String(body.nickname || 'Tester').slice(0, 64) || 'Tester';
+        const rawCopy = typeof body.copy === 'string' ? body.copy : (cfg?.public_welcome_copy ?? '');
+        const defaultCopy =
+          `🌙 <b>{name}</b>, dusk settles in.\n\n` +
+          `I'm <b>Luna Dusk</b> — gatekeeper of the No Lube wire.\n\n` +
+          `You're now in the public lounge. Watch the feed. When you're ready to step past the velvet rope into the private channel, DM me <code>/start</code> and I'll show you the tiers.`;
+        const copy = (rawCopy ?? '').trim() || defaultCopy;
+        const text = copy.replaceAll('{name}', nickname).replaceAll('{username}', '@' + nickname.replace(/\s+/g, '_'));
+        const imageUrl = typeof body.image_url === 'string' && body.image_url.trim()
+          ? body.image_url.trim()
+          : (cfg?.public_welcome_image_url || null);
+        const prefix = `🧪 <i>Test preview — DM only, not sent to public channel</i>\n\n`;
+        if (imageUrl) {
+          await tg(token, 'sendPhoto', {
+            chat_id: adminId,
+            photo: imageUrl,
+            caption: prefix + text,
+            parse_mode: 'HTML',
+          });
+        } else {
+          await tg(token, 'sendMessage', {
+            chat_id: adminId,
+            text: prefix + text,
+            parse_mode: 'HTML',
+            disable_web_page_preview: true,
+          });
+        }
+        return json({ ok: true, sent_to: adminId });
+      }
+
       case 'cron_status':
         return json(await handleCronStatus(profileKey));
 
