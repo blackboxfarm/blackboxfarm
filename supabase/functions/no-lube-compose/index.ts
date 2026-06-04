@@ -970,6 +970,12 @@ serve(async (req) => {
 
     let text = renderTemplate(tpl, vars);
 
+    // Tidy up the two sections that often render as a wall of "pending":
+    //   - BlackBox AI: drop "• pending" bullets, collapse to one n/a line if empty
+    //   - Developer Intel: collapse to one n/a line when all 4 fields are pending
+    text = collapseBlackBoxAi(text);
+    text = collapseDeveloperIntel(text);
+
     // Optional full re-render translation when channel language is not English.
     // We translate the rendered text wholesale (labels + natural-language) but
     // preserve numbers, tickers, URLs, and Markdown via the model instructions.
