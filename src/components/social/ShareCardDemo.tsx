@@ -36,6 +36,7 @@ import { NoLubeTemplateManager } from './NoLubeTemplateManager';
 import { NoLubeArchivePanel } from './NoLubeArchivePanel';
 import { NoLubeDailiesPanel } from './NoLubeDailiesPanel';
 import { NoLubeFlowLog } from './NoLubeFlowLog';
+import { SubscriptionAdminPanel } from './subscriptions/SubscriptionAdminPanel';
 
 interface CronStatus {
   schedulersActive: number;
