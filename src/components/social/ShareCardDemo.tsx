@@ -689,10 +689,8 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                       <TabsTrigger value="public_group">🌐 Public Channel</TabsTrigger>
                       <TabsTrigger value="private_group">🔒 Private Channel</TabsTrigger>
                       <TabsTrigger value="templates">🎯 Templates</TabsTrigger>
-                      <TabsTrigger value="assets">🎨 Asset Library</TabsTrigger>
-                      <TabsTrigger value="archive">📦 Archive</TabsTrigger>
-                      <TabsTrigger value="dailies">🏆 Dailies</TabsTrigger>
-                      <TabsTrigger value="steps_log">📜 Steps Log</TabsTrigger>
+                      <TabsTrigger value="subscriptions">💳 Subscriptions</TabsTrigger>
+                      <TabsTrigger value="history">🕘 History</TabsTrigger>
                     </TabsList>
                     {(['default'] as const).map(kind => {
                       const tname: TemplateName = 'no_lube';
@@ -767,20 +765,40 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                         })}
                       </Tabs>
                     </TabsContent>
-                    <TabsContent value="assets" className="space-y-4 pt-3">
-                      <NoLubeAssetLibrary />
-                    </TabsContent>
                     <TabsContent value="templates" className="space-y-4 pt-3">
-                      <NoLubeTemplateManager />
+                      <Tabs defaultValue="backgrounds" className="w-full">
+                        <TabsList>
+                          <TabsTrigger value="backgrounds">🖼️ Backgrounds</TabsTrigger>
+                          <TabsTrigger value="assets">🎨 Asset Library</TabsTrigger>
+                          <TabsTrigger value="dailies">🏆 Dailies</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="backgrounds" className="space-y-4 pt-3">
+                          <NoLubeTemplateManager />
+                        </TabsContent>
+                        <TabsContent value="assets" className="space-y-4 pt-3">
+                          <NoLubeAssetLibrary />
+                        </TabsContent>
+                        <TabsContent value="dailies" className="space-y-4 pt-3">
+                          <NoLubeDailiesPanel />
+                        </TabsContent>
+                      </Tabs>
                     </TabsContent>
-                    <TabsContent value="archive" className="space-y-4 pt-3">
-                      <NoLubeArchivePanel />
+                    <TabsContent value="subscriptions" className="space-y-4 pt-3">
+                      <SubscriptionAdminPanel profileKey="no_lube" displayName="No Lube" />
                     </TabsContent>
-                    <TabsContent value="dailies" className="space-y-4 pt-3">
-                      <NoLubeDailiesPanel />
-                    </TabsContent>
-                    <TabsContent value="steps_log" className="space-y-4 pt-3">
-                      <NoLubeFlowLog />
+                    <TabsContent value="history" className="space-y-4 pt-3">
+                      <Tabs defaultValue="archive" className="w-full">
+                        <TabsList>
+                          <TabsTrigger value="archive">📦 Archive</TabsTrigger>
+                          <TabsTrigger value="steps_log">📜 Steps Log</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="archive" className="space-y-4 pt-3">
+                          <NoLubeArchivePanel />
+                        </TabsContent>
+                        <TabsContent value="steps_log" className="space-y-4 pt-3">
+                          <NoLubeFlowLog />
+                        </TabsContent>
+                      </Tabs>
                     </TabsContent>
                   </Tabs>
                 </>
