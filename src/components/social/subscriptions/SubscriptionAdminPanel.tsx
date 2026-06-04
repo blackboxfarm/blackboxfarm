@@ -796,13 +796,13 @@ function TreasuryPanel({ profileKey }: { profileKey: string }) {
               <div className="flex items-end justify-between gap-3 border rounded p-3">
                 <div>
                   <Label className="text-xs">Balance</Label>
-                  <div className="text-2xl font-mono">{status.balance_sol.toFixed(6)} SOL</div>
+                  <div className="text-2xl font-mono">{(status.balance_sol ?? 0).toFixed(6)} SOL</div>
                   {status.balance_error && <div className="text-xs text-destructive">{status.balance_error}</div>}
                 </div>
                 <div>
                   <Button
                     onClick={() => { setShowWithdraw(true); setConfirmStep(false); }}
-                    disabled={!status.managed || status.balance_lamports <= status.fee_buffer_lamports}
+                     disabled={!status.managed || (status.balance_lamports ?? 0) <= (status.fee_buffer_lamports ?? 0)}
                     title={!status.managed ? 'Externally owned — withdraw from source wallet' : ''}
                   >
                     Withdraw
