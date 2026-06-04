@@ -8,7 +8,8 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Save, RefreshCcw, Wallet, ExternalLink, Plus, Trash2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Loader2, Save, RefreshCcw, Wallet, ExternalLink, Plus, Trash2, Eye, EyeOff, ShieldAlert } from 'lucide-react';
 import { CheckCircle2, XCircle, AlertTriangle, KeyRound, Zap, LinkIcon, Play, Users, Send, Megaphone } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -686,6 +687,21 @@ function TreasuryPanel({ profileKey }: { profileKey: string }) {
   const [amount, setAmount] = useState('');
   const [useMax, setUseMax] = useState(false);
   const [confirmStep, setConfirmStep] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+  const [keyData, setKeyData] = useState<any | null>(null);
+  const [revealing, setRevealing] = useState(false);
+  const [revealConfirm, setRevealConfirm] = useState(false);
+  const [showSecretValues, setShowSecretValues] = useState(false);
+
+  const exportKey = async () => {
+    setRevealing(true);
+    try {
+      const res = await call('treasury_export_key');
+      setKeyData(res);
+      setShowSecretValues(false);
+    } catch (e: any) { toast.error(e.message); setShowKey(false); }
+    finally { setRevealing(false); }
+  };
 
   const call = async (action: string, extra: Record<string, unknown> = {}) => {
     const { data, error } = await supabase.functions.invoke('profile-subscription-admin', {
@@ -806,6 +822,16 @@ function TreasuryPanel({ profileKey }: { profileKey: string }) {
                     title={!status.managed ? 'Externally owned — withdraw from source wallet' : ''}
                   >
                     Withdraw
+                  </Button>
+                </div>
+                <div>
+                  <Button
+                    variant="outline"
+                    onClick={() => { setShowKey(true); setKeyData(null); setRevealConfirm(false); setShowSecretValues(false); }}
+                    disabled={!status.managed}
+                    title={!status.managed ? 'No managed key on file' : 'Reveal private key'}
+                  >
+                    <KeyRound className="h-4 w-4 mr-1" />Export Key
                   </Button>
                 </div>
               </div>
@@ -952,6 +978,75 @@ function TreasuryPanel({ profileKey }: { profileKey: string }) {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={showKey} onOpenChange={(o) => { setShowKey(o); if (!o) { setKeyData(null); setRevealConfirm(false); setShowSecretValues(false); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-destructive" />Export Central Wallet Private Key</DialogTitle>
+            <DialogDescription>
+              Anyone with this key controls every SOL in <code className="text-xs">{status?.pubkey?.slice(0,8)}…</code>. Never paste it into Telegram, screenshots, or untrusted wallets.
+            </DialogDescription>
+          </DialogHeader>
+
+          {!keyData ? (
+            <div className="space-y-3">
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" className="mt-1" checked={revealConfirm} onChange={e => setRevealConfirm(e.target.checked)} />
+                <span>I understand this exposes the wallet&apos;s private key in plaintext. I am in a private environment.</span>
+              </label>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setShowKey(false)}>Cancel</Button>
+                <Button variant="destructive" disabled={!revealConfirm || revealing} onClick={exportKey}>
+                  {revealing ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4 mr-1" />}
+                  Reveal Private Key
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Showing secret values</Label>
+                <Button size="sm" variant="ghost" onClick={() => setShowSecretValues(v => !v)}>
+                  {showSecretValues ? <EyeOff className="h-3 w-3 mr-1" /> : <Eye className="h-3 w-3 mr-1" />}
+                  {showSecretValues ? 'Hide' : 'Show'}
+                </Button>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Public Key</Label>
+                <code className="block text-xs bg-muted px-2 py-1 rounded break-all">{keyData.pubkey}</code>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Secret Key (Base58 — Phantom / Solflare import)</Label>
+                <code className="block text-xs bg-muted px-2 py-1 rounded break-all">
+                  {showSecretValues ? keyData.secret_base58 : '•'.repeat(64)}
+                </code>
+                <Button size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(keyData.secret_base58); toast.success('Base58 secret copied'); }}>Copy Base58</Button>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">JSON Array (Solana CLI keypair file)</Label>
+                <code className="block text-xs bg-muted px-2 py-1 rounded break-all max-h-24 overflow-auto">
+                  {showSecretValues ? `[${keyData.json_array.join(',')}]` : '[ hidden ]'}
+                </code>
+                <Button size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(`[${keyData.json_array.join(',')}]`); toast.success('JSON array copied'); }}>Copy JSON</Button>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Seed (32-byte hex)</Label>
+                <code className="block text-xs bg-muted px-2 py-1 rounded break-all">
+                  {showSecretValues ? keyData.seed_hex_32 : '•'.repeat(64)}
+                </code>
+              </div>
+
+              <DialogFooter>
+                <Button onClick={() => setShowKey(false)}>Done</Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

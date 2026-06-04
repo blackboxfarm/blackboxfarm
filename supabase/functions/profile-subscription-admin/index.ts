@@ -572,6 +572,38 @@ async function handleTreasuryWithdrawals(profileKey: string, supabase: any) {
   return { ok: true, rows: data ?? [] };
 }
 
+async function handleTreasuryExportKey(profileKey: string, cfg: any, supabase: any, userId: string) {
+  if (!profileKey) throw new Error('profile_key required');
+  if (!cfg?.central_wallet_pubkey) throw new Error('No central wallet configured');
+  if (!cfg?.central_wallet_secret_encrypted) {
+    throw new Error('Wallet is externally owned — no private key stored');
+  }
+  const secretB58 = await SecureStorage.decrypt(cfg.central_wallet_secret_encrypted);
+  // Derive raw 64-byte secret + 32-byte seed for convenience
+  const kp = Keypair.fromSecretKey(bs58.decode(secretB58));
+  const seedHex = Array.from(kp.secretKey.slice(0, 32)).map(b => b.toString(16).padStart(2, '0')).join('');
+  const fullHex = Array.from(kp.secretKey).map(b => b.toString(16).padStart(2, '0')).join('');
+  // Audit
+  try {
+    await supabase.from('profile_central_wallet_withdrawals').insert({
+      profile_key: profileKey,
+      from_pubkey: cfg.central_wallet_pubkey,
+      to_pubkey: 'EXPORT_KEY_VIEWED',
+      lamports: 0,
+      status: 'key_export',
+      requested_by: userId,
+    });
+  } catch { /* audit best-effort */ }
+  return {
+    ok: true,
+    pubkey: cfg.central_wallet_pubkey,
+    secret_base58: secretB58,
+    secret_hex: fullHex,
+    seed_hex_32: seedHex,
+    json_array: Array.from(kp.secretKey),
+  };
+}
+
 // ---------- Entry ----------
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -660,6 +692,9 @@ Deno.serve(async (req) => {
 
       case 'treasury_withdrawals':
         return json(await handleTreasuryWithdrawals(profileKey, supabase));
+
+      case 'treasury_export_key':
+        return json(await handleTreasuryExportKey(profileKey, cfg, supabase, user.id));
 
       case 'run_setup': {
         const steps: Array<{ name: string; ok: boolean; detail?: string }> = [];
