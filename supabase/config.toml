@@ -624,3 +624,6 @@ verify_jwt = false
 
 [functions.profile-subscription-admin]
 verify_jwt = true
+
+[functions.preview-admin-notifications]
+verify_jwt = false
