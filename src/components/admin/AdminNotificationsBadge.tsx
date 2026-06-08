@@ -12,6 +12,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
+import { usePreviewSuperAdmin } from '@/hooks/usePreviewSuperAdmin';
 
 interface AdminNotification {
   id: string;
@@ -90,6 +91,7 @@ const showBrowserNotification = (title: string, message: string, type: string) =
 
 export function AdminNotificationsBadge() {
   const { toast } = useToast();
+  const isPreviewAdmin = usePreviewSuperAdmin();
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [tabTotals, setTabTotals] = useState<Record<TabCategory, number>>({ signups: 0, transactions: 0, audit: 0, tickets: 0, comments: 0 });
@@ -111,6 +113,43 @@ export function AdminNotificationsBadge() {
   }, [toast]);
 
   const fetchNotifications = useCallback(async () => {
+    // Preview-mode fallback: bypass RLS via service-role edge function so the
+    // owner can see admin alerts without being signed into Supabase.
+    if (isPreviewAdmin) {
+      try {
+        const { data, error } = await supabase.functions.invoke('preview-admin-notifications', { body: {} });
+        if (!error && data) {
+          const notifs = (data.notifications || []) as AdminNotification[];
+          setNotifications(notifs);
+          setUnreadCount(notifs.filter((n) => !n.is_read).length);
+          const t = data.tabTotals || {};
+          setTabTotals({
+            signups: t.signups ?? 0,
+            transactions: t.transactions ?? 0,
+            audit: t.audit ?? 0,
+            tickets: t.tickets ?? 0,
+            comments: 0,
+          });
+          // Hydrate comments too
+          const cs = (data.comments || []) as Array<any>;
+          const authors = (data.commentAuthors || {}) as Record<string, string>;
+          setComments(cs.map((r) => ({
+            id: r.id,
+            source: 'autopsy' as const,
+            slug: r.autopsy_slug,
+            context_label: 'Autopsy',
+            body: (r.body_clean || r.body || '').slice(0, 240),
+            author: authors[r.user_id] || 'User',
+            created_at: r.created_at,
+            href: `/autopsy/${r.autopsy_slug}#comment-${r.id}`,
+          })));
+          return;
+        }
+      } catch (e) {
+        console.warn('[admin-notifs] preview fetch failed, falling back to direct query', e);
+      }
+    }
+
     const { data, error } = await (supabase
       .from('admin_notifications' as any)
       .select('*')
@@ -141,9 +180,11 @@ export function AdminNotificationsBadge() {
     } catch {
       // non-fatal — fallback to in-memory counts
     }
-  }, []);
+  }, [isPreviewAdmin]);
 
   const fetchComments = useCallback(async () => {
+    // Preview mode hydrates comments via the edge function in fetchNotifications.
+    if (isPreviewAdmin) return;
     try {
       const { data, error } = await (supabase
         .from('autopsy_comments' as any)
@@ -178,7 +219,7 @@ export function AdminNotificationsBadge() {
     } catch (e) {
       console.warn('[admin-notifs] fetchComments failed', e);
     }
-  }, []);
+  }, [isPreviewAdmin]);
 
   const debouncedFetch = useCallback(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
