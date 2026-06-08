@@ -249,7 +249,11 @@ export function AdminNotificationsBadge() {
   }, [fetchNotifications, debouncedFetch, fetchComments]);
 
   const markAsRead = async (id: string) => {
-    await (supabase.from('admin_notifications' as any).update({ is_read: true, read_at: new Date().toISOString() }).eq('id', id) as any);
+    if (isPreviewAdmin) {
+      await supabase.functions.invoke('preview-admin-notifications', { body: { action: 'mark_read', ids: [id] } });
+    } else {
+      await (supabase.from('admin_notifications' as any).update({ is_read: true, read_at: new Date().toISOString() }).eq('id', id) as any);
+    }
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
     setUnreadCount((prev) => Math.max(0, prev - 1));
   };
@@ -257,13 +261,22 @@ export function AdminNotificationsBadge() {
   const markAllAsRead = async () => {
     const unreadIds = notifications.filter((n) => !n.is_read).map((n) => n.id);
     if (unreadIds.length === 0) return;
-    await (supabase.from('admin_notifications' as any).update({ is_read: true, read_at: new Date().toISOString() }).in('id', unreadIds) as any);
+    if (isPreviewAdmin) {
+      await supabase.functions.invoke('preview-admin-notifications', { body: { action: 'mark_all_read', tab: activeTab } });
+    } else {
+      await (supabase.from('admin_notifications' as any).update({ is_read: true, read_at: new Date().toISOString() }).in('id', unreadIds) as any);
+    }
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
     setUnreadCount(0);
+    await fetchNotifications();
   };
 
   const archiveNotification = async (id: string) => {
-    await (supabase.from('admin_notifications' as any).delete().eq('id', id) as any);
+    if (isPreviewAdmin) {
+      await supabase.functions.invoke('preview-admin-notifications', { body: { action: 'archive', id } });
+    } else {
+      await (supabase.from('admin_notifications' as any).delete().eq('id', id) as any);
+    }
     setNotifications((prev) => prev.filter((n) => n.id !== id));
     setUnreadCount((prev) => {
       const wasUnread = notifications.find((n) => n.id === id && !n.is_read);
@@ -280,17 +293,23 @@ export function AdminNotificationsBadge() {
     const confirmMsg = `Delete ALL ${total} alerts in "${activeTab}"? This is permanent.`;
     if (!window.confirm(confirmMsg)) return;
 
-    // Server-side bulk delete — covers EVERY matching row, not just what's loaded
-    let q = (supabase.from('admin_notifications' as any).delete().eq('is_archived', false) as any);
-    if (activeTab === 'signups') q = q.in('notification_type', SIGNUP_TYPES);
-    else if (activeTab === 'transactions') q = q.in('notification_type', TRANSACTION_TYPES);
-    else if (activeTab === 'tickets') q = q.in('notification_type', TICKET_TYPES);
-    else if (activeTab === 'audit') q = q.not('notification_type', 'in', `(${NON_AUDIT_TYPES.map(t => `"${t}"`).join(',')})`);
-
-    const { error } = await q;
-    if (error) {
-      toast({ title: 'Clear failed', description: error.message, variant: 'destructive' });
-      return;
+    if (isPreviewAdmin) {
+      const { data, error } = await supabase.functions.invoke('preview-admin-notifications', { body: { action: 'clear_tab', tab: activeTab } });
+      if (error || (data && data.ok === false)) {
+        toast({ title: 'Clear failed', description: error?.message || data?.error || 'unknown', variant: 'destructive' });
+        return;
+      }
+    } else {
+      let q = (supabase.from('admin_notifications' as any).delete().eq('is_archived', false) as any);
+      if (activeTab === 'signups') q = q.in('notification_type', SIGNUP_TYPES);
+      else if (activeTab === 'transactions') q = q.in('notification_type', TRANSACTION_TYPES);
+      else if (activeTab === 'tickets') q = q.in('notification_type', TICKET_TYPES);
+      else if (activeTab === 'audit') q = q.not('notification_type', 'in', `(${NON_AUDIT_TYPES.map(t => `"${t}"`).join(',')})`);
+      const { error } = await q;
+      if (error) {
+        toast({ title: 'Clear failed', description: error.message, variant: 'destructive' });
+        return;
+      }
     }
     toast({ title: 'Cleared', description: `Deleted ${total} alerts in ${activeTab}.` });
     await fetchNotifications();
