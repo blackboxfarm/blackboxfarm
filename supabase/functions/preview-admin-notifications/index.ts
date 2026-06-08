@@ -46,6 +46,52 @@ Deno.serve(withRunLog('preview-admin-notifications', async (req) => {
     const TICKET_TYPES = ['support_ticket', 'ticket_reply'];
     const NON_AUDIT_TYPES = [...SIGNUP_TYPES, ...TRANSACTION_TYPES, ...TICKET_TYPES];
 
+    // Parse optional action body for write operations.
+    let body: any = {};
+    try { body = await req.json(); } catch { /* GET or empty */ }
+    const action: string | undefined = body?.action;
+
+    if (action === 'mark_read') {
+      const ids: string[] = Array.isArray(body.ids) ? body.ids : [];
+      if (ids.length) {
+        await supabase.from('admin_notifications')
+          .update({ is_read: true, read_at: new Date().toISOString() })
+          .in('id', ids);
+      }
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (action === 'mark_all_read') {
+      const tab: string | undefined = body.tab;
+      let q: any = supabase.from('admin_notifications')
+        .update({ is_read: true, read_at: new Date().toISOString() })
+        .eq('is_archived', false).eq('is_read', false);
+      if (tab === 'signups') q = q.in('notification_type', SIGNUP_TYPES);
+      else if (tab === 'transactions') q = q.in('notification_type', TRANSACTION_TYPES);
+      else if (tab === 'tickets') q = q.in('notification_type', TICKET_TYPES);
+      else if (tab === 'audit') q = q.not('notification_type', 'in', `(${NON_AUDIT_TYPES.map(t => `"${t}"`).join(',')})`);
+      const { error } = await q;
+      return new Response(JSON.stringify({ ok: !error, error: error?.message }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (action === 'archive') {
+      const id: string | undefined = body.id;
+      if (id) await supabase.from('admin_notifications').delete().eq('id', id);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (action === 'clear_tab') {
+      const tab: string | undefined = body.tab;
+      let q: any = supabase.from('admin_notifications').delete().eq('is_archived', false);
+      if (tab === 'signups') q = q.in('notification_type', SIGNUP_TYPES);
+      else if (tab === 'transactions') q = q.in('notification_type', TRANSACTION_TYPES);
+      else if (tab === 'tickets') q = q.in('notification_type', TICKET_TYPES);
+      else if (tab === 'audit') q = q.not('notification_type', 'in', `(${NON_AUDIT_TYPES.map(t => `"${t}"`).join(',')})`);
+      else return new Response(JSON.stringify({ ok: false, error: 'unknown tab' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      const { error } = await q;
+      return new Response(JSON.stringify({ ok: !error, error: error?.message }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     const [notifsRes, sCount, tCount, kCount, aCount, commentsRes] = await Promise.all([
       supabase
         .from('admin_notifications')
