@@ -183,6 +183,8 @@ export function AdminNotificationsBadge() {
   }, [isPreviewAdmin]);
 
   const fetchComments = useCallback(async () => {
+    // Preview mode hydrates comments via the edge function in fetchNotifications.
+    if (isPreviewAdmin) return;
     try {
       const { data, error } = await (supabase
         .from('autopsy_comments' as any)
@@ -217,7 +219,7 @@ export function AdminNotificationsBadge() {
     } catch (e) {
       console.warn('[admin-notifs] fetchComments failed', e);
     }
-  }, []);
+  }, [isPreviewAdmin]);
 
   const debouncedFetch = useCallback(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
