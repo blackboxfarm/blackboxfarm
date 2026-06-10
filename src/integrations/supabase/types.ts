@@ -24947,6 +24947,7 @@ export type Database = {
         Args: { p_column: string; p_cutoff: string; p_table: string }
         Returns: number
       }
+      bump_channel_failure: { Args: { p_kind: string }; Returns: undefined }
       bump_seen_token: {
         Args: {
           p_mint: string
