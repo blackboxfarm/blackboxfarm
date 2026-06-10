@@ -19,13 +19,14 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { withRunLog } from '../_shared/run-logger.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-serve(async (req) => {
+serve(withRunLog('no-lube-sweeper', async (req, logger) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   const supabase = createClient(
@@ -80,7 +81,7 @@ serve(async (req) => {
       .from('no_lube_post_log')
       .update({ pushing_started_at: null })
       .lt('pushing_started_at', new Date(Date.now() - 60 * 1000).toISOString())
-      .is('posted', null)
+      .neq('posted', true)
       .select('id');
     report.push_locks_released = (released || []).length;
   } catch (e) { report.push_lock_error = String((e as Error).message || e); }
@@ -112,7 +113,8 @@ serve(async (req) => {
   } catch (e) { report.rugged_error = String((e as Error).message || e); }
 
   report.finished_at = new Date().toISOString();
+  logger?.addMeta('report', report);
   return new Response(JSON.stringify(report), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
-});
+}));

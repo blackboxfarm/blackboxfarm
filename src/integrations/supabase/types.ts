@@ -24947,7 +24947,15 @@ export type Database = {
         Args: { p_column: string; p_cutoff: string; p_table: string }
         Returns: number
       }
-      bump_channel_failure: { Args: { p_kind: string }; Returns: undefined }
+      bump_channel_failure: {
+        Args: {
+          _error_class?: string
+          _error_message?: string
+          _kind: string
+          _retry_after_seconds?: number
+        }
+        Returns: undefined
+      }
       bump_seen_token: {
         Args: {
           p_mint: string
@@ -25455,21 +25463,7 @@ export type Database = {
         }[]
       }
       mask_sensitive_data: { Args: { input_text: string }; Returns: string }
-      no_lube_health_summary: {
-        Args: never
-        Returns: {
-          creator_unresolvable: number
-          in_process: number
-          in_process_stale: number
-          ingest_failed: number
-          kyc_failed: number
-          mesh_failed: number
-          pending: number
-          posted_1h: number
-          posted_24h: number
-          push_failed_24h: number
-        }[]
-      }
+      no_lube_health_summary: { Args: never; Returns: Json }
       passes_worth_gate: {
         Args: { p_token_mint: string }
         Returns: {

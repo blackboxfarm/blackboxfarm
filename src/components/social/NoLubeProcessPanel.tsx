@@ -35,6 +35,7 @@ const FIELDS: string[] = [
   'holders_refreshed_at', 'blackbox_harvested_at',
   'enrichment_status', 'enrichment_last_run_at',
   'socials_changed', 'socials_last_checked_at',
+  'gate_block_reason', 'gate_blocked_at', 'in_process_since',
   'is_rugged', 'lifespan_minutes', 'created_at', 'updated_at',
 ];
 
