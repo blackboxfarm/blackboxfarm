@@ -3801,6 +3801,48 @@ export type Database = {
         }
         Relationships: []
       }
+      channel_health: {
+        Row: {
+          consecutive_failures: number
+          disabled_until: string | null
+          last_error: string | null
+          last_error_class: string | null
+          last_ok_at: string | null
+          notes: string | null
+          profile_kind: string
+          retry_after_at: string | null
+          total_failures: number
+          total_successes: number
+          updated_at: string
+        }
+        Insert: {
+          consecutive_failures?: number
+          disabled_until?: string | null
+          last_error?: string | null
+          last_error_class?: string | null
+          last_ok_at?: string | null
+          notes?: string | null
+          profile_kind: string
+          retry_after_at?: string | null
+          total_failures?: number
+          total_successes?: number
+          updated_at?: string
+        }
+        Update: {
+          consecutive_failures?: number
+          disabled_until?: string | null
+          last_error?: string | null
+          last_error_class?: string | null
+          last_ok_at?: string | null
+          notes?: string | null
+          profile_kind?: string
+          retry_after_at?: string | null
+          total_failures?: number
+          total_successes?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       channel_installations: {
         Row: {
           admin_config: Json
@@ -12085,6 +12127,8 @@ export type Database = {
           last_mcap_at_post: number | null
           last_multiplier: number | null
           last_posted_at: string | null
+          last_push_error: string | null
+          last_push_error_class: string | null
           liq_usd: number | null
           mcap: number | null
           mint_time: string | null
@@ -12092,12 +12136,15 @@ export type Database = {
           posted: boolean
           posted_at: string | null
           price_change_24h: number | null
+          push_attempts: number
+          pushing_started_at: string | null
           source_message_id: number | null
           tg_message_id: number | null
           ticker: string | null
           times_posted: number
           token_mint: string
           top10_pct: number | null
+          updated_at: string
           verdict_class: string
           vol_24h: number | null
         }
@@ -12114,6 +12161,8 @@ export type Database = {
           last_mcap_at_post?: number | null
           last_multiplier?: number | null
           last_posted_at?: string | null
+          last_push_error?: string | null
+          last_push_error_class?: string | null
           liq_usd?: number | null
           mcap?: number | null
           mint_time?: string | null
@@ -12121,12 +12170,15 @@ export type Database = {
           posted?: boolean
           posted_at?: string | null
           price_change_24h?: number | null
+          push_attempts?: number
+          pushing_started_at?: string | null
           source_message_id?: number | null
           tg_message_id?: number | null
           ticker?: string | null
           times_posted?: number
           token_mint: string
           top10_pct?: number | null
+          updated_at?: string
           verdict_class: string
           vol_24h?: number | null
         }
@@ -12143,6 +12195,8 @@ export type Database = {
           last_mcap_at_post?: number | null
           last_multiplier?: number | null
           last_posted_at?: string | null
+          last_push_error?: string | null
+          last_push_error_class?: string | null
           liq_usd?: number | null
           mcap?: number | null
           mint_time?: string | null
@@ -12150,12 +12204,15 @@ export type Database = {
           posted?: boolean
           posted_at?: string | null
           price_change_24h?: number | null
+          push_attempts?: number
+          pushing_started_at?: string | null
           source_message_id?: number | null
           tg_message_id?: number | null
           ticker?: string | null
           times_posted?: number
           token_mint?: string
           top10_pct?: number | null
+          updated_at?: string
           verdict_class?: string
           vol_24h?: number | null
         }
@@ -19043,11 +19100,14 @@ export type Database = {
           entry_mc_text: string | null
           first_call_message_id: number | null
           first_called_at: string
+          gate_block_reason: string | null
+          gate_blocked_at: string | null
           genealogy_chain: Json | null
           genealogy_depth: number | null
           genealogy_kyc_root: string | null
           holders_refreshed_at: string | null
           id: string
+          in_process_since: string | null
           ingest_completed_at: string | null
           ingest_last_error: string | null
           ingest_latency_ms: number | null
@@ -19105,11 +19165,14 @@ export type Database = {
           entry_mc_text?: string | null
           first_call_message_id?: number | null
           first_called_at: string
+          gate_block_reason?: string | null
+          gate_blocked_at?: string | null
           genealogy_chain?: Json | null
           genealogy_depth?: number | null
           genealogy_kyc_root?: string | null
           holders_refreshed_at?: string | null
           id?: string
+          in_process_since?: string | null
           ingest_completed_at?: string | null
           ingest_last_error?: string | null
           ingest_latency_ms?: number | null
@@ -19167,11 +19230,14 @@ export type Database = {
           entry_mc_text?: string | null
           first_call_message_id?: number | null
           first_called_at?: string
+          gate_block_reason?: string | null
+          gate_blocked_at?: string | null
           genealogy_chain?: Json | null
           genealogy_depth?: number | null
           genealogy_kyc_root?: string | null
           holders_refreshed_at?: string | null
           id?: string
+          in_process_since?: string | null
           ingest_completed_at?: string | null
           ingest_last_error?: string | null
           ingest_latency_ms?: number | null
@@ -25388,6 +25454,21 @@ export type Database = {
         }[]
       }
       mask_sensitive_data: { Args: { input_text: string }; Returns: string }
+      no_lube_health_summary: {
+        Args: never
+        Returns: {
+          creator_unresolvable: number
+          in_process: number
+          in_process_stale: number
+          ingest_failed: number
+          kyc_failed: number
+          mesh_failed: number
+          pending: number
+          posted_1h: number
+          posted_24h: number
+          push_failed_24h: number
+        }[]
+      }
       passes_worth_gate: {
         Args: { p_token_mint: string }
         Returns: {
