@@ -18,6 +18,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { withRunLog } from '../_shared/run-logger.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -34,7 +35,7 @@ const STAGE_TO_FN: Record<Stage, string> = {
   push: 'no-lube-orchestrate',
 };
 
-serve(async (req) => {
+serve(withRunLog('no-lube-stage-rerun', async (req, logger) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
     const authHeader = req.headers.get('Authorization') || '';
@@ -69,6 +70,8 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const stage = String(body.stage || '') as Stage;
     const mint = String(body.token_mint || body.mint || '').trim();
+    logger?.addMeta('stage', stage);
+    logger?.addMeta('mint', mint);
     if (!STAGE_TO_FN[stage] || !mint) {
       return new Response(JSON.stringify({ ok: false, error: 'stage and token_mint required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -81,13 +84,14 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    // Special handling: 'creator' re-arm — clear unresolvable so backfill picks it up
+    // Special handling: 'creator' re-arm — clear status + attempts so cooldown lifts.
+    // Covers unresolvable, unknown, and pending (all of which can be stuck).
     if (stage === 'creator') {
       await admin
         .from('telegram_insider_token_lifecycle')
-        .update({ creator_status: 'unknown', creator_attempts: 0 })
+        .update({ creator_status: 'unknown', creator_attempts: 0, creator_last_attempt_at: null })
         .eq('token_mint', mint)
-        .eq('creator_status', 'unresolvable');
+        .in('creator_status', ['unresolvable', 'unknown', 'pending']);
     }
     // Special handling: 'mesh' re-arm — clear mesh_promotion_status='failed'
     if (stage === 'mesh') {
@@ -99,11 +103,14 @@ serve(async (req) => {
     }
 
     const fnName = STAGE_TO_FN[stage];
+    // Pass both keys so the target function works regardless of which it expects.
     const invokeBody: Record<string, unknown> = stage === 'push'
-      ? { mint }
-      : { token_mint: mint, force: true };
+      ? { token_mint: mint, mint }
+      : { token_mint: mint, mint, force: true };
 
     const { data, error } = await admin.functions.invoke(fnName, { body: invokeBody });
+    logger?.addMeta('invoked', fnName);
+    logger?.addMeta('invoke_error', error ? String(error.message || error) : null);
 
     return new Response(JSON.stringify({
       ok: !error,
@@ -120,4 +127,4 @@ serve(async (req) => {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-});
+}));

@@ -14,6 +14,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { withRunLog } from '../_shared/run-logger.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -53,7 +54,7 @@ function jitterMs(attempt: number): number {
   return Math.round(base + (Math.random() * 2 - 1) * j);
 }
 
-serve(async (req) => {
+serve(withRunLog('no-lube-push', async (req, logger) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
     const { text, log_id, override, channel: rawChannel, image_url, cta, reply_to_message_id } = await req.json();
@@ -64,6 +65,8 @@ serve(async (req) => {
     }
     const channel: 'default' | 'public' | 'private' =
       rawChannel === 'public' || rawChannel === 'private' ? rawChannel : 'default';
+    logger?.addMeta('channel', channel);
+    logger?.addMeta('log_id', log_id ?? null);
 
     const token = Deno.env.get('TELEGRAM_HOLDERSINTEL_BOT_TOKEN');
     if (!token) {
@@ -204,6 +207,7 @@ serve(async (req) => {
       if (result.ok && result.json?.ok) break;
       const cls = classifyTgError(result.status, result.json);
       lastClass = cls.kind; lastDetail = cls.detail;
+      logger?.warn(`attempt ${attempts} failed`, { class: cls.kind, status: result.status, detail: cls.detail });
       const isMarkdownErr = /can't parse entities|parse_mode|markdown|byte offset/i.test(cls.detail);
       if (isMarkdownErr && !usePlain) {
         usePlain = true; // flip to plaintext, doesn't consume a real retry
@@ -213,11 +217,12 @@ serve(async (req) => {
       if (cls.kind === 'rate_limited') {
         const waitMs = Math.min((cls.retryAfterSec || 1) * 1000, 15000);
         // Persist retry_after on channel_health so other concurrent pushes back off
-        await supabase.from('channel_health').upsert({
-          profile_kind: channel,
-          retry_after_at: new Date(Date.now() + waitMs).toISOString(),
-          last_error: cls.detail, last_error_class: 'rate_limited',
-        }, { onConflict: 'profile_kind' });
+        await supabase.rpc('bump_channel_failure', {
+          _kind: channel,
+          _error_class: 'rate_limited',
+          _retry_after_seconds: cls.retryAfterSec || 1,
+          _error_message: cls.detail,
+        });
         if (attempts < 3) await new Promise(r => setTimeout(r, waitMs));
         continue;
       }
@@ -233,25 +238,22 @@ serve(async (req) => {
         profile_kind: channel,
         last_ok_at: new Date().toISOString(),
         consecutive_failures: 0,
-        total_successes: (health?.consecutive_failures !== undefined)
-          ? undefined : undefined,
+        total_successes: (health?.consecutive_failures ?? 0) + 1,
         last_error: null, last_error_class: null,
         retry_after_at: null,
+        updated_at: new Date().toISOString(),
       }, { onConflict: 'profile_kind' });
-      // increment total_successes via raw RPC-less update
-      await supabase.rpc('exec', {}).catch(() => {}); // no-op; counters via DB trigger could be added later
-    } else if (result) {
-      await supabase.from('channel_health').upsert({
-        profile_kind: channel,
-        last_error: `[${lastClass}] ${lastDetail}`.slice(0, 500),
-        last_error_class: lastClass || 'transient',
-        // fail-open: never set disabled_until (warn only)
-      }, { onConflict: 'profile_kind' });
-      // bump consecutive_failures atomically
-      await supabase.rpc('bump_channel_failure', { p_kind: channel }).catch(() => {
-        // RPC optional; tolerate missing without breaking push
-      });
+    } else if (result && lastClass !== 'rate_limited') {
+      // bump_channel_failure already called for rate_limited inside the loop
+      await supabase.rpc('bump_channel_failure', {
+        _kind: channel,
+        _error_class: lastClass || 'transient',
+        _retry_after_seconds: null,
+        _error_message: `[${lastClass}] ${lastDetail}`,
+      }).catch((e) => logger?.warn('bump_channel_failure failed', String(e)));
     }
+    logger?.addMeta('attempts', attempts);
+    logger?.addMeta('success', success);
 
     // Persist push attempt details on the log row regardless of outcome
     if (log_id) {
@@ -304,4 +306,4 @@ serve(async (req) => {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-});
+}));

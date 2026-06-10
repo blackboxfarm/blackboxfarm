@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Activity, AlertTriangle, Clock, CheckCircle2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 type Summary = {
   in_flight: number;
@@ -15,7 +16,7 @@ type Summary = {
 };
 
 type ChannelHealth = {
-  channel_kind: string;
+  profile_kind: string;
   last_ok_at: string | null;
   consecutive_failures: number;
   last_error_class: string | null;
@@ -47,13 +48,17 @@ export const NoLubeHealthStrip: React.FC<{ onSweep?: () => void }> = ({ onSweep 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: s } = await (supabase as any).rpc('no_lube_health_summary');
-      if (s) setSummary(s as Summary);
-      const { data: ch } = await (supabase as any)
+      const { data: s, error: sErr } = await (supabase as any).rpc('no_lube_health_summary');
+      if (sErr) { toast.error(`Health summary failed: ${sErr.message}`); }
+      else if (s) setSummary(s as Summary);
+      const { data: ch, error: chErr } = await (supabase as any)
         .from('channel_health')
-        .select('channel_kind, last_ok_at, consecutive_failures, last_error_class, retry_after_at')
-        .order('channel_kind');
-      setChannels((ch || []) as ChannelHealth[]);
+        .select('profile_kind, last_ok_at, consecutive_failures, last_error_class, retry_after_at')
+        .order('profile_kind');
+      if (chErr) { toast.error(`Channel health failed: ${chErr.message}`); }
+      else setChannels((ch || []) as ChannelHealth[]);
+    } catch (e: any) {
+      toast.error(`Health load failed: ${e?.message || e}`);
     } finally {
       setLoading(false);
     }
@@ -62,9 +67,14 @@ export const NoLubeHealthStrip: React.FC<{ onSweep?: () => void }> = ({ onSweep 
   const sweep = async () => {
     setSweeping(true);
     try {
-      await supabase.functions.invoke('no-lube-sweeper', { body: {} });
+      const { data, error } = await supabase.functions.invoke('no-lube-sweeper', { body: {} });
+      if (error) toast.error(`Sweep failed: ${error.message || error}`);
+      else toast.success('Sweep complete');
+      if (data) console.log('[sweep]', data);
       await load();
       onSweep?.();
+    } catch (e: any) {
+      toast.error(`Sweep failed: ${e?.message || e}`);
     } finally { setSweeping(false); }
   };
 
@@ -125,12 +135,12 @@ export const NoLubeHealthStrip: React.FC<{ onSweep?: () => void }> = ({ onSweep 
             <span className="text-[10px] text-muted-foreground uppercase">channels:</span>
             {channels.map(c => (
               <Badge
-                key={c.channel_kind}
+                key={c.profile_kind}
                 variant="outline"
                 className={`text-[10px] ${errBadge(c.last_error_class)}`}
                 title={`Last ok: ${fmtAgo(c.last_ok_at)} ago · ${c.consecutive_failures} fails${c.retry_after_at ? ` · cooldown until ${new Date(c.retry_after_at).toLocaleTimeString()}` : ''}`}
               >
-                {c.channel_kind}
+                {c.profile_kind}
                 {c.consecutive_failures > 0 && <span className="ml-1">×{c.consecutive_failures}</span>}
               </Badge>
             ))}
