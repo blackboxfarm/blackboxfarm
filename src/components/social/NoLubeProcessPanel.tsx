@@ -7,6 +7,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Loader2, RefreshCw, FileText, ExternalLink, Play } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import processMd from '../../../docs/no-lube-process.md?raw';
+import { NoLubeHealthStrip } from './NoLubeHealthStrip';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { MoreHorizontal } from 'lucide-react';
+import { toast } from 'sonner';
 
 /**
  * No Lube — Private channel "Process" tab.
@@ -69,6 +73,8 @@ export function NoLubeProcessPanel() {
   const [showDoc, setShowDoc] = useState(false);
   const [selected, setSelected] = useState<Row | null>(null);
   const [postStatus, setPostStatus] = useState<Record<string, PostStatus>>({});
+  const [filter, setFilter] = useState<'all' | 'stuck' | 'failed'>('all');
+  const [rerunningMint, setRerunningMint] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -122,6 +128,38 @@ export function NoLubeProcessPanel() {
     setLoading(false);
   };
 
+  const rerun = async (mint: string, stage: string) => {
+    setRerunningMint(mint);
+    try {
+      const { data, error } = await supabase.functions.invoke('no-lube-stage-rerun', { body: { mint, stage } });
+      if (error) throw error;
+      toast.success(`${stage} re-ran for ${mint.slice(0, 6)}…`);
+      if (data && (data as any).result) console.log('rerun result', data);
+      await load();
+    } catch (e: any) {
+      toast.error(`Re-run ${stage} failed: ${e.message || e}`);
+    } finally {
+      setRerunningMint(null);
+    }
+  };
+
+  const visibleRows = rows.filter(r => {
+    if (filter === 'all') return true;
+    if (filter === 'failed') {
+      return !!r.ingest_last_error || r.ingest_status === 'error' || r.creator_status === 'unresolvable';
+    }
+    if (filter === 'stuck') {
+      const stuckInProc = r.dev_wallet_source === 'in_process';
+      const meshLate = !r.mesh_hydrated_at && r.first_called_at &&
+        (Date.now() - new Date(r.first_called_at as string).getTime()) > 30 * 60 * 1000;
+      const ingestStarted = !!r.ingest_started_at;
+      const ingestStuck = ingestStarted && !r.ingest_completed_at && r.first_called_at &&
+        (Date.now() - new Date(r.first_called_at as string).getTime()) > 10 * 60 * 1000;
+      return stuckInProc || meshLate || ingestStuck;
+    }
+    return true;
+  });
+
   const runPipeline = async () => {
     setRunning(true);
     try {
@@ -136,6 +174,7 @@ export function NoLubeProcessPanel() {
 
   return (
     <div className="space-y-4">
+      <NoLubeHealthStrip onSweep={load} />
       <Card className="bg-card/60 border-border">
         <CardContent className="pt-4 flex items-center justify-between gap-3">
           <div>
@@ -165,8 +204,23 @@ export function NoLubeProcessPanel() {
 
       <Card className="bg-card/60 border-border">
         <CardContent className="pt-4">
-          <div className="text-xs text-muted-foreground mb-2">
-            Last {rows.length} tokens scraped from the Insiders channel (newest first)
+          <div className="flex items-center justify-between mb-2 gap-2">
+            <div className="text-xs text-muted-foreground">
+              Showing {visibleRows.length} / {rows.length} tokens (newest first)
+            </div>
+            <div className="flex gap-1">
+              {(['all', 'stuck', 'failed'] as const).map(f => (
+                <Button
+                  key={f}
+                  size="sm"
+                  variant={filter === f ? 'default' : 'outline'}
+                  className="h-7 px-2 text-[10px] uppercase"
+                  onClick={() => setFilter(f)}
+                >
+                  {f}
+                </Button>
+              ))}
+            </div>
           </div>
           <Table>
             <TableHeader>
@@ -179,10 +233,11 @@ export function NoLubeProcessPanel() {
                 <TableHead compact>Posted</TableHead>
                 <TableHead compact>Latency</TableHead>
                 <TableHead compact>First called</TableHead>
+                <TableHead compact>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map(r => {
+              {visibleRows.map(r => {
                 const ps = postStatus[r.token_mint];
                 return (
                 <TableRow
@@ -247,11 +302,33 @@ export function NoLubeProcessPanel() {
                   <TableCell compact className="text-[10px] text-muted-foreground">
                     {new Date(r.first_called_at).toLocaleString()}
                   </TableCell>
+                  <TableCell compact onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" disabled={rerunningMint === r.token_mint}>
+                          {rerunningMint === r.token_mint
+                            ? <Loader2 className="h-3 w-3 animate-spin" />
+                            : <MoreHorizontal className="h-3 w-3" />}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="bg-popover">
+                        <DropdownMenuLabel className="text-[10px]">Re-run from stage</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        {(['ingest', 'creator', 'kyc', 'mesh', 'compose', 'push'] as const).map(s => (
+                          <DropdownMenuItem key={s} onClick={() => rerun(r.token_mint, s)} className="text-xs">
+                            {s}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
                 </TableRow>
                 );
               })}
-              {!loading && rows.length === 0 && (
-                <TableRow><TableCell compact colSpan={8} className="text-center text-muted-foreground">No tokens yet.</TableCell></TableRow>
+              {!loading && visibleRows.length === 0 && (
+                <TableRow><TableCell compact colSpan={9} className="text-center text-muted-foreground">
+                  {rows.length === 0 ? 'No tokens yet.' : `No ${filter} tokens.`}
+                </TableCell></TableRow>
               )}
             </TableBody>
           </Table>
