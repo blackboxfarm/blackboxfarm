@@ -86,6 +86,7 @@ const Autopsies = lazy(() => import("./pages/Autopsies"));
 const AutopsyArticle = lazy(() => import("./pages/AutopsyArticle"));
 const AutopsyRaw = lazy(() => import("./pages/AutopsyRaw"));
 const TokenArchive = lazy(() => import("./pages/TokenArchive"));
+const TwilioIdeas = lazy(() => import("./pages/TwilioIdeas"));
 // AutopsyQueue page removed — Autopsies admin lives inside the Super Admin Autopsies tab.
 
 const queryClient = new QueryClient();
@@ -135,6 +136,7 @@ const App = () => {
                       <Route path="/contact" element={<ContactUs />} />
                       <Route path="/web3-manifesto" element={<Web3Manifesto />} />
                       <Route path="/super-admin" element={<SuperAdmin />} />
+                      <Route path="/twilio-ideas" element={<TwilioIdeas />} />
                       <Route path="/super-admin/phanes-batch" element={<SuperAdminRoute><PhanesBatch /></SuperAdminRoute>} />
                       <Route path="/developer/:walletAddress" element={<Developer />} />
                       <Route path="/demo" element={<Demo />} />
