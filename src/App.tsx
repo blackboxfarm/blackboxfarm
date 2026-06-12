@@ -86,6 +86,7 @@ const Autopsies = lazy(() => import("./pages/Autopsies"));
 const AutopsyArticle = lazy(() => import("./pages/AutopsyArticle"));
 const AutopsyRaw = lazy(() => import("./pages/AutopsyRaw"));
 const TokenArchive = lazy(() => import("./pages/TokenArchive"));
+const TwilioIdeas = lazy(() => import("./pages/TwilioIdeas"));
 // AutopsyQueue page removed — Autopsies admin lives inside the Super Admin Autopsies tab.
 
 const queryClient = new QueryClient();
