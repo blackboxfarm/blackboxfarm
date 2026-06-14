@@ -1,20 +1,19 @@
 # Waterfall Tab — 10×10 Solana Wallet Grid
 
-A 10-column × 10-row matrix of 100 generated Solana wallets. Each column is a "waterfall" (column header = wallet 1, rows 1–10 list wallets 1–10 of that column? — clarified below). Every wallet supports nickname, live SOL balance, USD value, SPL token listing, withdraw, and bulk private-key export.
+A 10-column × 10-row matrix of exactly 100 generated Solana wallets. Each column is one isolated vertical waterfall of 10 wallets. Funds move wallet 1 → wallet 2 → wallet 3 etc. within the same column only; columns do not mix.
 
-## Layout interpretation
+## Layout
 
 ```text
-            Col 1        Col 2        Col 3   ...  Col 10
-header      Wallet C1H   Wallet C2H   ...           (header wallet, nickname-editable)
-row 1       W1-1         W2-1         ...
-row 2       W1-2         W2-2         ...
+            Waterfall 1  Waterfall 2  Waterfall 3 ... Waterfall 10
+wallet 1    W1-1         W2-1         ...
+wallet 2    W1-2         W2-2         ...
 ...
-row 10      W1-10        W2-10        ...
+wallet 10   W1-10        W2-10        ...
 ```
 
-- 10 column-header wallets + 10×10 body wallets = **110 wallets total**.
-  If you'd rather have **exactly 100** (header IS row 1), I'll switch to that on your "Plan Approved" — just say "100 only".
+- 10 columns × 10 wallets = **100 wallets total**.
+- Column headings are labels only, not extra wallets.
 - Each cell shows: short pubkey, nickname, SOL balance, USD value, token count badge, [Withdraw] button.
 - Clicking a cell opens a side drawer with full details: full pubkey (copy), SPL token list with balances + USD, per-token Withdraw form (amount + destination address), and rename nickname.
 
@@ -27,7 +26,7 @@ waterfall_wallets
   id uuid pk
   user_id uuid (owner, super admin only)
   column_index int  (0..9)
-  row_index int     (-1 for header, 0..9 for body)
+  row_index int     (0..9)
   nickname text
   pubkey text unique
   secret_key_encrypted text   (AES via existing encrypt-data function)
@@ -42,8 +41,8 @@ RLS: super-admin-only (uses existing `is_super_admin` rpc). GRANTs to `authentic
 ## Edge functions (reuse existing patterns)
 
 Reuse the airdrop-wallet pattern:
-1. `waterfall-generate-all` — generates any missing wallets to fill the 10×11 grid (idempotent).
-2. `waterfall-refresh-balances` — batches `getBalance` + `getTokenAccountsByOwner` via Helius RPC for all 110 wallets; updates DB and returns token holdings keyed by pubkey.
+1. `waterfall-generate-all` — generates any missing wallets to fill the 10×10 grid (idempotent).
+2. `waterfall-refresh-balances` — batches `getBalance` + `getTokenAccountsByOwner` via Helius RPC for all 100 wallets; updates DB and returns token holdings keyed by pubkey.
 3. `waterfall-withdraw` — body: `{ walletId, mint ('SOL' or SPL mint), amount, destination }`. Decrypts key, signs, sends (SystemProgram.transfer for SOL, SPL transfer + close-if-empty for tokens), returns signature.
 4. `waterfall-export-keys` — super-admin-only; returns decrypted secret keys as JSON `[{column,row,nickname,pubkey,secret_base58}]` for one-time download.
 
@@ -54,7 +53,7 @@ USD pricing: SOL via existing `useSolPrice` hook; SPL tokens via DexScreener tok
 New file `src/components/admin/WaterfallGrid.tsx` rendered inside the existing Waterfall tab in `SuperAdmin.tsx`. Components:
 
 - Top toolbar: **Generate Missing Wallets**, **Refresh Balances**, **Export Private Keys (.json)**, total SOL + total USD summary.
-- Sticky-header table, 10 columns. Header row = the column-header wallet card. Body rows 1–10 = the column's waterfall wallets.
+- Sticky-header table, 10 columns. Header labels identify Waterfall 1–10. Rows 1–10 are the actual wallets.
 - Cell card: editable nickname (inline), pubkey short + copy, SOL + USD, token badge, Withdraw button.
 - `WalletDetailDrawer` — full pubkey, QR (optional), SPL token list, per-token withdraw form with Solana address validation, rename field.
 - Confirm modal before private-key export (warns about security).
@@ -77,8 +76,6 @@ New file `src/components/admin/WaterfallGrid.tsx` rendered inside the existing W
 - `src/components/admin/WaterfallWalletDrawer.tsx` (new)
 - `src/pages/SuperAdmin.tsx` (swap "coming soon" for `<WaterfallGrid />`)
 
-## Open question
+## Final decision
 
-Grid totals **110 wallets (10 header + 100 body)** as written above, or **100 wallets** where the header row IS row 1? Default is 110 unless you say "100 only" when approving.
-
-Reply **Plan Approved** to build.
+Exactly **100 wallets**. No header-wallet rows.
