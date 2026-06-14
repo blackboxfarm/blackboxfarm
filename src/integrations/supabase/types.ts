@@ -24469,6 +24469,48 @@ export type Database = {
           },
         ]
       }
+      waterfall_wallets: {
+        Row: {
+          column_index: number
+          created_at: string
+          created_by: string | null
+          id: string
+          last_balance_at: string | null
+          nickname: string | null
+          pubkey: string
+          row_index: number
+          secret_key_encrypted: string
+          sol_balance: number
+          updated_at: string
+        }
+        Insert: {
+          column_index: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          last_balance_at?: string | null
+          nickname?: string | null
+          pubkey: string
+          row_index: number
+          secret_key_encrypted: string
+          sol_balance?: number
+          updated_at?: string
+        }
+        Update: {
+          column_index?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          last_balance_at?: string | null
+          nickname?: string | null
+          pubkey?: string
+          row_index?: number
+          secret_key_encrypted?: string
+          sol_balance?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       web_chat_messages: {
         Row: {
           content: string
