@@ -575,15 +575,20 @@ function Cell({
       <Button size="sm" variant="outline" className="h-6 w-full text-[10px] px-2" onClick={onOpen}>
         <ArrowDownToLine className="h-3 w-3 mr-1" /> Withdraw / Details
       </Button>
-      {targetMint && (
-        <div className="flex gap-1">
+      <div className="flex gap-1">
           <Button
             size="sm"
             variant="default"
             className="h-6 flex-1 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
             onClick={() => runSwap("buy")}
-            disabled={!buyEnabled || busy !== null || cascadeRunning || trolling}
-            title={buyEnabled ? `Buy ${buySizePct}% of wallet SOL (~${(sol * (buySizePct / 100)).toFixed(4)} SOL) of target token` : "Buying disabled for this column"}
+            disabled={!targetMint || !buyEnabled || busy !== null || cascadeRunning || trolling}
+            title={
+              !targetMint
+                ? "Paste a token mint at the top to enable BUY"
+                : !buyEnabled
+                  ? "Buying disabled for this column (uncheck at top)"
+                  : `Buy ${buySizePct}% of wallet SOL (~${(sol * (buySizePct / 100)).toFixed(4)} SOL) of target token`
+            }
           >
             {busy === "buy" ? <Loader2 className="h-3 w-3 animate-spin" /> : <><ShoppingCart className="h-3 w-3 mr-1" />BUY</>}
           </Button>
@@ -592,13 +597,18 @@ function Cell({
             variant="default"
             className="h-6 flex-1 text-[10px] px-2 bg-rose-600 hover:bg-rose-700 text-white"
             onClick={() => runSwap("sell")}
-            disabled={!targetHeld || (targetHeld?.amount ?? 0) <= 0 || busy !== null || cascadeRunning || trolling}
-            title={targetHeld ? `Sell all ${targetHeld.amount} tokens` : "No target-token balance to sell"}
+            disabled={!targetMint || !targetHeld || (targetHeld?.amount ?? 0) <= 0 || busy !== null || cascadeRunning || trolling}
+            title={
+              !targetMint
+                ? "Paste a token mint at the top to enable SELL"
+                : targetHeld && targetHeld.amount > 0
+                  ? `Sell 100% (${targetHeld.amount.toLocaleString()}) of target token`
+                  : "No target-token balance in this wallet"
+            }
           >
             {busy === "sell" ? <Loader2 className="h-3 w-3 animate-spin" /> : <><DollarSign className="h-3 w-3 mr-1" />SELL</>}
           </Button>
-        </div>
-      )}
+      </div>
       <Button
         size="sm"
         variant={trolling ? "secondary" : "default"}
