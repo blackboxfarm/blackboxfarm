@@ -86,7 +86,7 @@ function DrawerBody({
     <>
       <SheetHeader>
               <SheetTitle>
-                Col {wallet.column_index + 1} · {wallet.row_index === -1 ? "Header" : `Row ${wallet.row_index + 1}`}
+                Waterfall {wallet.column_index + 1} · Wallet {wallet.row_index + 1}
               </SheetTitle>
               <SheetDescription className="font-mono text-xs break-all">
                 {wallet.pubkey}

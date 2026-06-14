@@ -1,7 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Keypair } from "npm:@solana/web3.js@1.95.3";
-import { encode as bs58encode } from "https://esm.sh/bs58@5.0.0";
+import bs58 from "npm:bs58@6.0.0";
+import { assertDbWrite } from "../_shared/db-assert.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,15 +26,19 @@ serve(async (req) => {
     const { data: isSuper } = await admin.rpc("is_super_admin", { _user_id: user.id });
     if (!isSuper) return new Response(JSON.stringify({ error: "Super admin required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    const { data: existing } = await admin.from("waterfall_wallets").select("column_index,row_index");
+    const { data: existing } = await admin
+      .from("waterfall_wallets")
+      .select("column_index,row_index")
+      .gte("row_index", 0)
+      .lte("row_index", 9);
     const have = new Set((existing ?? []).map((r: any) => `${r.column_index}:${r.row_index}`));
 
     const toInsert: any[] = [];
     for (let c = 0; c < 10; c++) {
-      for (let r = -1; r <= 9; r++) {
+      for (let r = 0; r < 10; r++) {
         if (have.has(`${c}:${r}`)) continue;
         const kp = Keypair.generate();
-        const secret = bs58encode(kp.secretKey);
+        const secret = bs58.encode(kp.secretKey);
         const enc = await admin.functions.invoke("encrypt-data", { body: { data: secret, action: "encrypt" } });
         const encrypted = (enc.data as any)?.encryptedData ?? secret;
         toInsert.push({
@@ -42,17 +47,20 @@ serve(async (req) => {
           pubkey: kp.publicKey.toBase58(),
           secret_key_encrypted: encrypted,
           created_by: user.id,
-          nickname: r === -1 ? `Col ${c + 1} Header` : `C${c + 1}·R${r + 1}`,
+          nickname: `Waterfall ${c + 1} · Wallet ${r + 1}`,
         });
       }
     }
 
     if (toInsert.length) {
-      const { error } = await admin.from("waterfall_wallets").insert(toInsert);
-      if (error) throw error;
+      await assertDbWrite(
+        admin.from("waterfall_wallets").insert(toInsert),
+        "waterfall_wallets",
+        "waterfall_generate_100_wallets",
+      );
     }
 
-    return new Response(JSON.stringify({ success: true, generated: toInsert.length }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ success: true, generated: toInsert.length, target: 100 }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("waterfall-generate-all", e);
     return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
