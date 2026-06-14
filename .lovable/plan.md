@@ -1,59 +1,84 @@
-## Fix Plan: No Lube Hardening Gaps
+# Waterfall Tab — 10×10 Solana Wallet Grid
 
-Address all 11 issues identified in the audit. Grouped by category.
+A 10-column × 10-row matrix of 100 generated Solana wallets. Each column is a "waterfall" (column header = wallet 1, rows 1–10 list wallets 1–10 of that column? — clarified below). Every wallet supports nickname, live SOL balance, USD value, SPL token listing, withdraw, and bulk private-key export.
 
-### A. Hard breaks (UI shows nothing)
+## Layout interpretation
 
-1. **Align `no_lube_health_summary` RPC ↔ `NoLubeHealthStrip`.**
-   Update the RPC to return the exact keys the UI reads: `in_flight, in_process_stuck, mesh_pending, push_failures_24h, push_success_24h, rugged_recent`. Also include the existing breakdown keys (`pending, ingest_failed, creator_unresolvable, kyc_failed, mesh_failed`) so future widgets can reuse them.
+```text
+            Col 1        Col 2        Col 3   ...  Col 10
+header      Wallet C1H   Wallet C2H   ...           (header wallet, nickname-editable)
+row 1       W1-1         W2-1         ...
+row 2       W1-2         W2-2         ...
+...
+row 10      W1-10        W2-10        ...
+```
 
-2. **Fix `channel_health` column mismatch.**
-   Migration: rename `profile_kind` → `channel_kind` (or add `channel_kind` and backfill), keep PK consistent. Update `bump_channel_failure` RPC + any references. UI query already uses `channel_kind`.
+- 10 column-header wallets + 10×10 body wallets = **110 wallets total**.
+  If you'd rather have **exactly 100** (header IS row 1), I'll switch to that on your "Plan Approved" — just say "100 only".
+- Each cell shows: short pubkey, nickname, SOL balance, USD value, token count badge, [Withdraw] button.
+- Clicking a cell opens a side drawer with full details: full pubkey (copy), SPL token list with balances + USD, per-token Withdraw form (amount + destination address), and rename nickname.
 
-### B. Tracing / observability gaps
+## Database
 
-3. **Wrap new edge functions with `withRunLog`.**
-   - `no-lube-sweeper` → log per-step counts via `logger.addMeta`
-   - `no-lube-stage-rerun` → log `stage`, `mint`, `invoked`, outcome
-   - `no-lube-push` → already updated; wrap entry, classify each attempt as info/warn/error events
+New migration creates one table:
 
-4. **Wire `bump_channel_failure` from `no-lube-push`.**
-   On every send: success → upsert `channel_health` row with `last_ok_at=now()`, `consecutive_failures=0`. Failure → call `bump_channel_failure(channel_kind, error_class, retry_after_seconds)`.
+```text
+waterfall_wallets
+  id uuid pk
+  user_id uuid (owner, super admin only)
+  column_index int  (0..9)
+  row_index int     (-1 for header, 0..9 for body)
+  nickname text
+  pubkey text unique
+  secret_key_encrypted text   (AES via existing encrypt-data function)
+  sol_balance numeric default 0
+  last_balance_at timestamptz
+  created_at timestamptz default now()
+  unique(column_index, row_index)
+```
 
-5. **Sweeper stale push-lock release: use `.neq('posted', true)` not `.is('posted', null)`.**
+RLS: super-admin-only (uses existing `is_super_admin` rpc). GRANTs to `authenticated` + `service_role`.
 
-6. **`stamp_in_process_since` trigger: add BEFORE INSERT branch.**
-   Stamp `in_process_since = now()` on INSERT when `dev_wallet_source='in_process'`, plus existing UPDATE OF logic.
+## Edge functions (reuse existing patterns)
 
-### C. Wiring / logic polish
+Reuse the airdrop-wallet pattern:
+1. `waterfall-generate-all` — generates any missing wallets to fill the 10×11 grid (idempotent).
+2. `waterfall-refresh-balances` — batches `getBalance` + `getTokenAccountsByOwner` via Helius RPC for all 110 wallets; updates DB and returns token holdings keyed by pubkey.
+3. `waterfall-withdraw` — body: `{ walletId, mint ('SOL' or SPL mint), amount, destination }`. Decrypts key, signs, sends (SystemProgram.transfer for SOL, SPL transfer + close-if-empty for tokens), returns signature.
+4. `waterfall-export-keys` — super-admin-only; returns decrypted secret keys as JSON `[{column,row,nickname,pubkey,secret_base58}]` for one-time download.
 
-7. **Stage-rerun `creator`:** also clear `creator_status IN ('unknown','pending')` cooldown (reset `creator_attempts=0`, clear `creator_last_attempt_at` if column exists) so non-`unresolvable` stuck rows actually retry.
+USD pricing: SOL via existing `useSolPrice` hook; SPL tokens via DexScreener token-price lookup (already in the codebase) — falls back to "—" if no price.
 
-8. **Stage-rerun `push`:** invoke `no-lube-orchestrate` with `{ token_mint: mint, mint }` (both keys) so whichever the orchestrator expects works.
+## UI
 
-9. **Toast on failure** in `NoLubeHealthStrip` `load()` and `sweep()` via `useToast`. Distinguish RPC vs channel query errors.
+New file `src/components/admin/WaterfallGrid.tsx` rendered inside the existing Waterfall tab in `SuperAdmin.tsx`. Components:
 
-10. **Add gate-block columns to `FIELDS` array** in `NoLubeProcessPanel` detail dialog: `gate_block_reason`, `gate_blocked_at`, `in_process_since`.
+- Top toolbar: **Generate Missing Wallets**, **Refresh Balances**, **Export Private Keys (.json)**, total SOL + total USD summary.
+- Sticky-header table, 10 columns. Header row = the column-header wallet card. Body rows 1–10 = the column's waterfall wallets.
+- Cell card: editable nickname (inline), pubkey short + copy, SOL + USD, token badge, Withdraw button.
+- `WalletDetailDrawer` — full pubkey, QR (optional), SPL token list, per-token withdraw form with Solana address validation, rename field.
+- Confirm modal before private-key export (warns about security).
 
-11. **Sweeper persistence:** with `withRunLog` (#3) cron heartbeat becomes visible in `edge_function_runs`; also add `logger.addMeta('report', report)` so per-step counts are queryable.
+## Security
 
-### Technical details
+- All key material encrypted at rest via existing `encrypt-data` function (AES-256-GCM).
+- Every edge function checks `is_super_admin`.
+- Export endpoint logs an entry in `secret_access_audit`.
+- Withdraw destination validated as base58 32–44 chars before signing.
 
-**Migration 1** — RPC + schema:
-- `DROP FUNCTION no_lube_health_summary(); CREATE FUNCTION ... RETURNS jsonb` returning the 6 UI keys + 5 breakdown keys.
-- `ALTER TABLE channel_health RENAME COLUMN profile_kind TO channel_kind;` (verify PK; may need DROP/RECREATE constraint).
-- Update `bump_channel_failure(_channel_kind text, _error_class text, _retry_after_seconds int)` to use `channel_kind`.
-- Replace `stamp_in_process_since` trigger to fire BEFORE INSERT OR UPDATE OF `dev_wallet_source`.
+## Files touched
 
-**Edge function edits:**
-- `no-lube-sweeper/index.ts`: import `withRunLog`, wrap handler, fix `.is('posted', null)` → `.neq('posted', true)`, add `logger.addMeta` per step.
-- `no-lube-stage-rerun/index.ts`: wrap with `withRunLog`, broaden creator re-arm, dual-key push invoke.
-- `no-lube-push/index.ts`: ensure `withRunLog` wrap, add `bump_channel_failure` + success upsert calls in retry loop.
+- `supabase/migrations/<ts>_waterfall_wallets.sql` (new)
+- `supabase/functions/waterfall-generate-all/index.ts` (new)
+- `supabase/functions/waterfall-refresh-balances/index.ts` (new)
+- `supabase/functions/waterfall-withdraw/index.ts` (new)
+- `supabase/functions/waterfall-export-keys/index.ts` (new)
+- `src/components/admin/WaterfallGrid.tsx` (new)
+- `src/components/admin/WaterfallWalletDrawer.tsx` (new)
+- `src/pages/SuperAdmin.tsx` (swap "coming soon" for `<WaterfallGrid />`)
 
-**UI edits:**
-- `NoLubeHealthStrip.tsx`: add `useToast`, surface errors, no other shape changes (RPC will now match).
-- `NoLubeProcessPanel.tsx`: extend `FIELDS` array with the 3 missing columns.
+## Open question
 
-### Out of scope
-- Re-architecting the Row type to be properly typed (cosmetic TS issue, not a functional break).
-- New UI tabs beyond the existing Stuck/Failed filter.
+Grid totals **110 wallets (10 header + 100 body)** as written above, or **100 wallets** where the header row IS row 1? Default is 110 unless you say "100 only" when approving.
+
+Reply **Plan Approved** to build.

@@ -11,6 +11,7 @@ import { AdminNotificationsBadge } from "@/components/admin/AdminNotificationsBa
 import { LazyLoader } from "@/components/ui/lazy-loader";
 import { AccountSnapshotWidget } from "@/components/admin/AccountSnapshotWidget";
 import { TabErrorBoundary } from "@/components/ui/TabErrorBoundary";
+const WaterfallGrid = lazy(() => import("@/components/admin/WaterfallGrid"));
 
 // Lazy load entire tab content sections - they ONLY load when their tab is clicked
 const UtilitiesTab = lazy(() => import("@/components/admin/tabs/UtilitiesTab"));
@@ -470,7 +471,7 @@ export default function SuperAdmin() {
           <TabsContent value="waterfall">
             {activeTab === "waterfall" && (
               <TabErrorBoundary tabName="Waterfall">
-                <div className="p-8 text-sm text-muted-foreground">Waterfall — coming soon.</div>
+                <Suspense fallback={<TabLoader />}><WaterfallGrid /></Suspense>
               </TabErrorBoundary>
             )}
           </TabsContent>
