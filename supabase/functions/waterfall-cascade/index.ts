@@ -66,9 +66,26 @@ serve(async (req) => {
       });
     }
 
-    const { columnIndex } = await req.json();
+    const { columnIndex, plan: providedPlan } = await req.json();
     if (typeof columnIndex !== "number" || columnIndex < 0 || columnIndex > 9) {
       throw new Error("columnIndex must be 0..9");
+    }
+
+    // Optional preview plan: array of {row, leaveBehindLamports} for rows 0..8
+    let planMap: Record<number, number> | null = null;
+    if (Array.isArray(providedPlan)) {
+      planMap = {};
+      for (const h of providedPlan) {
+        if (typeof h?.row !== "number" || typeof h?.leaveBehindLamports !== "number") {
+          throw new Error("plan entries must be { row, leaveBehindLamports }");
+        }
+        const lb = Math.floor(h.leaveBehindLamports);
+        // Guard rails: 0.70 - 1.00 SOL
+        if (lb < 0.70 * LAMPORTS_PER_SOL || lb > 1.00 * LAMPORTS_PER_SOL) {
+          throw new Error(`plan row ${h.row} leaveBehind out of bounds (0.70-1.00 SOL)`);
+        }
+        planMap[h.row] = lb;
+      }
     }
 
     const { data: wallets, error: werr } = await admin
@@ -91,6 +108,7 @@ serve(async (req) => {
         current_wallet_row: 0,
         current_step: "starting",
         created_by: user.id,
+        plan: providedPlan ?? null,
       })
       .select("id")
       .single();
@@ -162,7 +180,7 @@ serve(async (req) => {
           const next = wallets[r + 1];
           const destPk = new PublicKey(next.pubkey);
           const balance = await connection.getBalance(kp.publicKey);
-          const leaveBehind = randLeaveBehindLamports();
+          const leaveBehind = planMap && planMap[r] != null ? planMap[r] : randLeaveBehindLamports();
           const sendable = balance - leaveBehind - FEE_BUFFER_LAMPORTS;
 
           if (sendable < TROLL_RESERVE_LAMPORTS) {
