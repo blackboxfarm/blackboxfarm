@@ -83,7 +83,7 @@ export default function WaterfallGrid() {
 
   // Buy target — single token mint pasted at the top, with per-column enable checkboxes.
   const [targetMint, setTargetMint] = useState<string>("");
-  const [buySizeSol, setBuySizeSol] = useState<string>("0.01");
+  const [buySizePct, setBuySizePct] = useState<string>("95");
   const [buyEnabled, setBuyEnabled] = useState<boolean[]>(() => Array.from({ length: 10 }, () => true));
   const [tokenPrices, setTokenPrices] = useState<Record<string, { priceUsd: number; symbol: string }>>({});
 
@@ -387,7 +387,7 @@ export default function WaterfallGrid() {
                               tokenPrices={tokenPrices}
                               targetMint={validTargetMint ? targetMint.trim() : ""}
                               buyEnabled={buyEnabled[c]}
-                              buySizeSol={Number(buySizeSol) || 0}
+                              buySizePct={Number(buySizePct) || 0}
                             onOpen={() => setActive(w)}
                             onRename={updateNickname}
                               isHeadOfColumn={r === 0}
