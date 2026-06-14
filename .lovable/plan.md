@@ -1,60 +1,72 @@
-## What this does
+## Two-Stage Cascade: Preview → Execute
 
-Adds a **CASCADE** button next to TROLL on Wallet 1 of each column. One click runs the full waterfall through that column's 10 wallets.
+Turn the current one-shot CASCADE button into a two-click flow so you can see the projected SOL flow before any transactions fire.
 
-### Per-hop logic (wallets 1→9)
+### Stage 1 — CASCADE (preview)
 
-For each wallet N in order (1, 2, 3, 4, 5, 6, 7, 8, 9):
+Click **CASCADE** on Wallet 1 of a column:
 
-1. Run TROLL on wallet N — keep retrying any failed buy/sell until **10 successful buy+sell cycles** have completed (since these are ~$0.02 trades, failures should be rare and recoverable).
-2. Pick a random "leave-behind" amount between **0.75 and 0.95 SOL** (uniform random, 6-decimal precision).
-3. Transfer `(current_balance − leave_behind − fee_buffer)` SOL from wallet N to wallet N+1.
-4. Wait for confirmation, then move to wallet N+1.
+1. Read current Wallet 1 SOL balance (e.g. 15 SOL).
+2. Roll all 9 random leave-behind amounts up front (W1..W9), each uniform `0.75–0.95 SOL`, 6-decimal precision. W10 has no leave-behind (terminal).
+3. Walk the projection:
+   - `incoming[1] = currentBalance(W1)`
+   - `forward[N]  = incoming[N] − leaveBehind[N] − feeBuffer`
+   - `incoming[N+1] = forward[N]`
+   - `incoming[10]` = final landed amount, no forward.
+4. Store the plan in state (column-scoped) and render a red bracketed projection beside every wallet's balance:
 
-### Wallet 10 (terminal)
+```text
+W1   15.0000 SOL  [leave 0.8421 → fwd 14.1579]
+W2    0.0000 SOL  [in 14.1579 → leave 0.9102 → fwd 13.2477]
+...
+W10   0.0000 SOL  [in ~3.30 SOL · terminal]
+```
 
-- Run TROLL (10 successful cycles, with retries).
-- Stop. Leave whatever SOL remains in wallet 10. No further forwarding.
+5. The button relabels to **EXECUTE** (green) with a small **✕ Cancel** beside it to discard the projection and revert to CASCADE.
 
-### Failure behavior
+Nothing on-chain happens during preview.
 
-- TROLL buy/sell failures: retry the individual cycle until 10 successes accumulate. Cap retries per cycle at ~20 attempts to avoid infinite loops if the wallet truly runs out of SOL.
-- SOL transfer failure between wallets: halt cascade, return error showing which hop failed and current balances. Funds stay where they are — you can resume manually.
-- Insufficient SOL to leave 0.75–0.95 behind: halt with clear error ("wallet N only has X SOL, can't leave 0.75 behind and forward anything").
+### Stage 2 — EXECUTE
 
-### UI
+Click **EXECUTE**:
 
-- **CASCADE** button (purple, lightning-bolt icon) added beside the TROLL button on the Wallet 1 row of each of the 10 columns.
-- Click → confirm dialog showing the column number and total estimated time (~25 minutes for 10 wallets × ~2.5min TROLL each).
-- Live status badge under the button showing current step: `Cascading: W3 trolling 7/10` or `Cascading: W5 → W6 transfer`.
-- Toast notifications on each wallet completion and on final completion / failure.
-- Button disabled during a run; other column cascades can run in parallel.
+1. Send the cached `plan` (array of `{row, leaveBehindLamports}`) to the edge function alongside `columnIndex`.
+2. Edge function uses the **provided** leave-behind values instead of rolling its own — so the on-chain outcome matches what you previewed (modulo tiny fee variance).
+3. Existing run loop proceeds: troll W1 → transfer (balance − providedLeaveBehind − feeBuffer) → troll W2 → … → troll W10.
+4. As each hop completes, the red `[…]` projection on that row turns **green** and shows the realized amount; mismatches >0.001 SOL stay red with a delta.
+
+### UI details (per column)
+
+- Projection chips render inside `WaterfallGrid.tsx` next to each cell's SOL value. Red while pending, green when that hop's transfer is confirmed.
+- Header of the column shows: `Projected final W10: 3.3047 SOL` while in preview.
+- EXECUTE confirm dialog: "Cascade column N with previewed plan? ~25 min." (no re-rolling).
+- Preview is **per-column** state — previewing column 3 doesn't disturb column 1.
+- If Wallet 1 balance changes between preview and execute by more than 0.01 SOL, EXECUTE blocks with: "Balance changed since preview, re-run CASCADE."
+
+### Validation during preview (fail fast, no on-chain action)
+
+- If any projected `forward[N] < 0.005 SOL` (W2..W9 wouldn't have enough to cover its own troll), the preview renders that row in red with `INSUFFICIENT` and EXECUTE is disabled.
+- If W1 balance < ~0.80 SOL the CASCADE button is disabled with tooltip "need ≥ ~0.80 SOL in Wallet 1".
 
 ### Technical details
 
-**New edge function:** `supabase/functions/waterfall-cascade/index.ts`
+- **Frontend (`src/components/admin/WaterfallGrid.tsx`)**
+  - New per-column state: `cascadePlan: { columnIndex, basis: 'W1 balance at preview time', hops: [{row, leaveBehindLamports, projectedIncomingLamports, projectedForwardLamports, status: 'pending'|'done'|'mismatch'}] }`.
+  - Pure helper `buildCascadePlan(w1Balance: number): Plan` — does the roll + walk. Easy to unit test.
+  - Button state machine: `idle → preview → executing → done|failed`. Cancel returns to `idle`.
+  - Render projection chip inline with existing balance display in each wallet cell.
 
-- Input: `{ columnIndex: number }` (0–9). Server fetches all 10 wallets for that column, ordered by row.
-- Super-admin auth check (same pattern as `waterfall-troll`).
-- Reuses the existing TROLL swap logic — refactor the cycle loop from `waterfall-troll/index.ts` into a shared helper `_shared/troll-cycle.ts` that exports `runTrollCycles(connection, kp, { cycles: 10, maxRetriesPerCycle: 20 })` returning success count and SOL spent. Both `waterfall-troll` and `waterfall-cascade` import it.
-- Per hop: call the shared troll helper, then build a `SystemProgram.transfer` for `balance − leaveBehindLamports − 10_000` (fee buffer), sign with the wallet keypair (decrypted via `decryptWalletSecretAuto`), confirm, then proceed.
-- Streams progress via Supabase Realtime broadcast on channel `waterfall-cascade-{columnIndex}` so the UI can render live step text without polling.
-- Long-running (~25 min). Edge functions support up to 400s default — we'll need to either:
-  - (a) run as a background task using `EdgeRuntime.waitUntil()` and persist progress to a new `waterfall_cascade_runs` table that the UI subscribes to, OR
-  - (b) chain per-wallet invocations: the function does ONE wallet's troll+transfer then enqueues itself for wallet N+1 via a second `functions.invoke` call.
-  - **Recommendation: (a)** — single function call, background task, status row in DB, realtime updates to UI. Cleaner state, easier to resume/inspect.
+- **Edge function (`supabase/functions/waterfall-cascade/index.ts`)**
+  - Accept optional `plan: { row: number, leaveBehindLamports: number }[]` (length 9, rows 0..8). If present, use it verbatim; if absent, keep current behavior (server-side random) for backwards-compat / direct API use.
+  - Validate each `leaveBehindLamports` is within `[0.70, 1.00] SOL` to prevent abuse.
+  - On each hop, compute `sendable = balance − plan[row].leaveBehindLamports − FEE_BUFFER_LAMPORTS` exactly as today.
+  - Persist the plan on the `waterfall_cascade_runs` row so logs are auditable.
 
-**New table:** `waterfall_cascade_runs`
-- `column_index` (0–9), `status` (running/completed/failed), `current_wallet_row`, `current_step` (text), `started_at`, `completed_at`, `error`, `hop_log` (jsonb array of {row, leftBehind, forwarded, trollCycles, durationMs}).
-- RLS: super-admin only, same pattern as `waterfall_wallets`.
+- **DB migration**
+  - Add `plan jsonb` column to `waterfall_cascade_runs` (nullable, default null) to record the preview plan that was executed.
 
-**Edited files:**
-- `src/components/admin/WaterfallGrid.tsx` — add CASCADE button to wallet 1 of each column, realtime subscription to `waterfall_cascade_runs` for live status.
-- `supabase/functions/waterfall-troll/index.ts` — refactor to use shared helper.
+### Out of scope
 
-### Time / cost estimate (per column, your $68/SOL math)
-
-- TROLL × 10 wallets = ~25 min total (each TROLL is ~2.5min: 10 cycles × ~7s + retries).
-- 9 SOL transfers ≈ 9 × $0.0007 ≈ negligible.
-- TROLL fees: ~$0.10–$0.25 per wallet × 10 = **~$1–$2.50 in fees per full column cascade**.
-- Starting with 11 SOL in wallet 1: after 9 hops leaving 0.85 SOL avg behind, wallet 10 receives roughly `11 − 9×0.85 − fees ≈ 3.3 SOL`.
+- No changes to the standalone TROLL button.
+- No changes to the actual troll cycle logic, transfer logic, or wallet 10 terminal behavior.
+- No persistence of the preview across page reloads — it lives in component state only (re-click CASCADE to regenerate).
