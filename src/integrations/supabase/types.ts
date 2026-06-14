@@ -24479,6 +24479,7 @@ export type Database = {
           error: string | null
           hop_log: Json
           id: string
+          plan: Json | null
           started_at: string
           status: string
           updated_at: string
@@ -24492,6 +24493,7 @@ export type Database = {
           error?: string | null
           hop_log?: Json
           id?: string
+          plan?: Json | null
           started_at?: string
           status?: string
           updated_at?: string
@@ -24505,6 +24507,7 @@ export type Database = {
           error?: string | null
           hop_log?: Json
           id?: string
+          plan?: Json | null
           started_at?: string
           status?: string
           updated_at?: string
