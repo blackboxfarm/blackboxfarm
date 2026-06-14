@@ -16,20 +16,15 @@ serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const authHeader = req.headers.get("Authorization");
-    const admin = createClient(supabaseUrl, serviceKey);
-    const body = await req.json().catch(() => ({}));
-    let userId: string | null = null;
+    if (!authHeader) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    if (authHeader) {
-      const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
-      const { data: { user } } = await userClient.auth.getUser();
-      if (!user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      const { data: isSuper } = await admin.rpc("is_super_admin", { _user_id: user.id });
-      if (!isSuper) return new Response(JSON.stringify({ error: "Super admin required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      userId = user.id;
-    } else if (body.bootstrap !== true) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+    const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
+    const { data: { user } } = await userClient.auth.getUser();
+    if (!user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+    const admin = createClient(supabaseUrl, serviceKey);
+    const { data: isSuper } = await admin.rpc("is_super_admin", { _user_id: user.id });
+    if (!isSuper) return new Response(JSON.stringify({ error: "Super admin required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const { data: existing } = await admin
       .from("waterfall_wallets")
@@ -51,7 +46,7 @@ serve(async (req) => {
           row_index: r,
           pubkey: kp.publicKey.toBase58(),
           secret_key_encrypted: encrypted,
-          created_by: userId,
+          created_by: user.id,
           nickname: `Waterfall ${c + 1} · Wallet ${r + 1}`,
         });
       }
