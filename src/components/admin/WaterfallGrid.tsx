@@ -4,10 +4,58 @@ import { useSolPrice } from "@/hooks/useSolPrice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, RefreshCw, Download, Sparkles, Copy, ArrowDownToLine, Zap, Waves } from "lucide-react";
+import { Loader2, RefreshCw, Download, Sparkles, Copy, ArrowDownToLine, Zap, Waves, Play, X } from "lucide-react";
 import { WaterfallWalletDrawer, type WaterfallWallet, type TokenHolding } from "./WaterfallWalletDrawer";
 
 const SHORT = (k: string) => `${k.slice(0, 4)}…${k.slice(-4)}`;
+const LAMPORTS_PER_SOL = 1_000_000_000;
+const FEE_BUFFER_LAMPORTS = 10_000;
+
+type PlanHop = {
+  row: number;
+  leaveBehindLamports: number;
+  projectedIncomingLamports: number;
+  projectedForwardLamports: number; // 0 for terminal W10
+  insufficient: boolean;
+};
+type CascadePlan = {
+  columnIndex: number;
+  basisW1Lamports: number;
+  hops: PlanHop[]; // length 10 (rows 0..9)
+};
+
+function buildCascadePlan(columnIndex: number, w1Sol: number): CascadePlan {
+  const basis = Math.floor(w1Sol * LAMPORTS_PER_SOL);
+  const hops: PlanHop[] = [];
+  let incoming = basis;
+  for (let r = 0; r < 10; r++) {
+    if (r === 9) {
+      hops.push({
+        row: r,
+        leaveBehindLamports: incoming, // terminal, just sits
+        projectedIncomingLamports: incoming,
+        projectedForwardLamports: 0,
+        insufficient: incoming < 5_000_000, // 0.005 SOL min for troll
+      });
+      break;
+    }
+    const sol = 0.75 + Math.random() * 0.20;
+    const leave = Math.floor(sol * LAMPORTS_PER_SOL);
+    const forward = incoming - leave - FEE_BUFFER_LAMPORTS;
+    const insufficient = forward < 5_000_000;
+    hops.push({
+      row: r,
+      leaveBehindLamports: leave,
+      projectedIncomingLamports: incoming,
+      projectedForwardLamports: Math.max(0, forward),
+      insufficient,
+    });
+    incoming = forward;
+  }
+  return { columnIndex, basisW1Lamports: basis, hops };
+}
+
+const fmtSol = (lamports: number) => (lamports / LAMPORTS_PER_SOL).toFixed(4);
 
 type CascadeRun = {
   id: string;
@@ -27,6 +75,7 @@ export default function WaterfallGrid() {
   const [exporting, setExporting] = useState(false);
   const [active, setActive] = useState<WaterfallWallet | null>(null);
   const [cascades, setCascades] = useState<Record<number, CascadeRun>>({});
+  const [plans, setPlans] = useState<Record<number, CascadePlan>>({});
   const { priceData } = useSolPrice() as any;
   const solUsd = priceData?.price ?? 0;
 
@@ -87,14 +136,50 @@ export default function WaterfallGrid() {
     return () => { cancelled = true; supabase.removeChannel(channel); };
   }, []);
 
-  const startCascade = async (columnIndex: number) => {
+  const previewCascade = (columnIndex: number) => {
     if (cascades[columnIndex]) return toast({ title: "Already running", variant: "destructive" });
-    if (!confirm(
-      `CASCADE column ${columnIndex + 1}?\n\n` +
-      `Runs TROLL on W1 (10 cycles w/ retries) → forwards remainder to W2 (leaves 0.75–0.95 SOL behind) → repeats through W10.\n\n` +
-      `~25 minutes total. ~$1–$2.50 in fees.\nW1 needs enough SOL (≥ ~9 SOL recommended for clean 10-hop run).`
-    )) return;
-    const { error } = await supabase.functions.invoke("waterfall-cascade", { body: { columnIndex } });
+    const w1 = wallets.find((w) => w.column_index === columnIndex && w.row_index === 0);
+    if (!w1) return toast({ title: "Wallet 1 not found", variant: "destructive" });
+    const sol = Number(w1.sol_balance || 0);
+    if (sol < 0.80) {
+      return toast({ title: "Not enough SOL in W1", description: "Need ≥ ~0.80 SOL to plan a cascade.", variant: "destructive" });
+    }
+    const plan = buildCascadePlan(columnIndex, sol);
+    setPlans((prev) => ({ ...prev, [columnIndex]: plan }));
+  };
+
+  const cancelPlan = (columnIndex: number) => {
+    setPlans((prev) => {
+      const n = { ...prev };
+      delete n[columnIndex];
+      return n;
+    });
+  };
+
+  const executePlan = async (columnIndex: number) => {
+    const plan = plans[columnIndex];
+    if (!plan) return;
+    if (cascades[columnIndex]) return toast({ title: "Already running", variant: "destructive" });
+    const w1 = wallets.find((w) => w.column_index === columnIndex && w.row_index === 0);
+    if (!w1) return toast({ title: "Wallet 1 not found", variant: "destructive" });
+    const currentBasis = Math.floor(Number(w1.sol_balance || 0) * LAMPORTS_PER_SOL);
+    if (Math.abs(currentBasis - plan.basisW1Lamports) > 0.01 * LAMPORTS_PER_SOL) {
+      return toast({
+        title: "W1 balance changed since preview",
+        description: "Cancel and re-run CASCADE to regenerate the plan.",
+        variant: "destructive",
+      });
+    }
+    if (plan.hops.some((h) => h.insufficient)) {
+      return toast({ title: "Plan has insufficient hops", variant: "destructive" });
+    }
+    if (!confirm(`EXECUTE cascade on column ${columnIndex + 1} with the previewed plan?\n~25 minutes. ~$1–$2.50 in fees.`)) return;
+    const planPayload = plan.hops
+      .filter((h) => h.row < 9)
+      .map((h) => ({ row: h.row, leaveBehindLamports: h.leaveBehindLamports }));
+    const { error } = await supabase.functions.invoke("waterfall-cascade", {
+      body: { columnIndex, plan: planPayload },
+    });
     if (error) return toast({ title: "Cascade start failed", description: error.message, variant: "destructive" });
     toast({ title: `Cascade ${columnIndex + 1} started` });
   };
@@ -207,6 +292,8 @@ export default function WaterfallGrid() {
                     const w = grid.get(`${c}:${r}`);
                       const cascade = cascades[c];
                       const isCascadeWallet = !!cascade && cascade.current_wallet_row === r;
+                      const plan = plans[c];
+                      const planHop = plan?.hops.find((h) => h.row === r);
                     return (
                       <td key={c} className="p-2 border-b border-r align-top">
                         {w ? (
@@ -219,7 +306,11 @@ export default function WaterfallGrid() {
                               isHeadOfColumn={r === 0}
                               cascade={cascade}
                               isCurrentCascadeWallet={isCascadeWallet}
-                              onCascade={() => startCascade(c)}
+                              planHop={planHop}
+                              hasPlan={!!plan}
+                              onPreview={() => previewCascade(c)}
+                              onExecute={() => executePlan(c)}
+                              onCancelPlan={() => cancelPlan(c)}
                           />
                         ) : <span className="text-muted-foreground">—</span>}
                       </td>
@@ -245,7 +336,8 @@ export default function WaterfallGrid() {
 }
 
 function Cell({
-  w, tokens, solUsd, onOpen, onRename, isHeadOfColumn, cascade, isCurrentCascadeWallet, onCascade,
+  w, tokens, solUsd, onOpen, onRename, isHeadOfColumn, cascade, isCurrentCascadeWallet,
+  planHop, hasPlan, onPreview, onExecute, onCancelPlan,
 }: {
   w: WaterfallWallet;
   tokens: TokenHolding[];
@@ -255,7 +347,11 @@ function Cell({
   isHeadOfColumn: boolean;
   cascade?: CascadeRun;
   isCurrentCascadeWallet: boolean;
-  onCascade: () => void;
+  planHop?: PlanHop;
+  hasPlan: boolean;
+  onPreview: () => void;
+  onExecute: () => void;
+  onCancelPlan: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(w.nickname ?? "");
@@ -313,6 +409,17 @@ function Cell({
       <div className="text-[11px]">
         <span className="font-semibold">{sol.toFixed(4)} SOL</span>
         {solUsd > 0 && <span className="text-muted-foreground"> · ${(sol * solUsd).toFixed(2)}</span>}
+        {planHop && (
+          <span className={`ml-1 font-mono text-[10px] ${planHop.insufficient ? "text-red-600 dark:text-red-400" : "text-red-500 dark:text-red-400"}`}>
+            {planHop.insufficient ? (
+              <>[INSUFFICIENT]</>
+            ) : planHop.row === 9 ? (
+              <>[in ~{fmtSol(planHop.projectedIncomingLamports)} · terminal]</>
+            ) : (
+              <>[in {fmtSol(planHop.projectedIncomingLamports)} · leave {fmtSol(planHop.leaveBehindLamports)} → fwd {fmtSol(planHop.projectedForwardLamports)}]</>
+            )}
+          </span>
+        )}
       </div>
       {tokens.length > 0 && (
         <div className="text-[10px] text-muted-foreground">+{tokens.length} token{tokens.length > 1 ? "s" : ""}</div>
@@ -335,20 +442,43 @@ function Cell({
         )}
       </Button>
       {isHeadOfColumn && (
-        <Button
-          size="sm"
-          variant={cascadeRunning ? "secondary" : "outline"}
-          className="h-6 w-full text-[10px] px-2 border-purple-500 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950"
-          onClick={onCascade}
-          disabled={cascadeRunning}
-          title="Run TROLL on each wallet 1→10, forwarding the remainder down the column"
-        >
+        <>
           {cascadeRunning ? (
-            <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Cascading</>
+            <Button size="sm" variant="secondary" className="h-6 w-full text-[10px] px-2" disabled>
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" /> Cascading
+            </Button>
+          ) : hasPlan ? (
+            <div className="flex gap-1">
+              <Button
+                size="sm"
+                className="h-6 flex-1 text-[10px] px-2 bg-green-600 hover:bg-green-700 text-white"
+                onClick={onExecute}
+                title="Run cascade with the previewed leave-behind amounts"
+              >
+                <Play className="h-3 w-3 mr-1" /> EXECUTE
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 px-2 text-[10px]"
+                onClick={onCancelPlan}
+                title="Discard preview"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
           ) : (
-            <><Waves className="h-3 w-3 mr-1" /> CASCADE</>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 w-full text-[10px] px-2 border-purple-500 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950"
+              onClick={onPreview}
+              title="Preview random leave-behind amounts for the full cascade"
+            >
+              <Waves className="h-3 w-3 mr-1" /> CASCADE
+            </Button>
           )}
-        </Button>
+        </>
       )}
       {cascadeRunning && isHeadOfColumn && (
         <div className="text-[10px] text-purple-600 dark:text-purple-400 truncate" title={cascade?.current_step ?? ""}>

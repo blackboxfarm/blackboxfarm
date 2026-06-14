@@ -1,0 +1,1 @@
+ALTER TABLE public.waterfall_cascade_runs ADD COLUMN IF NOT EXISTS plan jsonb;
