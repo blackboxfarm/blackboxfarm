@@ -1,81 +1,60 @@
-# Waterfall Tab — 10×10 Solana Wallet Grid
+## What this does
 
-A 10-column × 10-row matrix of exactly 100 generated Solana wallets. Each column is one isolated vertical waterfall of 10 wallets. Funds move wallet 1 → wallet 2 → wallet 3 etc. within the same column only; columns do not mix.
+Adds a **CASCADE** button next to TROLL on Wallet 1 of each column. One click runs the full waterfall through that column's 10 wallets.
 
-## Layout
+### Per-hop logic (wallets 1→9)
 
-```text
-            Waterfall 1  Waterfall 2  Waterfall 3 ... Waterfall 10
-wallet 1    W1-1         W2-1         ...
-wallet 2    W1-2         W2-2         ...
-...
-wallet 10   W1-10        W2-10        ...
-```
+For each wallet N in order (1, 2, 3, 4, 5, 6, 7, 8, 9):
 
-- 10 columns × 10 wallets = **100 wallets total**.
-- Column headings are labels only, not extra wallets.
-- Each cell shows: short pubkey, nickname, SOL balance, USD value, token count badge, [Withdraw] button.
-- Clicking a cell opens a side drawer with full details: full pubkey (copy), SPL token list with balances + USD, per-token Withdraw form (amount + destination address), and rename nickname.
+1. Run TROLL on wallet N — keep retrying any failed buy/sell until **10 successful buy+sell cycles** have completed (since these are ~$0.02 trades, failures should be rare and recoverable).
+2. Pick a random "leave-behind" amount between **0.75 and 0.95 SOL** (uniform random, 6-decimal precision).
+3. Transfer `(current_balance − leave_behind − fee_buffer)` SOL from wallet N to wallet N+1.
+4. Wait for confirmation, then move to wallet N+1.
 
-## Database
+### Wallet 10 (terminal)
 
-New migration creates one table:
+- Run TROLL (10 successful cycles, with retries).
+- Stop. Leave whatever SOL remains in wallet 10. No further forwarding.
 
-```text
-waterfall_wallets
-  id uuid pk
-  user_id uuid (owner, super admin only)
-  column_index int  (0..9)
-  row_index int     (0..9)
-  nickname text
-  pubkey text unique
-  secret_key_encrypted text   (AES via existing encrypt-data function)
-  sol_balance numeric default 0
-  last_balance_at timestamptz
-  created_at timestamptz default now()
-  unique(column_index, row_index)
-```
+### Failure behavior
 
-RLS: super-admin-only (uses existing `is_super_admin` rpc). GRANTs to `authenticated` + `service_role`.
+- TROLL buy/sell failures: retry the individual cycle until 10 successes accumulate. Cap retries per cycle at ~20 attempts to avoid infinite loops if the wallet truly runs out of SOL.
+- SOL transfer failure between wallets: halt cascade, return error showing which hop failed and current balances. Funds stay where they are — you can resume manually.
+- Insufficient SOL to leave 0.75–0.95 behind: halt with clear error ("wallet N only has X SOL, can't leave 0.75 behind and forward anything").
 
-## Edge functions (reuse existing patterns)
+### UI
 
-Reuse the airdrop-wallet pattern:
-1. `waterfall-generate-all` — generates any missing wallets to fill the 10×10 grid (idempotent).
-2. `waterfall-refresh-balances` — batches `getBalance` + `getTokenAccountsByOwner` via Helius RPC for all 100 wallets; updates DB and returns token holdings keyed by pubkey.
-3. `waterfall-withdraw` — body: `{ walletId, mint ('SOL' or SPL mint), amount, destination }`. Decrypts key, signs, sends (SystemProgram.transfer for SOL, SPL transfer + close-if-empty for tokens), returns signature.
-4. `waterfall-export-keys` — super-admin-only; returns decrypted secret keys as JSON `[{column,row,nickname,pubkey,secret_base58}]` for one-time download.
+- **CASCADE** button (purple, lightning-bolt icon) added beside the TROLL button on the Wallet 1 row of each of the 10 columns.
+- Click → confirm dialog showing the column number and total estimated time (~25 minutes for 10 wallets × ~2.5min TROLL each).
+- Live status badge under the button showing current step: `Cascading: W3 trolling 7/10` or `Cascading: W5 → W6 transfer`.
+- Toast notifications on each wallet completion and on final completion / failure.
+- Button disabled during a run; other column cascades can run in parallel.
 
-USD pricing: SOL via existing `useSolPrice` hook; SPL tokens via DexScreener token-price lookup (already in the codebase) — falls back to "—" if no price.
+### Technical details
 
-## UI
+**New edge function:** `supabase/functions/waterfall-cascade/index.ts`
 
-New file `src/components/admin/WaterfallGrid.tsx` rendered inside the existing Waterfall tab in `SuperAdmin.tsx`. Components:
+- Input: `{ columnIndex: number }` (0–9). Server fetches all 10 wallets for that column, ordered by row.
+- Super-admin auth check (same pattern as `waterfall-troll`).
+- Reuses the existing TROLL swap logic — refactor the cycle loop from `waterfall-troll/index.ts` into a shared helper `_shared/troll-cycle.ts` that exports `runTrollCycles(connection, kp, { cycles: 10, maxRetriesPerCycle: 20 })` returning success count and SOL spent. Both `waterfall-troll` and `waterfall-cascade` import it.
+- Per hop: call the shared troll helper, then build a `SystemProgram.transfer` for `balance − leaveBehindLamports − 10_000` (fee buffer), sign with the wallet keypair (decrypted via `decryptWalletSecretAuto`), confirm, then proceed.
+- Streams progress via Supabase Realtime broadcast on channel `waterfall-cascade-{columnIndex}` so the UI can render live step text without polling.
+- Long-running (~25 min). Edge functions support up to 400s default — we'll need to either:
+  - (a) run as a background task using `EdgeRuntime.waitUntil()` and persist progress to a new `waterfall_cascade_runs` table that the UI subscribes to, OR
+  - (b) chain per-wallet invocations: the function does ONE wallet's troll+transfer then enqueues itself for wallet N+1 via a second `functions.invoke` call.
+  - **Recommendation: (a)** — single function call, background task, status row in DB, realtime updates to UI. Cleaner state, easier to resume/inspect.
 
-- Top toolbar: **Generate Missing Wallets**, **Refresh Balances**, **Export Private Keys (.json)**, total SOL + total USD summary.
-- Sticky-header table, 10 columns. Header labels identify Waterfall 1–10. Rows 1–10 are the actual wallets.
-- Cell card: editable nickname (inline), pubkey short + copy, SOL + USD, token badge, Withdraw button.
-- `WalletDetailDrawer` — full pubkey, QR (optional), SPL token list, per-token withdraw form with Solana address validation, rename field.
-- Confirm modal before private-key export (warns about security).
+**New table:** `waterfall_cascade_runs`
+- `column_index` (0–9), `status` (running/completed/failed), `current_wallet_row`, `current_step` (text), `started_at`, `completed_at`, `error`, `hop_log` (jsonb array of {row, leftBehind, forwarded, trollCycles, durationMs}).
+- RLS: super-admin only, same pattern as `waterfall_wallets`.
 
-## Security
+**Edited files:**
+- `src/components/admin/WaterfallGrid.tsx` — add CASCADE button to wallet 1 of each column, realtime subscription to `waterfall_cascade_runs` for live status.
+- `supabase/functions/waterfall-troll/index.ts` — refactor to use shared helper.
 
-- All key material encrypted at rest via existing `encrypt-data` function (AES-256-GCM).
-- Every edge function checks `is_super_admin`.
-- Export endpoint logs an entry in `secret_access_audit`.
-- Withdraw destination validated as base58 32–44 chars before signing.
+### Time / cost estimate (per column, your $68/SOL math)
 
-## Files touched
-
-- `supabase/migrations/<ts>_waterfall_wallets.sql` (new)
-- `supabase/functions/waterfall-generate-all/index.ts` (new)
-- `supabase/functions/waterfall-refresh-balances/index.ts` (new)
-- `supabase/functions/waterfall-withdraw/index.ts` (new)
-- `supabase/functions/waterfall-export-keys/index.ts` (new)
-- `src/components/admin/WaterfallGrid.tsx` (new)
-- `src/components/admin/WaterfallWalletDrawer.tsx` (new)
-- `src/pages/SuperAdmin.tsx` (swap "coming soon" for `<WaterfallGrid />`)
-
-## Final decision
-
-Exactly **100 wallets**. No header-wallet rows.
+- TROLL × 10 wallets = ~25 min total (each TROLL is ~2.5min: 10 cycles × ~7s + retries).
+- 9 SOL transfers ≈ 9 × $0.0007 ≈ negligible.
+- TROLL fees: ~$0.10–$0.25 per wallet × 10 = **~$1–$2.50 in fees per full column cascade**.
+- Starting with 11 SOL in wallet 1: after 9 hops leaving 0.85 SOL avg behind, wallet 10 receives roughly `11 − 9×0.85 − fees ≈ 3.3 SOL`.

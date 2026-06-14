@@ -24469,6 +24469,48 @@ export type Database = {
           },
         ]
       }
+      waterfall_cascade_runs: {
+        Row: {
+          column_index: number
+          completed_at: string | null
+          created_by: string | null
+          current_step: string | null
+          current_wallet_row: number | null
+          error: string | null
+          hop_log: Json
+          id: string
+          started_at: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          column_index: number
+          completed_at?: string | null
+          created_by?: string | null
+          current_step?: string | null
+          current_wallet_row?: number | null
+          error?: string | null
+          hop_log?: Json
+          id?: string
+          started_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          column_index?: number
+          completed_at?: string | null
+          created_by?: string | null
+          current_step?: string | null
+          current_wallet_row?: number | null
+          error?: string | null
+          hop_log?: Json
+          id?: string
+          started_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       waterfall_wallets: {
         Row: {
           column_index: number
