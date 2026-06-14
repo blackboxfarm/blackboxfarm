@@ -80,6 +80,7 @@ const ALLOWED_ADMIN_TABS = new Set([
   "docs",
   "chat-sessions",
   "dev-verdict",
+  "waterfall",
 ]);
 
 // Simple loading fallback
@@ -223,6 +224,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="docs" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-slate-500/30 data-[state=active]:to-zinc-500/20">📚 Docs</TabsTrigger>
             <TabsTrigger value="chat-sessions" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500/30 data-[state=active]:to-indigo-500/20">💬 Chat Sessions</TabsTrigger>
             <TabsTrigger value="dev-verdict" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-teal-500/20">🔬 Dev Verdict</TabsTrigger>
+            <TabsTrigger value="waterfall" className="flex-shrink-0">💧 Waterfall</TabsTrigger>
           </TabsList>
 
           {/* Each tab content is completely lazy - inner tabs only load when this category is active */}
@@ -462,6 +464,13 @@ export default function SuperAdmin() {
             {activeTab === "dev-verdict" && (
               <TabErrorBoundary tabName="Dev Verdict">
                 <Suspense fallback={<TabLoader />}><DevVerdictTab /></Suspense>
+              </TabErrorBoundary>
+            )}
+          </TabsContent>
+          <TabsContent value="waterfall">
+            {activeTab === "waterfall" && (
+              <TabErrorBoundary tabName="Waterfall">
+                <div className="p-8 text-sm text-muted-foreground">Waterfall — coming soon.</div>
               </TabErrorBoundary>
             )}
           </TabsContent>
