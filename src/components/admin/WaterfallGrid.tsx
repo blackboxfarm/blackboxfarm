@@ -4,7 +4,7 @@ import { useSolPrice } from "@/hooks/useSolPrice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, RefreshCw, Download, Sparkles, Copy, ArrowDownToLine } from "lucide-react";
+import { Loader2, RefreshCw, Download, Sparkles, Copy, ArrowDownToLine, Zap } from "lucide-react";
 import { WaterfallWalletDrawer, type WaterfallWallet, type TokenHolding } from "./WaterfallWalletDrawer";
 
 const SHORT = (k: string) => `${k.slice(0, 4)}…${k.slice(-4)}`;
@@ -185,7 +185,32 @@ function Cell({
 }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(w.nickname ?? "");
+  const [trolling, setTrolling] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
   const sol = Number(w.sol_balance || 0);
+
+  useEffect(() => {
+    if (!trolling) return;
+    const t0 = Date.now();
+    setElapsed(0);
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - t0) / 1000)), 250);
+    return () => clearInterval(id);
+  }, [trolling]);
+
+  const runTroll = async () => {
+    if (sol < 0.005) {
+      return toast({ title: "Not enough SOL", description: "Needs ~0.005 SOL for 10 cycles + fees.", variant: "destructive" });
+    }
+    if (!confirm(`Run TROLL on ${w.nickname || "Wallet"}?\n10× buy + sell of $TROLL at ~$0.02/cycle, 5s between cycles.\n~2 min runtime.`)) return;
+    setTrolling(true);
+    const { data, error } = await supabase.functions.invoke("waterfall-troll", { body: { walletId: w.id } });
+    setTrolling(false);
+    if (error) return toast({ title: "TROLL failed", description: error.message, variant: "destructive" });
+    const d = data as any;
+    const okCount = (d?.cycles ?? []).filter((c: any) => c.buy && c.sell).length;
+    toast({ title: `TROLL done (${okCount}/10)`, description: `Spent ${Number(d?.netSolSpent ?? 0).toFixed(6)} SOL in ${Math.round((d?.totalMs ?? 0) / 1000)}s` });
+  };
+
   return (
     <div className="space-y-1">
       {editing ? (
@@ -219,6 +244,20 @@ function Cell({
       )}
       <Button size="sm" variant="outline" className="h-6 w-full text-[10px] px-2" onClick={onOpen}>
         <ArrowDownToLine className="h-3 w-3 mr-1" /> Withdraw / Details
+      </Button>
+      <Button
+        size="sm"
+        variant={trolling ? "secondary" : "default"}
+        className="h-6 w-full text-[10px] px-2"
+        onClick={runTroll}
+        disabled={trolling}
+        title="10× buy+sell $TROLL (~$0.02 ea, 5s gap)"
+      >
+        {trolling ? (
+          <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> TROLL {elapsed}s</>
+        ) : (
+          <><Zap className="h-3 w-3 mr-1" /> TROLL</>
+        )}
       </Button>
     </div>
   );
