@@ -16,6 +16,12 @@ serve(withRunLog('security-sms-webhook', async (req) => {
   }
 
   try {
+    if (Deno.env.get('SMS_GLOBAL_KILL') !== 'false') {
+      console.warn('[SMS KILL] security-sms-webhook outbound suppressed');
+      return new Response('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'text/xml' },
+      });
+    }
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY is not configured');
 
