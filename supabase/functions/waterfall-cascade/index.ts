@@ -21,9 +21,11 @@ const corsHeaders = {
 const FEE_BUFFER_LAMPORTS = 10_000; // for the SystemProgram.transfer
 const TROLL_RESERVE_LAMPORTS = 5_000_000; // ~0.005 SOL kept for the NEXT wallet's troll fees on top of leaveBehind
 
-function randLeaveBehindLamports(): number {
-  const sol = 0.75 + Math.random() * 0.20; // 0.75 - 0.95
-  return Math.floor(sol * LAMPORTS_PER_SOL);
+function randLeaveBehindLamports(balanceLamports: number): number {
+  // Dynamic even-split fallback: target = balance/10, jitter ±15%.
+  const target = Math.floor(balanceLamports / 10);
+  const jitter = 1 + (Math.random() * 0.30 - 0.15);
+  return Math.max(1, Math.floor(target * jitter));
 }
 
 function keypairFromSecret(secret: string): Keypair {
@@ -81,8 +83,8 @@ serve(async (req) => {
         }
         const lb = Math.floor(h.leaveBehindLamports);
         // Guard rails: 0.70 - 1.00 SOL
-        if (lb < 0.70 * LAMPORTS_PER_SOL || lb > 1.00 * LAMPORTS_PER_SOL) {
-          throw new Error(`plan row ${h.row} leaveBehind out of bounds (0.70-1.00 SOL)`);
+        if (lb < 0.01 * LAMPORTS_PER_SOL || lb > 5.00 * LAMPORTS_PER_SOL) {
+          throw new Error(`plan row ${h.row} leaveBehind out of bounds (0.01-5.00 SOL)`);
         }
         planMap[h.row] = lb;
       }
@@ -180,7 +182,7 @@ serve(async (req) => {
           const next = wallets[r + 1];
           const destPk = new PublicKey(next.pubkey);
           const balance = await connection.getBalance(kp.publicKey);
-          const leaveBehind = planMap && planMap[r] != null ? planMap[r] : randLeaveBehindLamports();
+          const leaveBehind = planMap && planMap[r] != null ? planMap[r] : randLeaveBehindLamports(balance);
           const sendable = balance - leaveBehind - FEE_BUFFER_LAMPORTS;
 
           if (sendable < TROLL_RESERVE_LAMPORTS) {
