@@ -158,20 +158,16 @@ async function pollPaidOrders(mints: Set<string>) {
           payment_timestamp: ts,
           raw: o,
         };
-        try {
-          await assertDbWrite(
-            supabase
-              .from('token_paid_orders')
-              .upsert(row, { onConflict: 'token_mint,order_type,payment_timestamp', ignoreDuplicates: true })
-              .select('id')
-              .maybeSingle(),
-            'token_paid_orders',
-            'UPSERT',
-          );
-          saved++;
-        } catch (e) {
-          console.error('[boost-poller] order upsert failed', mint, o?.type, e);
-        }
+        await assertDbWrite(
+          supabase
+            .from('token_paid_orders')
+            .upsert(row, { onConflict: 'token_mint,order_type,payment_timestamp', ignoreDuplicates: true })
+            .select('id')
+            .maybeSingle(),
+          'token_paid_orders',
+          'UPSERT',
+        );
+        saved++;
       }
     } catch (e) {
       console.warn('[boost-poller] /orders fetch failed for', mint, e);
