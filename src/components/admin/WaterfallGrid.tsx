@@ -81,6 +81,49 @@ export default function WaterfallGrid() {
   const { priceData } = useSolPrice() as any;
   const solUsd = priceData?.price ?? 0;
 
+  // Buy target — single token mint pasted at the top, with per-column enable checkboxes.
+  const [targetMint, setTargetMint] = useState<string>("");
+  const [buySizeSol, setBuySizeSol] = useState<string>("0.01");
+  const [buyEnabled, setBuyEnabled] = useState<boolean[]>(() => Array.from({ length: 10 }, () => true));
+  const [tokenPrices, setTokenPrices] = useState<Record<string, { priceUsd: number; symbol: string }>>({});
+
+  // Aggregate all unique non-SOL mints currently held across the grid, then fetch DexScreener prices.
+  useEffect(() => {
+    const mints = new Set<string>();
+    for (const b of Object.values(balances)) for (const t of b.tokens) if (t.amount > 0) mints.add(t.mint);
+    if (targetMint && targetMint.length >= 32) mints.add(targetMint.trim());
+    const missing = [...mints].filter((m) => !(m in tokenPrices));
+    if (missing.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      // DexScreener accepts up to ~30 mints comma-separated.
+      const chunks: string[][] = [];
+      for (let i = 0; i < missing.length; i += 25) chunks.push(missing.slice(i, i + 25));
+      const next: Record<string, { priceUsd: number; symbol: string }> = {};
+      for (const chunk of chunks) {
+        try {
+          const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(",")}`);
+          const j = await r.json();
+          const pairs = (j?.pairs ?? []) as any[];
+          for (const m of chunk) {
+            const pair = pairs.find((p) => p?.baseToken?.address === m);
+            if (pair) next[m] = { priceUsd: Number(pair.priceUsd ?? 0), symbol: pair.baseToken?.symbol ?? "?" };
+            else next[m] = { priceUsd: 0, symbol: "?" };
+          }
+        } catch {
+          for (const m of chunk) next[m] = { priceUsd: 0, symbol: "?" };
+        }
+      }
+      if (!cancelled) setTokenPrices((prev) => ({ ...prev, ...next }));
+    })();
+    return () => { cancelled = true; };
+  }, [balances, targetMint]);
+
+  const toggleBuyEnabled = (col: number) =>
+    setBuyEnabled((prev) => prev.map((v, i) => (i === col ? !v : v)));
+
+  const validTargetMint = targetMint.trim().length >= 32 && targetMint.trim().length <= 44;
+
   const loadWallets = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -263,6 +306,44 @@ export default function WaterfallGrid() {
         </div>
       </div>
 
+      {/* Buy target bar */}
+      <div className="rounded-md border bg-muted/40 p-3 space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-xs font-medium whitespace-nowrap">Buy token (mint):</label>
+          <Input
+            value={targetMint}
+            onChange={(e) => setTargetMint(e.target.value)}
+            placeholder="Paste Solana token mint address…"
+            className="h-8 text-xs font-mono flex-1 min-w-[260px]"
+          />
+          <label className="text-xs font-medium whitespace-nowrap ml-2">Buy size (SOL):</label>
+          <Input
+            value={buySizeSol}
+            onChange={(e) => setBuySizeSol(e.target.value)}
+            className="h-8 text-xs w-24"
+          />
+          {validTargetMint && tokenPrices[targetMint.trim()] && (
+            <span className="text-xs text-muted-foreground ml-2">
+              {tokenPrices[targetMint.trim()].symbol} · ${tokenPrices[targetMint.trim()].priceUsd.toFixed(8).replace(/\.?0+$/, "")}
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-[11px] text-muted-foreground">BUY enabled per column:</span>
+          {Array.from({ length: 10 }, (_, c) => (
+            <label key={c} className="flex items-center gap-1 text-[11px] cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={buyEnabled[c]}
+                onChange={() => toggleBuyEnabled(c)}
+                className="h-3 w-3"
+              />
+              W{c + 1}
+            </label>
+          ))}
+        </div>
+      </div>
+
       {loading && <div className="text-sm text-muted-foreground">Loading…</div>}
 
       {isEmpty && !loading && (
@@ -303,6 +384,10 @@ export default function WaterfallGrid() {
                             w={w}
                             tokens={balances[w.pubkey]?.tokens ?? []}
                             solUsd={solUsd}
+                              tokenPrices={tokenPrices}
+                              targetMint={validTargetMint ? targetMint.trim() : ""}
+                              buyEnabled={buyEnabled[c]}
+                              buySizeSol={Number(buySizeSol) || 0}
                             onOpen={() => setActive(w)}
                             onRename={updateNickname}
                               isHeadOfColumn={r === 0}
