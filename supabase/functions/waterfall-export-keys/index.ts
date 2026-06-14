@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { decryptWalletSecretAuto } from "../_shared/decrypt-wallet-secret.ts";
+import { assertDbWrite } from "../_shared/db-assert.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -26,20 +28,17 @@ serve(async (req) => {
     const { data: wallets, error } = await admin
       .from("waterfall_wallets")
       .select("column_index,row_index,nickname,pubkey,secret_key_encrypted")
+      .gte("row_index", 0)
+      .lte("row_index", 9)
       .order("column_index").order("row_index");
     if (error) throw error;
 
     const out: any[] = [];
     for (const w of wallets ?? []) {
-      let secret = w.secret_key_encrypted as string;
-      if (secret.startsWith("AES:")) {
-        const dec = await admin.functions.invoke("encrypt-data", { body: { action: "decrypt", data: secret } });
-        const plain = (dec.data as any)?.decryptedData;
-        if (plain) secret = plain;
-      }
+      const secret = await decryptWalletSecretAuto(w.secret_key_encrypted as string);
       out.push({
         column: w.column_index + 1,
-        row: w.row_index === -1 ? "header" : w.row_index + 1,
+        wallet: w.row_index + 1,
         nickname: w.nickname,
         pubkey: w.pubkey,
         secret_base58: secret,
@@ -47,12 +46,12 @@ serve(async (req) => {
     }
 
     try {
-      await admin.from("secret_access_audit").insert({
+      await assertDbWrite(admin.from("secret_access_audit").insert({
         user_id: user.id,
         action: "export",
         resource: "waterfall_wallets",
         details: { count: out.length },
-      });
+      }), "secret_access_audit", "waterfall_private_key_export_audit");
     } catch (_) { /* table shape may differ; ignore */ }
 
     return new Response(JSON.stringify({ success: true, wallets: out }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });

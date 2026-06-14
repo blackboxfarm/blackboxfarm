@@ -88,9 +88,9 @@ export default function WaterfallGrid() {
     <div className="p-4 space-y-4">
       <div className="flex flex-wrap items-center gap-2 justify-between">
         <div>
-          <h2 className="text-lg font-semibold">💧 Waterfall — 10×11 Solana Wallet Grid</h2>
+          <h2 className="text-lg font-semibold">💧 Waterfall — 10×10 Solana Wallet Grid</h2>
           <p className="text-xs text-muted-foreground">
-            10 columns · 1 header + 10 rows each · {wallets.length}/110 wallets · Total: {totalSol.toFixed(4)} SOL
+            10 isolated columns · 10 wallets per column · {wallets.length}/100 wallets · Total: {totalSol.toFixed(4)} SOL
             {solUsd > 0 && ` (≈ $${(totalSol * solUsd).toFixed(2)})`}
           </p>
         </div>
@@ -114,7 +114,7 @@ export default function WaterfallGrid() {
 
       {isEmpty && !loading && (
         <div className="rounded border border-dashed p-8 text-center text-sm text-muted-foreground">
-          No wallets yet. Click <span className="font-medium">Generate Missing</span> to create the full 10×11 grid (110 wallets).
+          No wallets yet. Click <span className="font-medium">Generate Missing</span> to create the full 10×10 grid (100 wallets).
         </div>
       )}
 
@@ -124,19 +124,11 @@ export default function WaterfallGrid() {
             <thead className="sticky top-0 z-10 bg-muted">
               <tr>
                 {Array.from({ length: 10 }, (_, c) => {
-                  const header = grid.get(`${c}:-1`);
+                  const first = grid.get(`${c}:0`);
                   return (
                     <th key={c} className="p-2 border-b border-r min-w-[180px] align-top">
-                      <div className="font-bold text-[11px] text-muted-foreground mb-1">COL {c + 1} HEADER</div>
-                      {header ? (
-                        <Cell
-                          w={header}
-                          tokens={balances[header.pubkey]?.tokens ?? []}
-                          solUsd={solUsd}
-                          onOpen={() => setActive(header)}
-                          onRename={updateNickname}
-                        />
-                      ) : <span className="text-muted-foreground">—</span>}
+                      <div className="font-bold text-[11px] text-muted-foreground">WATERFALL {c + 1}</div>
+                      <div className="font-mono text-[10px] text-muted-foreground mt-1">{first ? SHORT(first.pubkey) : "—"}</div>
                     </th>
                   );
                 })}
