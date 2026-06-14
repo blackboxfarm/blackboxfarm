@@ -58,6 +58,15 @@ function normalizeBoosts(arr: any, source: 'latest' | 'top'): Array<{ mint: stri
     .map((b: BoostPayload) => ({ mint: b.tokenAddress!, row: b, source }));
 }
 
+function normalizePaymentTimestamp(value: unknown): string | null {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const millis = n > 10_000_000_000 ? n : n * 1000;
+  const date = new Date(millis);
+  if (!Number.isFinite(date.getTime())) return null;
+  return date.toISOString();
+}
+
 async function getLastTotal(mint: string): Promise<number | null> {
   const { data } = await supabase
     .from('token_boost_history')
@@ -99,20 +108,16 @@ async function persistBoosts(entries: Array<{ mint: string; row: BoostPayload; s
       raw: row as unknown as Record<string, unknown>,
     };
 
-    try {
-      await assertDbWrite(
-        supabase
-          .from('token_boost_history')
-          .upsert(payload, { onConflict: 'token_mint,source,captured_at', ignoreDuplicates: false })
-          .select('id')
-          .maybeSingle(),
-        'token_boost_history',
-        'UPSERT',
-      );
-      inserted++;
-    } catch (e) {
-      console.error('[boost-poller] upsert failed for', mint, e);
-    }
+    await assertDbWrite(
+      supabase
+        .from('token_boost_history')
+        .upsert(payload, { onConflict: 'token_mint,source,captured_at', ignoreDuplicates: false })
+        .select('id')
+        .maybeSingle(),
+      'token_boost_history',
+      'UPSERT',
+    );
+    inserted++;
   }
 
   return { inserted, positiveDelta };
@@ -144,37 +149,36 @@ async function pollPaidOrders(mints: Set<string>) {
   // soft cap to keep cron run under control
   const list = Array.from(mints).slice(0, 80);
   for (const mint of list) {
+    let orders: any[] = [];
     try {
       const data = await fetchJson(`https://api.dexscreener.com/orders/v1/solana/${mint}`);
-      const orders = Array.isArray(data) ? data : (data?.orders ?? []);
-      for (const o of orders) {
-        const ts = o?.paymentTimestamp ? new Date(Number(o.paymentTimestamp) * 1000).toISOString() : null;
-        const row = {
-          token_mint: mint,
-          chain_id: 'solana',
-          order_type: String(o?.type ?? 'unknown'),
-          status: o?.status ?? null,
-          amount: o?.amount != null ? Number(o.amount) : null,
-          payment_timestamp: ts,
-          raw: o,
-        };
-        try {
-          await assertDbWrite(
-            supabase
-              .from('token_paid_orders')
-              .upsert(row, { onConflict: 'token_mint,order_type,payment_timestamp', ignoreDuplicates: true })
-              .select('id')
-              .maybeSingle(),
-            'token_paid_orders',
-            'UPSERT',
-          );
-          saved++;
-        } catch (e) {
-          console.error('[boost-poller] order upsert failed', mint, o?.type, e);
-        }
-      }
+      orders = Array.isArray(data) ? data : (data?.orders ?? []);
     } catch (e) {
       console.warn('[boost-poller] /orders fetch failed for', mint, e);
+      continue;
+    }
+
+    for (const o of orders) {
+      const ts = normalizePaymentTimestamp(o?.paymentTimestamp);
+      const row = {
+        token_mint: mint,
+        chain_id: 'solana',
+        order_type: String(o?.type ?? 'unknown'),
+        status: o?.status ?? null,
+        amount: o?.amount != null ? Number(o.amount) : null,
+        payment_timestamp: ts,
+        raw: o,
+      };
+      await assertDbWrite(
+        supabase
+          .from('token_paid_orders')
+          .upsert(row, { onConflict: 'token_mint,order_type,payment_timestamp', ignoreDuplicates: true })
+          .select('id')
+          .maybeSingle(),
+        'token_paid_orders',
+        'UPSERT',
+      );
+      saved++;
     }
     // gentle pacing — DexScreener orders endpoint is rate-limited
     await new Promise((r) => setTimeout(r, 150));

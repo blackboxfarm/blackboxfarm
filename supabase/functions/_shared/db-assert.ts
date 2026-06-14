@@ -35,6 +35,11 @@ export class DbWriteError extends Error {
  */
 async function sendFailureSms(table: string, operation: string, error: { message: string; code?: string; details?: string }) {
   try {
+    if (Deno.env.get('DB_ASSERT_SMS_ENABLED') !== 'true') {
+      console.warn('[DB ASSERT] SMS disabled; set DB_ASSERT_SMS_ENABLED=true to re-enable DB write failure texts');
+      return;
+    }
+
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     const TWILIO_API_KEY = Deno.env.get('TWILIO_API_KEY');
     if (!LOVABLE_API_KEY || !TWILIO_API_KEY) {
