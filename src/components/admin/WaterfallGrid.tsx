@@ -4,10 +4,19 @@ import { useSolPrice } from "@/hooks/useSolPrice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, RefreshCw, Download, Sparkles, Copy, ArrowDownToLine, Zap } from "lucide-react";
+import { Loader2, RefreshCw, Download, Sparkles, Copy, ArrowDownToLine, Zap, Waves } from "lucide-react";
 import { WaterfallWalletDrawer, type WaterfallWallet, type TokenHolding } from "./WaterfallWalletDrawer";
 
 const SHORT = (k: string) => `${k.slice(0, 4)}…${k.slice(-4)}`;
+
+type CascadeRun = {
+  id: string;
+  column_index: number;
+  status: string;
+  current_wallet_row: number | null;
+  current_step: string | null;
+  error: string | null;
+};
 
 export default function WaterfallGrid() {
   const [wallets, setWallets] = useState<WaterfallWallet[]>([]);
@@ -17,6 +26,7 @@ export default function WaterfallGrid() {
   const [generating, setGenerating] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [active, setActive] = useState<WaterfallWallet | null>(null);
+  const [cascades, setCascades] = useState<Record<number, CascadeRun>>({});
   const { priceData } = useSolPrice() as any;
   const solUsd = priceData?.price ?? 0;
 
@@ -34,6 +44,60 @@ export default function WaterfallGrid() {
   }, []);
 
   useEffect(() => { loadWallets(); }, [loadWallets]);
+
+  // Load any currently-running cascades + subscribe to updates
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("waterfall_cascade_runs")
+        .select("id,column_index,status,current_wallet_row,current_step,error")
+        .eq("status", "running")
+        .order("started_at", { ascending: false });
+      if (cancelled) return;
+      const map: Record<number, CascadeRun> = {};
+      for (const r of (data ?? []) as CascadeRun[]) {
+        if (!(r.column_index in map)) map[r.column_index] = r;
+      }
+      setCascades(map);
+    })();
+    const channel = supabase
+      .channel("waterfall-cascade-runs")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "waterfall_cascade_runs" },
+        (payload: any) => {
+          const r = (payload.new ?? payload.old) as CascadeRun;
+          if (!r) return;
+          setCascades((prev) => {
+            const next = { ...prev };
+            if (r.status === "running") next[r.column_index] = r;
+            else delete next[r.column_index];
+            return next;
+          });
+          if (payload.eventType === "UPDATE" && r.status === "completed") {
+            toast({ title: `Cascade ${r.column_index + 1} complete` });
+          }
+          if (payload.eventType === "UPDATE" && r.status === "failed") {
+            toast({ title: `Cascade ${r.column_index + 1} failed`, description: r.error ?? "", variant: "destructive" });
+          }
+        },
+      )
+      .subscribe();
+    return () => { cancelled = true; supabase.removeChannel(channel); };
+  }, []);
+
+  const startCascade = async (columnIndex: number) => {
+    if (cascades[columnIndex]) return toast({ title: "Already running", variant: "destructive" });
+    if (!confirm(
+      `CASCADE column ${columnIndex + 1}?\n\n` +
+      `Runs TROLL on W1 (10 cycles w/ retries) → forwards remainder to W2 (leaves 0.75–0.95 SOL behind) → repeats through W10.\n\n` +
+      `~25 minutes total. ~$1–$2.50 in fees.\nW1 needs enough SOL (≥ ~9 SOL recommended for clean 10-hop run).`
+    )) return;
+    const { error } = await supabase.functions.invoke("waterfall-cascade", { body: { columnIndex } });
+    if (error) return toast({ title: "Cascade start failed", description: error.message, variant: "destructive" });
+    toast({ title: `Cascade ${columnIndex + 1} started` });
+  };
 
   const generate = async () => {
     setGenerating(true);
@@ -141,6 +205,8 @@ export default function WaterfallGrid() {
                 <tr key={r}>
                   {Array.from({ length: 10 }, (_, c) => {
                     const w = grid.get(`${c}:${r}`);
+                      const cascade = cascades[c];
+                      const isCascadeWallet = !!cascade && cascade.current_wallet_row === r;
                     return (
                       <td key={c} className="p-2 border-b border-r align-top">
                         {w ? (
@@ -150,6 +216,10 @@ export default function WaterfallGrid() {
                             solUsd={solUsd}
                             onOpen={() => setActive(w)}
                             onRename={updateNickname}
+                              isHeadOfColumn={r === 0}
+                              cascade={cascade}
+                              isCurrentCascadeWallet={isCascadeWallet}
+                              onCascade={() => startCascade(c)}
                           />
                         ) : <span className="text-muted-foreground">—</span>}
                       </td>
@@ -175,19 +245,24 @@ export default function WaterfallGrid() {
 }
 
 function Cell({
-  w, tokens, solUsd, onOpen, onRename,
+  w, tokens, solUsd, onOpen, onRename, isHeadOfColumn, cascade, isCurrentCascadeWallet, onCascade,
 }: {
   w: WaterfallWallet;
   tokens: TokenHolding[];
   solUsd: number;
   onOpen: () => void;
   onRename: (id: string, nickname: string) => void;
+  isHeadOfColumn: boolean;
+  cascade?: CascadeRun;
+  isCurrentCascadeWallet: boolean;
+  onCascade: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(w.nickname ?? "");
   const [trolling, setTrolling] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const sol = Number(w.sol_balance || 0);
+  const cascadeRunning = !!cascade;
 
   useEffect(() => {
     if (!trolling) return;
@@ -212,7 +287,7 @@ function Cell({
   };
 
   return (
-    <div className="space-y-1">
+    <div className={`space-y-1 ${isCurrentCascadeWallet ? "ring-2 ring-purple-500 rounded p-1 -m-1" : ""}`}>
       {editing ? (
         <div className="flex gap-1">
           <Input
@@ -250,7 +325,7 @@ function Cell({
         variant={trolling ? "secondary" : "default"}
         className="h-6 w-full text-[10px] px-2"
         onClick={runTroll}
-        disabled={trolling}
+        disabled={trolling || cascadeRunning}
         title="10× buy+sell $TROLL (~$0.02 ea, 5s gap)"
       >
         {trolling ? (
@@ -259,6 +334,27 @@ function Cell({
           <><Zap className="h-3 w-3 mr-1" /> TROLL</>
         )}
       </Button>
+      {isHeadOfColumn && (
+        <Button
+          size="sm"
+          variant={cascadeRunning ? "secondary" : "outline"}
+          className="h-6 w-full text-[10px] px-2 border-purple-500 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950"
+          onClick={onCascade}
+          disabled={cascadeRunning}
+          title="Run TROLL on each wallet 1→10, forwarding the remainder down the column"
+        >
+          {cascadeRunning ? (
+            <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Cascading</>
+          ) : (
+            <><Waves className="h-3 w-3 mr-1" /> CASCADE</>
+          )}
+        </Button>
+      )}
+      {cascadeRunning && isHeadOfColumn && (
+        <div className="text-[10px] text-purple-600 dark:text-purple-400 truncate" title={cascade?.current_step ?? ""}>
+          W{(cascade!.current_wallet_row ?? 0) + 1}: {cascade!.current_step}
+        </div>
+      )}
     </div>
   );
 }
