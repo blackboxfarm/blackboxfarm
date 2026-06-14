@@ -471,7 +471,7 @@ export default function SuperAdmin() {
           <TabsContent value="waterfall">
             {activeTab === "waterfall" && (
               <TabErrorBoundary tabName="Waterfall">
-                <WaterfallGrid />
+                <Suspense fallback={<TabLoader />}><WaterfallGrid /></Suspense>
               </TabErrorBoundary>
             )}
           </TabsContent>
