@@ -423,12 +423,17 @@ export default function WaterfallGrid() {
 }
 
 function Cell({
-  w, tokens, solUsd, onOpen, onRename, isHeadOfColumn, cascade, isCurrentCascadeWallet,
+  w, tokens, solUsd, tokenPrices, targetMint, buyEnabled, buySizeSol,
+  onOpen, onRename, isHeadOfColumn, cascade, isCurrentCascadeWallet,
   planHop, hasPlan, onPreview, onExecute, onCancelPlan,
 }: {
   w: WaterfallWallet;
   tokens: TokenHolding[];
   solUsd: number;
+  tokenPrices: Record<string, { priceUsd: number; symbol: string }>;
+  targetMint: string;
+  buyEnabled: boolean;
+  buySizeSol: number;
   onOpen: () => void;
   onRename: (id: string, nickname: string) => void;
   isHeadOfColumn: boolean;
@@ -443,6 +448,7 @@ function Cell({
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(w.nickname ?? "");
   const [trolling, setTrolling] = useState(false);
+  const [busy, setBusy] = useState<null | "buy" | "sell">(null);
   const [elapsed, setElapsed] = useState(0);
   const sol = Number(w.sol_balance || 0);
   const cascadeRunning = !!cascade;
@@ -468,6 +474,36 @@ function Cell({
     const okCount = (d?.cycles ?? []).filter((c: any) => c.buy && c.sell).length;
     toast({ title: `TROLL done (${okCount}/10)`, description: `Spent ${Number(d?.netSolSpent ?? 0).toFixed(6)} SOL in ${Math.round((d?.totalMs ?? 0) / 1000)}s` });
   };
+
+  const runSwap = async (side: "buy" | "sell") => {
+    if (!targetMint) return toast({ title: "Set a token address at the top", variant: "destructive" });
+    if (side === "buy") {
+      if (!buyEnabled) return;
+      if (!(buySizeSol > 0)) return toast({ title: "Set a buy size > 0 SOL", variant: "destructive" });
+      if (sol < buySizeSol + 0.005) {
+        return toast({ title: "Not enough SOL", description: `Need ~${(buySizeSol + 0.005).toFixed(4)} SOL.`, variant: "destructive" });
+      }
+      if (!confirm(`BUY ${buySizeSol} SOL of ${targetMint.slice(0, 6)}… from ${w.nickname || "wallet"}?`)) return;
+    } else {
+      const held = tokens.find((t) => t.mint === targetMint);
+      if (!held || held.amount <= 0) return toast({ title: "No balance to sell", variant: "destructive" });
+      if (!confirm(`SELL all ${held.amount.toLocaleString()} of ${targetMint.slice(0, 6)}… from ${w.nickname || "wallet"}?`)) return;
+    }
+    setBusy(side);
+    const { data, error } = await supabase.functions.invoke("waterfall-swap", {
+      body: {
+        walletId: w.id,
+        mint: targetMint,
+        side,
+        buyLamports: side === "buy" ? Math.floor(buySizeSol * LAMPORTS_PER_SOL) : undefined,
+      },
+    });
+    setBusy(null);
+    if (error) return toast({ title: `${side.toUpperCase()} failed`, description: error.message, variant: "destructive" });
+    toast({ title: `${side.toUpperCase()} sent`, description: `Tx: ${((data as any)?.signature ?? "").slice(0, 16)}…` });
+  };
+
+  const targetHeld = targetMint ? tokens.find((t) => t.mint === targetMint) : undefined;
 
   return (
     <div className={`space-y-1 ${isCurrentCascadeWallet ? "ring-2 ring-purple-500 rounded p-1 -m-1" : ""}`}>
@@ -509,11 +545,52 @@ function Cell({
         )}
       </div>
       {tokens.length > 0 && (
-        <div className="text-[10px] text-muted-foreground">+{tokens.length} token{tokens.length > 1 ? "s" : ""}</div>
+        <div className="text-[10px] space-y-0.5">
+          {tokens.slice(0, 4).map((t) => {
+            const meta = tokenPrices[t.mint];
+            const usd = meta ? meta.priceUsd * t.amount : 0;
+            const sym = meta?.symbol ?? "?";
+            const isTarget = targetMint === t.mint;
+            const amt = t.amount >= 1000
+              ? t.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })
+              : t.amount.toLocaleString(undefined, { maximumFractionDigits: 4 });
+            return (
+              <div key={t.mint} className={`truncate ${isTarget ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                {amt} {sym}
+                {usd > 0 && <span className="text-muted-foreground"> (${usd >= 1 ? usd.toFixed(2) : usd.toFixed(4)})</span>}
+              </div>
+            );
+          })}
+          {tokens.length > 4 && <div className="text-muted-foreground">+{tokens.length - 4} more…</div>}
+        </div>
       )}
       <Button size="sm" variant="outline" className="h-6 w-full text-[10px] px-2" onClick={onOpen}>
         <ArrowDownToLine className="h-3 w-3 mr-1" /> Withdraw / Details
       </Button>
+      {targetMint && (
+        <div className="flex gap-1">
+          <Button
+            size="sm"
+            variant="default"
+            className="h-6 flex-1 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+            onClick={() => runSwap("buy")}
+            disabled={!buyEnabled || busy !== null || cascadeRunning || trolling}
+            title={buyEnabled ? `Buy ${buySizeSol} SOL of target token` : "Buying disabled for this column"}
+          >
+            {busy === "buy" ? <Loader2 className="h-3 w-3 animate-spin" /> : <><ShoppingCart className="h-3 w-3 mr-1" />BUY</>}
+          </Button>
+          <Button
+            size="sm"
+            variant="default"
+            className="h-6 flex-1 text-[10px] px-2 bg-rose-600 hover:bg-rose-700 text-white"
+            onClick={() => runSwap("sell")}
+            disabled={!targetHeld || (targetHeld?.amount ?? 0) <= 0 || busy !== null || cascadeRunning || trolling}
+            title={targetHeld ? `Sell all ${targetHeld.amount} tokens` : "No target-token balance to sell"}
+          >
+            {busy === "sell" ? <Loader2 className="h-3 w-3 animate-spin" /> : <><DollarSign className="h-3 w-3 mr-1" />SELL</>}
+          </Button>
+        </div>
+      )}
       <Button
         size="sm"
         variant={trolling ? "secondary" : "default"}
