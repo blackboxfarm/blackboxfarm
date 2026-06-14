@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Keypair } from "npm:@solana/web3.js@1.95.3";
-import { encode as bs58encode } from "https://esm.sh/bs58@5.0.0";
+import bs58 from "npm:bs58@6.0.0";
 import { assertDbWrite } from "../_shared/db-assert.ts";
 
 const corsHeaders = {
@@ -38,7 +38,7 @@ serve(async (req) => {
       for (let r = 0; r < 10; r++) {
         if (have.has(`${c}:${r}`)) continue;
         const kp = Keypair.generate();
-        const secret = bs58encode(kp.secretKey);
+        const secret = bs58.encode(kp.secretKey);
         const enc = await admin.functions.invoke("encrypt-data", { body: { data: secret, action: "encrypt" } });
         const encrypted = (enc.data as any)?.encryptedData ?? secret;
         toInsert.push({

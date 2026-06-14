@@ -17,7 +17,7 @@ import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "npm:@solana/spl-token@0.4.8";
-import { decode as bs58decode } from "https://esm.sh/bs58@5.0.0";
+import bs58 from "npm:bs58@6.0.0";
 import { getHeliusRpcUrl } from "../_shared/helius-client.ts";
 import { decryptWalletSecretAuto } from "../_shared/decrypt-wallet-secret.ts";
 
@@ -58,7 +58,7 @@ serve(async (req) => {
 
     let secretBytes: Uint8Array;
     if (secret.trim().startsWith("[")) secretBytes = new Uint8Array(JSON.parse(secret));
-    else secretBytes = bs58decode(secret.trim());
+    else secretBytes = bs58.decode(secret.trim());
     const kp = Keypair.fromSecretKey(secretBytes);
     if (kp.publicKey.toBase58() !== w.pubkey) throw new Error("key mismatch");
 
