@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getHeliusRpcUrl } from "../_shared/helius-client.ts";
+import { assertDbWrite } from "../_shared/db-assert.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,7 +38,11 @@ serve(async (req) => {
     const { data: isSuper } = await admin.rpc("is_super_admin", { _user_id: user.id });
     if (!isSuper) return new Response(JSON.stringify({ error: "Super admin required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    const { data: wallets } = await admin.from("waterfall_wallets").select("id,pubkey");
+    const { data: wallets } = await admin
+      .from("waterfall_wallets")
+      .select("id,pubkey")
+      .gte("row_index", 0)
+      .lte("row_index", 9);
     if (!wallets?.length) {
       return new Response(JSON.stringify({ success: true, wallets: {} }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -75,7 +80,11 @@ serve(async (req) => {
 
     // Batch update sol balances
     for (const u of updates) {
-      await admin.from("waterfall_wallets").update({ sol_balance: u.sol, last_balance_at: new Date().toISOString() }).eq("id", u.id);
+      await assertDbWrite(
+        admin.from("waterfall_wallets").update({ sol_balance: u.sol, last_balance_at: new Date().toISOString() }).eq("id", u.id),
+        "waterfall_wallets",
+        "waterfall_refresh_balance_update",
+      );
     }
 
     return new Response(JSON.stringify({ success: true, wallets: results }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });

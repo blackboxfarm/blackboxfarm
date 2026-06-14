@@ -19,6 +19,7 @@ import {
 } from "npm:@solana/spl-token@0.4.8";
 import { decode as bs58decode } from "https://esm.sh/bs58@5.0.0";
 import { getHeliusRpcUrl } from "../_shared/helius-client.ts";
+import { decryptWalletSecretAuto } from "../_shared/decrypt-wallet-secret.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -43,8 +44,9 @@ serve(async (req) => {
     if (!isSuper) return new Response(JSON.stringify({ error: "Super admin required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const { walletId, mint, amount, destination } = await req.json();
-    if (!walletId || !mint || !destination || !(amount > 0)) {
-      throw new Error("walletId, mint, amount (>0) and destination required");
+    const numericAmount = Number(amount);
+    if (!walletId || !mint || !destination || (mint !== "SOL" && !(numericAmount > 0)) || (mint === "SOL" && !(numericAmount > 0) && numericAmount !== -1)) {
+      throw new Error("walletId, mint, amount and destination required");
     }
     if (destination.length < 32 || destination.length > 44) throw new Error("invalid destination");
     const destPk = new PublicKey(destination);
@@ -52,13 +54,7 @@ serve(async (req) => {
     const { data: w, error: werr } = await admin.from("waterfall_wallets").select("pubkey,secret_key_encrypted").eq("id", walletId).single();
     if (werr || !w) throw new Error("wallet not found");
 
-    let secret = w.secret_key_encrypted as string;
-    if (secret.startsWith("AES:")) {
-      const dec = await admin.functions.invoke("encrypt-data", { body: { action: "decrypt", data: secret } });
-      const plain = (dec.data as any)?.decryptedData;
-      if (!plain) throw new Error("decryption failed");
-      secret = plain;
-    }
+    const secret = await decryptWalletSecretAuto(w.secret_key_encrypted as string);
 
     let secretBytes: Uint8Array;
     if (secret.trim().startsWith("[")) secretBytes = new Uint8Array(JSON.parse(secret));
@@ -71,10 +67,10 @@ serve(async (req) => {
 
     if (mint === "SOL") {
       const balance = await connection.getBalance(kp.publicKey);
-      let lamports = Math.floor(Number(amount) * LAMPORTS_PER_SOL);
+      let lamports = Math.floor(numericAmount * LAMPORTS_PER_SOL);
       const fee = 5000;
       // "max" sentinel: caller can pass amount = -1 to sweep
-      if (Number(amount) < 0) lamports = Math.max(0, balance - fee);
+      if (numericAmount < 0) lamports = Math.max(0, balance - fee);
       if (lamports <= 0 || lamports + fee > balance) throw new Error(`insufficient SOL (have ${balance / LAMPORTS_PER_SOL})`);
       tx.add(SystemProgram.transfer({ fromPubkey: kp.publicKey, toPubkey: destPk, lamports }));
     } else {
@@ -87,7 +83,7 @@ serve(async (req) => {
       if (!toAccountExists) {
         tx.add(createAssociatedTokenAccountInstruction(kp.publicKey, toAta, destPk, mintPk, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID));
       }
-      const rawAmount = BigInt(Math.floor(Number(amount) * 10 ** mintInfo.decimals));
+      const rawAmount = BigInt(Math.floor(numericAmount * 10 ** mintInfo.decimals));
       tx.add(createTransferCheckedInstruction(fromAta, mintPk, toAta, kp.publicKey, rawAmount, mintInfo.decimals));
     }
 

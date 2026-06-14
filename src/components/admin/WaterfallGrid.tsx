@@ -25,6 +25,8 @@ export default function WaterfallGrid() {
     const { data, error } = await supabase
       .from("waterfall_wallets")
       .select("id,column_index,row_index,nickname,pubkey,sol_balance,last_balance_at")
+      .gte("row_index", 0)
+      .lte("row_index", 9)
       .order("column_index").order("row_index");
     if (error) toast({ title: "Load failed", description: error.message, variant: "destructive" });
     setWallets((data ?? []) as WaterfallWallet[]);
