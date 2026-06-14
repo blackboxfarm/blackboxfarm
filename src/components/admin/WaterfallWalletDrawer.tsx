@@ -30,20 +30,40 @@ export function WaterfallWalletDrawer({
   onRename: (id: string, nickname: string) => void;
   onWithdrawComplete: () => void;
 }) {
+  return (
+    <Sheet open={!!wallet} onOpenChange={(o) => !o && onClose()}>
+      <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+        {wallet && (
+          <DrawerBody
+            key={wallet.id}
+            wallet={wallet}
+            tokens={tokens}
+            solUsd={solUsd}
+            onRename={onRename}
+            onWithdrawComplete={onWithdrawComplete}
+          />
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function DrawerBody({
+  wallet, tokens, solUsd, onRename, onWithdrawComplete,
+}: {
+  wallet: WaterfallWallet;
+  tokens: TokenHolding[];
+  solUsd: number;
+  onRename: (id: string, nickname: string) => void;
+  onWithdrawComplete: () => void;
+}) {
   const [selectedMint, setSelectedMint] = useState<string>("SOL");
   const [amount, setAmount] = useState<string>("");
   const [destination, setDestination] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
-  const [nickname, setNickname] = useState(wallet?.nickname ?? "");
-
-  // Reset state when wallet changes
-  const walletKey = wallet?.id;
-  if (wallet && nickname !== (wallet.nickname ?? "") && !submitting) {
-    // Sync on open
-  }
+  const [nickname, setNickname] = useState(wallet.nickname ?? "");
 
   const handleWithdraw = async () => {
-    if (!wallet) return;
     if (!destination || destination.length < 32 || destination.length > 44) {
       return toast({ title: "Invalid destination", variant: "destructive" });
     }
@@ -63,11 +83,8 @@ export function WaterfallWalletDrawer({
   };
 
   return (
-    <Sheet open={!!wallet} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="w-full sm:max-w-md overflow-y-auto">
-        {wallet && (
-          <>
-            <SheetHeader>
+    <>
+      <SheetHeader>
               <SheetTitle>
                 Col {wallet.column_index + 1} · {wallet.row_index === -1 ? "Header" : `Row ${wallet.row_index + 1}`}
               </SheetTitle>
@@ -146,9 +163,6 @@ export function WaterfallWalletDrawer({
                 </Button>
               </div>
             </div>
-          </>
-        )}
-      </SheetContent>
-    </Sheet>
+    </>
   );
 }
