@@ -99,20 +99,16 @@ async function persistBoosts(entries: Array<{ mint: string; row: BoostPayload; s
       raw: row as unknown as Record<string, unknown>,
     };
 
-    try {
-      await assertDbWrite(
-        supabase
-          .from('token_boost_history')
-          .upsert(payload, { onConflict: 'token_mint,source,captured_at', ignoreDuplicates: false })
-          .select('id')
-          .maybeSingle(),
-        'token_boost_history',
-        'UPSERT',
-      );
-      inserted++;
-    } catch (e) {
-      console.error('[boost-poller] upsert failed for', mint, e);
-    }
+    await assertDbWrite(
+      supabase
+        .from('token_boost_history')
+        .upsert(payload, { onConflict: 'token_mint,source,captured_at', ignoreDuplicates: false })
+        .select('id')
+        .maybeSingle(),
+      'token_boost_history',
+      'UPSERT',
+    );
+    inserted++;
   }
 
   return { inserted, positiveDelta };
