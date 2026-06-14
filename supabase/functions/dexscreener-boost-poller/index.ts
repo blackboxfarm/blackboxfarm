@@ -149,33 +149,36 @@ async function pollPaidOrders(mints: Set<string>) {
   // soft cap to keep cron run under control
   const list = Array.from(mints).slice(0, 80);
   for (const mint of list) {
+    let orders: any[] = [];
     try {
       const data = await fetchJson(`https://api.dexscreener.com/orders/v1/solana/${mint}`);
-      const orders = Array.isArray(data) ? data : (data?.orders ?? []);
-      for (const o of orders) {
-        const ts = normalizePaymentTimestamp(o?.paymentTimestamp);
-        const row = {
-          token_mint: mint,
-          chain_id: 'solana',
-          order_type: String(o?.type ?? 'unknown'),
-          status: o?.status ?? null,
-          amount: o?.amount != null ? Number(o.amount) : null,
-          payment_timestamp: ts,
-          raw: o,
-        };
-        await assertDbWrite(
-          supabase
-            .from('token_paid_orders')
-            .upsert(row, { onConflict: 'token_mint,order_type,payment_timestamp', ignoreDuplicates: true })
-            .select('id')
-            .maybeSingle(),
-          'token_paid_orders',
-          'UPSERT',
-        );
-        saved++;
-      }
+      orders = Array.isArray(data) ? data : (data?.orders ?? []);
     } catch (e) {
       console.warn('[boost-poller] /orders fetch failed for', mint, e);
+      continue;
+    }
+
+    for (const o of orders) {
+      const ts = normalizePaymentTimestamp(o?.paymentTimestamp);
+      const row = {
+        token_mint: mint,
+        chain_id: 'solana',
+        order_type: String(o?.type ?? 'unknown'),
+        status: o?.status ?? null,
+        amount: o?.amount != null ? Number(o.amount) : null,
+        payment_timestamp: ts,
+        raw: o,
+      };
+      await assertDbWrite(
+        supabase
+          .from('token_paid_orders')
+          .upsert(row, { onConflict: 'token_mint,order_type,payment_timestamp', ignoreDuplicates: true })
+          .select('id')
+          .maybeSingle(),
+        'token_paid_orders',
+        'UPSERT',
+      );
+      saved++;
     }
     // gentle pacing — DexScreener orders endpoint is rate-limited
     await new Promise((r) => setTimeout(r, 150));
