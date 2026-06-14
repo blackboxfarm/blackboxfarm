@@ -470,7 +470,7 @@ export default function SuperAdmin() {
           <TabsContent value="waterfall">
             {activeTab === "waterfall" && (
               <TabErrorBoundary tabName="Waterfall">
-                <div className="p-8 text-sm text-muted-foreground">Waterfall — coming soon.</div>
+                <WaterfallGrid />
               </TabErrorBoundary>
             )}
           </TabsContent>
