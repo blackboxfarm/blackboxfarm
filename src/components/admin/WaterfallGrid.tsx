@@ -4,7 +4,7 @@ import { useSolPrice } from "@/hooks/useSolPrice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, RefreshCw, Download, Sparkles, Copy, ArrowDownToLine, Zap, Waves, Play, X } from "lucide-react";
+import { Loader2, RefreshCw, Download, Sparkles, Copy, ArrowDownToLine, Zap, Waves, Play, X, ShoppingCart, DollarSign } from "lucide-react";
 import { WaterfallWalletDrawer, type WaterfallWallet, type TokenHolding } from "./WaterfallWalletDrawer";
 
 const SHORT = (k: string) => `${k.slice(0, 4)}…${k.slice(-4)}`;
@@ -80,6 +80,49 @@ export default function WaterfallGrid() {
   const [plans, setPlans] = useState<Record<number, CascadePlan>>({});
   const { priceData } = useSolPrice() as any;
   const solUsd = priceData?.price ?? 0;
+
+  // Buy target — single token mint pasted at the top, with per-column enable checkboxes.
+  const [targetMint, setTargetMint] = useState<string>("");
+  const [buySizeSol, setBuySizeSol] = useState<string>("0.01");
+  const [buyEnabled, setBuyEnabled] = useState<boolean[]>(() => Array.from({ length: 10 }, () => true));
+  const [tokenPrices, setTokenPrices] = useState<Record<string, { priceUsd: number; symbol: string }>>({});
+
+  // Aggregate all unique non-SOL mints currently held across the grid, then fetch DexScreener prices.
+  useEffect(() => {
+    const mints = new Set<string>();
+    for (const b of Object.values(balances)) for (const t of b.tokens) if (t.amount > 0) mints.add(t.mint);
+    if (targetMint && targetMint.length >= 32) mints.add(targetMint.trim());
+    const missing = [...mints].filter((m) => !(m in tokenPrices));
+    if (missing.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      // DexScreener accepts up to ~30 mints comma-separated.
+      const chunks: string[][] = [];
+      for (let i = 0; i < missing.length; i += 25) chunks.push(missing.slice(i, i + 25));
+      const next: Record<string, { priceUsd: number; symbol: string }> = {};
+      for (const chunk of chunks) {
+        try {
+          const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(",")}`);
+          const j = await r.json();
+          const pairs = (j?.pairs ?? []) as any[];
+          for (const m of chunk) {
+            const pair = pairs.find((p) => p?.baseToken?.address === m);
+            if (pair) next[m] = { priceUsd: Number(pair.priceUsd ?? 0), symbol: pair.baseToken?.symbol ?? "?" };
+            else next[m] = { priceUsd: 0, symbol: "?" };
+          }
+        } catch {
+          for (const m of chunk) next[m] = { priceUsd: 0, symbol: "?" };
+        }
+      }
+      if (!cancelled) setTokenPrices((prev) => ({ ...prev, ...next }));
+    })();
+    return () => { cancelled = true; };
+  }, [balances, targetMint]);
+
+  const toggleBuyEnabled = (col: number) =>
+    setBuyEnabled((prev) => prev.map((v, i) => (i === col ? !v : v)));
+
+  const validTargetMint = targetMint.trim().length >= 32 && targetMint.trim().length <= 44;
 
   const loadWallets = useCallback(async () => {
     setLoading(true);
@@ -263,6 +306,44 @@ export default function WaterfallGrid() {
         </div>
       </div>
 
+      {/* Buy target bar */}
+      <div className="rounded-md border bg-muted/40 p-3 space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-xs font-medium whitespace-nowrap">Buy token (mint):</label>
+          <Input
+            value={targetMint}
+            onChange={(e) => setTargetMint(e.target.value)}
+            placeholder="Paste Solana token mint address…"
+            className="h-8 text-xs font-mono flex-1 min-w-[260px]"
+          />
+          <label className="text-xs font-medium whitespace-nowrap ml-2">Buy size (SOL):</label>
+          <Input
+            value={buySizeSol}
+            onChange={(e) => setBuySizeSol(e.target.value)}
+            className="h-8 text-xs w-24"
+          />
+          {validTargetMint && tokenPrices[targetMint.trim()] && (
+            <span className="text-xs text-muted-foreground ml-2">
+              {tokenPrices[targetMint.trim()].symbol} · ${tokenPrices[targetMint.trim()].priceUsd.toFixed(8).replace(/\.?0+$/, "")}
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-[11px] text-muted-foreground">BUY enabled per column:</span>
+          {Array.from({ length: 10 }, (_, c) => (
+            <label key={c} className="flex items-center gap-1 text-[11px] cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={buyEnabled[c]}
+                onChange={() => toggleBuyEnabled(c)}
+                className="h-3 w-3"
+              />
+              W{c + 1}
+            </label>
+          ))}
+        </div>
+      </div>
+
       {loading && <div className="text-sm text-muted-foreground">Loading…</div>}
 
       {isEmpty && !loading && (
@@ -303,6 +384,10 @@ export default function WaterfallGrid() {
                             w={w}
                             tokens={balances[w.pubkey]?.tokens ?? []}
                             solUsd={solUsd}
+                              tokenPrices={tokenPrices}
+                              targetMint={validTargetMint ? targetMint.trim() : ""}
+                              buyEnabled={buyEnabled[c]}
+                              buySizeSol={Number(buySizeSol) || 0}
                             onOpen={() => setActive(w)}
                             onRename={updateNickname}
                               isHeadOfColumn={r === 0}
@@ -338,12 +423,17 @@ export default function WaterfallGrid() {
 }
 
 function Cell({
-  w, tokens, solUsd, onOpen, onRename, isHeadOfColumn, cascade, isCurrentCascadeWallet,
+  w, tokens, solUsd, tokenPrices, targetMint, buyEnabled, buySizeSol,
+  onOpen, onRename, isHeadOfColumn, cascade, isCurrentCascadeWallet,
   planHop, hasPlan, onPreview, onExecute, onCancelPlan,
 }: {
   w: WaterfallWallet;
   tokens: TokenHolding[];
   solUsd: number;
+  tokenPrices: Record<string, { priceUsd: number; symbol: string }>;
+  targetMint: string;
+  buyEnabled: boolean;
+  buySizeSol: number;
   onOpen: () => void;
   onRename: (id: string, nickname: string) => void;
   isHeadOfColumn: boolean;
@@ -358,6 +448,7 @@ function Cell({
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(w.nickname ?? "");
   const [trolling, setTrolling] = useState(false);
+  const [busy, setBusy] = useState<null | "buy" | "sell">(null);
   const [elapsed, setElapsed] = useState(0);
   const sol = Number(w.sol_balance || 0);
   const cascadeRunning = !!cascade;
@@ -383,6 +474,36 @@ function Cell({
     const okCount = (d?.cycles ?? []).filter((c: any) => c.buy && c.sell).length;
     toast({ title: `TROLL done (${okCount}/10)`, description: `Spent ${Number(d?.netSolSpent ?? 0).toFixed(6)} SOL in ${Math.round((d?.totalMs ?? 0) / 1000)}s` });
   };
+
+  const runSwap = async (side: "buy" | "sell") => {
+    if (!targetMint) return toast({ title: "Set a token address at the top", variant: "destructive" });
+    if (side === "buy") {
+      if (!buyEnabled) return;
+      if (!(buySizeSol > 0)) return toast({ title: "Set a buy size > 0 SOL", variant: "destructive" });
+      if (sol < buySizeSol + 0.005) {
+        return toast({ title: "Not enough SOL", description: `Need ~${(buySizeSol + 0.005).toFixed(4)} SOL.`, variant: "destructive" });
+      }
+      if (!confirm(`BUY ${buySizeSol} SOL of ${targetMint.slice(0, 6)}… from ${w.nickname || "wallet"}?`)) return;
+    } else {
+      const held = tokens.find((t) => t.mint === targetMint);
+      if (!held || held.amount <= 0) return toast({ title: "No balance to sell", variant: "destructive" });
+      if (!confirm(`SELL all ${held.amount.toLocaleString()} of ${targetMint.slice(0, 6)}… from ${w.nickname || "wallet"}?`)) return;
+    }
+    setBusy(side);
+    const { data, error } = await supabase.functions.invoke("waterfall-swap", {
+      body: {
+        walletId: w.id,
+        mint: targetMint,
+        side,
+        buyLamports: side === "buy" ? Math.floor(buySizeSol * LAMPORTS_PER_SOL) : undefined,
+      },
+    });
+    setBusy(null);
+    if (error) return toast({ title: `${side.toUpperCase()} failed`, description: error.message, variant: "destructive" });
+    toast({ title: `${side.toUpperCase()} sent`, description: `Tx: ${((data as any)?.signature ?? "").slice(0, 16)}…` });
+  };
+
+  const targetHeld = targetMint ? tokens.find((t) => t.mint === targetMint) : undefined;
 
   return (
     <div className={`space-y-1 ${isCurrentCascadeWallet ? "ring-2 ring-purple-500 rounded p-1 -m-1" : ""}`}>
@@ -424,11 +545,52 @@ function Cell({
         )}
       </div>
       {tokens.length > 0 && (
-        <div className="text-[10px] text-muted-foreground">+{tokens.length} token{tokens.length > 1 ? "s" : ""}</div>
+        <div className="text-[10px] space-y-0.5">
+          {tokens.slice(0, 4).map((t) => {
+            const meta = tokenPrices[t.mint];
+            const usd = meta ? meta.priceUsd * t.amount : 0;
+            const sym = meta?.symbol ?? "?";
+            const isTarget = targetMint === t.mint;
+            const amt = t.amount >= 1000
+              ? t.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })
+              : t.amount.toLocaleString(undefined, { maximumFractionDigits: 4 });
+            return (
+              <div key={t.mint} className={`truncate ${isTarget ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                {amt} {sym}
+                {usd > 0 && <span className="text-muted-foreground"> (${usd >= 1 ? usd.toFixed(2) : usd.toFixed(4)})</span>}
+              </div>
+            );
+          })}
+          {tokens.length > 4 && <div className="text-muted-foreground">+{tokens.length - 4} more…</div>}
+        </div>
       )}
       <Button size="sm" variant="outline" className="h-6 w-full text-[10px] px-2" onClick={onOpen}>
         <ArrowDownToLine className="h-3 w-3 mr-1" /> Withdraw / Details
       </Button>
+      {targetMint && (
+        <div className="flex gap-1">
+          <Button
+            size="sm"
+            variant="default"
+            className="h-6 flex-1 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+            onClick={() => runSwap("buy")}
+            disabled={!buyEnabled || busy !== null || cascadeRunning || trolling}
+            title={buyEnabled ? `Buy ${buySizeSol} SOL of target token` : "Buying disabled for this column"}
+          >
+            {busy === "buy" ? <Loader2 className="h-3 w-3 animate-spin" /> : <><ShoppingCart className="h-3 w-3 mr-1" />BUY</>}
+          </Button>
+          <Button
+            size="sm"
+            variant="default"
+            className="h-6 flex-1 text-[10px] px-2 bg-rose-600 hover:bg-rose-700 text-white"
+            onClick={() => runSwap("sell")}
+            disabled={!targetHeld || (targetHeld?.amount ?? 0) <= 0 || busy !== null || cascadeRunning || trolling}
+            title={targetHeld ? `Sell all ${targetHeld.amount} tokens` : "No target-token balance to sell"}
+          >
+            {busy === "sell" ? <Loader2 className="h-3 w-3 animate-spin" /> : <><DollarSign className="h-3 w-3 mr-1" />SELL</>}
+          </Button>
+        </div>
+      )}
       <Button
         size="sm"
         variant={trolling ? "secondary" : "default"}
