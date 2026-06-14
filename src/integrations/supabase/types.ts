@@ -23019,6 +23019,436 @@ export type Database = {
           },
         ]
       }
+      vip_call_logs: {
+        Row: {
+          channel: string
+          created_at: string
+          duration_sec: number | null
+          id: string
+          order_id: string | null
+          outcome: string | null
+          phone: string | null
+          project_id: string
+          transcript: string | null
+        }
+        Insert: {
+          channel?: string
+          created_at?: string
+          duration_sec?: number | null
+          id?: string
+          order_id?: string | null
+          outcome?: string | null
+          phone?: string | null
+          project_id: string
+          transcript?: string | null
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          duration_sec?: number | null
+          id?: string
+          order_id?: string | null
+          outcome?: string | null
+          phone?: string | null
+          project_id?: string
+          transcript?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vip_call_logs_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "vip_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vip_call_logs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "vip_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vip_chat_sessions: {
+        Row: {
+          cart: Json
+          channel: string
+          created_at: string
+          customer_name: string | null
+          customer_phone: string | null
+          id: string
+          messages: Json
+          project_id: string
+          updated_at: string
+        }
+        Insert: {
+          cart?: Json
+          channel?: string
+          created_at?: string
+          customer_name?: string | null
+          customer_phone?: string | null
+          id?: string
+          messages?: Json
+          project_id: string
+          updated_at?: string
+        }
+        Update: {
+          cart?: Json
+          channel?: string
+          created_at?: string
+          customer_name?: string | null
+          customer_phone?: string | null
+          id?: string
+          messages?: Json
+          project_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vip_chat_sessions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "vip_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vip_customers: {
+        Row: {
+          created_at: string
+          id: string
+          last_ordered_at: string | null
+          name: string | null
+          notes: string | null
+          order_count: number
+          phone: string
+          project_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_ordered_at?: string | null
+          name?: string | null
+          notes?: string | null
+          order_count?: number
+          phone: string
+          project_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_ordered_at?: string | null
+          name?: string | null
+          notes?: string | null
+          order_count?: number
+          phone?: string
+          project_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vip_customers_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "vip_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vip_menu_categories: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          image_url: string | null
+          name: string
+          project_id: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          name: string
+          project_id: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          name?: string
+          project_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vip_menu_categories_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "vip_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vip_menu_items: {
+        Row: {
+          available: boolean
+          base_price: number
+          category_id: string
+          created_at: string
+          description: string | null
+          id: string
+          image_url: string | null
+          is_vegetarian: boolean
+          modifier_group_ids: string[]
+          name: string
+          project_id: string
+          sizes: Json
+          sort_order: number
+        }
+        Insert: {
+          available?: boolean
+          base_price?: number
+          category_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_vegetarian?: boolean
+          modifier_group_ids?: string[]
+          name: string
+          project_id: string
+          sizes?: Json
+          sort_order?: number
+        }
+        Update: {
+          available?: boolean
+          base_price?: number
+          category_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_vegetarian?: boolean
+          modifier_group_ids?: string[]
+          name?: string
+          project_id?: string
+          sizes?: Json
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vip_menu_items_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "vip_menu_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vip_menu_items_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "vip_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vip_modifier_groups: {
+        Row: {
+          created_at: string
+          id: string
+          max_select: number
+          min_select: number
+          name: string
+          project_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          max_select?: number
+          min_select?: number
+          name: string
+          project_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          max_select?: number
+          min_select?: number
+          name?: string
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vip_modifier_groups_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "vip_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vip_modifiers: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          name: string
+          price_delta: number
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          name: string
+          price_delta?: number
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          name?: string
+          price_delta?: number
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vip_modifiers_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "vip_modifier_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vip_orders: {
+        Row: {
+          address: string | null
+          channel: string
+          created_at: string
+          customer_id: string | null
+          customer_name: string
+          customer_phone: string
+          fulfillment: string
+          id: string
+          items: Json
+          notes: string | null
+          project_id: string
+          ready_by: string | null
+          status: string
+          subtotal: number
+          tax: number
+          total: number
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          channel?: string
+          created_at?: string
+          customer_id?: string | null
+          customer_name: string
+          customer_phone: string
+          fulfillment?: string
+          id?: string
+          items?: Json
+          notes?: string | null
+          project_id: string
+          ready_by?: string | null
+          status?: string
+          subtotal?: number
+          tax?: number
+          total?: number
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          channel?: string
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string
+          customer_phone?: string
+          fulfillment?: string
+          id?: string
+          items?: Json
+          notes?: string | null
+          project_id?: string
+          ready_by?: string | null
+          status?: string
+          subtotal?: number
+          tax?: number
+          total?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vip_orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "vip_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vip_orders_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "vip_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vip_projects: {
+        Row: {
+          address: string | null
+          branding: Json
+          created_at: string
+          hours: Json
+          id: string
+          is_listed: boolean
+          logo_url: string | null
+          name: string
+          phone: string | null
+          settings: Json
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          branding?: Json
+          created_at?: string
+          hours?: Json
+          id?: string
+          is_listed?: boolean
+          logo_url?: string | null
+          name: string
+          phone?: string | null
+          settings?: Json
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          branding?: Json
+          created_at?: string
+          hours?: Json
+          id?: string
+          is_listed?: boolean
+          logo_url?: string | null
+          name?: string
+          phone?: string | null
+          settings?: Json
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       vulture_accounts: {
         Row: {
           confidence_avg: number
