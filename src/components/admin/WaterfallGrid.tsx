@@ -316,12 +316,16 @@ export default function WaterfallGrid() {
             placeholder="Paste Solana token mint address…"
             className="h-8 text-xs font-mono flex-1 min-w-[260px]"
           />
-          <label className="text-xs font-medium whitespace-nowrap ml-2">Buy size (SOL):</label>
+          <label className="text-xs font-medium whitespace-nowrap ml-2">Buy size (% of wallet SOL):</label>
           <Input
-            value={buySizeSol}
-            onChange={(e) => setBuySizeSol(e.target.value)}
-            className="h-8 text-xs w-24"
+            value={buySizePct}
+            onChange={(e) => setBuySizePct(e.target.value)}
+            className="h-8 text-xs w-20"
+            type="number"
+            min={1}
+            max={99}
           />
+          <span className="text-[11px] text-muted-foreground">%</span>
           {validTargetMint && tokenPrices[targetMint.trim()] && (
             <span className="text-xs text-muted-foreground ml-2">
               {tokenPrices[targetMint.trim()].symbol} · ${tokenPrices[targetMint.trim()].priceUsd.toFixed(8).replace(/\.?0+$/, "")}
@@ -423,7 +427,7 @@ export default function WaterfallGrid() {
 }
 
 function Cell({
-  w, tokens, solUsd, tokenPrices, targetMint, buyEnabled, buySizeSol,
+  w, tokens, solUsd, tokenPrices, targetMint, buyEnabled, buySizePct,
   onOpen, onRename, isHeadOfColumn, cascade, isCurrentCascadeWallet,
   planHop, hasPlan, onPreview, onExecute, onCancelPlan,
 }: {
@@ -433,7 +437,7 @@ function Cell({
   tokenPrices: Record<string, { priceUsd: number; symbol: string }>;
   targetMint: string;
   buyEnabled: boolean;
-  buySizeSol: number;
+  buySizePct: number;
   onOpen: () => void;
   onRename: (id: string, nickname: string) => void;
   isHeadOfColumn: boolean;
@@ -479,11 +483,15 @@ function Cell({
     if (!targetMint) return toast({ title: "Set a token address at the top", variant: "destructive" });
     if (side === "buy") {
       if (!buyEnabled) return;
-      if (!(buySizeSol > 0)) return toast({ title: "Set a buy size > 0 SOL", variant: "destructive" });
-      if (sol < buySizeSol + 0.005) {
-        return toast({ title: "Not enough SOL", description: `Need ~${(buySizeSol + 0.005).toFixed(4)} SOL.`, variant: "destructive" });
+      if (!(buySizePct > 0 && buySizePct < 100)) return toast({ title: "Buy % must be between 1 and 99", variant: "destructive" });
+      if (sol < 0.002) {
+        return toast({ title: "Not enough SOL", description: `Wallet has ${sol.toFixed(6)} SOL.`, variant: "destructive" });
       }
-      if (!confirm(`BUY ${buySizeSol} SOL of ${targetMint.slice(0, 6)}… from ${w.nickname || "wallet"}?`)) return;
+      var buyLamportsCalc = Math.floor(sol * (buySizePct / 100) * LAMPORTS_PER_SOL);
+      if (buyLamportsCalc < 1_000_000) {
+        return toast({ title: "Buy size too small", description: `~${(buyLamportsCalc / LAMPORTS_PER_SOL).toFixed(6)} SOL.`, variant: "destructive" });
+      }
+      if (!confirm(`BUY ${(buyLamportsCalc / LAMPORTS_PER_SOL).toFixed(4)} SOL (${buySizePct}% of ${sol.toFixed(4)}) of ${targetMint.slice(0, 6)}… from ${w.nickname || "wallet"}?`)) return;
     } else {
       const held = tokens.find((t) => t.mint === targetMint);
       if (!held || held.amount <= 0) return toast({ title: "No balance to sell", variant: "destructive" });
@@ -495,7 +503,7 @@ function Cell({
         walletId: w.id,
         mint: targetMint,
         side,
-        buyLamports: side === "buy" ? Math.floor(buySizeSol * LAMPORTS_PER_SOL) : undefined,
+        buyLamports: side === "buy" ? Math.floor(sol * (buySizePct / 100) * LAMPORTS_PER_SOL) : undefined,
       },
     });
     setBusy(null);
@@ -575,7 +583,7 @@ function Cell({
             className="h-6 flex-1 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
             onClick={() => runSwap("buy")}
             disabled={!buyEnabled || busy !== null || cascadeRunning || trolling}
-            title={buyEnabled ? `Buy ${buySizeSol} SOL of target token` : "Buying disabled for this column"}
+            title={buyEnabled ? `Buy ${buySizePct}% of wallet SOL (~${(sol * (buySizePct / 100)).toFixed(4)} SOL) of target token` : "Buying disabled for this column"}
           >
             {busy === "buy" ? <Loader2 className="h-3 w-3 animate-spin" /> : <><ShoppingCart className="h-3 w-3 mr-1" />BUY</>}
           </Button>
