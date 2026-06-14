@@ -58,6 +58,15 @@ function normalizeBoosts(arr: any, source: 'latest' | 'top'): Array<{ mint: stri
     .map((b: BoostPayload) => ({ mint: b.tokenAddress!, row: b, source }));
 }
 
+function normalizePaymentTimestamp(value: unknown): string | null {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const millis = n > 10_000_000_000 ? n : n * 1000;
+  const date = new Date(millis);
+  if (!Number.isFinite(date.getTime())) return null;
+  return date.toISOString();
+}
+
 async function getLastTotal(mint: string): Promise<number | null> {
   const { data } = await supabase
     .from('token_boost_history')
@@ -144,7 +153,7 @@ async function pollPaidOrders(mints: Set<string>) {
       const data = await fetchJson(`https://api.dexscreener.com/orders/v1/solana/${mint}`);
       const orders = Array.isArray(data) ? data : (data?.orders ?? []);
       for (const o of orders) {
-        const ts = o?.paymentTimestamp ? new Date(Number(o.paymentTimestamp) * 1000).toISOString() : null;
+        const ts = normalizePaymentTimestamp(o?.paymentTimestamp);
         const row = {
           token_mint: mint,
           chain_id: 'solana',
