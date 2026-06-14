@@ -28,6 +28,8 @@ function buildCascadePlan(columnIndex: number, w1Sol: number): CascadePlan {
   const basis = Math.floor(w1Sol * LAMPORTS_PER_SOL);
   const hops: PlanHop[] = [];
   let incoming = basis;
+  // Dynamic even-split target: divide W1 balance by 10 wallets, then jitter ±15% per hop.
+  const targetLamports = Math.floor(basis / 10);
   for (let r = 0; r < 10; r++) {
     if (r === 9) {
       hops.push({
@@ -39,8 +41,8 @@ function buildCascadePlan(columnIndex: number, w1Sol: number): CascadePlan {
       });
       break;
     }
-    const sol = 0.75 + Math.random() * 0.20;
-    const leave = Math.floor(sol * LAMPORTS_PER_SOL);
+    const jitter = 1 + (Math.random() * 0.30 - 0.15); // ±15%
+    const leave = Math.max(1, Math.floor(targetLamports * jitter));
     const forward = incoming - leave - FEE_BUFFER_LAMPORTS;
     const insufficient = forward < 5_000_000;
     hops.push({
@@ -141,8 +143,8 @@ export default function WaterfallGrid() {
     const w1 = wallets.find((w) => w.column_index === columnIndex && w.row_index === 0);
     if (!w1) return toast({ title: "Wallet 1 not found", variant: "destructive" });
     const sol = Number(w1.sol_balance || 0);
-    if (sol < 0.80) {
-      return toast({ title: "Not enough SOL in W1", description: "Need ≥ ~0.80 SOL to plan a cascade.", variant: "destructive" });
+    if (sol < 0.50) {
+      return toast({ title: "Not enough SOL in W1", description: "Need ≥ 0.5 SOL to plan a cascade.", variant: "destructive" });
     }
     const plan = buildCascadePlan(columnIndex, sol);
     setPlans((prev) => ({ ...prev, [columnIndex]: plan }));

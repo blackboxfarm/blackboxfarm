@@ -1,72 +1,47 @@
-## Two-Stage Cascade: Preview → Execute
+## Dynamic Even-Split Cascade (with jitter)
 
-Turn the current one-shot CASCADE button into a two-click flow so you can see the projected SOL flow before any transactions fire.
+Replace the fixed `0.75–0.95 SOL` leave-behind with a **per-column dynamic target** derived from W1's balance, so 6 SOL spreads as ~0.6 SOL/wallet and 17 SOL spreads as ~1.7 SOL/wallet — with a little randomness so it's not a perfectly equal split.
 
-### Stage 1 — CASCADE (preview)
+### Math
 
-Click **CASCADE** on Wallet 1 of a column:
+On CASCADE click for a column:
 
-1. Read current Wallet 1 SOL balance (e.g. 15 SOL).
-2. Roll all 9 random leave-behind amounts up front (W1..W9), each uniform `0.75–0.95 SOL`, 6-decimal precision. W10 has no leave-behind (terminal).
-3. Walk the projection:
-   - `incoming[1] = currentBalance(W1)`
-   - `forward[N]  = incoming[N] − leaveBehind[N] − feeBuffer`
-   - `incoming[N+1] = forward[N]`
-   - `incoming[10]` = final landed amount, no forward.
-4. Store the plan in state (column-scoped) and render a red bracketed projection beside every wallet's balance:
+1. Read W1 balance `B` (SOL).
+2. `target = B / 10` — the ideal even share per wallet.
+3. For each of W1..W9, roll `leaveBehind = target * (1 + jitter)` where `jitter` is uniform in `[-0.15, +0.15]` (±15%).
+4. W10 just receives whatever's left (terminal, no forward).
+5. Walk the projection forward (`forward[N] = incoming[N] − leaveBehind[N] − feeBuffer`) exactly like today.
+6. After rolling all 9, the natural variance means W10's landed amount will also sit near `target` ± a few percent. No normalization needed — randomness is the point.
+
+### Examples
 
 ```text
-W1   15.0000 SOL  [leave 0.8421 → fwd 14.1579]
-W2    0.0000 SOL  [in 14.1579 → leave 0.9102 → fwd 13.2477]
-...
-W10   0.0000 SOL  [in ~3.30 SOL · terminal]
+B = 6 SOL    → target 0.60 → each wallet lands ~0.51–0.69 SOL
+B = 11 SOL   → target 1.10 → each wallet lands ~0.94–1.27 SOL
+B = 17 SOL   → target 1.70 → each wallet lands ~1.45–1.96 SOL
+B = 20 SOL   → target 2.00 → each wallet lands ~1.70–2.30 SOL
 ```
 
-5. The button relabels to **EXECUTE** (green) with a small **✕ Cancel** beside it to discard the projection and revert to CASCADE.
+### Minimum guard
 
-Nothing on-chain happens during preview.
+- If `target < 0.05 SOL` (i.e. W1 has < 0.5 SOL), CASCADE is disabled with tooltip "need ≥ 0.5 SOL in Wallet 1".
+- If any projected `forward[N] < 0.005 SOL` after the roll, that row renders `INSUFFICIENT` in red and EXECUTE is blocked for that column (extremely unlikely once the dynamic target is in place, but kept as a safety net).
 
-### Stage 2 — EXECUTE
+### Technical changes
 
-Click **EXECUTE**:
+- **`src/components/admin/WaterfallGrid.tsx`** — `buildCascadePlan(w1BalanceLamports)`:
+  - Compute `targetLamports = floor(w1BalanceLamports / 10)`.
+  - For rows 0..8: `leaveBehindLamports = floor(targetLamports * (1 + (Math.random() * 0.30 - 0.15)))`.
+  - Remove the hard-coded `0.75–0.95` range and the `< 0.80 SOL` button gate; replace with `targetLamports >= 0.05 SOL` gate.
+  - Projection chips and EXECUTE flow unchanged.
 
-1. Send the cached `plan` (array of `{row, leaveBehindLamports}`) to the edge function alongside `columnIndex`.
-2. Edge function uses the **provided** leave-behind values instead of rolling its own — so the on-chain outcome matches what you previewed (modulo tiny fee variance).
-3. Existing run loop proceeds: troll W1 → transfer (balance − providedLeaveBehind − feeBuffer) → troll W2 → … → troll W10.
-4. As each hop completes, the red `[…]` projection on that row turns **green** and shows the realized amount; mismatches >0.001 SOL stay red with a delta.
+- **`supabase/functions/waterfall-cascade/index.ts`** — relax the server-side validation:
+  - When a `plan` is supplied, validate `leaveBehindLamports` is within `[0.01, 5.00] SOL` (wide guardrail just to catch obvious bugs) instead of the current `[0.70, 1.00]` window.
+  - Server-side fallback path (no plan supplied) is rarely used now, but keep it working — change `randLeaveBehindLamports()` to accept the wallet's current balance and roll `balance/10 × jitter` the same way, so direct API callers get the same behavior.
 
-### UI details (per column)
-
-- Projection chips render inside `WaterfallGrid.tsx` next to each cell's SOL value. Red while pending, green when that hop's transfer is confirmed.
-- Header of the column shows: `Projected final W10: 3.3047 SOL` while in preview.
-- EXECUTE confirm dialog: "Cascade column N with previewed plan? ~25 min." (no re-rolling).
-- Preview is **per-column** state — previewing column 3 doesn't disturb column 1.
-- If Wallet 1 balance changes between preview and execute by more than 0.01 SOL, EXECUTE blocks with: "Balance changed since preview, re-run CASCADE."
-
-### Validation during preview (fail fast, no on-chain action)
-
-- If any projected `forward[N] < 0.005 SOL` (W2..W9 wouldn't have enough to cover its own troll), the preview renders that row in red with `INSUFFICIENT` and EXECUTE is disabled.
-- If W1 balance < ~0.80 SOL the CASCADE button is disabled with tooltip "need ≥ ~0.80 SOL in Wallet 1".
-
-### Technical details
-
-- **Frontend (`src/components/admin/WaterfallGrid.tsx`)**
-  - New per-column state: `cascadePlan: { columnIndex, basis: 'W1 balance at preview time', hops: [{row, leaveBehindLamports, projectedIncomingLamports, projectedForwardLamports, status: 'pending'|'done'|'mismatch'}] }`.
-  - Pure helper `buildCascadePlan(w1Balance: number): Plan` — does the roll + walk. Easy to unit test.
-  - Button state machine: `idle → preview → executing → done|failed`. Cancel returns to `idle`.
-  - Render projection chip inline with existing balance display in each wallet cell.
-
-- **Edge function (`supabase/functions/waterfall-cascade/index.ts`)**
-  - Accept optional `plan: { row: number, leaveBehindLamports: number }[]` (length 9, rows 0..8). If present, use it verbatim; if absent, keep current behavior (server-side random) for backwards-compat / direct API use.
-  - Validate each `leaveBehindLamports` is within `[0.70, 1.00] SOL` to prevent abuse.
-  - On each hop, compute `sendable = balance − plan[row].leaveBehindLamports − FEE_BUFFER_LAMPORTS` exactly as today.
-  - Persist the plan on the `waterfall_cascade_runs` row so logs are auditable.
-
-- **DB migration**
-  - Add `plan jsonb` column to `waterfall_cascade_runs` (nullable, default null) to record the preview plan that was executed.
+- **`.lovable/plan.md`** — update the spec to describe the dynamic target instead of the fixed range.
 
 ### Out of scope
 
-- No changes to the standalone TROLL button.
-- No changes to the actual troll cycle logic, transfer logic, or wallet 10 terminal behavior.
-- No persistence of the preview across page reloads — it lives in component state only (re-click CASCADE to regenerate).
+- TROLL button, troll cycle, transfer logic, W10 terminal behavior — unchanged.
+- No DB migration needed (the `plan jsonb` column already stores whatever leave-behind values we send).
