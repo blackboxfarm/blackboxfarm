@@ -9,6 +9,10 @@ const ADMIN_PHONE = '+12265835975';
 
 export async function sendAdminSms(body: string): Promise<boolean> {
   try {
+    if (Deno.env.get('SMS_GLOBAL_KILL') !== 'false') {
+      console.warn('[SMS KILL] sendAdminSms suppressed. Set SMS_GLOBAL_KILL=false to re-enable.');
+      return false;
+    }
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     const TWILIO_API_KEY = Deno.env.get('TWILIO_API_KEY');
     if (!LOVABLE_API_KEY || !TWILIO_API_KEY) {

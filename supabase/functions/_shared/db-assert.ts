@@ -35,8 +35,8 @@ export class DbWriteError extends Error {
  */
 async function sendFailureSms(table: string, operation: string, error: { message: string; code?: string; details?: string }) {
   try {
-    if (Deno.env.get('DB_ASSERT_SMS_ENABLED') !== 'true') {
-      console.warn('[DB ASSERT] SMS disabled; set DB_ASSERT_SMS_ENABLED=true to re-enable DB write failure texts');
+    if (Deno.env.get('SMS_GLOBAL_KILL') !== 'false' || Deno.env.get('DB_ASSERT_SMS_ENABLED') !== 'true') {
+      console.warn('[DB ASSERT] SMS disabled (SMS_GLOBAL_KILL on or DB_ASSERT_SMS_ENABLED!=true)');
       return;
     }
 

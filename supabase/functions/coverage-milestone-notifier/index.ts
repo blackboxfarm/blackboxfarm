@@ -11,6 +11,10 @@ const ADMIN_PHONE = '+12265835975';
 const TWILIO_FROM = '+16624814161';
 
 async function sendSms(body: string): Promise<{ ok: boolean; status?: number; err?: string }> {
+  if (Deno.env.get('SMS_GLOBAL_KILL') !== 'false') {
+    console.warn('[SMS KILL] coverage-milestone-notifier SMS suppressed');
+    return { ok: false, err: 'SMS_GLOBAL_KILL active' };
+  }
   const sid = Deno.env.get('TWILIO_ACCOUNT_SID');
   const token = Deno.env.get('TWILIO_AUTH_TOKEN');
   const from = TWILIO_FROM;

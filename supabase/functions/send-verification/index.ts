@@ -64,6 +64,12 @@ serve(withRunLog('send-verification', async (req) => {
     if (dbError) throw dbError;
 
     if (type === 'sms') {
+      if (Deno.env.get('SMS_GLOBAL_KILL') !== 'false') {
+        console.warn('[SMS KILL] send-verification SMS suppressed');
+        return new Response(JSON.stringify({ success: false, error: 'SMS temporarily disabled (SMS_GLOBAL_KILL)' }), {
+          status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
       const TWILIO_ACCOUNT_SID = Deno.env.get('TWILIO_ACCOUNT_SID');
       if (!TWILIO_ACCOUNT_SID) throw new Error('TWILIO_ACCOUNT_SID is not configured');
 
