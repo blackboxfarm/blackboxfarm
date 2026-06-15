@@ -315,7 +315,7 @@ async function traceDepth(
       });
 
       // Recurse deeper
-      await traceDepth(funderWallet, depth + 1, visited, result);
+      await traceDepth(funderWallet, depth + 1, visited, result, maxDepth);
     }
 
     // If we walked all branches without success/explicit termination, the funders
