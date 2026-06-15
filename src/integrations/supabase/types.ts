@@ -23072,37 +23072,49 @@ export type Database = {
       }
       vip_chat_sessions: {
         Row: {
+          abuse_score: number
+          blocked_at: string | null
           cart: Json
           channel: string
           created_at: string
           customer_name: string | null
           customer_phone: string | null
+          fingerprint: string | null
           id: string
           messages: Json
           project_id: string
           updated_at: string
+          voice_profile: Json | null
         }
         Insert: {
+          abuse_score?: number
+          blocked_at?: string | null
           cart?: Json
           channel?: string
           created_at?: string
           customer_name?: string | null
           customer_phone?: string | null
+          fingerprint?: string | null
           id?: string
           messages?: Json
           project_id: string
           updated_at?: string
+          voice_profile?: Json | null
         }
         Update: {
+          abuse_score?: number
+          blocked_at?: string | null
           cart?: Json
           channel?: string
           created_at?: string
           customer_name?: string | null
           customer_phone?: string | null
+          fingerprint?: string | null
           id?: string
           messages?: Json
           project_id?: string
           updated_at?: string
+          voice_profile?: Json | null
         }
         Relationships: [
           {
@@ -23117,6 +23129,7 @@ export type Database = {
       vip_customers: {
         Row: {
           created_at: string
+          fingerprint: string | null
           id: string
           last_ordered_at: string | null
           name: string | null
@@ -23125,9 +23138,11 @@ export type Database = {
           phone: string
           project_id: string
           updated_at: string
+          voice_profile: Json | null
         }
         Insert: {
           created_at?: string
+          fingerprint?: string | null
           id?: string
           last_ordered_at?: string | null
           name?: string | null
@@ -23136,9 +23151,11 @@ export type Database = {
           phone: string
           project_id: string
           updated_at?: string
+          voice_profile?: Json | null
         }
         Update: {
           created_at?: string
+          fingerprint?: string | null
           id?: string
           last_ordered_at?: string | null
           name?: string | null
@@ -23147,6 +23164,7 @@ export type Database = {
           phone?: string
           project_id?: string
           updated_at?: string
+          voice_profile?: Json | null
         }
         Relationships: [
           {
