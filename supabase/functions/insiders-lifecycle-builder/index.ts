@@ -227,17 +227,23 @@ async function runEnrichmentPass(
   };
 
   // Pull two queues:
-  //   A) tokens never enriched OR stale > 24h, ordered by peak DESC then newest
-  //   B) recent top-N for socials drift recheck
-  const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-
-  const { data: queueA } = await supabase
+  //   A) tokens that have NEVER been enriched (no enrichment_last_run_at) OR
+  //      whose prior enrichment did not produce a creator (enrichment_status != 'ok').
+  //      We deliberately do NOT re-enrich tokens that already resolved a creator —
+  //      that loop was burning hundreds of thousands of Helius credits per day.
+  //      Pass `force: true` to re-enrich everything (admin/manual rebuild).
+  //   B) recent top-N for socials drift recheck (off by default — costs Helius credits)
+  let queueAQuery = supabase
     .from('telegram_insider_token_lifecycle')
-    .select('id, token_mint, token_symbol, peak_multiplier, creator_wallet, enrichment_last_run_at, genealogy_kyc_root')
-    .or(`enrichment_last_run_at.is.null,enrichment_last_run_at.lt.${cutoff}`)
+    .select('id, token_mint, token_symbol, peak_multiplier, creator_wallet, enrichment_last_run_at, genealogy_kyc_root, enrichment_status')
     .order('peak_multiplier', { ascending: false })
     .order('first_called_at', { ascending: false })
     .limit(enrichLimit);
+  if (!force) {
+    // Never enriched OR previous run failed to resolve a creator.
+    queueAQuery = queueAQuery.or(`enrichment_last_run_at.is.null,enrichment_status.neq.ok`);
+  }
+  const { data: queueA } = await queueAQuery;
 
   const queueAIds = new Set((queueA || []).map((r: any) => r.id));
 
@@ -245,7 +251,7 @@ async function runEnrichmentPass(
   if (socialsRecheck) {
     const { data } = await supabase
       .from('telegram_insider_token_lifecycle')
-      .select('id, token_mint, token_symbol, peak_multiplier, creator_wallet, enrichment_last_run_at, genealogy_kyc_root')
+      .select('id, token_mint, token_symbol, peak_multiplier, creator_wallet, enrichment_last_run_at, genealogy_kyc_root, enrichment_status')
       .order('first_called_at', { ascending: false })
       .limit(socialsLimit);
     queueB = (data || []).filter((r: any) => !queueAIds.has(r.id));
@@ -253,17 +259,21 @@ async function runEnrichmentPass(
 
   let fullQueue = [...(queueA || []), ...queueB];
 
-  // KYC-skip guard: rows with a known KYC root don't need a full re-trace
-  // unless caller explicitly passes { force: true }.
+  // KYC-skip guard: rows with a known KYC root OR an already-resolved creator
+  // don't need a full re-trace unless caller explicitly passes { force: true }.
   let skippedKyc = 0;
+  let skippedResolved = 0;
   if (!force) {
     const before = fullQueue.length;
     fullQueue = fullQueue.filter((r: any) => !r.genealogy_kyc_root);
     skippedKyc = before - fullQueue.length;
+    const beforeResolved = fullQueue.length;
+    fullQueue = fullQueue.filter((r: any) => !(r.creator_wallet && r.enrichment_status === 'ok'));
+    skippedResolved = beforeResolved - fullQueue.length;
   }
   result.candidates = fullQueue.length;
 
-  console.log(`[enrich] queueA=${queueA?.length || 0} queueB=${queueB.length} skippedKyc=${skippedKyc} retraced=${fullQueue.length}${force ? ' (force=true)' : ''}`);
+  console.log(`[enrich] queueA=${queueA?.length || 0} queueB=${queueB.length} skippedKyc=${skippedKyc} skippedResolved=${skippedResolved} retraced=${fullQueue.length}${force ? ' (force=true)' : ''}`);
 
   // Process in batches of 5 for governance (Helius credits, Pump.fun 200-300/hr)
   const BATCH = 5;
