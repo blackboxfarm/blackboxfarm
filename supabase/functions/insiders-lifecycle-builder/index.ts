@@ -392,7 +392,10 @@ async function enrichOneToken(supabase: any, row: any, summary: EnrichmentResult
   if (creator) {
     summary.creator_resolved++;
     try {
-      const gen = await traceParentWallets(supabase, creator, 'insiders-lifecycle');
+      // Cap to 5 hops for this caller — full 20-hop trace was burning ~500k
+      // Helius credits/day. Tokens that need a deeper trace can be re-run via
+      // insiders-genealogy-backfill, which uses the full depth.
+      const gen = await traceParentWallets(supabase, creator, 'insiders-lifecycle', { maxDepth: 5 });
       if (gen.parentWallets.length > 0 || gen.xAccounts.length > 0) {
         await meshGenealogyResults(supabase, creator, gen, 'insiders-lifecycle');
         summary.genealogy_traced++;
@@ -800,7 +803,10 @@ serve(async (req) => {
     try { body = await req.clone().json(); } catch { /* GET / no body — use defaults */ }
     const doEnrich        = body.enrich !== false;
     const enrichLimit     = Number(body.enrichLimit ?? 200);
-    const doSocialsRecheck = body.socialsRecheck !== false;
+    // socialsRecheck defaults OFF — it was forcing a full re-enrichment of the
+    // top-50 recent tokens every 3h, including genealogy. Pass { socialsRecheck: true }
+    // on demand if you want to re-snapshot socials.
+    const doSocialsRecheck = body.socialsRecheck === true;
     const socialsLimit    = Number(body.socialsLimit ?? 50);
     const doChainPromoter = body.chainPromoter !== false;
     const force           = body.force === true;
