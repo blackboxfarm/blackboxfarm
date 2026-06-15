@@ -59,6 +59,7 @@ export async function traceParentWallets(
   supabase: any,
   wallet: string,
   source: string,
+  opts?: { maxDepth?: number },
 ): Promise<GenealogyResult> {
   const result: GenealogyResult = {
     parentWallets: [],
@@ -70,9 +71,10 @@ export async function traceParentWallets(
   };
 
   const visited = new Set<string>();
+  const effectiveMaxDepth = Math.max(1, Math.min(MAX_DEPTH, opts?.maxDepth ?? MAX_DEPTH));
 
   try {
-    await traceDepth(wallet, 1, visited, result);
+    await traceDepth(wallet, 1, visited, result, effectiveMaxDepth);
   } catch (err) {
     console.error(`[auto-genealogy] Error tracing ${wallet.slice(0, 8)}...: ${err}`);
     if (result.trailEndReason === 'in_progress') {
@@ -129,6 +131,7 @@ async function traceDepth(
   depth: number,
   visited: Set<string>,
   result: GenealogyResult,
+  maxDepth: number = MAX_DEPTH,
 ): Promise<void> {
   if (visited.has(wallet)) {
     if (result.trailEndReason === 'in_progress') {
@@ -138,7 +141,7 @@ async function traceDepth(
     }
     return;
   }
-  if (depth > MAX_DEPTH) {
+  if (depth > maxDepth) {
     if (result.trailEndReason === 'in_progress') {
       result.trailEndReason = 'depth_cap';
       result.trailEndedAtDepth = depth - 1;
@@ -312,7 +315,7 @@ async function traceDepth(
       });
 
       // Recurse deeper
-      await traceDepth(funderWallet, depth + 1, visited, result);
+      await traceDepth(funderWallet, depth + 1, visited, result, maxDepth);
     }
 
     // If we walked all branches without success/explicit termination, the funders
