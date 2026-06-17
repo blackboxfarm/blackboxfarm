@@ -110,6 +110,87 @@ export default function WaterfallGrid() {
     setSimLog((prev) => [{ ...e, ts: Date.now() }, ...prev].slice(0, 500));
   }, []);
 
+  const snapshotSim = useCallback(() => {
+    const snap: Record<string, { sol: number; tokens: Record<string, number> }> = {};
+    for (const w of wallets) {
+      const b = balances[w.pubkey];
+      const tokens: Record<string, number> = {};
+      for (const t of b?.tokens ?? []) tokens[t.mint] = t.amount;
+      snap[w.id] = { sol: Number(w.sol_balance || 0), tokens };
+    }
+    setSimState(snap);
+  }, [wallets, balances]);
+
+  useEffect(() => {
+    try { localStorage.setItem(SIM_STORAGE_KEY, simMode ? "1" : "0"); } catch {}
+    if (simMode && Object.keys(simState).length === 0 && wallets.length > 0) {
+      snapshotSim();
+      appendLog({ col: -1, row: -1, kind: "RESET", msg: `Snapshot taken from real balances (${wallets.length} wallets).` });
+    }
+    if (!simMode) {
+      setSimState({});
+      setSimLog([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [simMode, wallets.length]);
+
+  const resetSim = () => {
+    snapshotSim();
+    setSimLog([]);
+    appendLog({ col: -1, row: -1, kind: "RESET", msg: "Simulation reset to current real balances." });
+    toast({ title: "Simulation reset" });
+  };
+
+  const simBuy = useCallback((w: WaterfallWallet, mint: string, lamportsIn: number) => {
+    const meta = tokenPrices[mint];
+    const priceUsd = meta?.priceUsd ?? 0;
+    const solPriceUsd = solUsd || 0;
+    const solIn = lamportsIn / LAMPORTS_PER_SOL;
+    const usdIn = solIn * solPriceUsd * 0.99;
+    const tokensOut = priceUsd > 0 ? usdIn / priceUsd : 0;
+    setSimState((prev) => {
+      const cur = prev[w.id] ?? { sol: 0, tokens: {} };
+      const newSol = Math.max(0, cur.sol - solIn - 0.00001);
+      const newTokens = { ...cur.tokens, [mint]: (cur.tokens[mint] ?? 0) + tokensOut };
+      return { ...prev, [w.id]: { sol: newSol, tokens: newTokens } };
+    });
+    appendLog({
+      col: w.column_index, row: w.row_index, kind: "BUY",
+      msg: `W${w.column_index + 1}·R${w.row_index + 1}  SIM BUY  ${solIn.toFixed(4)} SOL → ${tokensOut.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${meta?.symbol ?? "?"} @ $${priceUsd ? priceUsd.toFixed(8).replace(/\.?0+$/, "") : "?"}`,
+    });
+  }, [tokenPrices, solUsd, appendLog]);
+
+  const simSell = useCallback((w: WaterfallWallet, mint: string) => {
+    const meta = tokenPrices[mint];
+    const priceUsd = meta?.priceUsd ?? 0;
+    const solPriceUsd = solUsd || 0;
+    setSimState((prev) => {
+      const cur = prev[w.id] ?? { sol: 0, tokens: {} };
+      const amt = cur.tokens[mint] ?? 0;
+      const usdOut = amt * priceUsd * 0.99;
+      const solOut = solPriceUsd > 0 ? usdOut / solPriceUsd : 0;
+      const newTokens = { ...cur.tokens };
+      delete newTokens[mint];
+      appendLog({
+        col: w.column_index, row: w.row_index, kind: "SELL",
+        msg: `W${w.column_index + 1}·R${w.row_index + 1}  SIM SELL ${amt.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${meta?.symbol ?? "?"} → ${solOut.toFixed(4)} SOL`,
+      });
+      return { ...prev, [w.id]: { sol: cur.sol + solOut - 0.00001, tokens: newTokens } };
+    });
+  }, [tokenPrices, solUsd, appendLog]);
+
+  const simTroll = useCallback((w: WaterfallWallet) => {
+    const cost = SIM_TROLL_CYCLES * SIM_TROLL_COST_PER_CYCLE;
+    setSimState((prev) => {
+      const cur = prev[w.id] ?? { sol: 0, tokens: {} };
+      return { ...prev, [w.id]: { ...cur, sol: Math.max(0, cur.sol - cost) } };
+    });
+    appendLog({
+      col: w.column_index, row: w.row_index, kind: "TROLL",
+      msg: `W${w.column_index + 1}·R${w.row_index + 1}  SIM TROLL ${SIM_TROLL_CYCLES} cycles · -${cost.toFixed(4)} SOL net`,
+    });
+  }, [appendLog]);
+
   // Aggregate all unique non-SOL mints currently held across the grid, then fetch DexScreener prices.
   useEffect(() => {
     const mints = new Set<string>();
