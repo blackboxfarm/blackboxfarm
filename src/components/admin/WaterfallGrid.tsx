@@ -543,7 +543,15 @@ export default function WaterfallGrid() {
                         {w ? (
                           <Cell
                             w={w}
-                            tokens={balances[w.pubkey]?.tokens ?? []}
+                            tokens={
+                              simMode
+                                ? Object.entries(simState[w.id]?.tokens ?? {}).map(([mint, amount]) => {
+                                    const real = (balances[w.pubkey]?.tokens ?? []).find((t) => t.mint === mint);
+                                    return { mint, amount, decimals: real?.decimals ?? 6 };
+                                  })
+                                : balances[w.pubkey]?.tokens ?? []
+                            }
+                            solOverride={simMode ? (simState[w.id]?.sol ?? Number(w.sol_balance || 0)) : undefined}
                             solUsd={solUsd}
                               tokenPrices={tokenPrices}
                               targetMint={validTargetMint ? targetMint.trim() : ""}
@@ -559,6 +567,10 @@ export default function WaterfallGrid() {
                               onPreview={() => previewCascade(c)}
                               onExecute={() => executePlan(c)}
                               onCancelPlan={() => cancelPlan(c)}
+                              simMode={simMode}
+                              onSimBuy={simBuy}
+                              onSimSell={simSell}
+                              onSimTroll={simTroll}
                           />
                         ) : <span className="text-muted-foreground">—</span>}
                       </td>
