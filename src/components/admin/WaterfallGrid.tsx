@@ -419,6 +419,17 @@ export default function WaterfallGrid() {
 
   return (
     <div className="p-4 space-y-4">
+      {simMode && (
+        <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 flex flex-wrap items-center gap-3">
+          <span className="text-lg">🧪</span>
+          <div className="flex-1 min-w-[200px]">
+            <div className="text-sm font-semibold text-amber-700 dark:text-amber-300">SIMULATION MODE — no real transactions</div>
+            <div className="text-[11px] text-muted-foreground">All BUY / SELL / TROLL / CASCADE actions run locally against a snapshot of real balances.</div>
+          </div>
+          <Button size="sm" variant="outline" onClick={resetSim}>Reset Sim</Button>
+          <Button size="sm" variant="ghost" onClick={() => setSimMode(false)}>Exit</Button>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2 justify-between">
         <div>
           <h2 className="text-lg font-semibold">💧 Waterfall — 10×10 Solana Wallet Grid</h2>
@@ -428,6 +439,15 @@ export default function WaterfallGrid() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant={simMode ? "default" : "outline"}
+            className={simMode ? "bg-amber-500 hover:bg-amber-600 text-black" : ""}
+            onClick={() => setSimMode((v) => !v)}
+            title="Toggle simulation mode (no real transactions)"
+          >
+            🧪 <span className="ml-2">{simMode ? "Sim ON" : "Sim Mode"}</span>
+          </Button>
           <Button size="sm" variant="outline" onClick={generate} disabled={generating}>
             {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             <span className="ml-2">Generate Missing</span>
