@@ -10,6 +10,17 @@ import { WaterfallWalletDrawer, type WaterfallWallet, type TokenHolding } from "
 const SHORT = (k: string) => `${k.slice(0, 4)}…${k.slice(-4)}`;
 const LAMPORTS_PER_SOL = 1_000_000_000;
 const FEE_BUFFER_LAMPORTS = 10_000;
+const SIM_STORAGE_KEY = "waterfall_sim_mode";
+const SIM_TROLL_CYCLES = 10;
+const SIM_TROLL_COST_PER_CYCLE = 0.0002; // SOL "fee" per simulated cycle
+
+export type SimLogEntry = {
+  ts: number;
+  col: number;
+  row: number;
+  kind: "BUY" | "SELL" | "TROLL" | "CASCADE" | "WITHDRAW" | "RESET";
+  msg: string;
+};
 
 type PlanHop = {
   row: number;
@@ -86,6 +97,99 @@ export default function WaterfallGrid() {
   const [buySizePct, setBuySizePct] = useState<string>("95");
   const [buyEnabled, setBuyEnabled] = useState<boolean[]>(() => Array.from({ length: 10 }, () => true));
   const [tokenPrices, setTokenPrices] = useState<Record<string, { priceUsd: number; symbol: string }>>({});
+
+  // ─── SIMULATION MODE ────────────────────────────────────────────────────
+  const [simMode, setSimMode] = useState<boolean>(() => {
+    try { return localStorage.getItem(SIM_STORAGE_KEY) === "1"; } catch { return false; }
+  });
+  const [simState, setSimState] = useState<Record<string, { sol: number; tokens: Record<string, number> }>>({});
+  const [simLog, setSimLog] = useState<SimLogEntry[]>([]);
+  const [simLogOpen, setSimLogOpen] = useState(true);
+
+  const appendLog = useCallback((e: Omit<SimLogEntry, "ts">) => {
+    setSimLog((prev) => [{ ...e, ts: Date.now() }, ...prev].slice(0, 500));
+  }, []);
+
+  const snapshotSim = useCallback(() => {
+    const snap: Record<string, { sol: number; tokens: Record<string, number> }> = {};
+    for (const w of wallets) {
+      const b = balances[w.pubkey];
+      const tokens: Record<string, number> = {};
+      for (const t of b?.tokens ?? []) tokens[t.mint] = t.amount;
+      snap[w.id] = { sol: Number(w.sol_balance || 0), tokens };
+    }
+    setSimState(snap);
+  }, [wallets, balances]);
+
+  useEffect(() => {
+    try { localStorage.setItem(SIM_STORAGE_KEY, simMode ? "1" : "0"); } catch {}
+    if (simMode && Object.keys(simState).length === 0 && wallets.length > 0) {
+      snapshotSim();
+      appendLog({ col: -1, row: -1, kind: "RESET", msg: `Snapshot taken from real balances (${wallets.length} wallets).` });
+    }
+    if (!simMode) {
+      setSimState({});
+      setSimLog([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [simMode, wallets.length]);
+
+  const resetSim = () => {
+    snapshotSim();
+    setSimLog([]);
+    appendLog({ col: -1, row: -1, kind: "RESET", msg: "Simulation reset to current real balances." });
+    toast({ title: "Simulation reset" });
+  };
+
+  const simBuy = useCallback((w: WaterfallWallet, mint: string, lamportsIn: number) => {
+    const meta = tokenPrices[mint];
+    const priceUsd = meta?.priceUsd ?? 0;
+    const solPriceUsd = solUsd || 0;
+    const solIn = lamportsIn / LAMPORTS_PER_SOL;
+    const usdIn = solIn * solPriceUsd * 0.99;
+    const tokensOut = priceUsd > 0 ? usdIn / priceUsd : 0;
+    setSimState((prev) => {
+      const cur = prev[w.id] ?? { sol: 0, tokens: {} };
+      const newSol = Math.max(0, cur.sol - solIn - 0.00001);
+      const newTokens = { ...cur.tokens, [mint]: (cur.tokens[mint] ?? 0) + tokensOut };
+      return { ...prev, [w.id]: { sol: newSol, tokens: newTokens } };
+    });
+    appendLog({
+      col: w.column_index, row: w.row_index, kind: "BUY",
+      msg: `W${w.column_index + 1}·R${w.row_index + 1}  SIM BUY  ${solIn.toFixed(4)} SOL → ${tokensOut.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${meta?.symbol ?? "?"} @ $${priceUsd ? priceUsd.toFixed(8).replace(/\.?0+$/, "") : "?"}`,
+    });
+  }, [tokenPrices, solUsd, appendLog]);
+
+  const simSell = useCallback((w: WaterfallWallet, mint: string) => {
+    const meta = tokenPrices[mint];
+    const priceUsd = meta?.priceUsd ?? 0;
+    const solPriceUsd = solUsd || 0;
+    setSimState((prev) => {
+      const cur = prev[w.id] ?? { sol: 0, tokens: {} };
+      const amt = cur.tokens[mint] ?? 0;
+      const usdOut = amt * priceUsd * 0.99;
+      const solOut = solPriceUsd > 0 ? usdOut / solPriceUsd : 0;
+      const newTokens = { ...cur.tokens };
+      delete newTokens[mint];
+      appendLog({
+        col: w.column_index, row: w.row_index, kind: "SELL",
+        msg: `W${w.column_index + 1}·R${w.row_index + 1}  SIM SELL ${amt.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${meta?.symbol ?? "?"} → ${solOut.toFixed(4)} SOL`,
+      });
+      return { ...prev, [w.id]: { sol: cur.sol + solOut - 0.00001, tokens: newTokens } };
+    });
+  }, [tokenPrices, solUsd, appendLog]);
+
+  const simTroll = useCallback((w: WaterfallWallet) => {
+    const cost = SIM_TROLL_CYCLES * SIM_TROLL_COST_PER_CYCLE;
+    setSimState((prev) => {
+      const cur = prev[w.id] ?? { sol: 0, tokens: {} };
+      return { ...prev, [w.id]: { ...cur, sol: Math.max(0, cur.sol - cost) } };
+    });
+    appendLog({
+      col: w.column_index, row: w.row_index, kind: "TROLL",
+      msg: `W${w.column_index + 1}·R${w.row_index + 1}  SIM TROLL ${SIM_TROLL_CYCLES} cycles · -${cost.toFixed(4)} SOL net`,
+    });
+  }, [appendLog]);
 
   // Aggregate all unique non-SOL mints currently held across the grid, then fetch DexScreener prices.
   useEffect(() => {
@@ -185,7 +289,9 @@ export default function WaterfallGrid() {
     if (cascades[columnIndex]) return toast({ title: "Already running", variant: "destructive" });
     const w1 = wallets.find((w) => w.column_index === columnIndex && w.row_index === 0);
     if (!w1) return toast({ title: "Wallet 1 not found", variant: "destructive" });
-    const sol = Number(w1.sol_balance || 0);
+    const sol = simMode
+      ? (simState[w1.id]?.sol ?? Number(w1.sol_balance || 0))
+      : Number(w1.sol_balance || 0);
     if (sol < 0.50) {
       return toast({ title: "Not enough SOL in W1", description: "Need ≥ 0.5 SOL to plan a cascade.", variant: "destructive" });
     }
@@ -204,6 +310,37 @@ export default function WaterfallGrid() {
   const executePlan = async (columnIndex: number) => {
     const plan = plans[columnIndex];
     if (!plan) return;
+    if (simMode) {
+      cancelPlan(columnIndex);
+      appendLog({ col: columnIndex, row: -1, kind: "CASCADE", msg: `── SIM CASCADE column ${columnIndex + 1} starting (10 hops) ──` });
+      for (const hop of plan.hops) {
+        const fromW = wallets.find((w) => w.column_index === columnIndex && w.row_index === hop.row);
+        const toW = wallets.find((w) => w.column_index === columnIndex && w.row_index === hop.row + 1);
+        if (!fromW) continue;
+        await new Promise((r) => setTimeout(r, 350));
+        setSimState((prev) => {
+          const next = { ...prev };
+          const from = next[fromW.id] ?? { sol: 0, tokens: {} };
+          if (hop.row === 9 || !toW) {
+            next[fromW.id] = { ...from, sol: hop.projectedIncomingLamports / LAMPORTS_PER_SOL };
+            return next;
+          }
+          const to = next[toW.id] ?? { sol: 0, tokens: {} };
+          next[fromW.id] = { ...from, sol: hop.leaveBehindLamports / LAMPORTS_PER_SOL };
+          next[toW.id] = { ...to, sol: to.sol + hop.projectedForwardLamports / LAMPORTS_PER_SOL };
+          return next;
+        });
+        appendLog({
+          col: columnIndex, row: hop.row, kind: "CASCADE",
+          msg: hop.row === 9
+            ? `W${columnIndex + 1}·R10  terminal · holds ${fmtSol(hop.projectedIncomingLamports)} SOL`
+            : `W${columnIndex + 1}·R${hop.row + 1}  leave ${fmtSol(hop.leaveBehindLamports)} → fwd ${fmtSol(hop.projectedForwardLamports)} to R${hop.row + 2}`,
+        });
+      }
+      appendLog({ col: columnIndex, row: -1, kind: "CASCADE", msg: `── SIM CASCADE column ${columnIndex + 1} complete ──` });
+      toast({ title: `Sim cascade ${columnIndex + 1} complete` });
+      return;
+    }
     if (cascades[columnIndex]) return toast({ title: "Already running", variant: "destructive" });
     const w1 = wallets.find((w) => w.column_index === columnIndex && w.row_index === 0);
     if (!w1) return toast({ title: "Wallet 1 not found", variant: "destructive" });
@@ -282,6 +419,17 @@ export default function WaterfallGrid() {
 
   return (
     <div className="p-4 space-y-4">
+      {simMode && (
+        <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 flex flex-wrap items-center gap-3">
+          <span className="text-lg">🧪</span>
+          <div className="flex-1 min-w-[200px]">
+            <div className="text-sm font-semibold text-amber-700 dark:text-amber-300">SIMULATION MODE — no real transactions</div>
+            <div className="text-[11px] text-muted-foreground">All BUY / SELL / TROLL / CASCADE actions run locally against a snapshot of real balances.</div>
+          </div>
+          <Button size="sm" variant="outline" onClick={resetSim}>Reset Sim</Button>
+          <Button size="sm" variant="ghost" onClick={() => setSimMode(false)}>Exit</Button>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2 justify-between">
         <div>
           <h2 className="text-lg font-semibold">💧 Waterfall — 10×10 Solana Wallet Grid</h2>
@@ -291,6 +439,15 @@ export default function WaterfallGrid() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant={simMode ? "default" : "outline"}
+            className={simMode ? "bg-amber-500 hover:bg-amber-600 text-black" : ""}
+            onClick={() => setSimMode((v) => !v)}
+            title="Toggle simulation mode (no real transactions)"
+          >
+            🧪 <span className="ml-2">{simMode ? "Sim ON" : "Sim Mode"}</span>
+          </Button>
           <Button size="sm" variant="outline" onClick={generate} disabled={generating}>
             {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             <span className="ml-2">Generate Missing</span>
@@ -386,7 +543,15 @@ export default function WaterfallGrid() {
                         {w ? (
                           <Cell
                             w={w}
-                            tokens={balances[w.pubkey]?.tokens ?? []}
+                            tokens={
+                              simMode
+                                ? Object.entries(simState[w.id]?.tokens ?? {}).map(([mint, amount]) => {
+                                    const real = (balances[w.pubkey]?.tokens ?? []).find((t) => t.mint === mint);
+                                    return { mint, amount, decimals: real?.decimals ?? 6 };
+                                  })
+                                : balances[w.pubkey]?.tokens ?? []
+                            }
+                            solOverride={simMode ? (simState[w.id]?.sol ?? Number(w.sol_balance || 0)) : undefined}
                             solUsd={solUsd}
                               tokenPrices={tokenPrices}
                               targetMint={validTargetMint ? targetMint.trim() : ""}
@@ -402,6 +567,10 @@ export default function WaterfallGrid() {
                               onPreview={() => previewCascade(c)}
                               onExecute={() => executePlan(c)}
                               onCancelPlan={() => cancelPlan(c)}
+                              simMode={simMode}
+                              onSimBuy={simBuy}
+                              onSimSell={simSell}
+                              onSimTroll={simTroll}
                           />
                         ) : <span className="text-muted-foreground">—</span>}
                       </td>
@@ -411,6 +580,39 @@ export default function WaterfallGrid() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {simMode && (
+        <div className="border rounded-md">
+          <button
+            onClick={() => setSimLogOpen((v) => !v)}
+            className="w-full px-3 py-2 flex items-center justify-between text-xs font-semibold bg-muted/40 hover:bg-muted"
+          >
+            <span>🧪 Simulation Log ({simLog.length})</span>
+            <div className="flex gap-3 items-center">
+              <span
+                onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(simLog.map(l => `${new Date(l.ts).toLocaleTimeString()}  ${l.msg}`).join("\n")); toast({ title: "Log copied" }); }}
+                className="text-[10px] underline text-muted-foreground hover:text-foreground cursor-pointer"
+              >copy</span>
+              <span
+                onClick={(e) => { e.stopPropagation(); setSimLog([]); }}
+                className="text-[10px] underline text-muted-foreground hover:text-foreground cursor-pointer"
+              >clear</span>
+              <span>{simLogOpen ? "▼" : "▶"}</span>
+            </div>
+          </button>
+          {simLogOpen && (
+            <div className="max-h-64 overflow-auto font-mono text-[11px] p-2 space-y-0.5">
+              {simLog.length === 0 && <div className="text-muted-foreground">No actions yet. Click BUY / SELL / TROLL / CASCADE on any wallet.</div>}
+              {simLog.map((l, i) => (
+                <div key={i} className="flex gap-2">
+                  <span className="text-muted-foreground shrink-0">{new Date(l.ts).toLocaleTimeString()}</span>
+                  <span className="truncate">{l.msg}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -427,12 +629,14 @@ export default function WaterfallGrid() {
 }
 
 function Cell({
-  w, tokens, solUsd, tokenPrices, targetMint, buyEnabled, buySizePct,
+  w, tokens, solOverride, solUsd, tokenPrices, targetMint, buyEnabled, buySizePct,
   onOpen, onRename, isHeadOfColumn, cascade, isCurrentCascadeWallet,
   planHop, hasPlan, onPreview, onExecute, onCancelPlan,
+  simMode, onSimBuy, onSimSell, onSimTroll,
 }: {
   w: WaterfallWallet;
   tokens: TokenHolding[];
+  solOverride?: number;
   solUsd: number;
   tokenPrices: Record<string, { priceUsd: number; symbol: string }>;
   targetMint: string;
@@ -448,13 +652,17 @@ function Cell({
   onPreview: () => void;
   onExecute: () => void;
   onCancelPlan: () => void;
+  simMode: boolean;
+  onSimBuy: (w: WaterfallWallet, mint: string, lamportsIn: number) => void;
+  onSimSell: (w: WaterfallWallet, mint: string) => void;
+  onSimTroll: (w: WaterfallWallet) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(w.nickname ?? "");
   const [trolling, setTrolling] = useState(false);
   const [busy, setBusy] = useState<null | "buy" | "sell">(null);
   const [elapsed, setElapsed] = useState(0);
-  const sol = Number(w.sol_balance || 0);
+  const sol = solOverride !== undefined ? solOverride : Number(w.sol_balance || 0);
   const cascadeRunning = !!cascade;
 
   useEffect(() => {
@@ -469,6 +677,7 @@ function Cell({
     if (sol < 0.005) {
       return toast({ title: "Not enough SOL", description: "Needs ~0.005 SOL for 10 cycles + fees.", variant: "destructive" });
     }
+    if (simMode) { onSimTroll(w); return; }
     if (!confirm(`Run TROLL on ${w.nickname || "Wallet"}?\n10× buy + sell of $TROLL at ~$0.02/cycle, 5s between cycles.\n~2 min runtime.`)) return;
     setTrolling(true);
     const { data, error } = await supabase.functions.invoke("waterfall-troll", { body: { walletId: w.id } });
@@ -491,10 +700,12 @@ function Cell({
       if (buyLamportsCalc < 1_000_000) {
         return toast({ title: "Buy size too small", description: `~${(buyLamportsCalc / LAMPORTS_PER_SOL).toFixed(6)} SOL.`, variant: "destructive" });
       }
+      if (simMode) { onSimBuy(w, targetMint, buyLamportsCalc); return; }
       if (!confirm(`BUY ${(buyLamportsCalc / LAMPORTS_PER_SOL).toFixed(4)} SOL (${buySizePct}% of ${sol.toFixed(4)}) of ${targetMint.slice(0, 6)}… from ${w.nickname || "wallet"}?`)) return;
     } else {
       const held = tokens.find((t) => t.mint === targetMint);
       if (!held || held.amount <= 0) return toast({ title: "No balance to sell", variant: "destructive" });
+      if (simMode) { onSimSell(w, targetMint); return; }
       if (!confirm(`SELL all ${held.amount.toLocaleString()} of ${targetMint.slice(0, 6)}… from ${w.nickname || "wallet"}?`)) return;
     }
     setBusy(side);
@@ -515,6 +726,9 @@ function Cell({
 
   return (
     <div className={`space-y-1 ${isCurrentCascadeWallet ? "ring-2 ring-purple-500 rounded p-1 -m-1" : ""}`}>
+      {simMode && (
+        <div className="text-[9px] uppercase tracking-wide text-amber-600 dark:text-amber-400 font-semibold">SIM</div>
+      )}
       {editing ? (
         <div className="flex gap-1">
           <Input
