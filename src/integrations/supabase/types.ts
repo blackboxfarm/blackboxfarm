@@ -23355,6 +23355,7 @@ export type Database = {
           customer_id: string | null
           customer_name: string
           customer_phone: string
+          daily_number: number | null
           fulfillment: string
           id: string
           items: Json
@@ -23374,6 +23375,7 @@ export type Database = {
           customer_id?: string | null
           customer_name: string
           customer_phone: string
+          daily_number?: number | null
           fulfillment?: string
           id?: string
           items?: Json
@@ -23393,6 +23395,7 @@ export type Database = {
           customer_id?: string | null
           customer_name?: string
           customer_phone?: string
+          daily_number?: number | null
           fulfillment?: string
           id?: string
           items?: Json
@@ -23466,6 +23469,53 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      vip_reviews: {
+        Row: {
+          author_name: string
+          avatar_url: string | null
+          created_at: string
+          id: string
+          is_published: boolean
+          project_id: string
+          rating: number
+          review_date: string
+          review_text: string
+          updated_at: string
+        }
+        Insert: {
+          author_name: string
+          avatar_url?: string | null
+          created_at?: string
+          id?: string
+          is_published?: boolean
+          project_id: string
+          rating: number
+          review_date?: string
+          review_text: string
+          updated_at?: string
+        }
+        Update: {
+          author_name?: string
+          avatar_url?: string | null
+          created_at?: string
+          id?: string
+          is_published?: boolean
+          project_id?: string
+          rating?: number
+          review_date?: string
+          review_text?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vip_reviews_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "vip_projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vulture_accounts: {
         Row: {
