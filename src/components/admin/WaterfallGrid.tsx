@@ -10,6 +10,17 @@ import { WaterfallWalletDrawer, type WaterfallWallet, type TokenHolding } from "
 const SHORT = (k: string) => `${k.slice(0, 4)}…${k.slice(-4)}`;
 const LAMPORTS_PER_SOL = 1_000_000_000;
 const FEE_BUFFER_LAMPORTS = 10_000;
+const SIM_STORAGE_KEY = "waterfall_sim_mode";
+const SIM_TROLL_CYCLES = 10;
+const SIM_TROLL_COST_PER_CYCLE = 0.0002; // SOL "fee" per simulated cycle
+
+export type SimLogEntry = {
+  ts: number;
+  col: number;
+  row: number;
+  kind: "BUY" | "SELL" | "TROLL" | "CASCADE" | "WITHDRAW" | "RESET";
+  msg: string;
+};
 
 type PlanHop = {
   row: number;
@@ -86,6 +97,18 @@ export default function WaterfallGrid() {
   const [buySizePct, setBuySizePct] = useState<string>("95");
   const [buyEnabled, setBuyEnabled] = useState<boolean[]>(() => Array.from({ length: 10 }, () => true));
   const [tokenPrices, setTokenPrices] = useState<Record<string, { priceUsd: number; symbol: string }>>({});
+
+  // ─── SIMULATION MODE ────────────────────────────────────────────────────
+  const [simMode, setSimMode] = useState<boolean>(() => {
+    try { return localStorage.getItem(SIM_STORAGE_KEY) === "1"; } catch { return false; }
+  });
+  const [simState, setSimState] = useState<Record<string, { sol: number; tokens: Record<string, number> }>>({});
+  const [simLog, setSimLog] = useState<SimLogEntry[]>([]);
+  const [simLogOpen, setSimLogOpen] = useState(true);
+
+  const appendLog = useCallback((e: Omit<SimLogEntry, "ts">) => {
+    setSimLog((prev) => [{ ...e, ts: Date.now() }, ...prev].slice(0, 500));
+  }, []);
 
   // Aggregate all unique non-SOL mints currently held across the grid, then fetch DexScreener prices.
   useEffect(() => {
