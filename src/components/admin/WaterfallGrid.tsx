@@ -596,12 +596,14 @@ export default function WaterfallGrid() {
 }
 
 function Cell({
-  w, tokens, solUsd, tokenPrices, targetMint, buyEnabled, buySizePct,
+  w, tokens, solOverride, solUsd, tokenPrices, targetMint, buyEnabled, buySizePct,
   onOpen, onRename, isHeadOfColumn, cascade, isCurrentCascadeWallet,
   planHop, hasPlan, onPreview, onExecute, onCancelPlan,
+  simMode, onSimBuy, onSimSell, onSimTroll,
 }: {
   w: WaterfallWallet;
   tokens: TokenHolding[];
+  solOverride?: number;
   solUsd: number;
   tokenPrices: Record<string, { priceUsd: number; symbol: string }>;
   targetMint: string;
@@ -617,13 +619,17 @@ function Cell({
   onPreview: () => void;
   onExecute: () => void;
   onCancelPlan: () => void;
+  simMode: boolean;
+  onSimBuy: (w: WaterfallWallet, mint: string, lamportsIn: number) => void;
+  onSimSell: (w: WaterfallWallet, mint: string) => void;
+  onSimTroll: (w: WaterfallWallet) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(w.nickname ?? "");
   const [trolling, setTrolling] = useState(false);
   const [busy, setBusy] = useState<null | "buy" | "sell">(null);
   const [elapsed, setElapsed] = useState(0);
-  const sol = Number(w.sol_balance || 0);
+  const sol = solOverride !== undefined ? solOverride : Number(w.sol_balance || 0);
   const cascadeRunning = !!cascade;
 
   useEffect(() => {
@@ -638,6 +644,7 @@ function Cell({
     if (sol < 0.005) {
       return toast({ title: "Not enough SOL", description: "Needs ~0.005 SOL for 10 cycles + fees.", variant: "destructive" });
     }
+    if (simMode) { onSimTroll(w); return; }
     if (!confirm(`Run TROLL on ${w.nickname || "Wallet"}?\n10× buy + sell of $TROLL at ~$0.02/cycle, 5s between cycles.\n~2 min runtime.`)) return;
     setTrolling(true);
     const { data, error } = await supabase.functions.invoke("waterfall-troll", { body: { walletId: w.id } });
@@ -660,10 +667,12 @@ function Cell({
       if (buyLamportsCalc < 1_000_000) {
         return toast({ title: "Buy size too small", description: `~${(buyLamportsCalc / LAMPORTS_PER_SOL).toFixed(6)} SOL.`, variant: "destructive" });
       }
+      if (simMode) { onSimBuy(w, targetMint, buyLamportsCalc); return; }
       if (!confirm(`BUY ${(buyLamportsCalc / LAMPORTS_PER_SOL).toFixed(4)} SOL (${buySizePct}% of ${sol.toFixed(4)}) of ${targetMint.slice(0, 6)}… from ${w.nickname || "wallet"}?`)) return;
     } else {
       const held = tokens.find((t) => t.mint === targetMint);
       if (!held || held.amount <= 0) return toast({ title: "No balance to sell", variant: "destructive" });
+      if (simMode) { onSimSell(w, targetMint); return; }
       if (!confirm(`SELL all ${held.amount.toLocaleString()} of ${targetMint.slice(0, 6)}… from ${w.nickname || "wallet"}?`)) return;
     }
     setBusy(side);
@@ -684,6 +693,9 @@ function Cell({
 
   return (
     <div className={`space-y-1 ${isCurrentCascadeWallet ? "ring-2 ring-purple-500 rounded p-1 -m-1" : ""}`}>
+      {simMode && (
+        <div className="text-[9px] uppercase tracking-wide text-amber-600 dark:text-amber-400 font-semibold">SIM</div>
+      )}
       {editing ? (
         <div className="flex gap-1">
           <Input
