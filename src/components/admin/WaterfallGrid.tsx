@@ -472,14 +472,51 @@ export default function WaterfallGrid() {
   return (
     <div className="p-4 space-y-4">
       {simMode && (
-        <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 flex flex-wrap items-center gap-3">
-          <span className="text-lg">🧪</span>
-          <div className="flex-1 min-w-[200px]">
-            <div className="text-sm font-semibold text-amber-700 dark:text-amber-300">SIMULATION MODE — no real transactions</div>
-            <div className="text-[11px] text-muted-foreground">All BUY / SELL / TROLL / CASCADE actions run locally against a snapshot of real balances.</div>
+        <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-lg">🧪</span>
+            <div className="flex-1 min-w-[200px]">
+              <div className="text-sm font-semibold text-amber-700 dark:text-amber-300">SIMULATION MODE — no real transactions</div>
+              <div className="text-[11px] text-muted-foreground">
+                R1 of every waterfall is seeded with {SIM_DEFAULT_SEED_SOL} fake SOL. All BUY / SELL / TROLL / CASCADE actions run locally.
+                {solUsd > 0 && <> Live SOL price: <span className="font-mono">${solUsd.toFixed(2)}</span></>}
+              </div>
+            </div>
+            <Button size="sm" variant="outline" onClick={resetAllGrid}>Reset All Grid</Button>
+            <Button size="sm" variant="ghost" onClick={() => setSimMode(false)}>Exit</Button>
           </div>
-          <Button size="sm" variant="outline" onClick={resetSim}>Reset Sim</Button>
-          <Button size="sm" variant="ghost" onClick={() => setSimMode(false)}>Exit</Button>
+          <div className="flex flex-wrap items-center gap-2 border-t border-amber-500/30 pt-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Fund:</span>
+            <select
+              value={simFundCol}
+              onChange={(e) => setSimFundCol(e.target.value)}
+              className="h-8 text-xs rounded border border-input bg-input px-2"
+            >
+              <option value="all">All waterfalls</option>
+              {Array.from({ length: 10 }, (_, i) => (
+                <option key={i} value={String(i)}>Waterfall {i + 1}</option>
+              ))}
+            </select>
+            <span className="text-[11px] text-muted-foreground">Add</span>
+            <Input
+              type="number"
+              min={0.001}
+              step={0.1}
+              value={simFundAmount}
+              onChange={(e) => setSimFundAmount(e.target.value)}
+              className="h-8 w-24 text-xs"
+            />
+            <span className="text-[11px] text-muted-foreground">SOL to Wallet 1</span>
+            {solUsd > 0 && Number(simFundAmount) > 0 && (
+              <span className="text-[11px] text-muted-foreground">
+                ≈ ${(Number(simFundAmount) * solUsd).toFixed(2)}
+                {simFundCol === "all" && <> × 10 = ${(Number(simFundAmount) * solUsd * 10).toFixed(2)}</>}
+              </span>
+            )}
+            <Button size="sm" variant="outline" onClick={() => simFund(simFundCol, Number(simFundAmount) || 0)}>
+              + Add
+            </Button>
+          </div>
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2 justify-between">
