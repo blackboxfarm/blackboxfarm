@@ -613,6 +613,24 @@ export default function WaterfallGrid() {
                     <th key={c} className="p-2 border-b border-r min-w-[180px] align-top">
                       <div className="font-bold text-[11px] text-muted-foreground">WATERFALL {c + 1}</div>
                       <div className="font-mono text-[10px] text-muted-foreground mt-1">{first ? SHORT(first.pubkey) : "—"}</div>
+                      {simMode && (
+                        <div className="flex gap-1 mt-1">
+                          <button
+                            onClick={() => simSeedColumn(c)}
+                            className="text-[9px] px-1.5 py-0.5 rounded border border-amber-500/50 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+                            title={`Seed R1 of W${c + 1} with ${SIM_DEFAULT_SEED_SOL} SOL`}
+                          >
+                            Seed {SIM_DEFAULT_SEED_SOL}
+                          </button>
+                          <button
+                            onClick={() => simClearColumn(c)}
+                            className="text-[9px] px-1.5 py-0.5 rounded border border-red-500/50 text-red-600 dark:text-red-400 hover:bg-red-500/10"
+                            title={`Clear all 10 wallets of W${c + 1}`}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      )}
                     </th>
                   );
                 })}
