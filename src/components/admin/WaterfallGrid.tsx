@@ -13,6 +13,7 @@ const FEE_BUFFER_LAMPORTS = 10_000;
 const SIM_STORAGE_KEY = "waterfall_sim_mode";
 const SIM_TROLL_CYCLES = 10;
 const SIM_TROLL_COST_PER_CYCLE = 0.0002; // SOL "fee" per simulated cycle
+const SIM_DEFAULT_SEED_SOL = 12; // fake SOL credited to R1 of each column when sim starts / is reset
 
 export type SimLogEntry = {
   ts: number;
@@ -106,26 +107,31 @@ export default function WaterfallGrid() {
   const [simLog, setSimLog] = useState<SimLogEntry[]>([]);
   const [simLogOpen, setSimLogOpen] = useState(true);
 
+  // Funding toolbar state
+  const [simFundCol, setSimFundCol] = useState<string>("all"); // "all" or "0".."9"
+  const [simFundAmount, setSimFundAmount] = useState<string>("10");
+
   const appendLog = useCallback((e: Omit<SimLogEntry, "ts">) => {
     setSimLog((prev) => [{ ...e, ts: Date.now() }, ...prev].slice(0, 500));
   }, []);
 
-  const snapshotSim = useCallback(() => {
+  // Seed default: R1 of each column gets SIM_DEFAULT_SEED_SOL fake SOL, everything else zero.
+  const seedDefaultSim = useCallback(() => {
     const snap: Record<string, { sol: number; tokens: Record<string, number> }> = {};
     for (const w of wallets) {
-      const b = balances[w.pubkey];
-      const tokens: Record<string, number> = {};
-      for (const t of b?.tokens ?? []) tokens[t.mint] = t.amount;
-      snap[w.id] = { sol: Number(w.sol_balance || 0), tokens };
+      snap[w.id] = {
+        sol: w.row_index === 0 ? SIM_DEFAULT_SEED_SOL : 0,
+        tokens: {},
+      };
     }
     setSimState(snap);
-  }, [wallets, balances]);
+  }, [wallets]);
 
   useEffect(() => {
     try { localStorage.setItem(SIM_STORAGE_KEY, simMode ? "1" : "0"); } catch {}
     if (simMode && Object.keys(simState).length === 0 && wallets.length > 0) {
-      snapshotSim();
-      appendLog({ col: -1, row: -1, kind: "RESET", msg: `Snapshot taken from real balances (${wallets.length} wallets).` });
+      seedDefaultSim();
+      appendLog({ col: -1, row: -1, kind: "RESET", msg: `Seeded ${SIM_DEFAULT_SEED_SOL} SOL on R1 of all 10 waterfalls.` });
     }
     if (!simMode) {
       setSimState({});
@@ -134,11 +140,57 @@ export default function WaterfallGrid() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [simMode, wallets.length]);
 
-  const resetSim = () => {
-    snapshotSim();
+  const resetAllGrid = () => {
+    seedDefaultSim();
     setSimLog([]);
-    appendLog({ col: -1, row: -1, kind: "RESET", msg: "Simulation reset to current real balances." });
-    toast({ title: "Simulation reset" });
+    appendLog({ col: -1, row: -1, kind: "RESET", msg: `Grid reset · R1 of all 10 waterfalls seeded with ${SIM_DEFAULT_SEED_SOL} SOL.` });
+    toast({ title: "Sim grid reset", description: `R1 of all columns = ${SIM_DEFAULT_SEED_SOL} SOL` });
+  };
+
+  // Add fake SOL to R1 of one column, or all columns.
+  const simFund = (colSel: string, amountSol: number) => {
+    if (!(amountSol > 0)) return toast({ title: "Enter an amount > 0", variant: "destructive" });
+    const cols = colSel === "all" ? Array.from({ length: 10 }, (_, i) => i) : [parseInt(colSel, 10)];
+    setSimState((prev) => {
+      const next = { ...prev };
+      for (const c of cols) {
+        const w1 = wallets.find((w) => w.column_index === c && w.row_index === 0);
+        if (!w1) continue;
+        const cur = next[w1.id] ?? { sol: 0, tokens: {} };
+        next[w1.id] = { ...cur, sol: cur.sol + amountSol };
+      }
+      return next;
+    });
+    const usd = solUsd > 0 ? ` ($${(amountSol * solUsd).toFixed(2)})` : "";
+    if (colSel === "all") {
+      appendLog({ col: -1, row: 0, kind: "RESET", msg: `SIM FUND · +${amountSol} SOL${usd} to R1 of ALL 10 waterfalls` });
+    } else {
+      const c = parseInt(colSel, 10);
+      appendLog({ col: c, row: 0, kind: "RESET", msg: `W${c + 1}·R1  SIM FUND  +${amountSol} SOL${usd}` });
+    }
+  };
+
+  // Zero out all 10 wallets in a single column.
+  const simClearColumn = (col: number) => {
+    setSimState((prev) => {
+      const next = { ...prev };
+      for (const w of wallets) {
+        if (w.column_index === col) next[w.id] = { sol: 0, tokens: {} };
+      }
+      return next;
+    });
+    appendLog({ col, row: -1, kind: "RESET", msg: `W${col + 1}  SIM CLEAR  (10 wallets zeroed)` });
+  };
+
+  // Re-seed just one column's R1 to default.
+  const simSeedColumn = (col: number) => {
+    setSimState((prev) => {
+      const next = { ...prev };
+      const w1 = wallets.find((w) => w.column_index === col && w.row_index === 0);
+      if (w1) next[w1.id] = { sol: SIM_DEFAULT_SEED_SOL, tokens: {} };
+      return next;
+    });
+    appendLog({ col, row: 0, kind: "RESET", msg: `W${col + 1}·R1  SIM SEED  ${SIM_DEFAULT_SEED_SOL} SOL` });
   };
 
   const simBuy = useCallback((w: WaterfallWallet, mint: string, lamportsIn: number) => {
