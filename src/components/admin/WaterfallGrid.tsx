@@ -583,6 +583,39 @@ export default function WaterfallGrid() {
         </div>
       )}
 
+      {simMode && (
+        <div className="border rounded-md">
+          <button
+            onClick={() => setSimLogOpen((v) => !v)}
+            className="w-full px-3 py-2 flex items-center justify-between text-xs font-semibold bg-muted/40 hover:bg-muted"
+          >
+            <span>🧪 Simulation Log ({simLog.length})</span>
+            <div className="flex gap-3 items-center">
+              <span
+                onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(simLog.map(l => `${new Date(l.ts).toLocaleTimeString()}  ${l.msg}`).join("\n")); toast({ title: "Log copied" }); }}
+                className="text-[10px] underline text-muted-foreground hover:text-foreground cursor-pointer"
+              >copy</span>
+              <span
+                onClick={(e) => { e.stopPropagation(); setSimLog([]); }}
+                className="text-[10px] underline text-muted-foreground hover:text-foreground cursor-pointer"
+              >clear</span>
+              <span>{simLogOpen ? "▼" : "▶"}</span>
+            </div>
+          </button>
+          {simLogOpen && (
+            <div className="max-h-64 overflow-auto font-mono text-[11px] p-2 space-y-0.5">
+              {simLog.length === 0 && <div className="text-muted-foreground">No actions yet. Click BUY / SELL / TROLL / CASCADE on any wallet.</div>}
+              {simLog.map((l, i) => (
+                <div key={i} className="flex gap-2">
+                  <span className="text-muted-foreground shrink-0">{new Date(l.ts).toLocaleTimeString()}</span>
+                  <span className="truncate">{l.msg}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <WaterfallWalletDrawer
         wallet={active}
         tokens={active ? balances[active.pubkey]?.tokens ?? [] : []}
