@@ -289,7 +289,9 @@ export default function WaterfallGrid() {
     if (cascades[columnIndex]) return toast({ title: "Already running", variant: "destructive" });
     const w1 = wallets.find((w) => w.column_index === columnIndex && w.row_index === 0);
     if (!w1) return toast({ title: "Wallet 1 not found", variant: "destructive" });
-    const sol = Number(w1.sol_balance || 0);
+    const sol = simMode
+      ? (simState[w1.id]?.sol ?? Number(w1.sol_balance || 0))
+      : Number(w1.sol_balance || 0);
     if (sol < 0.50) {
       return toast({ title: "Not enough SOL in W1", description: "Need ≥ 0.5 SOL to plan a cascade.", variant: "destructive" });
     }
@@ -308,6 +310,37 @@ export default function WaterfallGrid() {
   const executePlan = async (columnIndex: number) => {
     const plan = plans[columnIndex];
     if (!plan) return;
+    if (simMode) {
+      cancelPlan(columnIndex);
+      appendLog({ col: columnIndex, row: -1, kind: "CASCADE", msg: `── SIM CASCADE column ${columnIndex + 1} starting (10 hops) ──` });
+      for (const hop of plan.hops) {
+        const fromW = wallets.find((w) => w.column_index === columnIndex && w.row_index === hop.row);
+        const toW = wallets.find((w) => w.column_index === columnIndex && w.row_index === hop.row + 1);
+        if (!fromW) continue;
+        await new Promise((r) => setTimeout(r, 350));
+        setSimState((prev) => {
+          const next = { ...prev };
+          const from = next[fromW.id] ?? { sol: 0, tokens: {} };
+          if (hop.row === 9 || !toW) {
+            next[fromW.id] = { ...from, sol: hop.projectedIncomingLamports / LAMPORTS_PER_SOL };
+            return next;
+          }
+          const to = next[toW.id] ?? { sol: 0, tokens: {} };
+          next[fromW.id] = { ...from, sol: hop.leaveBehindLamports / LAMPORTS_PER_SOL };
+          next[toW.id] = { ...to, sol: to.sol + hop.projectedForwardLamports / LAMPORTS_PER_SOL };
+          return next;
+        });
+        appendLog({
+          col: columnIndex, row: hop.row, kind: "CASCADE",
+          msg: hop.row === 9
+            ? `W${columnIndex + 1}·R10  terminal · holds ${fmtSol(hop.projectedIncomingLamports)} SOL`
+            : `W${columnIndex + 1}·R${hop.row + 1}  leave ${fmtSol(hop.leaveBehindLamports)} → fwd ${fmtSol(hop.projectedForwardLamports)} to R${hop.row + 2}`,
+        });
+      }
+      appendLog({ col: columnIndex, row: -1, kind: "CASCADE", msg: `── SIM CASCADE column ${columnIndex + 1} complete ──` });
+      toast({ title: `Sim cascade ${columnIndex + 1} complete` });
+      return;
+    }
     if (cascades[columnIndex]) return toast({ title: "Already running", variant: "destructive" });
     const w1 = wallets.find((w) => w.column_index === columnIndex && w.row_index === 0);
     if (!w1) return toast({ title: "Wallet 1 not found", variant: "destructive" });
