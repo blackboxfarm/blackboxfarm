@@ -111,6 +111,10 @@ export default function WaterfallGrid() {
   const [simFundCol, setSimFundCol] = useState<string>("all"); // "all" or "0".."9"
   const [simFundAmount, setSimFundAmount] = useState<string>("10");
 
+  // Bulk-sell busy flags
+  const [sellingCol, setSellingCol] = useState<number | null>(null);
+  const [sellingGrid, setSellingGrid] = useState<boolean>(false);
+
   const appendLog = useCallback((e: Omit<SimLogEntry, "ts">) => {
     setSimLog((prev) => [{ ...e, ts: Date.now() }, ...prev].slice(0, 500));
   }, []);
