@@ -23,9 +23,11 @@ type PersistedBlob = {
   simLog?: SimLogEntry[];
   simFundCol?: string;
   simFundAmount?: string;
-  simCostBasis?: Record<string, Record<string, { solIn: number; usdIn: number; tokens: number }>>;
+  simCostBasis?: Record<string, Record<string, SimCostBasis>>;
   simRealizedPnl?: Record<string, { sol: number; usd: number }>;
 };
+
+type SimCostBasis = { solIn: number; usdIn: number; tokens: number; entryPriceUsd?: number };
 
 function loadPersisted(): PersistedBlob {
   try {
@@ -157,7 +159,7 @@ export default function WaterfallGrid() {
   const [simLogOpen, setSimLogOpen] = useState(true);
 
   // Cost basis per (walletId → mint) for realized PnL.
-  const [simCostBasis, setSimCostBasis] = useState<Record<string, Record<string, { solIn: number; usdIn: number; tokens: number }>>>(
+  const [simCostBasis, setSimCostBasis] = useState<Record<string, Record<string, SimCostBasis>>>(
     () => PERSISTED_INIT.simCostBasis ?? {},
   );
   const [simRealizedPnl, setSimRealizedPnl] = useState<Record<string, { sol: number; usd: number }>>(
@@ -314,6 +316,11 @@ export default function WaterfallGrid() {
     setSimCostBasis((prev) => {
       const walletBasis = prev[w.id] ?? {};
       const cur = walletBasis[mint] ?? { solIn: 0, usdIn: 0, tokens: 0 };
+      const nextTokens = cur.tokens + tokensOut;
+      const priorEntry = cur.entryPriceUsd ?? (cur.tokens > 0 && cur.usdIn > 0 ? cur.usdIn / cur.tokens : undefined);
+      const nextEntry = priceUsd > 0 && nextTokens > 0
+        ? (((priorEntry ?? priceUsd) * cur.tokens) + (priceUsd * tokensOut)) / nextTokens
+        : priorEntry;
       return {
         ...prev,
         [w.id]: {
@@ -323,7 +330,8 @@ export default function WaterfallGrid() {
             // Always record a USD basis when we know the SOL price, even if
             // the token price was phantom — otherwise PnL coloring stays grey.
             usdIn: cur.usdIn + (solPriceUsd > 0 ? solIn * solPriceUsd * 0.99 : 0),
-            tokens: cur.tokens + tokensOut,
+            tokens: nextTokens,
+            entryPriceUsd: nextEntry,
           },
         },
       };
