@@ -1245,7 +1245,7 @@ function Cell({
   w, tokens, solOverride, solUsd, tokenPrices, targetMint, buyEnabled, buySizePct,
   onOpen, onRename, isHeadOfColumn, cascade, isCurrentCascadeWallet,
   planHop, hasPlan, onPreview, onExecute, onCancelPlan,
-  simMode, onSimBuy, onSimSell, onSimTroll,
+  simMode, onSimBuy, onSimSell, onSimTroll, realizedPnl,
 }: {
   w: WaterfallWallet;
   tokens: TokenHolding[];
