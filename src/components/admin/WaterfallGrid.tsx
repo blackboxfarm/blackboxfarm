@@ -212,16 +212,19 @@ export default function WaterfallGrid() {
     const solPriceUsd = solUsd || 0;
     const solIn = lamportsIn / LAMPORTS_PER_SOL;
     const usdIn = solIn * solPriceUsd * 0.99;
-    const tokensOut = priceUsd > 0 ? usdIn / priceUsd : 0;
+    // Guarantee a non-zero token credit even when DexScreener has no price yet
+    // (fresh pump.fun mint). Falls back to 1 SOL → 1,000,000 phantom units.
+    const phantomPrice = !(priceUsd > 0 && solPriceUsd > 0);
+    const tokensOut = phantomPrice ? solIn * 1_000_000 : usdIn / priceUsd;
     setSimState((prev) => {
-      const cur = prev[w.id] ?? { sol: 0, tokens: {} };
+      const cur = prev[w.id] ?? { sol: Number(w.sol_balance || 0), tokens: {} };
       const newSol = Math.max(0, cur.sol - solIn - 0.00001);
       const newTokens = { ...cur.tokens, [mint]: (cur.tokens[mint] ?? 0) + tokensOut };
       return { ...prev, [w.id]: { sol: newSol, tokens: newTokens } };
     });
     appendLog({
       col: w.column_index, row: w.row_index, kind: "BUY",
-      msg: `W${w.column_index + 1}·R${w.row_index + 1}  SIM BUY  ${solIn.toFixed(4)} SOL → ${tokensOut.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${meta?.symbol ?? "?"} @ $${priceUsd ? priceUsd.toFixed(8).replace(/\.?0+$/, "") : "?"}`,
+      msg: `W${w.column_index + 1}·R${w.row_index + 1}  SIM BUY  ${solIn.toFixed(4)} SOL → ${tokensOut.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${meta?.symbol ?? "?"} @ $${priceUsd ? priceUsd.toFixed(8).replace(/\.?0+$/, "") : "?"}${phantomPrice ? "  (phantom price)" : ""}`,
     });
   }, [tokenPrices, solUsd, appendLog]);
 
@@ -230,7 +233,7 @@ export default function WaterfallGrid() {
     const priceUsd = meta?.priceUsd ?? 0;
     const solPriceUsd = solUsd || 0;
     setSimState((prev) => {
-      const cur = prev[w.id] ?? { sol: 0, tokens: {} };
+      const cur = prev[w.id] ?? { sol: Number(w.sol_balance || 0), tokens: {} };
       let amt = cur.tokens[mint] ?? 0;
       let synthSolIn = 0;
       // Phantom-holding synthesis: if the wallet has no token balance but does
@@ -258,7 +261,7 @@ export default function WaterfallGrid() {
   const simTroll = useCallback((w: WaterfallWallet) => {
     const cost = SIM_TROLL_CYCLES * SIM_TROLL_COST_PER_CYCLE;
     setSimState((prev) => {
-      const cur = prev[w.id] ?? { sol: 0, tokens: {} };
+      const cur = prev[w.id] ?? { sol: Number(w.sol_balance || 0), tokens: {} };
       return { ...prev, [w.id]: { ...cur, sol: Math.max(0, cur.sol - cost) } };
     });
     appendLog({
