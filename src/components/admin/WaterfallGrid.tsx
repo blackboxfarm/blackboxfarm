@@ -907,6 +907,19 @@ export default function WaterfallGrid() {
             <Button size="sm" variant="outline" onClick={resetAllGrid}>Reset All Grid</Button>
             <Button size="sm" variant="ghost" onClick={() => setSimMode(false)}>Exit</Button>
           </div>
+          <div className="flex flex-wrap items-center gap-2 border-t border-amber-500/30 pt-2 text-[11px]">
+            <span className="font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Live prices:</span>
+            <span className="text-muted-foreground">
+              {lastPriceRefresh > 0
+                ? <>updated {Math.max(0, Math.floor((Date.now() - lastPriceRefresh) / 1000))}s ago · {activeMints.length} mint{activeMints.length === 1 ? "" : "s"}</>
+                : <>idle — no mints tracked yet</>}
+            </span>
+            <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" onClick={refreshActivePrices} disabled={pricesRefreshing || activeMints.length === 0}>
+              {pricesRefreshing ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+              Refresh now
+            </Button>
+            <span className="text-muted-foreground">· auto every 15s (paused when tab hidden)</span>
+          </div>
           <div className="flex flex-wrap items-center gap-2 border-t border-amber-500/30 pt-2">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Fund:</span>
             <select
