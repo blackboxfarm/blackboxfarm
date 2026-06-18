@@ -1269,6 +1269,7 @@ function Cell({
   onSimBuy: (w: WaterfallWallet, mint: string, lamportsIn: number) => void;
   onSimSell: (w: WaterfallWallet, mint: string) => void;
   onSimTroll: (w: WaterfallWallet) => void;
+  realizedPnl?: { sol: number; usd: number };
 }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(w.nickname ?? "");
