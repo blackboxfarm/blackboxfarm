@@ -1424,6 +1424,12 @@ function Cell({
           )}
         </div>
       )}
+      {tokens.length === 0 && realizedPnl && (Math.abs(realizedPnl.sol) > 1e-6 || Math.abs(realizedPnl.usd) > 0.001) && (
+        <div className={`text-[10px] font-medium ${realizedPnl.sol >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+          Realized: {realizedPnl.sol >= 0 ? "+" : ""}{realizedPnl.sol.toFixed(4)} SOL
+          {Math.abs(realizedPnl.usd) > 0.001 && <> ({realizedPnl.usd >= 0 ? "+" : ""}${realizedPnl.usd.toFixed(2)})</>}
+        </div>
+      )}
       <Button size="sm" variant="outline" className="h-6 w-full text-[10px] px-2" onClick={onOpen}>
         <ArrowDownToLine className="h-3 w-3 mr-1" /> Withdraw / Details
       </Button>
