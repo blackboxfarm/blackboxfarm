@@ -569,41 +569,98 @@ export default function WaterfallGrid() {
     }
   };
 
-  // Aggregate all unique non-SOL mints currently held across the grid, then fetch DexScreener prices.
-  useEffect(() => {
+  // Fetch DexScreener prices for an explicit mint set. Used both for the
+  // initial "missing mint" backfill and for the SIM-mode live refresh poller.
+  const fetchPricesFor = useCallback(async (mintList: string[]) => {
+    if (mintList.length === 0) return {} as Record<string, { priceUsd: number; symbol: string }>;
+    const chunks: string[][] = [];
+    for (let i = 0; i < mintList.length; i += 25) chunks.push(mintList.slice(i, i + 25));
+    const next: Record<string, { priceUsd: number; symbol: string }> = {};
+    for (const chunk of chunks) {
+      try {
+        const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(",")}`);
+        const j = await r.json();
+        const pairs = (j?.pairs ?? []) as any[];
+        for (const m of chunk) {
+          const pair = pairs.find((p) => p?.baseToken?.address === m);
+          if (pair) next[m] = { priceUsd: Number(pair.priceUsd ?? 0), symbol: pair.baseToken?.symbol ?? "?" };
+          else next[m] = { priceUsd: 0, symbol: "?" };
+        }
+      } catch {
+        for (const m of chunk) next[m] = { priceUsd: 0, symbol: "?" };
+      }
+    }
+    return next;
+  }, []);
+
+  // Aggregate mints currently relevant to the grid (held on-chain + held in
+  // SIM + configured target/per-column mints).
+  const activeMints = useMemo(() => {
     const mints = new Set<string>();
     for (const b of Object.values(balances)) for (const t of b.tokens) if (t.amount > 0) mints.add(t.mint);
-    if (targetMint && targetMint.length >= 32) mints.add(targetMint.trim());
+    if (targetMint && targetMint.trim().length >= 32) mints.add(targetMint.trim());
     for (const m of perColMints) {
       const v = (m ?? "").trim();
       if (v.length >= 32 && v.length <= 44) mints.add(v);
     }
-    const missing = [...mints].filter((m) => !(m in tokenPrices));
+    for (const entry of Object.values(simState)) {
+      for (const m of Object.keys(entry.tokens ?? {})) mints.add(m);
+    }
+    return [...mints];
+  }, [balances, targetMint, perColMints, simState]);
+
+  // Initial / on-change backfill of any newly-seen mints.
+  useEffect(() => {
+    const missing = activeMints.filter((m) => !(m in tokenPrices));
     if (missing.length === 0) return;
     let cancelled = false;
     (async () => {
-      // DexScreener accepts up to ~30 mints comma-separated.
-      const chunks: string[][] = [];
-      for (let i = 0; i < missing.length; i += 25) chunks.push(missing.slice(i, i + 25));
-      const next: Record<string, { priceUsd: number; symbol: string }> = {};
-      for (const chunk of chunks) {
-        try {
-          const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(",")}`);
-          const j = await r.json();
-          const pairs = (j?.pairs ?? []) as any[];
-          for (const m of chunk) {
-            const pair = pairs.find((p) => p?.baseToken?.address === m);
-            if (pair) next[m] = { priceUsd: Number(pair.priceUsd ?? 0), symbol: pair.baseToken?.symbol ?? "?" };
-            else next[m] = { priceUsd: 0, symbol: "?" };
-          }
-        } catch {
-          for (const m of chunk) next[m] = { priceUsd: 0, symbol: "?" };
-        }
+      const next = await fetchPricesFor(missing);
+      if (!cancelled) {
+        setTokenPrices((prev) => ({ ...prev, ...next }));
+        setLastPriceRefresh(Date.now());
       }
-      if (!cancelled) setTokenPrices((prev) => ({ ...prev, ...next }));
     })();
     return () => { cancelled = true; };
-  }, [balances, targetMint, perColMints]);
+  }, [activeMints, tokenPrices, fetchPricesFor]);
+
+  // Manual refresh handler — also used by the live poller.
+  const refreshActivePrices = useCallback(async () => {
+    if (activeMints.length === 0) return;
+    setPricesRefreshing(true);
+    try {
+      const next = await fetchPricesFor(activeMints);
+      setTokenPrices((prev) => ({ ...prev, ...next }));
+      setLastPriceRefresh(Date.now());
+    } finally {
+      setPricesRefreshing(false);
+    }
+  }, [activeMints, fetchPricesFor]);
+
+  // Live price polling for SIM mode (15s, pauses when tab hidden).
+  useEffect(() => {
+    if (!simMode) return;
+    if (activeMints.length === 0) return;
+    let timer: number | null = null;
+    const tick = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void refreshActivePrices();
+    };
+    timer = window.setInterval(tick, 15_000);
+    const onVis = () => { if (document.visibilityState === "visible") tick(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      if (timer != null) window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [simMode, activeMints, refreshActivePrices]);
+
+  // 1-second tick so "updated Ns ago" label re-renders in SIM mode.
+  useEffect(() => {
+    if (!simMode) return;
+    const id = window.setInterval(() => forceTick((v) => (v + 1) % 1_000_000), 1000);
+    return () => window.clearInterval(id);
+  }, [simMode]);
 
   const toggleBuyEnabled = (col: number) =>
     setBuyEnabled((prev) => prev.map((v, i) => (i === col ? !v : v)));
