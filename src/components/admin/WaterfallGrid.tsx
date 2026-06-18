@@ -363,7 +363,7 @@ export default function WaterfallGrid() {
         const usdIn = synthSolIn * solPriceUsd * 0.99;
         amt = usdIn / priceUsd;
       }
-      const usdOut = amt * priceUsd * 0.99;
+      const usdOut = amt * priceUsd;
       const solOut = solPriceUsd > 0 ? usdOut / solPriceUsd : 0;
       const newTokens = { ...cur.tokens };
       delete newTokens[mint];
@@ -376,7 +376,9 @@ export default function WaterfallGrid() {
       if (basis && basis.tokens > 0 && amt > 0) {
         const frac = Math.min(1, amt / basis.tokens);
         costSol = basis.solIn * frac;
-        costUsd = basis.usdIn * frac;
+        costUsd = basis.entryPriceUsd && basis.entryPriceUsd > 0
+          ? basis.entryPriceUsd * amt
+          : basis.usdIn * frac;
       }
       pnlSol = solOut - costSol;
       pnlUsd = costUsd > 0 ? usdOut - costUsd : 0;
@@ -403,7 +405,7 @@ export default function WaterfallGrid() {
       });
       setSimRealizedPnl((prevR) => {
         const cur = prevR[w.id] ?? { sol: 0, usd: 0 };
-        return { ...prevR, [w.id]: { sol: cur.sol + pnlSol, usd: cur.usd + pnlUsd } };
+        return { ...prevR, [w.id]: { sol: pnlSol, usd: pnlUsd } };
       });
 
       const pnlTag = amt > 0
