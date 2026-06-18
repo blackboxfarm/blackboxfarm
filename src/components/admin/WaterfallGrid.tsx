@@ -722,8 +722,15 @@ export default function WaterfallGrid() {
             variant="default"
             className="bg-rose-600 hover:bg-rose-700 text-white"
             onClick={sellGrid}
-            disabled={sellingGrid || sellingCol !== null || !targetMint || isEmpty}
-            title={!targetMint ? "Set target token to enable" : "Sell target token across all 100 wallets"}
+            disabled={
+              sellingGrid || sellingCol !== null || buyingCol !== null || isEmpty ||
+              (useSameMint ? !targetMint.trim() : perColMints.every((m) => !(m ?? "").trim()))
+            }
+            title={
+              (useSameMint ? !targetMint.trim() : perColMints.every((m) => !(m ?? "").trim()))
+                ? "Set at least one target token to enable"
+                : "Sell target tokens across all configured waterfalls"
+            }
           >
             {sellingGrid ? <Loader2 className="h-4 w-4 animate-spin" /> : <DollarSign className="h-4 w-4" />}
             <span className="ml-2">SELL GRID</span>
