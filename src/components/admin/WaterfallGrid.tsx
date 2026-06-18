@@ -334,8 +334,8 @@ export default function WaterfallGrid() {
     });
   }, [tokenPrices, solUsd, appendLog]);
 
-  const simSell = useCallback((w: WaterfallWallet, mint: string) => {
-    const meta = tokenPrices[mint];
+  const simSell = useCallback((w: WaterfallWallet, mint: string, priceOverride?: { priceUsd: number; symbol: string }) => {
+    const meta = priceOverride ?? tokenPrices[mint];
     const priceUsd = meta?.priceUsd ?? 0;
     const solPriceUsd = solUsd || 0;
     let pnlSol = 0;
