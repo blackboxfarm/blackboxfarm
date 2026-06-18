@@ -1184,6 +1184,7 @@ export default function WaterfallGrid() {
                               onSimSell={simSell}
                               onSimTroll={simTroll}
                               realizedPnl={simMode ? simRealizedPnl[w.id] : undefined}
+                              costBasis={simMode ? simCostBasis[w.id] : undefined}
                           />
                         ) : <span className="text-muted-foreground">—</span>}
                       </td>
