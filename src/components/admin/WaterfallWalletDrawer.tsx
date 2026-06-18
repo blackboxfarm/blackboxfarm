@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Copy, ExternalLink } from "lucide-react";
+import { Loader2, Copy, ExternalLink, Eye, EyeOff, KeyRound } from "lucide-react";
 
 export type WaterfallWallet = {
   id: string;
@@ -62,6 +62,31 @@ function DrawerBody({
   const [destination, setDestination] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [nickname, setNickname] = useState(wallet.nickname ?? "");
+  const [revealedKey, setRevealedKey] = useState<string | null>(null);
+  const [revealing, setRevealing] = useState(false);
+  const hideTimerRef = useRef<number | null>(null);
+
+  useEffect(() => () => { if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current); }, []);
+
+  const hideKey = () => {
+    setRevealedKey(null);
+    if (hideTimerRef.current) { window.clearTimeout(hideTimerRef.current); hideTimerRef.current = null; }
+  };
+
+  const revealKey = async () => {
+    if (!confirm(`Reveal the PRIVATE KEY for Waterfall ${wallet.column_index + 1} · Wallet ${wallet.row_index + 1}?\n\nAnyone who sees your screen will be able to drain this wallet. Are you sure?`)) return;
+    setRevealing(true);
+    const { data, error } = await supabase.functions.invoke("export-wallet-key", {
+      body: { wallet_id: wallet.id, source: "waterfall_wallets" },
+    });
+    setRevealing(false);
+    if (error || !(data as any)?.secret_key) {
+      return toast({ title: "Reveal failed", description: error?.message || "No key returned", variant: "destructive" });
+    }
+    setRevealedKey((data as any).secret_key as string);
+    if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = window.setTimeout(() => setRevealedKey(null), 60_000);
+  };
 
   const handleWithdraw = async () => {
     if (!destination || destination.length < 32 || destination.length > 44) {
@@ -161,6 +186,37 @@ function DrawerBody({
                   {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                   Send
                 </Button>
+              </div>
+
+              <div className="space-y-2 rounded border border-destructive/40 p-3">
+                <div className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-1">
+                  <KeyRound className="h-3 w-3" /> Private Key
+                </div>
+                {!revealedKey ? (
+                  <Button
+                    onClick={revealKey}
+                    disabled={revealing}
+                    variant="outline"
+                    size="sm"
+                    className="w-full border-destructive/60 text-destructive hover:bg-destructive/10"
+                  >
+                    {revealing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
+                    Show Private Key
+                  </Button>
+                ) : (
+                  <>
+                    <Input readOnly value={revealedKey} className="h-8 font-mono text-[10px]" onFocus={(e) => e.currentTarget.select()} />
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" className="flex-1" onClick={() => { navigator.clipboard.writeText(revealedKey); toast({ title: "Key copied" }); }}>
+                        <Copy className="h-3 w-3 mr-1" /> Copy
+                      </Button>
+                      <Button size="sm" variant="outline" className="flex-1" onClick={hideKey}>
+                        <EyeOff className="h-3 w-3 mr-1" /> Hide
+                      </Button>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">Auto-hides in 60 seconds.</div>
+                  </>
+                )}
               </div>
             </div>
     </>
