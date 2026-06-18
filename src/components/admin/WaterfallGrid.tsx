@@ -156,6 +156,17 @@ export default function WaterfallGrid() {
   });
   const [simLogOpen, setSimLogOpen] = useState(true);
 
+  // Cost basis per (walletId → mint) for realized PnL.
+  const [simCostBasis, setSimCostBasis] = useState<Record<string, Record<string, { solIn: number; usdIn: number; tokens: number }>>>(
+    () => PERSISTED_INIT.simCostBasis ?? {},
+  );
+  const [simRealizedPnl, setSimRealizedPnl] = useState<Record<string, { sol: number; usd: number }>>(
+    () => PERSISTED_INIT.simRealizedPnl ?? {},
+  );
+  const [lastPriceRefresh, setLastPriceRefresh] = useState<number>(0);
+  const [pricesRefreshing, setPricesRefreshing] = useState(false);
+  const [, forceTick] = useState(0);
+
   // Funding toolbar state
   const [simFundCol, setSimFundCol] = useState<string>(PERSISTED_INIT.simFundCol ?? "all"); // "all" or "0".."9"
   const [simFundAmount, setSimFundAmount] = useState<string>(PERSISTED_INIT.simFundAmount ?? "10");
