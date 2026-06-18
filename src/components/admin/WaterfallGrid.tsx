@@ -519,22 +519,44 @@ export default function WaterfallGrid() {
     if (!plan) return;
     if (simMode) {
       cancelPlan(columnIndex);
-      appendLog({ col: columnIndex, row: -1, kind: "CASCADE", msg: `── SIM CASCADE column ${columnIndex + 1} starting (10 hops) ──` });
+      appendLog({ col: columnIndex, row: -1, kind: "CASCADE", msg: `── SIM CASCADE column ${columnIndex + 1} starting (10 hops × 10 TROLL cycles) ──` });
       for (const hop of plan.hops) {
         const fromW = wallets.find((w) => w.column_index === columnIndex && w.row_index === hop.row);
         const toW = wallets.find((w) => w.column_index === columnIndex && w.row_index === hop.row + 1);
         if (!fromW) continue;
-        await new Promise((r) => setTimeout(r, 350));
+
+        // SIM TROLL: 10 buy/sell cycles on this wallet before forwarding
+        let trollSpentLamports = 0;
+        for (let k = 1; k <= 10; k++) {
+          const jitter = 1 + (Math.random() * 0.4 - 0.2); // ±20%
+          const feeSol = SIM_TROLL_COST_PER_CYCLE * jitter;
+          trollSpentLamports += Math.floor(feeSol * LAMPORTS_PER_SOL);
+          appendLog({
+            col: columnIndex, row: hop.row, kind: "TROLL",
+            msg: `W${columnIndex + 1}·R${hop.row + 1}  troll ${k}/10  BUY→SELL $TROLL  −${feeSol.toFixed(5)} SOL`,
+          });
+          await new Promise((r) => setTimeout(r, 90));
+        }
+        // Deduct troll fees from the wallet's sim SOL up front
+        setSimState((prev) => {
+          const next = { ...prev };
+          const cur = next[fromW.id] ?? { sol: 0, tokens: {} };
+          next[fromW.id] = { ...cur, sol: Math.max(0, cur.sol - trollSpentLamports / LAMPORTS_PER_SOL) };
+          return next;
+        });
+
+        await new Promise((r) => setTimeout(r, 200));
         setSimState((prev) => {
           const next = { ...prev };
           const from = next[fromW.id] ?? { sol: 0, tokens: {} };
           if (hop.row === 9 || !toW) {
-            next[fromW.id] = { ...from, sol: hop.projectedIncomingLamports / LAMPORTS_PER_SOL };
+            next[fromW.id] = { ...from, sol: Math.max(0, hop.projectedIncomingLamports / LAMPORTS_PER_SOL - trollSpentLamports / LAMPORTS_PER_SOL) };
             return next;
           }
           const to = next[toW.id] ?? { sol: 0, tokens: {} };
+          const forwardSol = Math.max(0, (hop.projectedForwardLamports - trollSpentLamports) / LAMPORTS_PER_SOL);
           next[fromW.id] = { ...from, sol: hop.leaveBehindLamports / LAMPORTS_PER_SOL };
-          next[toW.id] = { ...to, sol: to.sol + hop.projectedForwardLamports / LAMPORTS_PER_SOL };
+          next[toW.id] = { ...to, sol: to.sol + forwardSol };
           return next;
         });
         appendLog({
