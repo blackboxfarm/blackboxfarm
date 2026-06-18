@@ -122,6 +122,7 @@ export default function WaterfallGrid() {
   // Bulk-sell busy flags
   const [sellingCol, setSellingCol] = useState<number | null>(null);
   const [sellingGrid, setSellingGrid] = useState<boolean>(false);
+  const [buyingCol, setBuyingCol] = useState<number | null>(null);
 
   const appendLog = useCallback((e: Omit<SimLogEntry, "ts">) => {
     setSimLog((prev) => [{ ...e, ts: Date.now() }, ...prev].slice(0, 500));
@@ -732,14 +733,31 @@ export default function WaterfallGrid() {
 
       {/* Buy target bar */}
       <div className="rounded-md border bg-muted/40 p-3 space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="text-xs font-medium whitespace-nowrap">Buy token (mint):</label>
-          <Input
-            value={targetMint}
-            onChange={(e) => setTargetMint(e.target.value)}
-            placeholder="Paste Solana token mint address…"
-            className="h-8 text-xs font-mono flex-1 min-w-[260px]"
+        <label className="flex items-center gap-2 text-xs font-medium cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={useSameMint}
+            onChange={() => setUseSameMint((v) => !v)}
+            className="h-3.5 w-3.5"
           />
+          Use the same Buy token for all 10 waterfalls
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          {useSameMint ? (
+            <>
+              <label className="text-xs font-medium whitespace-nowrap">Buy token (mint):</label>
+              <Input
+                value={targetMint}
+                onChange={(e) => setTargetMint(e.target.value)}
+                placeholder="Paste Solana token mint address…"
+                className="h-8 text-xs font-mono flex-1 min-w-[260px]"
+              />
+            </>
+          ) : (
+            <span className="text-[11px] text-muted-foreground italic flex-1 min-w-[260px]">
+              Per-waterfall mint inputs are shown in each column header below.
+            </span>
+          )}
           <label className="text-xs font-medium whitespace-nowrap ml-2">Buy size (% of wallet SOL):</label>
           <Input
             value={buySizePct}
@@ -750,7 +768,7 @@ export default function WaterfallGrid() {
             max={99}
           />
           <span className="text-[11px] text-muted-foreground">%</span>
-          {validTargetMint && tokenPrices[targetMint.trim()] && (
+          {useSameMint && validTargetMint && tokenPrices[targetMint.trim()] && (
             <span className="text-xs text-muted-foreground ml-2">
               {tokenPrices[targetMint.trim()].symbol} · ${tokenPrices[targetMint.trim()].priceUsd.toFixed(8).replace(/\.?0+$/, "")}
             </span>
@@ -787,18 +805,45 @@ export default function WaterfallGrid() {
               <tr>
                 {Array.from({ length: 10 }, (_, c) => {
                   const first = grid.get(`${c}:0`);
+                  const colMint = mintForCol(c);
+                  const colMintMeta = colMint && tokenPrices[colMint];
                   return (
                     <th key={c} className="p-2 border-b border-r min-w-[180px] align-top">
                       <div className="font-bold text-[11px] text-muted-foreground">WATERFALL {c + 1}</div>
                       <div className="font-mono text-[10px] text-muted-foreground mt-1">{first ? SHORT(first.pubkey) : "—"}</div>
-                      <button
-                        onClick={() => sellColumn(c)}
-                        disabled={sellingGrid || sellingCol !== null || !targetMint}
-                        className="mt-1 w-full text-[10px] px-1.5 py-0.5 rounded bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold flex items-center justify-center gap-1"
-                        title={!targetMint ? "Set target token to enable" : `Sell target token in every wallet of W${c + 1}`}
-                      >
-                        {sellingCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>Sell W{c + 1}</>}
-                      </button>
+                      {!useSameMint && (
+                        <Input
+                          value={perColMints[c] ?? ""}
+                          onChange={(e) =>
+                            setPerColMints((prev) => prev.map((v, i) => (i === c ? e.target.value : v)))
+                          }
+                          placeholder="Mint…"
+                          className="h-6 mt-1 text-[10px] font-mono"
+                        />
+                      )}
+                      {colMintMeta && (
+                        <div className="text-[9px] text-muted-foreground mt-0.5 truncate">
+                          {colMintMeta.symbol} · ${colMintMeta.priceUsd.toFixed(8).replace(/\.?0+$/, "")}
+                        </div>
+                      )}
+                      <div className="flex gap-1 mt-1">
+                        <button
+                          onClick={() => buyColumn(c)}
+                          disabled={sellingGrid || sellingCol !== null || buyingCol !== null || !colMint || !buyEnabled[c]}
+                          className="flex-1 text-[10px] px-1.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold flex items-center justify-center gap-1"
+                          title={!colMint ? "Set this waterfall's mint to enable" : !buyEnabled[c] ? "Buying disabled for this column" : `Buy target token in every wallet of W${c + 1}`}
+                        >
+                          {buyingCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>Buy W{c + 1}</>}
+                        </button>
+                        <button
+                          onClick={() => sellColumn(c)}
+                          disabled={sellingGrid || sellingCol !== null || buyingCol !== null || !colMint}
+                          className="flex-1 text-[10px] px-1.5 py-0.5 rounded bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold flex items-center justify-center gap-1"
+                          title={!colMint ? "Set this waterfall's mint to enable" : `Sell target token in every wallet of W${c + 1}`}
+                        >
+                          {sellingCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>Sell W{c + 1}</>}
+                        </button>
+                      </div>
                       {simMode && (
                         <div className="flex gap-1 mt-1">
                           <button
@@ -847,7 +892,7 @@ export default function WaterfallGrid() {
                             solOverride={simMode ? (simState[w.id]?.sol ?? Number(w.sol_balance || 0)) : undefined}
                             solUsd={solUsd}
                               tokenPrices={tokenPrices}
-                              targetMint={validTargetMint ? targetMint.trim() : ""}
+                              targetMint={mintForCol(c)}
                               buyEnabled={buyEnabled[c]}
                               buySizePct={Number(buySizePct) || 0}
                             onOpen={() => setActive(w)}
