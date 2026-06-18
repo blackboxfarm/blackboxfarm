@@ -1401,7 +1401,12 @@ function Cell({
             let pnlPct = 0;
             if (basis && basis.tokens > 0) {
               const heldRatio = Math.min(1, t.amount / basis.tokens);
-              costUsd = basis.usdIn * heldRatio;
+              // Fallback: if we never captured a USD basis (phantom-price buy),
+              // derive it from the SOL spent × live SOL/USD.
+              const basisUsd = basis.usdIn > 0
+                ? basis.usdIn
+                : basis.solIn * (solUsd || 0) * 0.99;
+              costUsd = basisUsd * heldRatio;
               if (costUsd > 0 && usd > 0) pnlPct = ((usd - costUsd) / costUsd) * 100;
             }
             const hasPnl = costUsd > 0 && usd > 0;
