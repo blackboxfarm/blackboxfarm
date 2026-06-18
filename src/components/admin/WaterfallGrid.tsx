@@ -320,7 +320,9 @@ export default function WaterfallGrid() {
           ...walletBasis,
           [mint]: {
             solIn: cur.solIn + solIn,
-            usdIn: cur.usdIn + (phantomPrice ? 0 : usdIn),
+            // Always record a USD basis when we know the SOL price, even if
+            // the token price was phantom — otherwise PnL coloring stays grey.
+            usdIn: cur.usdIn + (solPriceUsd > 0 ? solIn * solPriceUsd * 0.99 : 0),
             tokens: cur.tokens + tokensOut,
           },
         },
