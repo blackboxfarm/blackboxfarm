@@ -406,7 +406,7 @@ export default function WaterfallGrid() {
       const newSol = Math.max(0, cur.sol - synthSolIn + solOut - 0.00001);
       return { ...prev, [w.id]: { sol: newSol, tokens: newTokens } };
     });
-  }, [tokenPrices, solUsd, appendLog]);
+  }, [tokenPrices, solUsd, appendLog, simCostBasis]);
 
   const simTroll = useCallback((w: WaterfallWallet) => {
     const cost = SIM_TROLL_CYCLES * SIM_TROLL_COST_PER_CYCLE;
