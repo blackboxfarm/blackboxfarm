@@ -1,30 +1,34 @@
-## Why you didn't see TROLL buys/sells in SIM cascade
+## Problem
 
-The live `waterfall-cascade` edge function actually does interleave 10 TROLL buy→sell cycles per wallet (via `runTrollCycles`) **before** each wallet-to-wallet forward. But the **SIM** path in `WaterfallGrid.tsx → executePlan()` (lines 520–549) takes a shortcut: it only simulates the SOL transfers and logs one CASCADE line per hop. The TROLL leg is skipped entirely in SIM, which is why the 12 SOL distributed cleanly with no buy/sell rows.
+In SIM mode, BUY (single cell, **Buy W#**, or via CASCADE) does not always leave a token balance on the wallet, so the follow-on SELL has nothing to sell and either no-ops or relies on the phantom-holding fallback added last turn.
 
-## Fix: simulate the TROLL cycles in SIM cascade
+Root causes in `WaterfallGrid.tsx`:
 
-Update the SIM branch of `executePlan` in `src/components/admin/WaterfallGrid.tsx` so each hop mirrors the real edge function order:
+1. **`simBuy` silently produces 0 tokens** when `tokenPrices[mint]` is missing or `priceUsd === 0` (e.g. a brand-new pump.fun mint where DexScreener returns nothing). `tokensOut = priceUsd > 0 ? usdIn / priceUsd : 0` → wallet is debited SOL, credited 0 tokens, sell finds nothing.
+2. **`simState` SOL fallback bug.** When a wallet isn't yet in `simState`, `simBuy` starts from `{ sol: 0, tokens: {} }`, so `newSol = max(0, 0 − solIn)` collapses to 0 even though eligibility was computed against `w.sol_balance`. Tokens still get credited, but the wallet's SOL ledger silently desyncs.
+3. **CASCADE TROLL cycles already pair BUY→SELL**, so they intentionally leave 0 holdings. That is correct behaviour, but the **column-level Buy W#** must leave tokens behind — today it does, *unless* (1) bites.
 
-```text
-for each hop r in 0..9:
-  1. SIM TROLL: 10 cycles × (BUY TROLL → SELL TROLL) on wallet Wr
-     - per cycle: deduct SIM_TROLL_COST_PER_CYCLE SOL from Wr (fee jitter)
-     - appendLog: "W{col+1}·R{r+1}  troll cycle k/10  buy/sell  −{fee} SOL"
-     - small await (e.g. 60–120 ms) per cycle so the log streams
-  2. If r === 9: terminal, log "holds X SOL", break.
-  3. SIM TRANSFER: leave behind / forward (existing logic, unchanged)
-```
+## Changes (SIM-only, frontend only)
 
-Details:
-- Reuse the existing `SIM_TROLL_COST_PER_CYCLE` constant (already defined at line 15) so the SIM cost model stays consistent with `simTroll()`.
-- Use `appendLog({ kind: "TROLL", ... })` for the cycle lines so they're visually distinct from `CASCADE` transfer lines. If `"TROLL"` isn't an allowed `kind` in `SimLogEntry`, add it.
-- Update `simState[Wr].sol` after the troll block (subtract `10 * SIM_TROLL_COST_PER_CYCLE`) **before** computing the hop's leave/forward amounts, so the displayed balances reflect realistic post-TROLL SOL.
-- Keep total per-hop sim latency reasonable (≈1–1.5 s for 10 cycles + transfer) so a full column finishes in ~12–15 s.
-- Header banner already says "10 hops"; optionally tweak the start log to `"… starting (10 hops × 10 TROLL cycles)"`.
+File: `src/components/admin/WaterfallGrid.tsx`
 
-No edge-function or DB changes required — the live cascade already runs TROLL correctly; only the SIM visualization is missing it.
+1. **`simBuy` — guarantee a non-zero token credit.**
+   - If `priceUsd > 0`: keep current math.
+   - If `priceUsd === 0` or price metadata missing: fall back to a deterministic synthetic rate of `1 SOL → 1_000_000 phantom units`, credit `solIn * 1_000_000` tokens, and tag the log line with `(phantom price)` so it's obvious in the SIM log.
+   - This guarantees `cur.tokens[mint] > 0` after every BUY, so `collectSellTargets` finds the wallet.
 
-## Files touched
+2. **`simBuy` / `simSell` / `simTroll` — seed missing simState from real balance.**
+   - Replace `prev[w.id] ?? { sol: 0, tokens: {} }` with `prev[w.id] ?? { sol: Number(w.sol_balance || 0), tokens: {} }` so the wallet's SOL ledger doesn't snap to 0 the first time it's touched.
 
-- `src/components/admin/WaterfallGrid.tsx` (SIM branch of `executePlan` only)
+3. **Cell-level BUY button (`Cell` component, line ~1070).**
+   - Same `simBuy` is reused, so fix in (1) covers it. No additional change.
+
+4. **Keep the phantom-holding fallback in `simSell`** as a safety net for CASCADE-only runs (already shipped last turn).
+
+No edge function, schema, or live-mode changes. CASCADE behaviour unchanged.
+
+## Verification
+
+- Seed W3 R1 with 12 SOL, click **Buy W3** with a fresh pump.fun mint that DexScreener doesn't price → SIM log shows `SIM BUY … → X phantom (phantom price)`, wallet card shows token balance > 0.
+- Click **Sell W3** → SIM log shows `SIM SELL X … → Y SOL` against the real (non-phantom) holding, wallet SOL increases.
+- Run **CASCADE** on W4 → unchanged: 10 TROLL cycles per hop, no net holdings, then **Sell W4** uses phantom fallback.
