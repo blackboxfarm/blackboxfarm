@@ -398,6 +398,7 @@ export default function WaterfallGrid() {
               solIn: basis.solIn * (1 - frac),
               usdIn: basis.usdIn * (1 - frac),
               tokens: remTokens,
+              entryPriceUsd: basis.entryPriceUsd,
             };
           }
         }
@@ -1345,7 +1346,7 @@ function Cell({
   onSimSell: (w: WaterfallWallet, mint: string) => void;
   onSimTroll: (w: WaterfallWallet) => void;
   realizedPnl?: { sol: number; usd: number };
-  costBasis?: Record<string, { solIn: number; usdIn: number; tokens: number }>;
+  costBasis?: Record<string, SimCostBasis>;
 }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(w.nickname ?? "");
@@ -1477,7 +1478,9 @@ function Cell({
               const basisUsd = basis.usdIn > 0
                 ? basis.usdIn
                 : basis.solIn * (solUsd || 0) * 0.99;
-              costUsd = basisUsd * heldRatio;
+              costUsd = basis.entryPriceUsd && basis.entryPriceUsd > 0
+                ? basis.entryPriceUsd * t.amount
+                : basisUsd * heldRatio;
               if (costUsd > 0 && usd > 0) pnlPct = ((usd - costUsd) / costUsd) * 100;
             }
             const hasPnl = costUsd > 0 && usd > 0;
