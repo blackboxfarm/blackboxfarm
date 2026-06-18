@@ -1247,6 +1247,7 @@ function Cell({
   onOpen, onRename, isHeadOfColumn, cascade, isCurrentCascadeWallet,
   planHop, hasPlan, onPreview, onExecute, onCancelPlan,
   simMode, onSimBuy, onSimSell, onSimTroll, realizedPnl,
+  costBasis,
 }: {
   w: WaterfallWallet;
   tokens: TokenHolding[];
@@ -1271,6 +1272,7 @@ function Cell({
   onSimSell: (w: WaterfallWallet, mint: string) => void;
   onSimTroll: (w: WaterfallWallet) => void;
   realizedPnl?: { sol: number; usd: number };
+  costBasis?: Record<string, { solIn: number; usdIn: number; tokens: number }>;
 }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(w.nickname ?? "");
