@@ -1395,32 +1395,33 @@ function Cell({
               ? t.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })
               : t.amount.toLocaleString(undefined, { maximumFractionDigits: 4 });
             const basis = costBasis?.[t.mint];
-            let unrealized: { sol: number; usd: number; pct: number } | null = null;
-            if (basis && basis.tokens > 0 && meta) {
+            let costUsd = 0;
+            let pnlPct = 0;
+            if (basis && basis.tokens > 0) {
               const heldRatio = Math.min(1, t.amount / basis.tokens);
-              const costSol = basis.solIn * heldRatio;
-              const costUsd = basis.usdIn * heldRatio;
-              const curSol = solEq;
-              const pnlSol = curSol - costSol;
-              const pnlUsd = usd - costUsd;
-              const pct = costUsd > 0 ? (pnlUsd / costUsd) * 100 : (costSol > 0 ? (pnlSol / costSol) * 100 : 0);
-              unrealized = { sol: pnlSol, usd: pnlUsd, pct };
+              costUsd = basis.usdIn * heldRatio;
+              if (costUsd > 0 && usd > 0) pnlPct = ((usd - costUsd) / costUsd) * 100;
             }
+            const hasPnl = costUsd > 0 && usd > 0;
+            const pnlColor = !hasPnl
+              ? "text-muted-foreground"
+              : usd >= costUsd
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-red-600 dark:text-red-400";
             return (
               <div key={t.mint} className={`truncate ${isTarget ? "text-foreground font-medium" : "text-muted-foreground"}`}>
                 {amt} {sym}
                 {usd > 0 && (
-                  <span className="text-muted-foreground">
-                    {" "}≈ ${usd >= 1 ? usd.toFixed(2) : usd.toFixed(4)}
-                    {solEq > 0 && <> / {solEq.toFixed(4)} SOL</>}
-                  </span>
-                )}
-                {unrealized && (Math.abs(unrealized.sol) > 1e-6 || Math.abs(unrealized.usd) > 0.001) && (
-                  <span className={`ml-1 font-mono ${unrealized.sol >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
-                    [{unrealized.sol >= 0 ? "+" : ""}{unrealized.sol.toFixed(4)} SOL
-                    {Math.abs(unrealized.usd) > 0.001 && <> / {unrealized.usd >= 0 ? "+" : ""}${Math.abs(unrealized.usd) >= 1 ? unrealized.usd.toFixed(2) : unrealized.usd.toFixed(4)}</>}
-                    {Math.abs(unrealized.pct) > 0.01 && <> · {unrealized.pct >= 0 ? "+" : ""}{unrealized.pct.toFixed(1)}%</>}]
-                  </span>
+                  <>
+                    <span className="text-muted-foreground">{" ≈ "}</span>
+                    <span className={`font-medium ${pnlColor}`} title={hasPnl ? `Cost: $${costUsd.toFixed(4)} · ${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(1)}%` : undefined}>
+                      ${usd >= 1 ? usd.toFixed(2) : usd.toFixed(4)}
+                    </span>
+                    {solEq > 0 && <span className="text-muted-foreground"> / {solEq.toFixed(4)} SOL</span>}
+                    {hasPnl && Math.abs(pnlPct) > 0.01 && (
+                      <span className={`ml-1 font-mono ${pnlColor}`}>({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%)</span>
+                    )}
+                  </>
                 )}
               </div>
             );
