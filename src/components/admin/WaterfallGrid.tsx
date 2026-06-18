@@ -543,11 +543,26 @@ export default function WaterfallGrid() {
     setBuyingCol(col);
     let ok = 0; let firstErr = "";
     try {
+      // Capture a FRESH price at the moment of this column buy so all 10
+      // wallets in this column share the same cost basis — and a later
+      // column buy (e.g. 20s after) gets its OWN fresh capture instead of
+      // re-using the polled snapshot from the previous column.
+      let captured: { priceUsd: number; symbol: string } | undefined;
+      if (simMode) {
+        try {
+          const fresh = await fetchPricesFor([mint]);
+          if (fresh[mint] && fresh[mint].priceUsd > 0) {
+            captured = fresh[mint];
+            setTokenPrices((prev) => ({ ...prev, [mint]: fresh[mint] }));
+            appendLog({ col, row: -1, kind: "BUY", msg: `W${col + 1}  PRICE LOCK  ${fresh[mint].symbol} @ $${fresh[mint].priceUsd.toFixed(8).replace(/\.?0+$/, "")}` });
+          }
+        } catch { /* fall back to cached tokenPrices */ }
+      }
       for (const w of eligible) {
         const s = simMode ? (simState[w.id]?.sol ?? Number(w.sol_balance || 0)) : Number(w.sol_balance || 0);
         const lamports = Math.floor(s * (pct / 100) * LAMPORTS_PER_SOL);
         try {
-          if (simMode) simBuy(w, mint, lamports);
+          if (simMode) simBuy(w, mint, lamports, captured);
           else {
             const { error } = await supabase.functions.invoke("waterfall-swap", {
               body: { walletId: w.id, mint, side: "buy", buyLamports: lamports },
