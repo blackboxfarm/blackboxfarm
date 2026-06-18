@@ -231,16 +231,27 @@ export default function WaterfallGrid() {
     const solPriceUsd = solUsd || 0;
     setSimState((prev) => {
       const cur = prev[w.id] ?? { sol: 0, tokens: {} };
-      const amt = cur.tokens[mint] ?? 0;
+      let amt = cur.tokens[mint] ?? 0;
+      let synthSolIn = 0;
+      // Phantom-holding synthesis: if the wallet has no token balance but does
+      // have SOL, pretend it bought ~25% of its SOL worth of the token a moment
+      // ago. Keeps SELL demos meaningful right after a CASCADE round (which
+      // pairs every buy with an immediate sell and leaves zero holdings).
+      if (amt <= 0 && cur.sol > 0.0005 && priceUsd > 0 && solPriceUsd > 0) {
+        synthSolIn = cur.sol * 0.25;
+        const usdIn = synthSolIn * solPriceUsd * 0.99;
+        amt = usdIn / priceUsd;
+      }
       const usdOut = amt * priceUsd * 0.99;
       const solOut = solPriceUsd > 0 ? usdOut / solPriceUsd : 0;
       const newTokens = { ...cur.tokens };
       delete newTokens[mint];
       appendLog({
         col: w.column_index, row: w.row_index, kind: "SELL",
-        msg: `W${w.column_index + 1}·R${w.row_index + 1}  SIM SELL ${amt.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${meta?.symbol ?? "?"} → ${solOut.toFixed(4)} SOL`,
+        msg: `W${w.column_index + 1}·R${w.row_index + 1}  SIM SELL ${amt.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${meta?.symbol ?? "?"} → ${solOut.toFixed(4)} SOL${synthSolIn > 0 ? "  (phantom)" : ""}`,
       });
-      return { ...prev, [w.id]: { sol: cur.sol + solOut - 0.00001, tokens: newTokens } };
+      const newSol = Math.max(0, cur.sol - synthSolIn + solOut - 0.00001);
+      return { ...prev, [w.id]: { sol: newSol, tokens: newTokens } };
     });
   }, [tokenPrices, solUsd, appendLog]);
 
