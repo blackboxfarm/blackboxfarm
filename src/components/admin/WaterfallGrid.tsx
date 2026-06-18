@@ -23,6 +23,8 @@ type PersistedBlob = {
   simLog?: SimLogEntry[];
   simFundCol?: string;
   simFundAmount?: string;
+  simCostBasis?: Record<string, Record<string, { solIn: number; usdIn: number; tokens: number }>>;
+  simRealizedPnl?: Record<string, { sol: number; usd: number }>;
 };
 
 function loadPersisted(): PersistedBlob {
