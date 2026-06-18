@@ -294,8 +294,8 @@ export default function WaterfallGrid() {
     appendLog({ col, row: 0, kind: "RESET", msg: `W${col + 1}·R1  SIM SEED  ${SIM_DEFAULT_SEED_SOL} SOL` });
   };
 
-  const simBuy = useCallback((w: WaterfallWallet, mint: string, lamportsIn: number) => {
-    const meta = tokenPrices[mint];
+  const simBuy = useCallback((w: WaterfallWallet, mint: string, lamportsIn: number, priceOverride?: { priceUsd: number; symbol: string }) => {
+    const meta = priceOverride ?? tokenPrices[mint];
     const priceUsd = meta?.priceUsd ?? 0;
     const solPriceUsd = solUsd || 0;
     const solIn = lamportsIn / LAMPORTS_PER_SOL;
