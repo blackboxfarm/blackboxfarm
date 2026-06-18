@@ -644,6 +644,17 @@ export default function WaterfallGrid() {
             {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             <span className="ml-2">Export Private Keys</span>
           </Button>
+          <Button
+            size="sm"
+            variant="default"
+            className="bg-rose-600 hover:bg-rose-700 text-white"
+            onClick={sellGrid}
+            disabled={sellingGrid || sellingCol !== null || !targetMint || isEmpty}
+            title={!targetMint ? "Set target token to enable" : "Sell target token across all 100 wallets"}
+          >
+            {sellingGrid ? <Loader2 className="h-4 w-4 animate-spin" /> : <DollarSign className="h-4 w-4" />}
+            <span className="ml-2">SELL GRID</span>
+          </Button>
         </div>
       </div>
 
