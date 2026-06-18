@@ -533,18 +533,31 @@ export default function WaterfallGrid() {
   };
 
   const exportKeys = async () => {
-    if (!confirm("Export ALL private keys as a JSON file? Treat the file as a vault — anyone with it controls the wallets.")) return;
+    if (!confirm("Export ALL 100 private keys to your device as CSV + JSON files?\n\nAnyone with these files controls the wallets. Are you sure?")) return;
     setExporting(true);
     const { data, error } = await supabase.functions.invoke("waterfall-export-keys");
     setExporting(false);
     if (error) return toast({ title: "Export failed", description: error.message, variant: "destructive" });
-    const blob = new Blob([JSON.stringify((data as any)?.wallets ?? [], null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `waterfall-wallets-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const rows = ((data as any)?.wallets ?? []) as Array<{ column: number; wallet: number; nickname: string | null; pubkey: string; secret_base58: string }>;
+    const ts = new Date();
+    const stamp = `${ts.getFullYear()}${String(ts.getMonth()+1).padStart(2,"0")}${String(ts.getDate()).padStart(2,"0")}-${String(ts.getHours()).padStart(2,"0")}${String(ts.getMinutes()).padStart(2,"0")}`;
+    const download = (filename: string, blob: Blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+    const csvEsc = (v: any) => {
+      const s = v == null ? "" : String(v);
+      return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const csv = [
+      ["column","wallet","nickname","pubkey","secret_base58"].join(","),
+      ...rows.map(r => [r.column, r.wallet, r.nickname ?? "", r.pubkey, r.secret_base58].map(csvEsc).join(",")),
+    ].join("\n");
+    download(`waterfall-keys-${stamp}.json`, new Blob([JSON.stringify(rows, null, 2)], { type: "application/json" }));
+    download(`waterfall-keys-${stamp}.csv`, new Blob([csv], { type: "text/csv" }));
+    toast({ title: `Exported ${rows.length} keys`, description: "CSV + JSON downloaded" });
   };
 
   const updateNickname = async (id: string, nickname: string) => {
