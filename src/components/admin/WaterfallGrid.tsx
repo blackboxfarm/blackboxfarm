@@ -98,6 +98,14 @@ export default function WaterfallGrid() {
   const [buySizePct, setBuySizePct] = useState<string>("95");
   const [buyEnabled, setBuyEnabled] = useState<boolean[]>(() => Array.from({ length: 10 }, () => true));
   const [tokenPrices, setTokenPrices] = useState<Record<string, { priceUsd: number; symbol: string }>>({});
+  // When true (default) every waterfall buys the single `targetMint` above.
+  // When false each waterfall column gets its own mint input in the header.
+  const [useSameMint, setUseSameMint] = useState<boolean>(true);
+  const [perColMints, setPerColMints] = useState<string[]>(() => Array.from({ length: 10 }, () => ""));
+  const mintForCol = useCallback(
+    (c: number) => (useSameMint ? targetMint.trim() : (perColMints[c] ?? "").trim()),
+    [useSameMint, targetMint, perColMints],
+  );
 
   // ─── SIMULATION MODE ────────────────────────────────────────────────────
   const [simMode, setSimMode] = useState<boolean>(() => {
@@ -248,13 +256,11 @@ export default function WaterfallGrid() {
   }, [appendLog]);
 
   // ─── BULK SELL (per column + entire grid) ──────────────────────────────
-  // Returns wallets in a column (or all columns when col === -1) that currently
-  // hold `targetMint` with a positive balance.
+  // Returns wallets in a column that currently hold that column's target mint.
   const collectSellTargets = useCallback((col: number): WaterfallWallet[] => {
-    const mint = targetMint.trim();
+    const mint = mintForCol(col);
     if (!mint) return [];
-    const inScope = col < 0 ? wallets : wallets.filter((w) => w.column_index === col);
-    return inScope.filter((w) => {
+    return wallets.filter((w) => w.column_index === col).filter((w) => {
       if (simMode) {
         const amt = simState[w.id]?.tokens?.[mint] ?? 0;
         return amt > 0;
@@ -262,7 +268,7 @@ export default function WaterfallGrid() {
       const held = (balances[w.pubkey]?.tokens ?? []).find((t) => t.mint === mint);
       return !!held && held.amount > 0;
     });
-  }, [wallets, balances, simState, simMode, targetMint]);
+  }, [wallets, balances, simState, simMode, mintForCol]);
 
   const sellOneLive = async (w: WaterfallWallet, mint: string) => {
     const { error } = await supabase.functions.invoke("waterfall-swap", {
@@ -272,8 +278,8 @@ export default function WaterfallGrid() {
   };
 
   const sellColumn = async (col: number) => {
-    const mint = targetMint.trim();
-    if (!mint) return toast({ title: "Set a token address at the top", variant: "destructive" });
+    const mint = mintForCol(col);
+    if (!mint) return toast({ title: `W${col + 1}: set a token mint first`, variant: "destructive" });
     const list = collectSellTargets(col);
     if (list.length === 0) return toast({ title: `W${col + 1}: no wallets hold target token`, variant: "destructive" });
     if (!confirm(`Sell ALL ${mint.slice(0, 6)}… in every wallet of W${col + 1}?\nThis will sell ${list.length} wallet(s) immediately.`)) return;
@@ -302,26 +308,30 @@ export default function WaterfallGrid() {
   };
 
   const sellGrid = async () => {
-    const mint = targetMint.trim();
-    if (!mint) return toast({ title: "Set a token address at the top", variant: "destructive" });
-    const list = collectSellTargets(-1);
-    if (list.length === 0) return toast({ title: "No wallets hold target token", variant: "destructive" });
-    if (!confirm(`SELL GRID: Sell ALL ${mint.slice(0, 6)}… across ALL ${list.length} holding wallet(s)?\nThis cannot be undone.`)) return;
+    // Gather targets per-column (each column may have its own mint).
+    const perColLists: WaterfallWallet[][] = Array.from({ length: 10 }, (_, c) => collectSellTargets(c));
+    const list = perColLists.flat();
+    if (list.length === 0) return toast({ title: "No wallets hold any target token", variant: "destructive" });
+    if (!confirm(`SELL GRID: Sell every target token across ALL ${list.length} holding wallet(s)?\nThis cannot be undone.`)) return;
     setSellingGrid(true);
     const perCol = new Array(10).fill(0).map(() => ({ ok: 0, total: 0 }));
     let ok = 0; let firstErr = "";
     try {
-      for (const w of list) {
-        perCol[w.column_index].total++;
-        try {
-          if (simMode) simSell(w, mint);
-          else await sellOneLive(w, mint);
-          perCol[w.column_index].ok++;
-          ok++;
-        } catch (e: any) {
-          if (!firstErr) firstErr = e?.message || String(e);
+      for (let c = 0; c < 10; c++) {
+        const mint = mintForCol(c);
+        if (!mint) continue;
+        for (const w of perColLists[c]) {
+          perCol[c].total++;
+          try {
+            if (simMode) simSell(w, mint);
+            else await sellOneLive(w, mint);
+            perCol[c].ok++;
+            ok++;
+          } catch (e: any) {
+            if (!firstErr) firstErr = e?.message || String(e);
+          }
+          await new Promise((r) => setTimeout(r, simMode ? 60 : 200));
         }
-        await new Promise((r) => setTimeout(r, simMode ? 60 : 200));
       }
       if (simMode) appendLog({ col: -1, row: -1, kind: "SELL", msg: `GRID SIM SELL  (${ok}/${list.length} wallets)` });
       const desc = perCol
@@ -338,11 +348,60 @@ export default function WaterfallGrid() {
     }
   };
 
+  // ─── BULK BUY (per column) ─────────────────────────────────────────────
+  const buyColumn = async (col: number) => {
+    const mint = mintForCol(col);
+    if (!mint) return toast({ title: `W${col + 1}: set a token mint first`, variant: "destructive" });
+    const pct = Number(buySizePct) || 0;
+    if (!(pct > 0 && pct < 100)) return toast({ title: "Buy % must be between 1 and 99", variant: "destructive" });
+    const colWallets = wallets.filter((w) => w.column_index === col);
+    // Eligible = enough SOL to make a meaningful buy.
+    const eligible = colWallets.filter((w) => {
+      const s = simMode ? (simState[w.id]?.sol ?? Number(w.sol_balance || 0)) : Number(w.sol_balance || 0);
+      return s >= 0.002 && Math.floor(s * (pct / 100) * LAMPORTS_PER_SOL) >= 1_000_000;
+    });
+    if (eligible.length === 0) return toast({ title: `W${col + 1}: no wallets with enough SOL`, variant: "destructive" });
+    if (!confirm(`BUY ${mint.slice(0, 6)}… in every wallet of W${col + 1} (${eligible.length}/${colWallets.length} eligible) at ${pct}% of wallet SOL?`)) return;
+    setBuyingCol(col);
+    let ok = 0; let firstErr = "";
+    try {
+      for (const w of eligible) {
+        const s = simMode ? (simState[w.id]?.sol ?? Number(w.sol_balance || 0)) : Number(w.sol_balance || 0);
+        const lamports = Math.floor(s * (pct / 100) * LAMPORTS_PER_SOL);
+        try {
+          if (simMode) simBuy(w, mint, lamports);
+          else {
+            const { error } = await supabase.functions.invoke("waterfall-swap", {
+              body: { walletId: w.id, mint, side: "buy", buyLamports: lamports },
+            });
+            if (error) throw new Error(error.message);
+          }
+          ok++;
+        } catch (e: any) {
+          if (!firstErr) firstErr = e?.message || String(e);
+        }
+        await new Promise((r) => setTimeout(r, simMode ? 80 : 250));
+      }
+      if (simMode) appendLog({ col, row: -1, kind: "BUY", msg: `W${col + 1}  SIM BUY WATERFALL  (${ok}/${eligible.length} wallets)` });
+      toast({
+        title: `W${col + 1} bought ${ok}/${eligible.length}`,
+        description: firstErr ? `First error: ${firstErr}` : simMode ? "Simulation complete." : "Submitted.",
+        variant: firstErr ? "destructive" : "default",
+      });
+    } finally {
+      setBuyingCol(null);
+    }
+  };
+
   // Aggregate all unique non-SOL mints currently held across the grid, then fetch DexScreener prices.
   useEffect(() => {
     const mints = new Set<string>();
     for (const b of Object.values(balances)) for (const t of b.tokens) if (t.amount > 0) mints.add(t.mint);
     if (targetMint && targetMint.length >= 32) mints.add(targetMint.trim());
+    for (const m of perColMints) {
+      const v = (m ?? "").trim();
+      if (v.length >= 32 && v.length <= 44) mints.add(v);
+    }
     const missing = [...mints].filter((m) => !(m in tokenPrices));
     if (missing.length === 0) return;
     let cancelled = false;
@@ -368,7 +427,7 @@ export default function WaterfallGrid() {
       if (!cancelled) setTokenPrices((prev) => ({ ...prev, ...next }));
     })();
     return () => { cancelled = true; };
-  }, [balances, targetMint]);
+  }, [balances, targetMint, perColMints]);
 
   const toggleBuyEnabled = (col: number) =>
     setBuyEnabled((prev) => prev.map((v, i) => (i === col ? !v : v)));
