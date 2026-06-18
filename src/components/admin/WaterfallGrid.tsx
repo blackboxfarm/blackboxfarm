@@ -230,16 +230,19 @@ export default function WaterfallGrid() {
         const blob: PersistedBlob = {
           targetMint, useSameMint, perColMints, buySizePct, buyEnabled,
           simState, simLog, simFundCol, simFundAmount,
+          simCostBasis, simRealizedPnl,
         };
         localStorage.setItem(PERSIST_KEY, JSON.stringify(blob));
       } catch { /* quota or serialization error — ignore */ }
     }, 150);
     return () => clearTimeout(t);
-  }, [targetMint, useSameMint, perColMints, buySizePct, buyEnabled, simState, simLog, simFundCol, simFundAmount]);
+  }, [targetMint, useSameMint, perColMints, buySizePct, buyEnabled, simState, simLog, simFundCol, simFundAmount, simCostBasis, simRealizedPnl]);
 
   const resetAllGrid = () => {
     seedDefaultSim();
     setSimLog([]);
+    setSimCostBasis({});
+    setSimRealizedPnl({});
     try { localStorage.removeItem(PERSIST_KEY); } catch {}
     appendLog({ col: -1, row: -1, kind: "RESET", msg: `Grid reset · R1 of all 10 waterfalls seeded with ${SIM_DEFAULT_SEED_SOL} SOL.` });
     toast({ title: "Sim grid reset", description: `R1 of all columns = ${SIM_DEFAULT_SEED_SOL} SOL` });
