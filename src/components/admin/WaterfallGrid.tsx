@@ -310,6 +310,22 @@ export default function WaterfallGrid() {
       const newTokens = { ...cur.tokens, [mint]: (cur.tokens[mint] ?? 0) + tokensOut };
       return { ...prev, [w.id]: { sol: newSol, tokens: newTokens } };
     });
+    // Accumulate cost basis for realized PnL on later sells.
+    setSimCostBasis((prev) => {
+      const walletBasis = prev[w.id] ?? {};
+      const cur = walletBasis[mint] ?? { solIn: 0, usdIn: 0, tokens: 0 };
+      return {
+        ...prev,
+        [w.id]: {
+          ...walletBasis,
+          [mint]: {
+            solIn: cur.solIn + solIn,
+            usdIn: cur.usdIn + (phantomPrice ? 0 : usdIn),
+            tokens: cur.tokens + tokensOut,
+          },
+        },
+      };
+    });
     appendLog({
       col: w.column_index, row: w.row_index, kind: "BUY",
       msg: `W${w.column_index + 1}·R${w.row_index + 1}  SIM BUY  ${solIn.toFixed(4)} SOL → ${tokensOut.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${meta?.symbol ?? "?"} @ $${priceUsd ? priceUsd.toFixed(8).replace(/\.?0+$/, "") : "?"}${phantomPrice ? "  (phantom price)" : ""}`,
@@ -320,6 +336,10 @@ export default function WaterfallGrid() {
     const meta = tokenPrices[mint];
     const priceUsd = meta?.priceUsd ?? 0;
     const solPriceUsd = solUsd || 0;
+    let pnlSol = 0;
+    let pnlUsd = 0;
+    let pnlPct = 0;
+    let pnlHasUsd = false;
     setSimState((prev) => {
       const cur = prev[w.id] ?? { sol: Number(w.sol_balance || 0), tokens: {} };
       let amt = cur.tokens[mint] ?? 0;
@@ -337,9 +357,51 @@ export default function WaterfallGrid() {
       const solOut = solPriceUsd > 0 ? usdOut / solPriceUsd : 0;
       const newTokens = { ...cur.tokens };
       delete newTokens[mint];
+
+      // Realized PnL vs accumulated cost basis (proportional to sold tokens).
+      const basisWallet = simCostBasis[w.id] ?? {};
+      const basis = basisWallet[mint];
+      let costSol = synthSolIn; // synthetic basis defaults to the phantom-buy SOL
+      let costUsd = synthSolIn * solPriceUsd * 0.99;
+      if (basis && basis.tokens > 0 && amt > 0) {
+        const frac = Math.min(1, amt / basis.tokens);
+        costSol = basis.solIn * frac;
+        costUsd = basis.usdIn * frac;
+      }
+      pnlSol = solOut - costSol;
+      pnlUsd = costUsd > 0 ? usdOut - costUsd : 0;
+      pnlHasUsd = costUsd > 0;
+      pnlPct = costUsd > 0 ? (pnlUsd / costUsd) * 100 : (costSol > 0 ? (pnlSol / costSol) * 100 : 0);
+
+      // Update cost basis (consume the sold portion) and realized PnL totals.
+      setSimCostBasis((prevBasis) => {
+        const wb = { ...(prevBasis[w.id] ?? {}) };
+        if (basis && basis.tokens > 0) {
+          const frac = Math.min(1, amt / basis.tokens);
+          const remTokens = Math.max(0, basis.tokens - amt);
+          if (remTokens <= 1e-9) {
+            delete wb[mint];
+          } else {
+            wb[mint] = {
+              solIn: basis.solIn * (1 - frac),
+              usdIn: basis.usdIn * (1 - frac),
+              tokens: remTokens,
+            };
+          }
+        }
+        return { ...prevBasis, [w.id]: wb };
+      });
+      setSimRealizedPnl((prevR) => {
+        const cur = prevR[w.id] ?? { sol: 0, usd: 0 };
+        return { ...prevR, [w.id]: { sol: cur.sol + pnlSol, usd: cur.usd + pnlUsd } };
+      });
+
+      const pnlTag = amt > 0
+        ? `  PnL ${pnlSol >= 0 ? "+" : ""}${pnlSol.toFixed(4)} SOL${pnlHasUsd ? ` (${pnlUsd >= 0 ? "+" : ""}$${pnlUsd.toFixed(2)}, ${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(1)}%)` : ""}`
+        : "";
       appendLog({
         col: w.column_index, row: w.row_index, kind: "SELL",
-        msg: `W${w.column_index + 1}·R${w.row_index + 1}  SIM SELL ${amt.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${meta?.symbol ?? "?"} → ${solOut.toFixed(4)} SOL${synthSolIn > 0 ? "  (phantom)" : ""}`,
+        msg: `W${w.column_index + 1}·R${w.row_index + 1}  SIM SELL ${amt.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${meta?.symbol ?? "?"} → ${solOut.toFixed(4)} SOL${synthSolIn > 0 ? "  (phantom)" : ""}${pnlTag}`,
       });
       const newSol = Math.max(0, cur.sol - synthSolIn + solOut - 0.00001);
       return { ...prev, [w.id]: { sol: newSol, tokens: newTokens } };
