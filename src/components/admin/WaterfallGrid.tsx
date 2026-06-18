@@ -1184,6 +1184,7 @@ export default function WaterfallGrid() {
                               onSimSell={simSell}
                               onSimTroll={simTroll}
                               realizedPnl={simMode ? simRealizedPnl[w.id] : undefined}
+                              costBasis={simMode ? simCostBasis[w.id] : undefined}
                           />
                         ) : <span className="text-muted-foreground">—</span>}
                       </td>
@@ -1246,6 +1247,7 @@ function Cell({
   onOpen, onRename, isHeadOfColumn, cascade, isCurrentCascadeWallet,
   planHop, hasPlan, onPreview, onExecute, onCancelPlan,
   simMode, onSimBuy, onSimSell, onSimTroll, realizedPnl,
+  costBasis,
 }: {
   w: WaterfallWallet;
   tokens: TokenHolding[];
@@ -1270,6 +1272,7 @@ function Cell({
   onSimSell: (w: WaterfallWallet, mint: string) => void;
   onSimTroll: (w: WaterfallWallet) => void;
   realizedPnl?: { sol: number; usd: number };
+  costBasis?: Record<string, { solIn: number; usdIn: number; tokens: number }>;
 }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(w.nickname ?? "");
@@ -1391,6 +1394,18 @@ function Cell({
             const amt = t.amount >= 1000
               ? t.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })
               : t.amount.toLocaleString(undefined, { maximumFractionDigits: 4 });
+            const basis = costBasis?.[t.mint];
+            let unrealized: { sol: number; usd: number; pct: number } | null = null;
+            if (basis && basis.tokens > 0 && meta) {
+              const heldRatio = Math.min(1, t.amount / basis.tokens);
+              const costSol = basis.solIn * heldRatio;
+              const costUsd = basis.usdIn * heldRatio;
+              const curSol = solEq;
+              const pnlSol = curSol - costSol;
+              const pnlUsd = usd - costUsd;
+              const pct = costUsd > 0 ? (pnlUsd / costUsd) * 100 : (costSol > 0 ? (pnlSol / costSol) * 100 : 0);
+              unrealized = { sol: pnlSol, usd: pnlUsd, pct };
+            }
             return (
               <div key={t.mint} className={`truncate ${isTarget ? "text-foreground font-medium" : "text-muted-foreground"}`}>
                 {amt} {sym}
@@ -1398,6 +1413,13 @@ function Cell({
                   <span className="text-muted-foreground">
                     {" "}≈ ${usd >= 1 ? usd.toFixed(2) : usd.toFixed(4)}
                     {solEq > 0 && <> / {solEq.toFixed(4)} SOL</>}
+                  </span>
+                )}
+                {unrealized && (Math.abs(unrealized.sol) > 1e-6 || Math.abs(unrealized.usd) > 0.001) && (
+                  <span className={`ml-1 font-mono ${unrealized.sol >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                    [{unrealized.sol >= 0 ? "+" : ""}{unrealized.sol.toFixed(4)} SOL
+                    {Math.abs(unrealized.usd) > 0.001 && <> / {unrealized.usd >= 0 ? "+" : ""}${Math.abs(unrealized.usd) >= 1 ? unrealized.usd.toFixed(2) : unrealized.usd.toFixed(4)}</>}
+                    {Math.abs(unrealized.pct) > 0.01 && <> · {unrealized.pct >= 0 ? "+" : ""}{unrealized.pct.toFixed(1)}%</>}]
                   </span>
                 )}
               </div>
