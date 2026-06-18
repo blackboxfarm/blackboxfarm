@@ -15,6 +15,7 @@ const WALLET_SOURCES = [
   { table: 'blackbox_wallets', secretCol: 'secret_key_encrypted', encrypted: true },
   { table: 'super_admin_wallets', secretCol: 'secret_key_encrypted', encrypted: true },
   { table: 'airdrop_wallets', secretCol: 'secret_key_encrypted', encrypted: true },
+  { table: 'waterfall_wallets', secretCol: 'secret_key_encrypted', encrypted: true },
 ];
 
 serve(withRunLog('export-wallet-key', async (req) => {
