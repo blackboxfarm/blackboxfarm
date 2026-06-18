@@ -543,31 +543,56 @@ export default function WaterfallGrid() {
     setBuyingCol(col);
     let ok = 0; let firstErr = "";
     try {
-      // Capture a FRESH price at the moment of this column buy so all 10
-      // wallets in this column share the same cost basis — and a later
-      // column buy (e.g. 20s after) gets its OWN fresh capture instead of
-      // re-using the polled snapshot from the previous column.
-      let captured: { priceUsd: number; symbol: string } | undefined;
-      if (simMode) {
-        try {
-          const fresh = await fetchPricesFor([mint]);
-          if (fresh[mint] && fresh[mint].priceUsd > 0) {
-            captured = fresh[mint];
-            setTokenPrices((prev) => ({ ...prev, [mint]: fresh[mint] }));
-            appendLog({ col, row: -1, kind: "BUY", msg: `W${col + 1}  PRICE LOCK  ${fresh[mint].symbol} @ $${fresh[mint].priceUsd.toFixed(8).replace(/\.?0+$/, "")}` });
-          }
-        } catch { /* fall back to cached tokenPrices */ }
-      }
       for (const w of eligible) {
         const s = simMode ? (simState[w.id]?.sol ?? Number(w.sol_balance || 0)) : Number(w.sol_balance || 0);
         const lamports = Math.floor(s * (pct / 100) * LAMPORTS_PER_SOL);
+        // Fetch a FRESH price for THIS wallet's buy moment, so per-wallet
+        // PnL reflects intra-waterfall price drift instead of a single
+        // column-wide snapshot.
+        let priceMeta: { priceUsd: number; symbol: string } | undefined;
         try {
-          if (simMode) simBuy(w, mint, lamports, captured);
+          const fresh = await fetchPricesFor([mint]);
+          if (fresh[mint] && fresh[mint].priceUsd > 0) {
+            priceMeta = fresh[mint];
+            setTokenPrices((prev) => ({ ...prev, [mint]: fresh[mint] }));
+          }
+        } catch { /* fall back to cached tokenPrices */ }
+        const effective = priceMeta ?? tokenPrices[mint];
+        try {
+          if (simMode) simBuy(w, mint, lamports, priceMeta);
           else {
             const { error } = await supabase.functions.invoke("waterfall-swap", {
               body: { walletId: w.id, mint, side: "buy", buyLamports: lamports },
             });
             if (error) throw new Error(error.message);
+            // Record per-wallet cost basis for LIVE buys so the cell's USD
+            // value can colour green/red against the buy price.
+            const solIn = lamports / LAMPORTS_PER_SOL;
+            const solPriceUsd = solUsd || 0;
+            const usdIn = solIn * solPriceUsd * 0.99;
+            const priceUsd = effective?.priceUsd ?? 0;
+            const tokensEst = priceUsd > 0 && solPriceUsd > 0
+              ? usdIn / priceUsd
+              : solIn * 1_000_000; // phantom estimate, refined when balances refresh
+            setSimCostBasis((prev) => {
+              const wb = prev[w.id] ?? {};
+              const cur = wb[mint] ?? { solIn: 0, usdIn: 0, tokens: 0 };
+              return {
+                ...prev,
+                [w.id]: {
+                  ...wb,
+                  [mint]: {
+                    solIn: cur.solIn + solIn,
+                    usdIn: cur.usdIn + (solPriceUsd > 0 ? usdIn : 0),
+                    tokens: cur.tokens + tokensEst,
+                  },
+                },
+              };
+            });
+            appendLog({
+              col: w.column_index, row: w.row_index, kind: "BUY",
+              msg: `W${w.column_index + 1}·R${w.row_index + 1}  LIVE BUY  ${solIn.toFixed(4)} SOL @ $${priceUsd ? priceUsd.toFixed(8).replace(/\.?0+$/, "") : "?"}`,
+            });
           }
           ok++;
         } catch (e: any) {
@@ -1201,7 +1226,7 @@ export default function WaterfallGrid() {
                               onSimSell={simSell}
                               onSimTroll={simTroll}
                               realizedPnl={simMode ? simRealizedPnl[w.id] : undefined}
-                              costBasis={simMode ? simCostBasis[w.id] : undefined}
+                              costBasis={simCostBasis[w.id]}
                           />
                         ) : <span className="text-muted-foreground">—</span>}
                       </td>
