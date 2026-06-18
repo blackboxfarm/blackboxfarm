@@ -513,8 +513,17 @@ export default function WaterfallGrid() {
         for (const w of perColLists[c]) {
           perCol[c].total++;
           try {
-            if (simMode) simSell(w, mint);
-            else await sellOneLive(w, mint);
+            if (simMode) {
+              let priceMeta: { priceUsd: number; symbol: string } | undefined;
+              try {
+                const fresh = await fetchPricesFor([mint]);
+                if (fresh[mint] && fresh[mint].priceUsd > 0) {
+                  priceMeta = fresh[mint];
+                  setTokenPrices((prev) => ({ ...prev, [mint]: fresh[mint] }));
+                }
+              } catch { /* ignore */ }
+              simSell(w, mint, priceMeta);
+            } else await sellOneLive(w, mint);
             perCol[c].ok++;
             ok++;
           } catch (e: any) {
