@@ -11,6 +11,32 @@ const SHORT = (k: string) => `${k.slice(0, 4)}…${k.slice(-4)}`;
 const LAMPORTS_PER_SOL = 1_000_000_000;
 const FEE_BUFFER_LAMPORTS = 10_000;
 const SIM_STORAGE_KEY = "waterfall_sim_mode";
+const PERSIST_KEY = "waterfall-grid:v1";
+
+type PersistedBlob = {
+  targetMint?: string;
+  useSameMint?: boolean;
+  perColMints?: string[];
+  buySizePct?: string;
+  buyEnabled?: boolean[];
+  simState?: Record<string, { sol: number; tokens: Record<string, number> }>;
+  simLog?: SimLogEntry[];
+  simFundCol?: string;
+  simFundAmount?: string;
+};
+
+function loadPersisted(): PersistedBlob {
+  try {
+    const raw = localStorage.getItem(PERSIST_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? (parsed as PersistedBlob) : {};
+  } catch {
+    return {};
+  }
+}
+const PERSISTED_INIT: PersistedBlob = typeof window !== "undefined" ? loadPersisted() : {};
+
 const SIM_TROLL_CYCLES = 10;
 const SIM_TROLL_COST_PER_CYCLE = 0.0002; // SOL "fee" per simulated cycle
 const SIM_DEFAULT_SEED_SOL = 12; // fake SOL credited to R1 of each column when sim starts / is reset
@@ -94,14 +120,22 @@ export default function WaterfallGrid() {
   const solUsd = priceData?.price ?? 0;
 
   // Buy target — single token mint pasted at the top, with per-column enable checkboxes.
-  const [targetMint, setTargetMint] = useState<string>("");
-  const [buySizePct, setBuySizePct] = useState<string>("95");
-  const [buyEnabled, setBuyEnabled] = useState<boolean[]>(() => Array.from({ length: 10 }, () => true));
+  const [targetMint, setTargetMint] = useState<string>(PERSISTED_INIT.targetMint ?? "");
+  const [buySizePct, setBuySizePct] = useState<string>(PERSISTED_INIT.buySizePct ?? "95");
+  const [buyEnabled, setBuyEnabled] = useState<boolean[]>(() => {
+    const p = PERSISTED_INIT.buyEnabled;
+    if (Array.isArray(p) && p.length === 10) return p.map(Boolean);
+    return Array.from({ length: 10 }, () => true);
+  });
   const [tokenPrices, setTokenPrices] = useState<Record<string, { priceUsd: number; symbol: string }>>({});
   // When true (default) every waterfall buys the single `targetMint` above.
   // When false each waterfall column gets its own mint input in the header.
-  const [useSameMint, setUseSameMint] = useState<boolean>(true);
-  const [perColMints, setPerColMints] = useState<string[]>(() => Array.from({ length: 10 }, () => ""));
+  const [useSameMint, setUseSameMint] = useState<boolean>(PERSISTED_INIT.useSameMint ?? true);
+  const [perColMints, setPerColMints] = useState<string[]>(() => {
+    const p = PERSISTED_INIT.perColMints;
+    if (Array.isArray(p) && p.length === 10) return p.map((s) => String(s ?? ""));
+    return Array.from({ length: 10 }, () => "");
+  });
   const mintForCol = useCallback(
     (c: number) => (useSameMint ? targetMint.trim() : (perColMints[c] ?? "").trim()),
     [useSameMint, targetMint, perColMints],
@@ -111,13 +145,18 @@ export default function WaterfallGrid() {
   const [simMode, setSimMode] = useState<boolean>(() => {
     try { return localStorage.getItem(SIM_STORAGE_KEY) === "1"; } catch { return false; }
   });
-  const [simState, setSimState] = useState<Record<string, { sol: number; tokens: Record<string, number> }>>({});
-  const [simLog, setSimLog] = useState<SimLogEntry[]>([]);
+  const [simState, setSimState] = useState<Record<string, { sol: number; tokens: Record<string, number> }>>(
+    () => PERSISTED_INIT.simState ?? {},
+  );
+  const [simLog, setSimLog] = useState<SimLogEntry[]>(() => {
+    const p = PERSISTED_INIT.simLog;
+    return Array.isArray(p) ? p.slice(0, 500) : [];
+  });
   const [simLogOpen, setSimLogOpen] = useState(true);
 
   // Funding toolbar state
-  const [simFundCol, setSimFundCol] = useState<string>("all"); // "all" or "0".."9"
-  const [simFundAmount, setSimFundAmount] = useState<string>("10");
+  const [simFundCol, setSimFundCol] = useState<string>(PERSISTED_INIT.simFundCol ?? "all"); // "all" or "0".."9"
+  const [simFundAmount, setSimFundAmount] = useState<string>(PERSISTED_INIT.simFundAmount ?? "10");
 
   // Bulk-sell busy flags
   const [sellingCol, setSellingCol] = useState<number | null>(null);
@@ -146,16 +185,29 @@ export default function WaterfallGrid() {
       seedDefaultSim();
       appendLog({ col: -1, row: -1, kind: "RESET", msg: `Seeded ${SIM_DEFAULT_SEED_SOL} SOL on R1 of all 10 waterfalls.` });
     }
-    if (!simMode) {
-      setSimState({});
-      setSimLog([]);
-    }
+    // NOTE: leaving simMode no longer wipes simState/simLog — they are persisted
+    // across mounts and reloads. Use "Reset All Grid" to clear explicitly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [simMode, wallets.length]);
+
+  // Debounced persistence of all user-controlled SIM + UI state.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        const blob: PersistedBlob = {
+          targetMint, useSameMint, perColMints, buySizePct, buyEnabled,
+          simState, simLog, simFundCol, simFundAmount,
+        };
+        localStorage.setItem(PERSIST_KEY, JSON.stringify(blob));
+      } catch { /* quota or serialization error — ignore */ }
+    }, 150);
+    return () => clearTimeout(t);
+  }, [targetMint, useSameMint, perColMints, buySizePct, buyEnabled, simState, simLog, simFundCol, simFundAmount]);
 
   const resetAllGrid = () => {
     seedDefaultSim();
     setSimLog([]);
+    try { localStorage.removeItem(PERSIST_KEY); } catch {}
     appendLog({ col: -1, row: -1, kind: "RESET", msg: `Grid reset · R1 of all 10 waterfalls seeded with ${SIM_DEFAULT_SEED_SOL} SOL.` });
     toast({ title: "Sim grid reset", description: `R1 of all columns = ${SIM_DEFAULT_SEED_SOL} SOL` });
   };
