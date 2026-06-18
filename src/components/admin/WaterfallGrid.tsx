@@ -261,7 +261,8 @@ export default function WaterfallGrid() {
   const collectSellTargets = useCallback((col: number): WaterfallWallet[] => {
     const mint = mintForCol(col);
     if (!mint) return [];
-    return wallets.filter((w) => w.column_index === col).filter((w) => {
+    const inCol = wallets.filter((w) => w.column_index === col);
+    const holders = inCol.filter((w) => {
       if (simMode) {
         const amt = simState[w.id]?.tokens?.[mint] ?? 0;
         return amt > 0;
@@ -269,6 +270,16 @@ export default function WaterfallGrid() {
       const held = (balances[w.pubkey]?.tokens ?? []).find((t) => t.mint === mint);
       return !!held && held.amount > 0;
     });
+    if (holders.length > 0) return holders;
+    // SIM fallback: after a CASCADE run every buy is paired with an immediate
+    // sell, so no wallet ends up holding the token. Allow the user to still
+    // demonstrate a per-column / grid sell by targeting every wallet in the
+    // column that has SOL — simSell() synthesizes a phantom holding so the
+    // log line is meaningful. Never do this in live mode.
+    if (simMode) {
+      return inCol.filter((w) => (simState[w.id]?.sol ?? 0) > 0.0005);
+    }
+    return holders;
   }, [wallets, balances, simState, simMode, mintForCol]);
 
   const sellOneLive = async (w: WaterfallWallet, mint: string) => {
