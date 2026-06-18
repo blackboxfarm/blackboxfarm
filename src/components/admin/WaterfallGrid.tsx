@@ -466,8 +466,20 @@ export default function WaterfallGrid() {
     try {
       for (const w of list) {
         try {
-          if (simMode) simSell(w, mint);
-          else await sellOneLive(w, mint);
+          if (simMode) {
+            // Fetch a FRESH price for THIS wallet's sell moment so realized
+            // PnL reflects current market, not the stale snapshot left in
+            // tokenPrices by the most recent buy fetch.
+            let priceMeta: { priceUsd: number; symbol: string } | undefined;
+            try {
+              const fresh = await fetchPricesFor([mint]);
+              if (fresh[mint] && fresh[mint].priceUsd > 0) {
+                priceMeta = fresh[mint];
+                setTokenPrices((prev) => ({ ...prev, [mint]: fresh[mint] }));
+              }
+            } catch { /* fall back to cached tokenPrices */ }
+            simSell(w, mint, priceMeta);
+          } else await sellOneLive(w, mint);
           ok++;
         } catch (e: any) {
           if (!firstErr) firstErr = e?.message || String(e);
