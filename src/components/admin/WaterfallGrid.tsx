@@ -23,6 +23,8 @@ type PersistedBlob = {
   simLog?: SimLogEntry[];
   simFundCol?: string;
   simFundAmount?: string;
+  simCostBasis?: Record<string, Record<string, { solIn: number; usdIn: number; tokens: number }>>;
+  simRealizedPnl?: Record<string, { sol: number; usd: number }>;
 };
 
 function loadPersisted(): PersistedBlob {
@@ -154,6 +156,17 @@ export default function WaterfallGrid() {
   });
   const [simLogOpen, setSimLogOpen] = useState(true);
 
+  // Cost basis per (walletId → mint) for realized PnL.
+  const [simCostBasis, setSimCostBasis] = useState<Record<string, Record<string, { solIn: number; usdIn: number; tokens: number }>>>(
+    () => PERSISTED_INIT.simCostBasis ?? {},
+  );
+  const [simRealizedPnl, setSimRealizedPnl] = useState<Record<string, { sol: number; usd: number }>>(
+    () => PERSISTED_INIT.simRealizedPnl ?? {},
+  );
+  const [lastPriceRefresh, setLastPriceRefresh] = useState<number>(0);
+  const [pricesRefreshing, setPricesRefreshing] = useState(false);
+  const [, forceTick] = useState(0);
+
   // Funding toolbar state
   const [simFundCol, setSimFundCol] = useState<string>(PERSISTED_INIT.simFundCol ?? "all"); // "all" or "0".."9"
   const [simFundAmount, setSimFundAmount] = useState<string>(PERSISTED_INIT.simFundAmount ?? "10");
@@ -217,16 +230,19 @@ export default function WaterfallGrid() {
         const blob: PersistedBlob = {
           targetMint, useSameMint, perColMints, buySizePct, buyEnabled,
           simState, simLog, simFundCol, simFundAmount,
+          simCostBasis, simRealizedPnl,
         };
         localStorage.setItem(PERSIST_KEY, JSON.stringify(blob));
       } catch { /* quota or serialization error — ignore */ }
     }, 150);
     return () => clearTimeout(t);
-  }, [targetMint, useSameMint, perColMints, buySizePct, buyEnabled, simState, simLog, simFundCol, simFundAmount]);
+  }, [targetMint, useSameMint, perColMints, buySizePct, buyEnabled, simState, simLog, simFundCol, simFundAmount, simCostBasis, simRealizedPnl]);
 
   const resetAllGrid = () => {
     seedDefaultSim();
     setSimLog([]);
+    setSimCostBasis({});
+    setSimRealizedPnl({});
     try { localStorage.removeItem(PERSIST_KEY); } catch {}
     appendLog({ col: -1, row: -1, kind: "RESET", msg: `Grid reset · R1 of all 10 waterfalls seeded with ${SIM_DEFAULT_SEED_SOL} SOL.` });
     toast({ title: "Sim grid reset", description: `R1 of all columns = ${SIM_DEFAULT_SEED_SOL} SOL` });
@@ -294,6 +310,22 @@ export default function WaterfallGrid() {
       const newTokens = { ...cur.tokens, [mint]: (cur.tokens[mint] ?? 0) + tokensOut };
       return { ...prev, [w.id]: { sol: newSol, tokens: newTokens } };
     });
+    // Accumulate cost basis for realized PnL on later sells.
+    setSimCostBasis((prev) => {
+      const walletBasis = prev[w.id] ?? {};
+      const cur = walletBasis[mint] ?? { solIn: 0, usdIn: 0, tokens: 0 };
+      return {
+        ...prev,
+        [w.id]: {
+          ...walletBasis,
+          [mint]: {
+            solIn: cur.solIn + solIn,
+            usdIn: cur.usdIn + (phantomPrice ? 0 : usdIn),
+            tokens: cur.tokens + tokensOut,
+          },
+        },
+      };
+    });
     appendLog({
       col: w.column_index, row: w.row_index, kind: "BUY",
       msg: `W${w.column_index + 1}·R${w.row_index + 1}  SIM BUY  ${solIn.toFixed(4)} SOL → ${tokensOut.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${meta?.symbol ?? "?"} @ $${priceUsd ? priceUsd.toFixed(8).replace(/\.?0+$/, "") : "?"}${phantomPrice ? "  (phantom price)" : ""}`,
@@ -304,6 +336,10 @@ export default function WaterfallGrid() {
     const meta = tokenPrices[mint];
     const priceUsd = meta?.priceUsd ?? 0;
     const solPriceUsd = solUsd || 0;
+    let pnlSol = 0;
+    let pnlUsd = 0;
+    let pnlPct = 0;
+    let pnlHasUsd = false;
     setSimState((prev) => {
       const cur = prev[w.id] ?? { sol: Number(w.sol_balance || 0), tokens: {} };
       let amt = cur.tokens[mint] ?? 0;
@@ -321,14 +357,56 @@ export default function WaterfallGrid() {
       const solOut = solPriceUsd > 0 ? usdOut / solPriceUsd : 0;
       const newTokens = { ...cur.tokens };
       delete newTokens[mint];
+
+      // Realized PnL vs accumulated cost basis (proportional to sold tokens).
+      const basisWallet = simCostBasis[w.id] ?? {};
+      const basis = basisWallet[mint];
+      let costSol = synthSolIn; // synthetic basis defaults to the phantom-buy SOL
+      let costUsd = synthSolIn * solPriceUsd * 0.99;
+      if (basis && basis.tokens > 0 && amt > 0) {
+        const frac = Math.min(1, amt / basis.tokens);
+        costSol = basis.solIn * frac;
+        costUsd = basis.usdIn * frac;
+      }
+      pnlSol = solOut - costSol;
+      pnlUsd = costUsd > 0 ? usdOut - costUsd : 0;
+      pnlHasUsd = costUsd > 0;
+      pnlPct = costUsd > 0 ? (pnlUsd / costUsd) * 100 : (costSol > 0 ? (pnlSol / costSol) * 100 : 0);
+
+      // Update cost basis (consume the sold portion) and realized PnL totals.
+      setSimCostBasis((prevBasis) => {
+        const wb = { ...(prevBasis[w.id] ?? {}) };
+        if (basis && basis.tokens > 0) {
+          const frac = Math.min(1, amt / basis.tokens);
+          const remTokens = Math.max(0, basis.tokens - amt);
+          if (remTokens <= 1e-9) {
+            delete wb[mint];
+          } else {
+            wb[mint] = {
+              solIn: basis.solIn * (1 - frac),
+              usdIn: basis.usdIn * (1 - frac),
+              tokens: remTokens,
+            };
+          }
+        }
+        return { ...prevBasis, [w.id]: wb };
+      });
+      setSimRealizedPnl((prevR) => {
+        const cur = prevR[w.id] ?? { sol: 0, usd: 0 };
+        return { ...prevR, [w.id]: { sol: cur.sol + pnlSol, usd: cur.usd + pnlUsd } };
+      });
+
+      const pnlTag = amt > 0
+        ? `  PnL ${pnlSol >= 0 ? "+" : ""}${pnlSol.toFixed(4)} SOL${pnlHasUsd ? ` (${pnlUsd >= 0 ? "+" : ""}$${pnlUsd.toFixed(2)}, ${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(1)}%)` : ""}`
+        : "";
       appendLog({
         col: w.column_index, row: w.row_index, kind: "SELL",
-        msg: `W${w.column_index + 1}·R${w.row_index + 1}  SIM SELL ${amt.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${meta?.symbol ?? "?"} → ${solOut.toFixed(4)} SOL${synthSolIn > 0 ? "  (phantom)" : ""}`,
+        msg: `W${w.column_index + 1}·R${w.row_index + 1}  SIM SELL ${amt.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${meta?.symbol ?? "?"} → ${solOut.toFixed(4)} SOL${synthSolIn > 0 ? "  (phantom)" : ""}${pnlTag}`,
       });
       const newSol = Math.max(0, cur.sol - synthSolIn + solOut - 0.00001);
       return { ...prev, [w.id]: { sol: newSol, tokens: newTokens } };
     });
-  }, [tokenPrices, solUsd, appendLog]);
+  }, [tokenPrices, solUsd, appendLog, simCostBasis]);
 
   const simTroll = useCallback((w: WaterfallWallet) => {
     const cost = SIM_TROLL_CYCLES * SIM_TROLL_COST_PER_CYCLE;
@@ -491,41 +569,98 @@ export default function WaterfallGrid() {
     }
   };
 
-  // Aggregate all unique non-SOL mints currently held across the grid, then fetch DexScreener prices.
-  useEffect(() => {
+  // Fetch DexScreener prices for an explicit mint set. Used both for the
+  // initial "missing mint" backfill and for the SIM-mode live refresh poller.
+  const fetchPricesFor = useCallback(async (mintList: string[]) => {
+    if (mintList.length === 0) return {} as Record<string, { priceUsd: number; symbol: string }>;
+    const chunks: string[][] = [];
+    for (let i = 0; i < mintList.length; i += 25) chunks.push(mintList.slice(i, i + 25));
+    const next: Record<string, { priceUsd: number; symbol: string }> = {};
+    for (const chunk of chunks) {
+      try {
+        const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(",")}`);
+        const j = await r.json();
+        const pairs = (j?.pairs ?? []) as any[];
+        for (const m of chunk) {
+          const pair = pairs.find((p) => p?.baseToken?.address === m);
+          if (pair) next[m] = { priceUsd: Number(pair.priceUsd ?? 0), symbol: pair.baseToken?.symbol ?? "?" };
+          else next[m] = { priceUsd: 0, symbol: "?" };
+        }
+      } catch {
+        for (const m of chunk) next[m] = { priceUsd: 0, symbol: "?" };
+      }
+    }
+    return next;
+  }, []);
+
+  // Aggregate mints currently relevant to the grid (held on-chain + held in
+  // SIM + configured target/per-column mints).
+  const activeMints = useMemo(() => {
     const mints = new Set<string>();
     for (const b of Object.values(balances)) for (const t of b.tokens) if (t.amount > 0) mints.add(t.mint);
-    if (targetMint && targetMint.length >= 32) mints.add(targetMint.trim());
+    if (targetMint && targetMint.trim().length >= 32) mints.add(targetMint.trim());
     for (const m of perColMints) {
       const v = (m ?? "").trim();
       if (v.length >= 32 && v.length <= 44) mints.add(v);
     }
-    const missing = [...mints].filter((m) => !(m in tokenPrices));
+    for (const entry of Object.values(simState)) {
+      for (const m of Object.keys(entry.tokens ?? {})) mints.add(m);
+    }
+    return [...mints];
+  }, [balances, targetMint, perColMints, simState]);
+
+  // Initial / on-change backfill of any newly-seen mints.
+  useEffect(() => {
+    const missing = activeMints.filter((m) => !(m in tokenPrices));
     if (missing.length === 0) return;
     let cancelled = false;
     (async () => {
-      // DexScreener accepts up to ~30 mints comma-separated.
-      const chunks: string[][] = [];
-      for (let i = 0; i < missing.length; i += 25) chunks.push(missing.slice(i, i + 25));
-      const next: Record<string, { priceUsd: number; symbol: string }> = {};
-      for (const chunk of chunks) {
-        try {
-          const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(",")}`);
-          const j = await r.json();
-          const pairs = (j?.pairs ?? []) as any[];
-          for (const m of chunk) {
-            const pair = pairs.find((p) => p?.baseToken?.address === m);
-            if (pair) next[m] = { priceUsd: Number(pair.priceUsd ?? 0), symbol: pair.baseToken?.symbol ?? "?" };
-            else next[m] = { priceUsd: 0, symbol: "?" };
-          }
-        } catch {
-          for (const m of chunk) next[m] = { priceUsd: 0, symbol: "?" };
-        }
+      const next = await fetchPricesFor(missing);
+      if (!cancelled) {
+        setTokenPrices((prev) => ({ ...prev, ...next }));
+        setLastPriceRefresh(Date.now());
       }
-      if (!cancelled) setTokenPrices((prev) => ({ ...prev, ...next }));
     })();
     return () => { cancelled = true; };
-  }, [balances, targetMint, perColMints]);
+  }, [activeMints, tokenPrices, fetchPricesFor]);
+
+  // Manual refresh handler — also used by the live poller.
+  const refreshActivePrices = useCallback(async () => {
+    if (activeMints.length === 0) return;
+    setPricesRefreshing(true);
+    try {
+      const next = await fetchPricesFor(activeMints);
+      setTokenPrices((prev) => ({ ...prev, ...next }));
+      setLastPriceRefresh(Date.now());
+    } finally {
+      setPricesRefreshing(false);
+    }
+  }, [activeMints, fetchPricesFor]);
+
+  // Live price polling for SIM mode (15s, pauses when tab hidden).
+  useEffect(() => {
+    if (!simMode) return;
+    if (activeMints.length === 0) return;
+    let timer: number | null = null;
+    const tick = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void refreshActivePrices();
+    };
+    timer = window.setInterval(tick, 15_000);
+    const onVis = () => { if (document.visibilityState === "visible") tick(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      if (timer != null) window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [simMode, activeMints, refreshActivePrices]);
+
+  // 1-second tick so "updated Ns ago" label re-renders in SIM mode.
+  useEffect(() => {
+    if (!simMode) return;
+    const id = window.setInterval(() => forceTick((v) => (v + 1) % 1_000_000), 1000);
+    return () => window.clearInterval(id);
+  }, [simMode]);
 
   const toggleBuyEnabled = (col: number) =>
     setBuyEnabled((prev) => prev.map((v, i) => (i === col ? !v : v)));
@@ -771,6 +906,19 @@ export default function WaterfallGrid() {
             </div>
             <Button size="sm" variant="outline" onClick={resetAllGrid}>Reset All Grid</Button>
             <Button size="sm" variant="ghost" onClick={() => setSimMode(false)}>Exit</Button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 border-t border-amber-500/30 pt-2 text-[11px]">
+            <span className="font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Live prices:</span>
+            <span className="text-muted-foreground">
+              {lastPriceRefresh > 0
+                ? <>updated {Math.max(0, Math.floor((Date.now() - lastPriceRefresh) / 1000))}s ago · {activeMints.length} mint{activeMints.length === 1 ? "" : "s"}</>
+                : <>idle — no mints tracked yet</>}
+            </span>
+            <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" onClick={refreshActivePrices} disabled={pricesRefreshing || activeMints.length === 0}>
+              {pricesRefreshing ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+              Refresh now
+            </Button>
+            <span className="text-muted-foreground">· auto every 15s (paused when tab hidden)</span>
           </div>
           <div className="flex flex-wrap items-center gap-2 border-t border-amber-500/30 pt-2">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Fund:</span>
@@ -1035,6 +1183,7 @@ export default function WaterfallGrid() {
                               onSimBuy={simBuy}
                               onSimSell={simSell}
                               onSimTroll={simTroll}
+                              realizedPnl={simMode ? simRealizedPnl[w.id] : undefined}
                           />
                         ) : <span className="text-muted-foreground">—</span>}
                       </td>
@@ -1096,7 +1245,7 @@ function Cell({
   w, tokens, solOverride, solUsd, tokenPrices, targetMint, buyEnabled, buySizePct,
   onOpen, onRename, isHeadOfColumn, cascade, isCurrentCascadeWallet,
   planHop, hasPlan, onPreview, onExecute, onCancelPlan,
-  simMode, onSimBuy, onSimSell, onSimTroll,
+  simMode, onSimBuy, onSimSell, onSimTroll, realizedPnl,
 }: {
   w: WaterfallWallet;
   tokens: TokenHolding[];
@@ -1120,6 +1269,7 @@ function Cell({
   onSimBuy: (w: WaterfallWallet, mint: string, lamportsIn: number) => void;
   onSimSell: (w: WaterfallWallet, mint: string) => void;
   onSimTroll: (w: WaterfallWallet) => void;
+  realizedPnl?: { sol: number; usd: number };
 }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(w.nickname ?? "");
@@ -1235,6 +1385,7 @@ function Cell({
           {tokens.slice(0, 4).map((t) => {
             const meta = tokenPrices[t.mint];
             const usd = meta ? meta.priceUsd * t.amount : 0;
+            const solEq = solUsd > 0 ? usd / solUsd : 0;
             const sym = meta?.symbol ?? "?";
             const isTarget = targetMint === t.mint;
             const amt = t.amount >= 1000
@@ -1243,11 +1394,40 @@ function Cell({
             return (
               <div key={t.mint} className={`truncate ${isTarget ? "text-foreground font-medium" : "text-muted-foreground"}`}>
                 {amt} {sym}
-                {usd > 0 && <span className="text-muted-foreground"> (${usd >= 1 ? usd.toFixed(2) : usd.toFixed(4)})</span>}
+                {usd > 0 && (
+                  <span className="text-muted-foreground">
+                    {" "}≈ ${usd >= 1 ? usd.toFixed(2) : usd.toFixed(4)}
+                    {solEq > 0 && <> / {solEq.toFixed(4)} SOL</>}
+                  </span>
+                )}
               </div>
             );
           })}
           {tokens.length > 4 && <div className="text-muted-foreground">+{tokens.length - 4} more…</div>}
+          {(() => {
+            const tokensUsd = tokens.reduce((s, t) => s + (tokenPrices[t.mint]?.priceUsd ?? 0) * t.amount, 0);
+            const solValueUsd = sol * solUsd;
+            const totalUsd = tokensUsd + solValueUsd;
+            const totalSol = solUsd > 0 ? totalUsd / solUsd : sol;
+            if (tokensUsd <= 0) return null;
+            return (
+              <div className="text-[10px] text-foreground font-medium border-t border-border/40 pt-0.5">
+                Total ≈ {solUsd > 0 ? `$${totalUsd.toFixed(2)} / ` : ""}{totalSol.toFixed(4)} SOL
+              </div>
+            );
+          })()}
+          {realizedPnl && (Math.abs(realizedPnl.sol) > 1e-6 || Math.abs(realizedPnl.usd) > 0.001) && (
+            <div className={`text-[10px] font-medium ${realizedPnl.sol >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+              Realized: {realizedPnl.sol >= 0 ? "+" : ""}{realizedPnl.sol.toFixed(4)} SOL
+              {Math.abs(realizedPnl.usd) > 0.001 && <> ({realizedPnl.usd >= 0 ? "+" : ""}${realizedPnl.usd.toFixed(2)})</>}
+            </div>
+          )}
+        </div>
+      )}
+      {tokens.length === 0 && realizedPnl && (Math.abs(realizedPnl.sol) > 1e-6 || Math.abs(realizedPnl.usd) > 0.001) && (
+        <div className={`text-[10px] font-medium ${realizedPnl.sol >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+          Realized: {realizedPnl.sol >= 0 ? "+" : ""}{realizedPnl.sol.toFixed(4)} SOL
+          {Math.abs(realizedPnl.usd) > 0.001 && <> ({realizedPnl.usd >= 0 ? "+" : ""}${realizedPnl.usd.toFixed(2)})</>}
         </div>
       )}
       <Button size="sm" variant="outline" className="h-6 w-full text-[10px] px-2" onClick={onOpen}>
