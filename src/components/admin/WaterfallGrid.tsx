@@ -111,6 +111,10 @@ export default function WaterfallGrid() {
   const [simFundCol, setSimFundCol] = useState<string>("all"); // "all" or "0".."9"
   const [simFundAmount, setSimFundAmount] = useState<string>("10");
 
+  // Bulk-sell busy flags
+  const [sellingCol, setSellingCol] = useState<number | null>(null);
+  const [sellingGrid, setSellingGrid] = useState<boolean>(false);
+
   const appendLog = useCallback((e: Omit<SimLogEntry, "ts">) => {
     setSimLog((prev) => [{ ...e, ts: Date.now() }, ...prev].slice(0, 500));
   }, []);
@@ -242,6 +246,97 @@ export default function WaterfallGrid() {
       msg: `W${w.column_index + 1}·R${w.row_index + 1}  SIM TROLL ${SIM_TROLL_CYCLES} cycles · -${cost.toFixed(4)} SOL net`,
     });
   }, [appendLog]);
+
+  // ─── BULK SELL (per column + entire grid) ──────────────────────────────
+  // Returns wallets in a column (or all columns when col === -1) that currently
+  // hold `targetMint` with a positive balance.
+  const collectSellTargets = useCallback((col: number): WaterfallWallet[] => {
+    const mint = targetMint.trim();
+    if (!mint) return [];
+    const inScope = col < 0 ? wallets : wallets.filter((w) => w.column_index === col);
+    return inScope.filter((w) => {
+      if (simMode) {
+        const amt = simState[w.id]?.tokens?.[mint] ?? 0;
+        return amt > 0;
+      }
+      const held = (balances[w.pubkey]?.tokens ?? []).find((t) => t.mint === mint);
+      return !!held && held.amount > 0;
+    });
+  }, [wallets, balances, simState, simMode, targetMint]);
+
+  const sellOneLive = async (w: WaterfallWallet, mint: string) => {
+    const { error } = await supabase.functions.invoke("waterfall-swap", {
+      body: { walletId: w.id, mint, side: "sell" },
+    });
+    if (error) throw new Error(error.message);
+  };
+
+  const sellColumn = async (col: number) => {
+    const mint = targetMint.trim();
+    if (!mint) return toast({ title: "Set a token address at the top", variant: "destructive" });
+    const list = collectSellTargets(col);
+    if (list.length === 0) return toast({ title: `W${col + 1}: no wallets hold target token`, variant: "destructive" });
+    if (!confirm(`Sell ALL ${mint.slice(0, 6)}… in every wallet of W${col + 1}?\nThis will sell ${list.length} wallet(s) immediately.`)) return;
+    setSellingCol(col);
+    let ok = 0; let firstErr = "";
+    try {
+      for (const w of list) {
+        try {
+          if (simMode) simSell(w, mint);
+          else await sellOneLive(w, mint);
+          ok++;
+        } catch (e: any) {
+          if (!firstErr) firstErr = e?.message || String(e);
+        }
+        await new Promise((r) => setTimeout(r, simMode ? 80 : 200));
+      }
+      if (simMode) appendLog({ col, row: -1, kind: "SELL", msg: `W${col + 1}  SIM SELL WATERFALL  (${ok}/${list.length} wallets)` });
+      toast({
+        title: `W${col + 1} sold ${ok}/${list.length}`,
+        description: firstErr ? `First error: ${firstErr}` : simMode ? "Simulation complete." : "Submitted.",
+        variant: firstErr ? "destructive" : "default",
+      });
+    } finally {
+      setSellingCol(null);
+    }
+  };
+
+  const sellGrid = async () => {
+    const mint = targetMint.trim();
+    if (!mint) return toast({ title: "Set a token address at the top", variant: "destructive" });
+    const list = collectSellTargets(-1);
+    if (list.length === 0) return toast({ title: "No wallets hold target token", variant: "destructive" });
+    if (!confirm(`SELL GRID: Sell ALL ${mint.slice(0, 6)}… across ALL ${list.length} holding wallet(s)?\nThis cannot be undone.`)) return;
+    setSellingGrid(true);
+    const perCol = new Array(10).fill(0).map(() => ({ ok: 0, total: 0 }));
+    let ok = 0; let firstErr = "";
+    try {
+      for (const w of list) {
+        perCol[w.column_index].total++;
+        try {
+          if (simMode) simSell(w, mint);
+          else await sellOneLive(w, mint);
+          perCol[w.column_index].ok++;
+          ok++;
+        } catch (e: any) {
+          if (!firstErr) firstErr = e?.message || String(e);
+        }
+        await new Promise((r) => setTimeout(r, simMode ? 60 : 200));
+      }
+      if (simMode) appendLog({ col: -1, row: -1, kind: "SELL", msg: `GRID SIM SELL  (${ok}/${list.length} wallets)` });
+      const desc = perCol
+        .map((p, i) => (p.total > 0 ? `W${i + 1}:${p.ok}/${p.total}` : null))
+        .filter(Boolean)
+        .join(" · ");
+      toast({
+        title: `Grid sell complete: ${ok}/${list.length}`,
+        description: firstErr ? `First error: ${firstErr}  |  ${desc}` : desc,
+        variant: firstErr ? "destructive" : "default",
+      });
+    } finally {
+      setSellingGrid(false);
+    }
+  };
 
   // Aggregate all unique non-SOL mints currently held across the grid, then fetch DexScreener prices.
   useEffect(() => {
@@ -549,6 +644,17 @@ export default function WaterfallGrid() {
             {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             <span className="ml-2">Export Private Keys</span>
           </Button>
+          <Button
+            size="sm"
+            variant="default"
+            className="bg-rose-600 hover:bg-rose-700 text-white"
+            onClick={sellGrid}
+            disabled={sellingGrid || sellingCol !== null || !targetMint || isEmpty}
+            title={!targetMint ? "Set target token to enable" : "Sell target token across all 100 wallets"}
+          >
+            {sellingGrid ? <Loader2 className="h-4 w-4 animate-spin" /> : <DollarSign className="h-4 w-4" />}
+            <span className="ml-2">SELL GRID</span>
+          </Button>
         </div>
       </div>
 
@@ -613,6 +719,14 @@ export default function WaterfallGrid() {
                     <th key={c} className="p-2 border-b border-r min-w-[180px] align-top">
                       <div className="font-bold text-[11px] text-muted-foreground">WATERFALL {c + 1}</div>
                       <div className="font-mono text-[10px] text-muted-foreground mt-1">{first ? SHORT(first.pubkey) : "—"}</div>
+                      <button
+                        onClick={() => sellColumn(c)}
+                        disabled={sellingGrid || sellingCol !== null || !targetMint}
+                        className="mt-1 w-full text-[10px] px-1.5 py-0.5 rounded bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold flex items-center justify-center gap-1"
+                        title={!targetMint ? "Set target token to enable" : `Sell target token in every wallet of W${c + 1}`}
+                      >
+                        {sellingCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>Sell W{c + 1}</>}
+                      </button>
                       {simMode && (
                         <div className="flex gap-1 mt-1">
                           <button

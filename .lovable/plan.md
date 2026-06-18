@@ -1,47 +1,44 @@
-## SIM Mode v2 — Funding Controls & Reset
+## Add "Sell Waterfall" (per column) and "Sell Grid" (global) buttons
 
-Refines the existing client-side Simulation Mode in `WaterfallGrid.tsx`. No edge function or DB changes.
+Adds bulk-sell controls to `WaterfallGrid.tsx`. Both respect SIM mode (route through `simSell`) and live mode (invoke `waterfall-swap` edge function, same as the per-wallet SELL button).
 
-### What changes
+### Behavior
 
-**1. Default seed funding**
-- When SIM mode is toggled ON (or "Reset Sim" is clicked), Wallet 1 (R1) of each waterfall column is seeded with **12 SOL** of fake funds. All other rows start at 0 SOL / 0 tokens.
-- Live SOL/USD price (from existing `useSolPrice` hook) drives every USD figure in the sim log and cell overlays — no hardcoded price.
+**Sell Waterfall (per column)**
+- Button in each column header next to existing `Seed` / `Clear` (label: `Sell W{n}`, rose color).
+- Disabled when no `targetMint` is set or no wallet in that column holds the target token.
+- Click → `confirm("Sell ALL {target} in every wallet of W{n}? This sells {X} wallets immediately.")`
+- On confirm: iterate the 10 wallets in that column; for each wallet that holds `targetMint` with amount > 0:
+  - SIM mode → call existing `simSell(w, targetMint)`
+  - Live mode → `supabase.functions.invoke("waterfall-swap", { body: { walletId: w.id, mint: targetMint, side: "sell" } })`
+- Fire sequentially with a small (~200ms) gap to avoid RPC bursts; track a per-column `sellingCol` busy flag to show spinner and disable the button.
+- Toast summary at the end: `Sold X/Y wallets in W{n}` (errors counted, first error message surfaced).
 
-**2. Manual funding control (toolbar)**
-A new compact funding bar sits in the SIM banner:
+**Sell Grid (global)**
+- Button in the top toolbar near `Reset All Grid` (rose color, prominent).
+- Disabled when no `targetMint` set or zero wallets hold the target.
+- Click → `confirm("SELL GRID: Sell ALL {target} across ALL 100 wallets? This cannot be undone.")`
+- On confirm: iterate all 10 columns sequentially, running the same per-wallet sell logic as above. Global `sellingGrid` busy flag disables all sell controls during the run.
+- Toast summary: `Grid sell complete: X/Y wallets sold` plus per-column counts in description.
 
-```text
-[ Waterfall ▼ ]  [ Amount: 10 ] SOL  → Wallet 1   [ + Add ]
-```
+### UI placement
 
-- `Waterfall` dropdown: lists every column (Waterfall 1, Waterfall 2, …) plus an **"All waterfalls"** option.
-- `Amount` numeric input (default 10, min 0.001, step 0.1).
-- Target is fixed to **Wallet 1 (R1)** of the chosen column — matches how real funding always lands on R1 before cascading.
-- `Add` button credits the sim balance and writes a log line: `14:22:05  W2·R1  SIM FUND +10 SOL  ($1,847.20)`.
+- Column header (in the existing `Seed`/`Clear` row): add `Sell W{n}` button after `Clear`.
+- Top toolbar: add `SELL GRID` button to the right of `Reset All Grid` (visible in both live and sim mode).
+- Both buttons use the same rose styling as existing per-wallet SELL for visual consistency.
 
-**3. Reset controls**
+### Technical notes
 
-Three scopes, all sim-only:
-
-- **Per-column "Clear"** — small button at the top of each waterfall column. Zeroes all 100 wallets in that column (SOL + tokens) and logs `W2  SIM CLEAR  (100 wallets zeroed)`.
-- **Per-column "Seed 12"** — re-seeds just that column's R1 with 12 SOL (handy after a clear).
-- **"Reset All Grid"** — wipes every column back to the default seed state (R1 = 12 SOL, rest = 0) and clears the sim log. Replaces the current "Reset Sim" button.
-
-All three only act on `simState` — real on-chain balances are never touched.
-
-### Acceptance
-- Toggle SIM ON → every column's R1 shows `12.0000 SOL` with SIM badge; USD value reflects live `useSolPrice`.
-- Pick "Waterfall 3", amount 5, click Add → W3·R1 jumps to 17 SOL, log entry appears with live USD conversion.
-- Pick "All waterfalls", amount 2, Add → every column's R1 gains +2 SOL in one log batch.
-- Click a column's `Clear` → that column's 100 cells go to 0, others untouched.
-- Click `Reset All Grid` → all columns return to 12 SOL on R1, log cleared.
-- Real balances and edge functions remain completely untouched (verify via network tab: zero `waterfall-*` invocations during any SIM action).
+- New state: `sellingCol: number | null`, `sellingGrid: boolean`.
+- New helpers (inside `WaterfallGrid`): `sellColumn(col: number)` and `sellGrid()`. They reuse `balances` (already in state) to discover which wallets hold `targetMint`.
+- Sim log entries: emit `WX·RY SIM SELL` lines (already supported by `simSell`); add a final `WX SIM SELL WATERFALL (n wallets)` / `GRID SIM SELL (n wallets)` summary line.
+- Live mode: no edge-function changes; reuses existing `waterfall-swap` invocation pattern.
+- No DB / schema changes.
 
 ### Files
-- `src/components/admin/WaterfallGrid.tsx` — only file edited. Adds funding toolbar, per-column Clear/Seed buttons, Reset-All behavior change, default 12 SOL seed on enable/reset, and USD formatting via `useSolPrice`.
 
-### Out of scope
-- No changes to `WaterfallWalletDrawer.tsx`, edge functions, or DB.
-- No per-row manual funding (R1 only — matches real cascade entry point).
-- No persisted sim history.
+- `src/components/admin/WaterfallGrid.tsx` — only file touched.
+
+### Also fix (drive-by)
+
+Runtime preview shows `ReferenceError: resetSim is not defined` — a stale reference left from the SIM v2 rename. Replace with `resetAllGrid` while in this file.
