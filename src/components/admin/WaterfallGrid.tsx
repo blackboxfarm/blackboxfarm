@@ -719,6 +719,14 @@ export default function WaterfallGrid() {
                     <th key={c} className="p-2 border-b border-r min-w-[180px] align-top">
                       <div className="font-bold text-[11px] text-muted-foreground">WATERFALL {c + 1}</div>
                       <div className="font-mono text-[10px] text-muted-foreground mt-1">{first ? SHORT(first.pubkey) : "—"}</div>
+                      <button
+                        onClick={() => sellColumn(c)}
+                        disabled={sellingGrid || sellingCol !== null || !targetMint}
+                        className="mt-1 w-full text-[10px] px-1.5 py-0.5 rounded bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold flex items-center justify-center gap-1"
+                        title={!targetMint ? "Set target token to enable" : `Sell target token in every wallet of W${c + 1}`}
+                      >
+                        {sellingCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>Sell W{c + 1}</>}
+                      </button>
                       {simMode && (
                         <div className="flex gap-1 mt-1">
                           <button
