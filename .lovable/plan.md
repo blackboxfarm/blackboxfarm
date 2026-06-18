@@ -1,44 +1,38 @@
-## Add "Sell Waterfall" (per column) and "Sell Grid" (global) buttons
+## Plan: Key Export Enhancements
 
-Adds bulk-sell controls to `WaterfallGrid.tsx`. Both respect SIM mode (route through `simSell`) and live mode (invoke `waterfall-swap` edge function, same as the per-wallet SELL button).
+Add both export options from the previous sanity check, each gated by a confirmation prompt.
 
-### Behavior
+### 1. Bulk Export → CSV + JSON Download
+- In `src/components/admin/WaterfallGrid.tsx`, modify the existing `exportKeys()` handler bound to the "Export Keys" toolbar button.
+- Flow:
+  1. `confirm("Export ALL 100 private keys to your device? They will download as CSV + JSON files. Anyone with these files controls the wallets.")` → abort if no.
+  2. Invoke `waterfall-export-keys` (already returns `{wallets: [{column, wallet, nickname, pubkey, secret_base58}]}`).
+  3. Build two Blobs client-side:
+     - `waterfall-keys-YYYYMMDD-HHmm.json` — pretty JSON of the array.
+     - `waterfall-keys-YYYYMMDD-HHmm.csv` — header `column,wallet,nickname,pubkey,secret_base58` with proper quoting.
+  4. Trigger two sequential `<a download>` clicks (object URLs, revoked after).
+  5. Toast: `Exported 100 keys (CSV + JSON)`.
+- No edge function changes needed.
 
-**Sell Waterfall (per column)**
-- Button in each column header next to existing `Seed` / `Clear` (label: `Sell W{n}`, rose color).
-- Disabled when no `targetMint` is set or no wallet in that column holds the target token.
-- Click → `confirm("Sell ALL {target} in every wallet of W{n}? This sells {X} wallets immediately.")`
-- On confirm: iterate the 10 wallets in that column; for each wallet that holds `targetMint` with amount > 0:
-  - SIM mode → call existing `simSell(w, targetMint)`
-  - Live mode → `supabase.functions.invoke("waterfall-swap", { body: { walletId: w.id, mint: targetMint, side: "sell" } })`
-- Fire sequentially with a small (~200ms) gap to avoid RPC bursts; track a per-column `sellingCol` busy flag to show spinner and disable the button.
-- Toast summary at the end: `Sold X/Y wallets in W{n}` (errors counted, first error message surfaced).
+### 2. Per-Wallet "Show Key" Button
+- In `src/components/admin/WaterfallWalletDrawer.tsx`, add a new section inside `DrawerBody` (below Holdings, above Withdraw) titled "Private Key".
+- Default state: key hidden, single destructive-outline button `Show Private Key`.
+- Click flow:
+  1. `confirm("Reveal the private key for W{col}·{row}? Anyone who sees your screen will be able to drain this wallet.")` → abort if no.
+  2. Call existing `export-wallet-key` edge function with `{ wallet_id: wallet.id, source: "waterfall_wallets" }`.
+     - Note: `export-wallet-key`'s `WALLET_SOURCES` array does NOT currently include `waterfall_wallets`. **Add** `{ table: 'waterfall_wallets', secretCol: 'secret_key_encrypted', encrypted: true }` to that list in `supabase/functions/export-wallet-key/index.ts`. No other edge-function changes.
+  3. On success, render the base58 secret in a monospace readonly `<Input>` with:
+     - `Copy` button (clipboard + toast).
+     - `Hide` button (clears local state).
+  4. Auto-hide after 60 seconds (timeout cleared on unmount / hide).
+- Drawer-local state only: `revealedKey: string | null`, `revealing: boolean`. Never written to any global store, never persisted, never logged.
 
-**Sell Grid (global)**
-- Button in the top toolbar near `Reset All Grid` (rose color, prominent).
-- Disabled when no `targetMint` set or zero wallets hold the target.
-- Click → `confirm("SELL GRID: Sell ALL {target} across ALL 100 wallets? This cannot be undone.")`
-- On confirm: iterate all 10 columns sequentially, running the same per-wallet sell logic as above. Global `sellingGrid` busy flag disables all sell controls during the run.
-- Toast summary: `Grid sell complete: X/Y wallets sold` plus per-column counts in description.
+### Files Touched
+- `src/components/admin/WaterfallGrid.tsx` — augment `exportKeys()` with confirm + dual download.
+- `src/components/admin/WaterfallWalletDrawer.tsx` — add "Private Key" reveal section.
+- `supabase/functions/export-wallet-key/index.ts` — register `waterfall_wallets` in `WALLET_SOURCES`.
 
-### UI placement
-
-- Column header (in the existing `Seed`/`Clear` row): add `Sell W{n}` button after `Clear`.
-- Top toolbar: add `SELL GRID` button to the right of `Reset All Grid` (visible in both live and sim mode).
-- Both buttons use the same rose styling as existing per-wallet SELL for visual consistency.
-
-### Technical notes
-
-- New state: `sellingCol: number | null`, `sellingGrid: boolean`.
-- New helpers (inside `WaterfallGrid`): `sellColumn(col: number)` and `sellGrid()`. They reuse `balances` (already in state) to discover which wallets hold `targetMint`.
-- Sim log entries: emit `WX·RY SIM SELL` lines (already supported by `simSell`); add a final `WX SIM SELL WATERFALL (n wallets)` / `GRID SIM SELL (n wallets)` summary line.
-- Live mode: no edge-function changes; reuses existing `waterfall-swap` invocation pattern.
-- No DB / schema changes.
-
-### Files
-
-- `src/components/admin/WaterfallGrid.tsx` — only file touched.
-
-### Also fix (drive-by)
-
-Runtime preview shows `ReferenceError: resetSim is not defined` — a stale reference left from the SIM v2 rename. Replace with `resetAllGrid` while in this file.
+### Security Notes
+- All reveals/exports remain super-admin gated on the server (unchanged).
+- Audit rows continue to write (`activity_logs` for single reveal, `secret_access_audit` for bulk export).
+- Keys never enter localStorage; reveal state is component-local and timer-cleared.
