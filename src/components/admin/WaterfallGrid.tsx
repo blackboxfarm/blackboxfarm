@@ -1385,6 +1385,7 @@ function Cell({
           {tokens.slice(0, 4).map((t) => {
             const meta = tokenPrices[t.mint];
             const usd = meta ? meta.priceUsd * t.amount : 0;
+            const solEq = solUsd > 0 ? usd / solUsd : 0;
             const sym = meta?.symbol ?? "?";
             const isTarget = targetMint === t.mint;
             const amt = t.amount >= 1000
@@ -1393,11 +1394,34 @@ function Cell({
             return (
               <div key={t.mint} className={`truncate ${isTarget ? "text-foreground font-medium" : "text-muted-foreground"}`}>
                 {amt} {sym}
-                {usd > 0 && <span className="text-muted-foreground"> (${usd >= 1 ? usd.toFixed(2) : usd.toFixed(4)})</span>}
+                {usd > 0 && (
+                  <span className="text-muted-foreground">
+                    {" "}≈ ${usd >= 1 ? usd.toFixed(2) : usd.toFixed(4)}
+                    {solEq > 0 && <> / {solEq.toFixed(4)} SOL</>}
+                  </span>
+                )}
               </div>
             );
           })}
           {tokens.length > 4 && <div className="text-muted-foreground">+{tokens.length - 4} more…</div>}
+          {(() => {
+            const tokensUsd = tokens.reduce((s, t) => s + (tokenPrices[t.mint]?.priceUsd ?? 0) * t.amount, 0);
+            const solValueUsd = sol * solUsd;
+            const totalUsd = tokensUsd + solValueUsd;
+            const totalSol = solUsd > 0 ? totalUsd / solUsd : sol;
+            if (tokensUsd <= 0) return null;
+            return (
+              <div className="text-[10px] text-foreground font-medium border-t border-border/40 pt-0.5">
+                Total ≈ {solUsd > 0 ? `$${totalUsd.toFixed(2)} / ` : ""}{totalSol.toFixed(4)} SOL
+              </div>
+            );
+          })()}
+          {realizedPnl && (Math.abs(realizedPnl.sol) > 1e-6 || Math.abs(realizedPnl.usd) > 0.001) && (
+            <div className={`text-[10px] font-medium ${realizedPnl.sol >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+              Realized: {realizedPnl.sol >= 0 ? "+" : ""}{realizedPnl.sol.toFixed(4)} SOL
+              {Math.abs(realizedPnl.usd) > 0.001 && <> ({realizedPnl.usd >= 0 ? "+" : ""}${realizedPnl.usd.toFixed(2)})</>}
+            </div>
+          )}
         </div>
       )}
       <Button size="sm" variant="outline" className="h-6 w-full text-[10px] px-2" onClick={onOpen}>
