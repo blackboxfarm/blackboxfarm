@@ -181,9 +181,29 @@ export default function WaterfallGrid() {
 
   useEffect(() => {
     try { localStorage.setItem(SIM_STORAGE_KEY, simMode ? "1" : "0"); } catch {}
-    if (simMode && Object.keys(simState).length === 0 && wallets.length > 0) {
-      seedDefaultSim();
-      appendLog({ col: -1, row: -1, kind: "RESET", msg: `Seeded ${SIM_DEFAULT_SEED_SOL} SOL on R1 of all 10 waterfalls.` });
+    if (simMode && wallets.length > 0) {
+      // Fill in any wallets missing a sim entry so every column's R1 starts
+      // with SIM_DEFAULT_SEED_SOL even when persisted simState only covers a
+      // subset of columns. Existing entries are preserved as-is.
+      const missing = wallets.filter((w) => !simState[w.id]);
+      if (missing.length > 0) {
+        setSimState((prev) => {
+          const next = { ...prev };
+          const seededCols = new Set<number>();
+          for (const w of missing) {
+            next[w.id] = {
+              sol: w.row_index === 0 ? SIM_DEFAULT_SEED_SOL : 0,
+              tokens: {},
+            };
+            if (w.row_index === 0) seededCols.add(w.column_index);
+          }
+          if (seededCols.size > 0) {
+            const cols = [...seededCols].sort((a, b) => a - b).map((c) => `W${c + 1}`).join(", ");
+            appendLog({ col: -1, row: -1, kind: "RESET", msg: `Seeded ${SIM_DEFAULT_SEED_SOL} SOL on R1 of ${cols}.` });
+          }
+          return next;
+        });
+      }
     }
     // NOTE: leaving simMode no longer wipes simState/simLog — they are persisted
     // across mounts and reloads. Use "Reset All Grid" to clear explicitly.
