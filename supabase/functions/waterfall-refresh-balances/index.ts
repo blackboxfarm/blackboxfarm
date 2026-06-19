@@ -87,6 +87,33 @@ serve(async (req) => {
       );
     }
 
+    // Persist token holdings into wallet_positions so the grid always shows
+    // every token a wallet has ever held — not just what the last live RPC
+    // call surfaced. Mints with zero balance are removed for that wallet.
+    const nowIso = new Date().toISOString();
+    for (const [pubkey, { tokens }] of Object.entries(results)) {
+      const mints = tokens.map((t) => t.mint);
+      if (tokens.length > 0) {
+        const rows = tokens.map((t) => ({
+          wallet_address: pubkey,
+          token_mint: t.mint,
+          balance: t.amount,
+          total_invested_usd: 0,
+          last_transaction_at: nowIso,
+          updated_at: nowIso,
+        }));
+        await assertDbWrite(
+          admin.from("wallet_positions").upsert(rows, { onConflict: "wallet_address,token_mint" }),
+          "wallet_positions",
+          "waterfall_refresh_positions_upsert",
+        );
+      }
+      // Drop stale positions (mints no longer held by this wallet).
+      let del = admin.from("wallet_positions").delete().eq("wallet_address", pubkey);
+      if (mints.length > 0) del = del.not("token_mint", "in", `(${mints.map((m) => `"${m}"`).join(",")})`);
+      await assertDbWrite(del, "wallet_positions", "waterfall_refresh_positions_prune");
+    }
+
     return new Response(JSON.stringify({ success: true, wallets: results }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("waterfall-refresh-balances", e);
