@@ -421,7 +421,7 @@ async function tryPumpPortalTrade(params: {
   action: 'buy' | 'sell';
   amount: string; // For buy: SOL amount OR token amount depending on denominatedInSol
   slippageBps: number;
-  pool?: 'pump' | 'bonk' | 'auto'; // Which launchpad pool to use
+  pool?: 'pump' | 'bonk' | 'pump-amm' | 'auto'; // Which launchpad pool to use
   denominatedInSol?: boolean; // Buy mode only
   priorityFeeSol?: number;
 }): Promise<{ tx: Uint8Array } | { error: string }> {
@@ -1413,9 +1413,9 @@ serve(withRunLog('raydium-swap', async (req) => {
 
     // Determine which pool to use for PumpPortal
     // bags.fm uses 'pump' pool via PumpPortal API
-    const getBondingCurvePool = (): 'pump' | 'bonk' | 'auto' => {
+    const getBondingCurvePool = (): 'pump' | 'bonk' | 'pump-amm' | 'auto' => {
       const bestDex = String(venueHint?.bestDex || "").toLowerCase();
-      if (bestDex.includes("pumpswap")) return 'auto';
+      if (bestDex.includes("pumpswap")) return 'pump-amm';
       if (hasAmmLiquidity && venueHint?.hasPumpFun) return 'auto';
       if (venueHint?.hasPumpFun) return 'pump';
       if (venueHint?.hasBonkFun) return 'bonk';
@@ -1524,12 +1524,11 @@ serve(withRunLog('raydium-swap', async (req) => {
       let pumpExecutedLamports = 0;
 
       try {
-        // First try with specific pool, then with 'auto' if it fails
-        // For pumpswap tokens or tokens with .pump suffix, always try 'auto' first
-        // because they may have graduated from bonding curve to PumpSwap AMM
+        // First try with the detected pool, then with 'auto' if it fails.
+        // DexScreener `pumpswap` maps to PumpPortal's `pump-amm` pool.
         const suffixHint = String(tokenMint).endsWith('pump');
-        const poolsRaw: Array<'pump' | 'bonk' | 'auto'> = suffixHint
-          ? ['auto', getBondingCurvePool(), 'pump']
+        const poolsRaw: Array<'pump' | 'bonk' | 'pump-amm' | 'auto'> = suffixHint
+          ? [getBondingCurvePool(), 'auto', 'pump']
           : [getBondingCurvePool(), 'auto'];
         const pools = Array.from(new Set(poolsRaw));
 
@@ -1541,7 +1540,7 @@ serve(withRunLog('raydium-swap', async (req) => {
 
           const tryTokenDenominatedBuyFallback = async (
             chunkLamports: number,
-            pool: 'pump' | 'bonk' | 'auto',
+            pool: 'pump' | 'bonk' | 'pump-amm' | 'auto',
             candidateSlippageBps: number
           ): Promise<{ signature?: string; error?: string }> => {
             const estimatedTokenAmount = await estimatePumpTokenAmountFromLamports(String(tokenMint), chunkLamports);
