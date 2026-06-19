@@ -1212,7 +1212,7 @@ serve(withRunLog('raydium-swap', async (req) => {
             wantedLamports = Math.floor((usd / approxPrice) * 1_000_000_000);
           }
 
-          const feeReserveLamports = 1_000_000; // 0.001 SOL (reduced for micro-buys)
+          const feeReserveLamports = DEFAULT_BUY_FEE_RESERVE_LAMPORTS;
           let solBal: number | null = null;
           try { solBal = await connection.getBalance(owner.publicKey); } catch { solBal = null; }
           let lamports = wantedLamports;
