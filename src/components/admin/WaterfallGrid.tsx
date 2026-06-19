@@ -768,6 +768,22 @@ export default function WaterfallGrid() {
 
   const validTargetMint = targetMint.trim().length >= 32 && targetMint.trim().length <= 44;
 
+  const applyRefreshPayload = useCallback((payload: any) => {
+    const refreshed = (payload?.wallets ?? {}) as Record<string, { sol: number; tokens: TokenHolding[] }>;
+    setBalances(refreshed);
+    setWallets((prev) => prev.map((w) => {
+      const live = refreshed[w.pubkey]?.sol;
+      return typeof live === "number" && Number.isFinite(live) ? { ...w, sol_balance: live } : w;
+    }));
+    return refreshed;
+  }, []);
+
+  const refreshBalancesForBuy = useCallback(async () => {
+    const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances");
+    if (error) throw new Error(error.message);
+    return applyRefreshPayload(data);
+  }, [applyRefreshPayload]);
+
   const loadWallets = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -951,7 +967,7 @@ export default function WaterfallGrid() {
     const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances");
     setRefreshing(false);
     if (error) return toast({ title: "Refresh failed", description: error.message, variant: "destructive" });
-    setBalances((data as any)?.wallets ?? {});
+    applyRefreshPayload(data);
     loadWallets();
     toast({ title: "Balances refreshed" });
   };
