@@ -1033,6 +1033,45 @@ export default function WaterfallGrid() {
 
   const isEmpty = wallets.length === 0;
 
+  // USD value of tokens held in each column (sum across all 10 wallets of that column).
+  const tokenUsdByCol = useMemo(() => {
+    const out: number[] = Array.from({ length: 10 }, () => 0);
+    for (const w of wallets) {
+      const toks = balances[w.pubkey]?.tokens ?? [];
+      let sum = 0;
+      for (const t of toks) {
+        const px = tokenPrices[t.mint]?.priceUsd ?? 0;
+        sum += px * t.amount;
+      }
+      if (w.column_index >= 0 && w.column_index < 10) out[w.column_index] += sum;
+    }
+    return out;
+  }, [wallets, balances, tokenPrices]);
+  const totalTokenUsd = useMemo(() => tokenUsdByCol.reduce((a, b) => a + b, 0), [tokenUsdByCol]);
+  const totalWalletsWithTokens = useMemo(() => {
+    let n = 0;
+    for (const w of wallets) if ((balances[w.pubkey]?.tokens ?? []).some((t) => t.amount > 0)) n++;
+    return n;
+  }, [wallets, balances]);
+
+  // Auto-load on-chain balances + token holdings once wallets are loaded so the
+  // grid shows tokens + USD value WITHOUT the user clicking "Refresh".
+  const didAutoRefreshRef = useRef(false);
+  useEffect(() => {
+    if (didAutoRefreshRef.current) return;
+    if (wallets.length === 0) return;
+    didAutoRefreshRef.current = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances");
+        if (error) throw error;
+        applyRefreshPayload(data);
+      } catch (e) {
+        console.warn("[WaterfallGrid] auto-refresh failed", e);
+      }
+    })();
+  }, [wallets, applyRefreshPayload]);
+
   return (
     <div className="p-4 space-y-4">
       {simMode && (
