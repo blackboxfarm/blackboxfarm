@@ -66,7 +66,15 @@ serve(async (req) => {
       body: swapBody,
     });
 
-    if (swapError) throw new Error(`raydium-swap invoke failed: ${swapError.message}`);
+    if (swapError) {
+      const details = (swapError as any)?.context?.json ?? (swapError as any)?.context?.body ?? null;
+      const detailError = details && typeof details === "object" ? (details.error ?? details.message) : null;
+      const detailCode = details && typeof details === "object" ? details.error_code : null;
+      if (detailCode === "PUMPFUN_CURVE_REJECTED") {
+        throw new Error(`pump.fun rejected buy — top up wallet ${(w.pubkey as string).slice(0,8)}.. with more SOL or lower buyLamports (${detailError ?? swapError.message})`);
+      }
+      throw new Error(`raydium-swap invoke failed${detailError ? `: ${detailError}` : `: ${swapError.message}`}`);
+    }
     if (swapResult?.error) {
       if (swapResult.error_code === "PUMPFUN_CURVE_REJECTED") {
         throw new Error(`pump.fun rejected buy — top up wallet ${(w.pubkey as string).slice(0,8)}.. with more SOL or lower buyLamports (${swapResult.error})`);

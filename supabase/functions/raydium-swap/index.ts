@@ -421,7 +421,7 @@ async function tryPumpPortalTrade(params: {
   action: 'buy' | 'sell';
   amount: string; // For buy: SOL amount OR token amount depending on denominatedInSol
   slippageBps: number;
-  pool?: 'pump' | 'bonk' | 'auto'; // Which launchpad pool to use
+  pool?: 'pump' | 'bonk' | 'pump-amm' | 'auto'; // Which launchpad pool to use
   denominatedInSol?: boolean; // Buy mode only
   priorityFeeSol?: number;
 }): Promise<{ tx: Uint8Array } | { error: string }> {
@@ -1413,9 +1413,9 @@ serve(withRunLog('raydium-swap', async (req) => {
 
     // Determine which pool to use for PumpPortal
     // bags.fm uses 'pump' pool via PumpPortal API
-    const getBondingCurvePool = (): 'pump' | 'bonk' | 'auto' => {
+    const getBondingCurvePool = (): 'pump' | 'bonk' | 'pump-amm' | 'auto' => {
       const bestDex = String(venueHint?.bestDex || "").toLowerCase();
-      if (bestDex.includes("pumpswap")) return 'auto';
+      if (bestDex.includes("pumpswap")) return 'pump-amm';
       if (hasAmmLiquidity && venueHint?.hasPumpFun) return 'auto';
       if (venueHint?.hasPumpFun) return 'pump';
       if (venueHint?.hasBonkFun) return 'bonk';
@@ -1524,12 +1524,11 @@ serve(withRunLog('raydium-swap', async (req) => {
       let pumpExecutedLamports = 0;
 
       try {
-        // First try with specific pool, then with 'auto' if it fails
-        // For pumpswap tokens or tokens with .pump suffix, always try 'auto' first
-        // because they may have graduated from bonding curve to PumpSwap AMM
+        // First try with the detected pool, then with 'auto' if it fails.
+        // DexScreener `pumpswap` maps to PumpPortal's `pump-amm` pool.
         const suffixHint = String(tokenMint).endsWith('pump');
-        const poolsRaw: Array<'pump' | 'bonk' | 'auto'> = suffixHint
-          ? ['auto', getBondingCurvePool(), 'pump']
+        const poolsRaw: Array<'pump' | 'bonk' | 'pump-amm' | 'auto'> = suffixHint
+          ? [getBondingCurvePool(), 'auto', 'pump']
           : [getBondingCurvePool(), 'auto'];
         const pools = Array.from(new Set(poolsRaw));
 
@@ -1541,7 +1540,7 @@ serve(withRunLog('raydium-swap', async (req) => {
 
           const tryTokenDenominatedBuyFallback = async (
             chunkLamports: number,
-            pool: 'pump' | 'bonk' | 'auto',
+            pool: 'pump' | 'bonk' | 'pump-amm' | 'auto',
             candidateSlippageBps: number
           ): Promise<{ signature?: string; error?: string }> => {
             const estimatedTokenAmount = await estimatePumpTokenAmountFromLamports(String(tokenMint), chunkLamports);
@@ -1649,6 +1648,12 @@ serve(withRunLog('raydium-swap', async (req) => {
                         console.log(`PumpPortal 6024 overflow (pool=${pool}) — bonding curve complete, exiting to DEX routing`);
                         needJupiter = true;
                         jupReason = `PumpPortal 6024 overflow — bonding curve complete`;
+                        break;
+                      }
+
+                      const isCustom1 = msg.includes('custom program error: 0x1') || msg.includes('"Custom":1');
+                      if (isCustom1) {
+                        sawSlippageError = true;
                         break;
                       }
 
@@ -1877,10 +1882,7 @@ serve(withRunLog('raydium-swap', async (req) => {
         const hint = curveRejected
           ? "pump.fun curve rejected the buy — likely insufficient SOL in wallet (need amount + ~0.001 SOL fees + rent) or slippage too tight"
           : jupReason;
-        return new Response(
-          JSON.stringify({ error: hint, error_code: "PUMPFUN_CURVE_REJECTED", underlying: jupReason }),
-          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return ok({ error: hint, error_code: "PUMPFUN_CURVE_REJECTED", underlying: jupReason }, 200);
       }
       console.log(`Pumpswap fast-path: skipping heavy DEX cascade, trying bags.fm directly. Reason: ${jupReason}`);
       try {
