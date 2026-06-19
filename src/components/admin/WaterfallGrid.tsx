@@ -479,7 +479,7 @@ export default function WaterfallGrid() {
 
   const sellOneLive = async (w: WaterfallWallet, mint: string) => {
     const { error } = await supabase.functions.invoke("waterfall-swap", {
-      body: { walletId: w.id, mint, side: "sell" },
+      body: { walletId: w.id, mint, side: "sell", priorityFeeMode: "low" },
     });
     if (error) throw new Error(error.message);
   };
