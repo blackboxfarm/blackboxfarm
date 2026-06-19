@@ -1651,7 +1651,7 @@ function Cell({
                 ? "Paste a token mint at the top to enable BUY"
                 : !buyEnabled
                   ? "Buying disabled for this column (uncheck at top)"
-                  : `Buy ${buySizePct}% of wallet SOL (~${(sol * (buySizePct / 100)).toFixed(4)} SOL) of target token`
+                  : `Buy ${buySizePct}% of spendable SOL after reserving ${BUY_SELL_FEE_RESERVE_SOL.toFixed(3)} SOL for fees`
             }
           >
             {busy === "buy" ? <Loader2 className="h-3 w-3 animate-spin" /> : <><ShoppingCart className="h-3 w-3 mr-1" />BUY</>}
