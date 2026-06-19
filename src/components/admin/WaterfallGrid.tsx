@@ -1784,6 +1784,25 @@ function Cell({
             return (
               <div key={t.mint} className={`truncate ${isTarget ? "text-foreground font-medium" : "text-muted-foreground"}`}>
                 <span className="font-semibold">{amt}</span> {tokenLabel}
+                {!simMode && (
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`Sell ALL ${amt} ${tokenLabel} (${SHORT(t.mint)}) from ${w.nickname || "wallet"}?`)) return;
+                      setSellingMint(t.mint);
+                      try {
+                        await onSellMintLive(w, t.mint);
+                        toast({ title: `Sell sent: ${tokenLabel}` });
+                      } catch (e: any) {
+                        toast({ title: `Sell failed`, description: e?.message || String(e), variant: "destructive" });
+                      } finally { setSellingMint(null); }
+                    }}
+                    disabled={sellingMint !== null || sellingAll || busy !== null || cascadeRunning || trolling}
+                    className="ml-1 inline-flex items-center px-1 py-px rounded text-[9px] bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-40 align-middle"
+                    title={`Sell 100% of ${tokenLabel}`}
+                  >
+                    {sellingMint === t.mint ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : "Sell"}
+                  </button>
+                )}
                 {usd > 0 && (
                   <>
                     <span className="text-muted-foreground">{" ≈ "}</span>
@@ -1862,6 +1881,21 @@ function Cell({
             {busy === "sell" ? <Loader2 className="h-3 w-3 animate-spin" /> : <><DollarSign className="h-3 w-3 mr-1" />SELL</>}
           </Button>
       </div>
+      {!simMode && tokens.length > 0 && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-6 w-full text-[10px] px-2 border-rose-500 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950"
+          onClick={async () => {
+            setSellingAll(true);
+            try { await onSellAllLive(w); } finally { setSellingAll(false); }
+          }}
+          disabled={sellingAll || sellingMint !== null || busy !== null || cascadeRunning || trolling}
+          title="Sell every token in this wallet (any mint)"
+        >
+          {sellingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <><DollarSign className="h-3 w-3 mr-1" />SELL ALL HOLDINGS</>}
+        </Button>
+      )}
       <Button
         size="sm"
         variant={trolling ? "secondary" : "default"}
