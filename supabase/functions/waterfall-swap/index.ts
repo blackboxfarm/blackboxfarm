@@ -76,8 +76,12 @@ serve(async (req) => {
       throw new Error(`raydium-swap invoke failed${detailError ? `: ${detailError}` : `: ${swapError.message}`}`);
     }
     if (swapResult?.error) {
-      if (swapResult.error_code === "PUMPFUN_CURVE_REJECTED") {
-        return new Response(JSON.stringify({ success: false, skipReason: "pumpfun_curve_rejected", wallet: w.pubkey, error: `pump.fun rejected buy (likely curve moved or slippage too tight): ${swapResult.error}` }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      if (swapResult.error_code) {
+        const skipReason = String(swapResult.error_code).toLowerCase();
+        const prefix = swapResult.error_code === "PUMPFUN_CURVE_REJECTED"
+          ? "pump.fun rejected buy"
+          : "buy skipped";
+        return new Response(JSON.stringify({ success: false, skipReason, wallet: w.pubkey, error: `${prefix}: ${swapResult.error}` }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       throw new Error(`raydium-swap: ${swapResult.error_code ? `[${swapResult.error_code}] ` : ""}${swapResult.error}`);
     }
