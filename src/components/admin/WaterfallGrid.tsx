@@ -1336,6 +1336,7 @@ export default function WaterfallGrid() {
                               onPreview={() => previewCascade(c)}
                               onExecute={() => executePlan(c)}
                               onCancelPlan={() => cancelPlan(c)}
+                              onRefreshBalancesForBuy={refreshBalancesForBuy}
                               simMode={simMode}
                               onSimBuy={simBuy}
                               onSimSell={simSell}
@@ -1403,6 +1404,7 @@ function Cell({
   w, tokens, solOverride, solUsd, tokenPrices, targetMint, buyEnabled, buySizePct,
   onOpen, onRename, isHeadOfColumn, cascade, isCurrentCascadeWallet,
   planHop, hasPlan, onPreview, onExecute, onCancelPlan,
+  onRefreshBalancesForBuy,
   simMode, onSimBuy, onSimSell, onSimTroll, realizedPnl,
   costBasis,
 }: {
@@ -1424,6 +1426,7 @@ function Cell({
   onPreview: () => void;
   onExecute: () => void;
   onCancelPlan: () => void;
+  onRefreshBalancesForBuy: () => Promise<Record<string, { sol: number; tokens: TokenHolding[] }>>;
   simMode: boolean;
   onSimBuy: (w: WaterfallWallet, mint: string, lamportsIn: number) => void;
   onSimSell: (w: WaterfallWallet, mint: string) => void;
