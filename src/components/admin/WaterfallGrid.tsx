@@ -1442,6 +1442,16 @@ export default function WaterfallGrid() {
                           {sellingCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>Sell W{c + 1}</>}
                         </button>
                       </div>
+                      <div className="flex gap-1 mt-1">
+                        <button
+                          onClick={() => sellAllInColumn(c)}
+                          disabled={sellingGrid || sellingCol !== null || sellingAllCol !== null || buyingCol !== null}
+                          className="flex-1 text-[10px] px-1.5 py-0.5 rounded bg-rose-800 hover:bg-rose-900 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold flex items-center justify-center gap-1"
+                          title={`Sell ALL token holdings (any mint) across every wallet of W${c + 1}`}
+                        >
+                          {sellingAllCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>Sell ALL W{c + 1}</>}
+                        </button>
+                      </div>
                       {simMode && (
                         <div className="flex gap-1 mt-1">
                           <button
