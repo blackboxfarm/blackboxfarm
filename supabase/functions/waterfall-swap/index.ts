@@ -54,7 +54,7 @@ serve(async (req) => {
       side,
       tokenMint: mint,
       slippageBps,
-      priorityFeeMode: body.priorityFeeMode ?? "medium",
+      priorityFeeMode: body.priorityFeeMode ?? "low",
       walletId,
       walletSource: "waterfall_wallets",
     };

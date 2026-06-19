@@ -479,7 +479,7 @@ export default function WaterfallGrid() {
 
   const sellOneLive = async (w: WaterfallWallet, mint: string) => {
     const { error } = await supabase.functions.invoke("waterfall-swap", {
-      body: { walletId: w.id, mint, side: "sell" },
+      body: { walletId: w.id, mint, side: "sell", priorityFeeMode: "low" },
     });
     if (error) throw new Error(error.message);
   };
@@ -575,6 +575,98 @@ export default function WaterfallGrid() {
       setSellingGrid(false);
     }
   };
+
+  // ─── SELL ANY HELD TOKEN (not just the column target) ──────────────────
+  const sellMintLive = useCallback(async (w: WaterfallWallet, mint: string) => {
+    const { data, error } = await supabase.functions.invoke("waterfall-swap", {
+      body: { walletId: w.id, mint, side: "sell", priorityFeeMode: "low" },
+    });
+    if (error) throw new Error(error.message);
+    if (data && (data as any).success === false) {
+      throw new Error((data as any).error || (data as any).skipReason || "sell failed");
+    }
+    return (data as any)?.signature as string | undefined;
+  }, []);
+
+  // ─── SELL ALL TOKENS IN ONE WALLET ─────────────────────────────────────
+  const sellAllInWallet = useCallback(async (w: WaterfallWallet) => {
+    const held = (balancesRef.current[w.pubkey]?.tokens ?? []).filter((t) => t.amount > 0);
+    if (held.length === 0) { toast({ title: "No tokens to sell" }); return { ok: 0, total: 0 }; }
+    if (!confirm(`Sell ALL ${held.length} token(s) in ${w.nickname || SHORT(w.pubkey)}?`)) return { ok: 0, total: 0 };
+    let ok = 0; let firstErr = "";
+    for (const t of held) {
+      try { await sellMintLive(w, t.mint); ok++; }
+      catch (e: any) { if (!firstErr) firstErr = e?.message || String(e); }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    toast({ title: `Sold ${ok}/${held.length}`, description: firstErr || "Submitted.", variant: firstErr ? "destructive" : "default" });
+    void refreshBalancesForBuy([w.pubkey]);
+    return { ok, total: held.length };
+  }, [sellMintLive]);
+
+  // ─── SELL ALL HOLDINGS IN AN ENTIRE COLUMN ─────────────────────────────
+  const [sellingAllCol, setSellingAllCol] = useState<number | null>(null);
+  const sellAllInColumn = useCallback(async (col: number) => {
+    const colWallets = wallets.filter((w) => w.column_index === col);
+    const targets = colWallets
+      .map((w) => ({ w, held: (balancesRef.current[w.pubkey]?.tokens ?? []).filter((t) => t.amount > 0) }))
+      .filter((x) => x.held.length > 0);
+    if (targets.length === 0) return toast({ title: `W${col + 1}: no token holdings`, variant: "destructive" });
+    const totalSells = targets.reduce((s, x) => s + x.held.length, 0);
+    if (!confirm(`Sell ALL holdings across W${col + 1}?\n${targets.length} wallet(s), ${totalSells} sell(s) total.`)) return;
+    setSellingAllCol(col);
+    let ok = 0; let firstErr = "";
+    try {
+      for (const { w, held } of targets) {
+        for (const t of held) {
+          try { await sellMintLive(w, t.mint); ok++; }
+          catch (e: any) { if (!firstErr) firstErr = e?.message || String(e); }
+          await new Promise((r) => setTimeout(r, 250));
+        }
+      }
+      toast({ title: `W${col + 1}: sold ${ok}/${totalSells}`, description: firstErr || "Submitted.", variant: firstErr ? "destructive" : "default" });
+      void refreshBalancesForBuy(targets.map((x) => x.w.pubkey));
+    } finally { setSellingAllCol(null); }
+  }, [wallets, sellMintLive]);
+
+  // ─── SWEEP ALL SOL → MAIN WALLET ───────────────────────────────────────
+  const SWEEP_DEST_KEY = "waterfall_sweep_destination";
+  const [sweeping, setSweeping] = useState(false);
+  const sweepAllSol = useCallback(async () => {
+    const remembered = (() => { try { return localStorage.getItem(SWEEP_DEST_KEY) || ""; } catch { return ""; } })();
+    const dest = window.prompt("Sweep ALL SOL from every wallet to which address?", remembered) || "";
+    const trimmed = dest.trim();
+    if (!trimmed) return;
+    if (trimmed.length < 32 || trimmed.length > 44) return toast({ title: "Invalid Solana address", variant: "destructive" });
+    try { localStorage.setItem(SWEEP_DEST_KEY, trimmed); } catch {}
+    const DUST = 0.000015;
+    const candidates = wallets.filter((w) => {
+      const live = balancesRef.current[w.pubkey]?.sol;
+      const sol = typeof live === "number" ? live : Number(w.sol_balance || 0);
+      return sol > DUST;
+    });
+    if (candidates.length === 0) return toast({ title: "No wallets with sweepable SOL" });
+    if (!confirm(`Sweep SOL from ${candidates.length} wallet(s) → ${trimmed.slice(0, 6)}…${trimmed.slice(-4)}?`)) return;
+    setSweeping(true);
+    let ok = 0; let firstErr = "";
+    try {
+      for (const w of candidates) {
+        try {
+          const { data, error } = await supabase.functions.invoke("waterfall-withdraw", {
+            body: { walletId: w.id, mint: "SOL", amount: -1, destination: trimmed },
+          });
+          if (error) throw new Error(error.message);
+          if (data && (data as any).error) throw new Error((data as any).error);
+          ok++;
+        } catch (e: any) {
+          if (!firstErr) firstErr = `${SHORT(w.pubkey)}: ${e?.message || String(e)}`;
+        }
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      toast({ title: `Swept ${ok}/${candidates.length}`, description: firstErr || `Sent to ${SHORT(trimmed)}`, variant: firstErr ? "destructive" : "default" });
+      void refreshBalancesForBuy(candidates.map((w) => w.pubkey));
+    } finally { setSweeping(false); }
+  }, [wallets]);
 
   // ─── BULK BUY (per column) ─────────────────────────────────────────────
   const buyColumn = async (col: number) => {
@@ -1204,6 +1296,17 @@ export default function WaterfallGrid() {
             {sellingGrid ? <Loader2 className="h-4 w-4 animate-spin" /> : <DollarSign className="h-4 w-4" />}
             <span className="ml-2">SELL GRID</span>
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-amber-500 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
+            onClick={sweepAllSol}
+            disabled={sweeping || isEmpty}
+            title="Sweep all remaining SOL from every wallet to a main address"
+          >
+            {sweeping ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowDownToLine className="h-4 w-4" />}
+            <span className="ml-2">SWEEP SOL</span>
+          </Button>
         </div>
       </div>
 
@@ -1339,6 +1442,16 @@ export default function WaterfallGrid() {
                           {sellingCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>Sell W{c + 1}</>}
                         </button>
                       </div>
+                      <div className="flex gap-1 mt-1">
+                        <button
+                          onClick={() => sellAllInColumn(c)}
+                          disabled={sellingGrid || sellingCol !== null || sellingAllCol !== null || buyingCol !== null}
+                          className="flex-1 text-[10px] px-1.5 py-0.5 rounded bg-rose-800 hover:bg-rose-900 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold flex items-center justify-center gap-1"
+                          title={`Sell ALL token holdings (any mint) across every wallet of W${c + 1}`}
+                        >
+                          {sellingAllCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>Sell ALL W{c + 1}</>}
+                        </button>
+                      </div>
                       {simMode && (
                         <div className="flex gap-1 mt-1">
                           <button
@@ -1407,6 +1520,8 @@ export default function WaterfallGrid() {
                               onSimTroll={simTroll}
                               realizedPnl={simMode ? simRealizedPnl[w.id] : undefined}
                               costBasis={simCostBasis[w.id]}
+                              onSellMintLive={sellMintLive}
+                              onSellAllLive={sellAllInWallet}
                           />
                         ) : <span className="text-muted-foreground">—</span>}
                       </td>
@@ -1471,6 +1586,7 @@ function Cell({
   onRefreshBalancesForBuy,
   simMode, onSimBuy, onSimSell, onSimTroll, realizedPnl,
   costBasis,
+  onSellMintLive, onSellAllLive,
 }: {
   w: WaterfallWallet;
   tokens: TokenHolding[];
@@ -1497,11 +1613,15 @@ function Cell({
   onSimTroll: (w: WaterfallWallet) => void;
   realizedPnl?: { sol: number; usd: number };
   costBasis?: Record<string, SimCostBasis>;
+  onSellMintLive: (w: WaterfallWallet, mint: string) => Promise<string | undefined>;
+  onSellAllLive: (w: WaterfallWallet) => Promise<{ ok: number; total: number }>;
 }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(w.nickname ?? "");
   const [trolling, setTrolling] = useState(false);
   const [busy, setBusy] = useState<null | "buy" | "sell">(null);
+  const [sellingMint, setSellingMint] = useState<string | null>(null);
+  const [sellingAll, setSellingAll] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const sol = solOverride !== undefined ? solOverride : Number(w.sol_balance || 0);
   const cascadeRunning = !!cascade;
@@ -1572,6 +1692,7 @@ function Cell({
         buyPct: side === "buy" ? Math.min(MAX_BUY_SIZE_PCT, buySizePct || 0) : undefined,
         buySellFeeReserveLamports: side === "buy" ? Math.floor(BUY_SELL_FEE_RESERVE_SOL * LAMPORTS_PER_SOL) : undefined,
         minBuyLamports: side === "buy" ? MIN_BUY_LAMPORTS : undefined,
+        priorityFeeMode: "low",
       },
     });
     setBusy(null);
@@ -1663,6 +1784,25 @@ function Cell({
             return (
               <div key={t.mint} className={`truncate ${isTarget ? "text-foreground font-medium" : "text-muted-foreground"}`}>
                 <span className="font-semibold">{amt}</span> {tokenLabel}
+                {!simMode && (
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`Sell ALL ${amt} ${tokenLabel} (${SHORT(t.mint)}) from ${w.nickname || "wallet"}?`)) return;
+                      setSellingMint(t.mint);
+                      try {
+                        await onSellMintLive(w, t.mint);
+                        toast({ title: `Sell sent: ${tokenLabel}` });
+                      } catch (e: any) {
+                        toast({ title: `Sell failed`, description: e?.message || String(e), variant: "destructive" });
+                      } finally { setSellingMint(null); }
+                    }}
+                    disabled={sellingMint !== null || sellingAll || busy !== null || cascadeRunning || trolling}
+                    className="ml-1 inline-flex items-center px-1 py-px rounded text-[9px] bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-40 align-middle"
+                    title={`Sell 100% of ${tokenLabel}`}
+                  >
+                    {sellingMint === t.mint ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : "Sell"}
+                  </button>
+                )}
                 {usd > 0 && (
                   <>
                     <span className="text-muted-foreground">{" ≈ "}</span>
@@ -1741,6 +1881,21 @@ function Cell({
             {busy === "sell" ? <Loader2 className="h-3 w-3 animate-spin" /> : <><DollarSign className="h-3 w-3 mr-1" />SELL</>}
           </Button>
       </div>
+      {!simMode && tokens.length > 0 && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-6 w-full text-[10px] px-2 border-rose-500 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950"
+          onClick={async () => {
+            setSellingAll(true);
+            try { await onSellAllLive(w); } finally { setSellingAll(false); }
+          }}
+          disabled={sellingAll || sellingMint !== null || busy !== null || cascadeRunning || trolling}
+          title="Sell every token in this wallet (any mint)"
+        >
+          {sellingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <><DollarSign className="h-3 w-3 mr-1" />SELL ALL HOLDINGS</>}
+        </Button>
+      )}
       <Button
         size="sm"
         variant={trolling ? "secondary" : "default"}
