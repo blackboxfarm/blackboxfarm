@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 const SOL_MINT = "So11111111111111111111111111111111111111112";
-const DEFAULT_SLIPPAGE_BPS = 500;
+const DEFAULT_SLIPPAGE_BPS = 1500;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
