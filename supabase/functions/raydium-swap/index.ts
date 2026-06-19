@@ -1232,6 +1232,13 @@ serve(withRunLog('raydium-swap', async (req) => {
             : MIN_EXECUTABLE_BUY_LAMPORTS;
           let solBal: number | null = null;
           try { solBal = await connection.getBalance(owner.publicKey); } catch { solBal = null; }
+          if (buyPct > 0 && solBal === null) {
+            return softError(
+              "LIVE_BALANCE_UNAVAILABLE",
+              "Could not fetch live wallet SOL to calculate percentage buy. No trade was sent.",
+              { reserveLamports: feeReserveLamports, buyPct }
+            );
+          }
           let lamports = wantedLamports;
           if (solBal !== null) {
             const spendable = Math.max(0, solBal - feeReserveLamports);
