@@ -787,16 +787,19 @@ export default function WaterfallGrid() {
 
   const applyRefreshPayload = useCallback((payload: any) => {
     const refreshed = (payload?.wallets ?? {}) as Record<string, { sol: number; tokens: TokenHolding[] }>;
-    setBalances(refreshed);
+    const partial = Boolean(payload?.partial);
+    setBalances((prev) => partial ? { ...prev, ...refreshed } : refreshed);
     setWallets((prev) => prev.map((w) => {
       const live = refreshed[w.pubkey]?.sol;
       return typeof live === "number" && Number.isFinite(live) && live !== Number(w.sol_balance || 0) ? { ...w, sol_balance: live } : w;
     }));
-    return refreshed;
-  }, []);
+    return partial ? { ...balances, ...refreshed } : refreshed;
+  }, [balances]);
 
-  const refreshBalancesForBuy = useCallback(async () => {
-    const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances");
+  const refreshBalancesForBuy = useCallback(async (pubkeys?: string[]) => {
+    const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances", {
+      body: pubkeys?.length ? { pubkeys } : {},
+    });
     if (error) throw new Error(error.message);
     return applyRefreshPayload(data);
   }, [applyRefreshPayload]);
