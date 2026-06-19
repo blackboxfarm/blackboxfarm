@@ -176,6 +176,8 @@ export default function WaterfallGrid() {
   const [lastPriceRefresh, setLastPriceRefresh] = useState<number>(0);
   const [pricesRefreshing, setPricesRefreshing] = useState(false);
   const [, forceTick] = useState(0);
+  const balancesRef = useRef<Record<string, { sol: number; tokens: TokenHolding[] }>>({});
+  const balanceRefreshInFlightRef = useRef(false);
 
   // Funding toolbar state
   const [simFundCol, setSimFundCol] = useState<string>(PERSISTED_INIT.simFundCol ?? "all"); // "all" or "0".."9"
@@ -584,7 +586,7 @@ export default function WaterfallGrid() {
     if (!simMode) {
       setBuyingCol(col);
       try {
-        balanceSnapshot = await refreshBalancesForBuy();
+        balanceSnapshot = await refreshBalancesForBuy(wallets.filter((w) => w.column_index === col).map((w) => w.pubkey));
       } catch (e: any) {
         setBuyingCol(null);
         return toast({ title: "Live balance refresh failed", description: e?.message || String(e), variant: "destructive" });
@@ -681,6 +683,7 @@ export default function WaterfallGrid() {
         description: firstErr ? `First fail: ${firstErr}` : simMode ? "Simulation complete." : "Submitted.",
         variant: firstErr && ok === 0 ? "destructive" : "default",
       });
+      if (!simMode && ok > 0) void refreshBalancesForBuy(colWallets.map((w) => w.pubkey));
     } finally {
       setBuyingCol(null);
     }
@@ -786,16 +789,21 @@ export default function WaterfallGrid() {
 
   const applyRefreshPayload = useCallback((payload: any) => {
     const refreshed = (payload?.wallets ?? {}) as Record<string, { sol: number; tokens: TokenHolding[] }>;
-    setBalances(refreshed);
+    const partial = Boolean(payload?.partial);
+    const nextBalances = partial ? { ...balancesRef.current, ...refreshed } : refreshed;
+    balancesRef.current = nextBalances;
+    setBalances(nextBalances);
     setWallets((prev) => prev.map((w) => {
       const live = refreshed[w.pubkey]?.sol;
-      return typeof live === "number" && Number.isFinite(live) ? { ...w, sol_balance: live } : w;
+      return typeof live === "number" && Number.isFinite(live) && live !== Number(w.sol_balance || 0) ? { ...w, sol_balance: live } : w;
     }));
-    return refreshed;
+    return nextBalances;
   }, []);
 
-  const refreshBalancesForBuy = useCallback(async () => {
-    const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances");
+  const refreshBalancesForBuy = useCallback(async (pubkeys?: string[]) => {
+    const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances", {
+      body: pubkeys?.length ? { pubkeys } : {},
+    });
     if (error) throw new Error(error.message);
     return applyRefreshPayload(data);
   }, [applyRefreshPayload]);
@@ -1064,18 +1072,22 @@ export default function WaterfallGrid() {
     if (wallets.length === 0) return;
     let cancelled = false;
     const run = async () => {
+      if (balanceRefreshInFlightRef.current) return;
+      balanceRefreshInFlightRef.current = true;
       try {
         const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances");
         if (error) throw error;
         if (!cancelled) applyRefreshPayload(data);
       } catch (e) {
         console.warn("[WaterfallGrid] auto-refresh failed", e);
+      } finally {
+        balanceRefreshInFlightRef.current = false;
       }
     };
     run();
-    const id = window.setInterval(run, 20_000);
+    const id = window.setInterval(run, 60_000);
     return () => { cancelled = true; window.clearInterval(id); };
-  }, [wallets, applyRefreshPayload]);
+  }, [wallets.length, applyRefreshPayload]);
 
   return (
     <div className="p-4 space-y-4">
@@ -1478,7 +1490,7 @@ function Cell({
   onPreview: () => void;
   onExecute: () => void;
   onCancelPlan: () => void;
-  onRefreshBalancesForBuy: () => Promise<Record<string, { sol: number; tokens: TokenHolding[] }>>;
+  onRefreshBalancesForBuy: (pubkeys?: string[]) => Promise<Record<string, { sol: number; tokens: TokenHolding[] }>>;
   simMode: boolean;
   onSimBuy: (w: WaterfallWallet, mint: string, lamportsIn: number) => void;
   onSimSell: (w: WaterfallWallet, mint: string) => void;
@@ -1527,7 +1539,7 @@ function Cell({
       if (!simMode) {
         setBusy("buy");
         try {
-          const fresh = await onRefreshBalancesForBuy();
+          const fresh = await onRefreshBalancesForBuy([w.pubkey]);
           liveSol = fresh[w.pubkey]?.sol ?? sol;
         } catch (e: any) {
           setBusy(null);
@@ -1567,6 +1579,7 @@ function Cell({
     if (data && (data as any).success === false) {
       return toast({ title: `${side.toUpperCase()} skipped`, description: (data as any).error || (data as any).skipReason || "No executable trade.", variant: "destructive" });
     }
+    if (!simMode) void onRefreshBalancesForBuy([w.pubkey]);
     toast({ title: `${side.toUpperCase()} sent`, description: `Tx: ${((data as any)?.signature ?? "").slice(0, 16)}…` });
   };
 
@@ -1621,6 +1634,7 @@ function Cell({
             const usd = meta ? meta.priceUsd * t.amount : 0;
             const solEq = solUsd > 0 ? usd / solUsd : 0;
             const sym = meta?.symbol ?? "?";
+            const tokenLabel = sym && sym !== "?" ? sym : SHORT(t.mint);
             const isTarget = targetMint === t.mint;
             const amt = t.amount >= 1000
               ? t.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })
@@ -1648,7 +1662,7 @@ function Cell({
                 : "text-red-600 dark:text-red-400";
             return (
               <div key={t.mint} className={`truncate ${isTarget ? "text-foreground font-medium" : "text-muted-foreground"}`}>
-                {amt} {sym}
+                <span className="font-semibold">{amt}</span> {tokenLabel}
                 {usd > 0 && (
                   <>
                     <span className="text-muted-foreground">{" ≈ "}</span>
