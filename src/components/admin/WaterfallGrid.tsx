@@ -12,6 +12,7 @@ const LAMPORTS_PER_SOL = 1_000_000_000;
 const FEE_BUFFER_LAMPORTS = 10_000;
 const BUY_SELL_FEE_RESERVE_SOL = 0.012;
 const MIN_BUY_LAMPORTS = 500_000;
+const MAX_BUY_SIZE_PCT = 90;
 const SIM_STORAGE_KEY = "waterfall_sim_mode";
 const PERSIST_KEY = "waterfall-grid:v1";
 
@@ -42,6 +43,11 @@ function loadPersisted(): PersistedBlob {
   }
 }
 const PERSISTED_INIT: PersistedBlob = typeof window !== "undefined" ? loadPersisted() : {};
+const clampBuySizePct = (raw: unknown) => {
+  const n = Number(raw ?? MAX_BUY_SIZE_PCT);
+  if (!Number.isFinite(n)) return String(MAX_BUY_SIZE_PCT);
+  return String(Math.min(MAX_BUY_SIZE_PCT, Math.max(1, Math.floor(n))));
+};
 
 const SIM_TROLL_CYCLES = 10;
 const SIM_TROLL_COST_PER_CYCLE = 0.0002; // SOL "fee" per simulated cycle
@@ -127,7 +133,7 @@ export default function WaterfallGrid() {
 
   // Buy target — single token mint pasted at the top, with per-column enable checkboxes.
   const [targetMint, setTargetMint] = useState<string>(PERSISTED_INIT.targetMint ?? "");
-  const [buySizePct, setBuySizePct] = useState<string>(PERSISTED_INIT.buySizePct ?? "90");
+  const [buySizePct, setBuySizePct] = useState<string>(clampBuySizePct(PERSISTED_INIT.buySizePct));
   const [buyEnabled, setBuyEnabled] = useState<boolean[]>(() => {
     const p = PERSISTED_INIT.buyEnabled;
     if (Array.isArray(p) && p.length === 10) return p.map(Boolean);
