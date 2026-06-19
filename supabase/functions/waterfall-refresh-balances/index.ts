@@ -109,7 +109,7 @@ serve(async (req) => {
             console.warn("asset fetch failed for", w.pubkey, e);
             return null;
           });
-          const tokenScanOk = assetResult != null;
+          let tokenScanOk = assetResult != null;
           let sol = parseNativeSol(assetResult);
           if (sol == null) {
             if (requestedPubkeys.length > 0) {
@@ -125,14 +125,15 @@ serve(async (req) => {
             const tokenAccounts = await Promise.all(
               TOKEN_PROGRAMS.map((programId) =>
                 rpc("getTokenAccountsByOwner", [w.pubkey, { programId }, { encoding: "jsonParsed" }])
-                  .then((r) => r?.value ?? [])
+                  .then((r) => ({ ok: true, value: r?.value ?? [] }))
                   .catch((e) => {
                     console.warn("token account fetch failed for", w.pubkey, programId, e);
-                    return [];
+                    return { ok: false, value: [] };
                   }),
               ),
             );
-            for (const acc of tokenAccounts.flat()) {
+            tokenScanOk = tokenAccounts.some((r) => r.ok);
+            for (const acc of tokenAccounts.flatMap((r) => r.value)) {
               const info = acc?.account?.data?.parsed?.info;
               const tokenAmount = info?.tokenAmount;
               if (!info?.mint || !tokenAmount) continue;
@@ -148,7 +149,7 @@ serve(async (req) => {
           updates.push({ id: w.id, sol });
         } catch (e) {
           console.error("balance fetch failed for", w.pubkey, e);
-          results[w.pubkey] = { sol: 0, tokens: [] };
+          results[w.pubkey] = { sol: Number(w.sol_balance ?? 0), tokens: [], tokenScanOk: false };
         }
       }
     }
@@ -167,7 +168,8 @@ serve(async (req) => {
     // every token a wallet has ever held — not just what the last live RPC
     // call surfaced. Mints with zero balance are removed for that wallet.
     const nowIso = new Date().toISOString();
-    for (const [pubkey, { tokens }] of Object.entries(results)) {
+    for (const [pubkey, { tokens, tokenScanOk }] of Object.entries(results)) {
+      if (tokenScanOk === false) continue;
       const mints = tokens.map((t) => t.mint);
       if (tokens.length > 0) {
         const rows = tokens.map((t) => ({
