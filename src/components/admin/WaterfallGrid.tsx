@@ -1142,6 +1142,10 @@ export default function WaterfallGrid() {
             10 isolated columns · 10 wallets per column · {wallets.length}/100 wallets · Total: {totalSol.toFixed(4)} SOL
             {solUsd > 0 && ` (≈ $${(totalSol * solUsd).toFixed(2)})`}
           </p>
+          <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+            🪙 Tokens held: ${totalTokenUsd.toFixed(2)} across {totalWalletsWithTokens} wallet{totalWalletsWithTokens === 1 ? "" : "s"}
+            {solUsd > 0 && ` · Grand total (SOL + tokens) ≈ $${(totalSol * solUsd + totalTokenUsd).toFixed(2)}`}
+          </p>
         </div>
         <div className="flex gap-2">
           <Button
