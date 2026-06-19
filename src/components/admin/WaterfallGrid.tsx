@@ -1586,6 +1586,7 @@ function Cell({
   onRefreshBalancesForBuy,
   simMode, onSimBuy, onSimSell, onSimTroll, realizedPnl,
   costBasis,
+  onSellMintLive, onSellAllLive,
 }: {
   w: WaterfallWallet;
   tokens: TokenHolding[];
@@ -1612,6 +1613,8 @@ function Cell({
   onSimTroll: (w: WaterfallWallet) => void;
   realizedPnl?: { sol: number; usd: number };
   costBasis?: Record<string, SimCostBasis>;
+  onSellMintLive: (w: WaterfallWallet, mint: string) => Promise<string | undefined>;
+  onSellAllLive: (w: WaterfallWallet) => Promise<{ ok: number; total: number }>;
 }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(w.nickname ?? "");
