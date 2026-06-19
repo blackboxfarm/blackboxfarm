@@ -1,33 +1,51 @@
-## Problem
+Do I know what the issue is? Yes.
 
-Logs show the real failure chain on token `5QgYwF...pump`:
+**What happened in the screenshot**
+- The UI calculated W1 buy from the stored DB balance: `0.1333 SOL` with a persisted `95%` setting.
+- It sent `115,277,917 lamports` to `waterfall-swap` for wallet `475NMKG1`.
+- `waterfall-swap` delegated to `raydium-swap`.
+- `raydium-swap` checked the live on-chain balance, reserved `0.012 SOL`, and found `0` executable SOL.
+- So the buy stopped before any real venue trade. It did **not** get to a successful PumpPortal/Raydium/Jupiter buy.
 
-1. PumpPortal returns `custom program error: 0x1` (pump.fun bonding-curve rejected the buy — typically insufficient SOL/slippage on the curve).
-2. The "fast-path" I added then tries **bags.fm** for a pure **pump.fun** token (bestDex=`pumpswap`, hasBagsFm=`false`). bags.fm builds a quote/tx anyway, and signing+sending it OOMs the function.
-3. `raydium-swap` returns 500 → `waterfall-swap` surfaces "non-2xx".
+**Root problem**
+- The frontend is still sizing buys from stale `waterfall_wallets.sol_balance`.
+- The old saved local setting still shows `95%`, even though the intended default is 90%.
+- The backend is correctly refusing to spend fee reserve, but the frontend should not be sending stale fixed lamports in the first place.
 
-The fast-path is wrong: bags.fm is only valid when the token actually lives on bags.fm. For pumpfun BC tokens it should NOT fall through to bags.fm — it should return the PumpPortal error cleanly.
+**Fix plan**
+1. **Force buy size to 90 max**
+   - Clamp saved/local `buySizePct` to `90` if it is higher.
+   - Set the input max to `90`.
+   - Make the label clear it is `% of spendable SOL after fees`, not raw wallet SOL.
 
-## Fix
+2. **Stop trusting stale DB SOL for live buys**
+   - Before executing a live column buy, call `waterfall-refresh-balances` first.
+   - Use the refreshed balances for eligibility and per-wallet buy sizing.
+   - Update the grid immediately with refreshed balances before sending swaps.
 
-Edit `supabase/functions/raydium-swap/index.ts` fast-path block:
+3. **Move final buy sizing to the backend**
+   - Send `buyPct` and reserve settings to `waterfall-swap` / `raydium-swap`, not only precomputed stale `buyLamports`.
+   - `raydium-swap` will fetch live SOL and compute:
+     `floor((liveSolLamports - buySellFeeReserveLamports) * buyPct / 100)`
+   - This guarantees every wallet buys from live chain balance and keeps sell-fee reserve.
 
-- Gate the bags.fm fast-path on `hasBagsFm === true` (from the dex venue hint). For pure pumpfun tokens, skip bags.fm entirely.
-- When skipped, return HTTP 502 with the PumpPortal error verbatim and `error_code: "PUMPFUN_CURVE_REJECTED"` (include the 0x1 hint → "insufficient SOL or slippage too tight on pump.fun curve").
-- Keep the existing bags.fm fast-path ONLY for `hasBagsFm` tokens.
+4. **Make failures useful, not misleading**
+   - If a wallet has no spendable SOL after reserve, show: wallet short pubkey, live SOL, reserve, computed buy size.
+   - Toast/log should say `skipped no spendable SOL` instead of looking like a venue/trade failure.
 
-Edit `supabase/functions/waterfall-swap/index.ts`:
+5. **Deploy and verify**
+   - Deploy `waterfall-swap` and `raydium-swap`.
+   - Test W1 buy path and confirm logs show backend-calculated live buy lamports, not stale UI lamports.
 
-- When `swapResult.error_code === "PUMPFUN_CURVE_REJECTED"`, return a friendlier message: `pump.fun rejected buy (likely insufficient SOL in wallet or slippage too tight)` so the W1/W2 toasts show the actionable cause instead of "non-2xx".
+**Files to change**
+- `src/components/admin/WaterfallGrid.tsx`
+- `supabase/functions/waterfall-swap/index.ts`
+- `supabase/functions/raydium-swap/index.ts`
 
-Deploy both functions.
+<presentation-actions>
+  <presentation-open-history>View History</presentation-open-history>
+</presentation-actions>
 
-## Why this fixes it
-
-- No more bags.fm tx build/sign for pumpfun tokens → no OOM → function returns cleanly.
-- The real cause (curve rejected the buy, almost certainly wallet SOL balance vs `buyLamports + priority fee + rent`) is surfaced to the UI so you can top up the wallet or lower the buy size.
-
-## Not changed
-
-- Decryption path, walletSource routing, PumpPortal call itself — all confirmed working in logs.
-- bags.fm fast-path stays intact for real bags.fm tokens.
+<presentation-actions>
+<presentation-link url="https://docs.lovable.dev/tips-tricks/troubleshooting">Troubleshooting docs</presentation-link>
+</presentation-actions>
