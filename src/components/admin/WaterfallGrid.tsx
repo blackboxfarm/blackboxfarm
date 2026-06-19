@@ -789,7 +789,7 @@ export default function WaterfallGrid() {
     setBalances(refreshed);
     setWallets((prev) => prev.map((w) => {
       const live = refreshed[w.pubkey]?.sol;
-      return typeof live === "number" && Number.isFinite(live) ? { ...w, sol_balance: live } : w;
+      return typeof live === "number" && Number.isFinite(live) && live !== Number(w.sol_balance || 0) ? { ...w, sol_balance: live } : w;
     }));
     return refreshed;
   }, []);
@@ -1075,7 +1075,7 @@ export default function WaterfallGrid() {
     run();
     const id = window.setInterval(run, 20_000);
     return () => { cancelled = true; window.clearInterval(id); };
-  }, [wallets, applyRefreshPayload]);
+  }, [wallets.length, applyRefreshPayload]);
 
   return (
     <div className="p-4 space-y-4">
