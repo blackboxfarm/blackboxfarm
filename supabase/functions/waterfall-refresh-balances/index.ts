@@ -80,7 +80,7 @@ serve(async (req) => {
 
     let walletQuery = admin
       .from("waterfall_wallets")
-      .select("id,pubkey")
+      .select("id,pubkey,sol_balance")
       .gte("row_index", 0)
       .lte("row_index", 9);
     if (requestedPubkeys.length > 0) walletQuery = walletQuery.in("pubkey", requestedPubkeys);
@@ -111,8 +111,12 @@ serve(async (req) => {
           });
           let sol = parseNativeSol(assetResult);
           if (sol == null) {
-            const bal = await rpc("getBalance", [w.pubkey]);
-            sol = (bal?.value ?? 0) / 1e9;
+            if (requestedPubkeys.length > 0) {
+              const bal = await rpc("getBalance", [w.pubkey]);
+              sol = (bal?.value ?? 0) / 1e9;
+            } else {
+              sol = Number(w.sol_balance ?? 0);
+            }
           }
           let tokens = parseAssetTokens(assetResult);
           const byMint = new Map<string, { mint: string; amount: number; decimals: number }>();
