@@ -578,9 +578,24 @@ export default function WaterfallGrid() {
   const buyColumn = async (col: number) => {
     const mint = mintForCol(col);
     if (!mint) return toast({ title: `W${col + 1}: set a token mint first`, variant: "destructive" });
-    const pct = Number(buySizePct) || 0;
-    if (!(pct > 0 && pct < 100)) return toast({ title: "Buy % must be between 1 and 99", variant: "destructive" });
-    const colWallets = wallets.filter((w) => w.column_index === col);
+    const pct = Math.min(MAX_BUY_SIZE_PCT, Number(buySizePct) || 0);
+    if (!(pct > 0 && pct <= MAX_BUY_SIZE_PCT)) return toast({ title: `Buy % must be between 1 and ${MAX_BUY_SIZE_PCT}`, variant: "destructive" });
+    if (!simMode) {
+      setBuyingCol(col);
+      try {
+        await refreshBalancesForBuy();
+      } catch (e: any) {
+        setBuyingCol(null);
+        return toast({ title: "Live balance refresh failed", description: e?.message || String(e), variant: "destructive" });
+      }
+      setBuyingCol(null);
+    }
+    const balanceSnapshot = !simMode ? await refreshBalancesForBuy().catch(() => balances) : balances;
+    const sourceWallets = wallets.map((w) => {
+      const live = balanceSnapshot[w.pubkey]?.sol;
+      return typeof live === "number" && Number.isFinite(live) ? { ...w, sol_balance: live } : w;
+    });
+    const colWallets = sourceWallets.filter((w) => w.column_index === col);
     const skipped: string[] = [];
     const buyLamportsByWallet = new Map<string, number>();
     const eligible = colWallets.filter((w) => {
@@ -596,7 +611,7 @@ export default function WaterfallGrid() {
     });
     if (eligible.length === 0) return toast({ title: `W${col + 1}: no usable SOL after fee reserve`, description: `Leaving ${BUY_SELL_FEE_RESERVE_SOL.toFixed(3)} SOL for buy/sell fees.`, variant: "destructive" });
     skipped.forEach((msg) => appendLog({ col, row: -1, kind: "BUY", msg: `W${col + 1}  SKIP  ${msg}` }));
-    if (!confirm(`BUY ${mint.slice(0, 6)}… in every wallet of W${col + 1} (${eligible.length}/${colWallets.length} eligible) at ${pct}% of SOL after reserving ${BUY_SELL_FEE_RESERVE_SOL.toFixed(3)} SOL?`)) return;
+    if (!confirm(`BUY ${mint.slice(0, 6)}… in every wallet of W${col + 1} (${eligible.length}/${colWallets.length} eligible) at ${pct}% of live spendable SOL after reserving ${BUY_SELL_FEE_RESERVE_SOL.toFixed(3)} SOL?`)) return;
     setBuyingCol(col);
     let ok = 0; let firstErr = "";
     try {
@@ -618,7 +633,7 @@ export default function WaterfallGrid() {
           if (simMode) simBuy(w, mint, lamports, priceMeta);
           else {
             const { data: resp, error } = await supabase.functions.invoke("waterfall-swap", {
-              body: { walletId: w.id, mint, side: "buy", buyLamports: lamports },
+              body: { walletId: w.id, mint, side: "buy", buyLamports: lamports, buyPct: pct, buySellFeeReserveLamports: Math.floor(BUY_SELL_FEE_RESERVE_SOL * LAMPORTS_PER_SOL), minBuyLamports: MIN_BUY_LAMPORTS },
             });
             if (error) throw new Error(error.message);
             if (resp && (resp as any).success === false) throw new Error((resp as any).error || (resp as any).skipReason || "buy skipped");
