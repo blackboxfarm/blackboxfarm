@@ -1621,6 +1621,7 @@ function Cell({
             const usd = meta ? meta.priceUsd * t.amount : 0;
             const solEq = solUsd > 0 ? usd / solUsd : 0;
             const sym = meta?.symbol ?? "?";
+            const tokenLabel = sym && sym !== "?" ? sym : SHORT(t.mint);
             const isTarget = targetMint === t.mint;
             const amt = t.amount >= 1000
               ? t.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })
@@ -1648,7 +1649,7 @@ function Cell({
                 : "text-red-600 dark:text-red-400";
             return (
               <div key={t.mint} className={`truncate ${isTarget ? "text-foreground font-medium" : "text-muted-foreground"}`}>
-                {amt} {sym}
+                <span className="font-semibold">{amt}</span> {tokenLabel}
                 {usd > 0 && (
                   <>
                     <span className="text-muted-foreground">{" ≈ "}</span>
