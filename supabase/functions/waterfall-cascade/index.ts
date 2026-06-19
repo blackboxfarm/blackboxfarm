@@ -68,7 +68,8 @@ serve(async (req) => {
       });
     }
 
-    const { columnIndex, plan: providedPlan } = await req.json();
+    const { columnIndex, plan: providedPlan, skipTroll: skipTrollRaw } = await req.json();
+    const skipTroll = skipTrollRaw === true;
     if (typeof columnIndex !== "number" || columnIndex < 0 || columnIndex > 9) {
       throw new Error("columnIndex must be 0..9");
     }
@@ -108,7 +109,7 @@ serve(async (req) => {
         column_index: columnIndex,
         status: "running",
         current_wallet_row: 0,
-        current_step: "starting",
+        current_step: skipTroll ? "starting (skip troll)" : "starting",
         created_by: user.id,
         plan: providedPlan ?? null,
       })
@@ -145,24 +146,30 @@ serve(async (req) => {
         for (let r = 0; r < 10; r++) {
           const w = wallets[r];
           const hopStart = Date.now();
-          await updateRun({ current_wallet_row: r, current_step: `W${r + 1} trolling` });
+          await updateRun({
+            current_wallet_row: r,
+            current_step: skipTroll ? `W${r + 1} skipping troll` : `W${r + 1} trolling`,
+          });
 
           const secret = await decryptWalletSecretAuto(w.secret_key_encrypted as string);
           const kp = keypairFromSecret(secret);
           if (kp.publicKey.toBase58() !== w.pubkey) throw new Error(`W${r + 1} key mismatch`);
 
           // TROLL with retries until 10 successful cycles or max attempts/cycle hit
-          const troll = await runTrollCycles(connection, kp, {
-            cycles: 10,
-            gapMs: 5000,
-            maxAttemptsPerCycle: 20,
-            onProgress: async (msg) => {
-              await updateRun({ current_step: `W${r + 1} ${msg}` });
-            },
-          });
-
-          if (troll.successCount < 10) {
-            throw new Error(`W${r + 1} TROLL only completed ${troll.successCount}/10 cycles`);
+          let trollSuccessCount = 0;
+          if (!skipTroll) {
+            const troll = await runTrollCycles(connection, kp, {
+              cycles: 10,
+              gapMs: 5000,
+              maxAttemptsPerCycle: 20,
+              onProgress: async (msg) => {
+                await updateRun({ current_step: `W${r + 1} ${msg}` });
+              },
+            });
+            if (troll.successCount < 10) {
+              throw new Error(`W${r + 1} TROLL only completed ${troll.successCount}/10 cycles`);
+            }
+            trollSuccessCount = troll.successCount;
           }
 
           // Last wallet: terminal, do not forward
@@ -170,7 +177,8 @@ serve(async (req) => {
             await appendHop({
               row: r,
               pubkey: w.pubkey,
-              trollCycles: troll.successCount,
+              trollCycles: trollSuccessCount,
+              trollSkipped: skipTroll,
               forwarded: 0,
               leftBehindLamports: await connection.getBalance(kp.publicKey),
               durationMs: Date.now() - hopStart,
@@ -205,7 +213,8 @@ serve(async (req) => {
           await appendHop({
             row: r,
             pubkey: w.pubkey,
-            trollCycles: troll.successCount,
+            trollCycles: trollSuccessCount,
+            trollSkipped: skipTroll,
             leftBehindLamports: leaveBehind,
             forwardedLamports: sendable,
             transferSig: sig,

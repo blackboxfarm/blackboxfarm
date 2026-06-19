@@ -178,6 +178,14 @@ export default function WaterfallGrid() {
   const [sellingGrid, setSellingGrid] = useState<boolean>(false);
   const [buyingCol, setBuyingCol] = useState<number | null>(null);
 
+  // Skip TROLL buy/sell during cascade — just spread SOL across the wallets.
+  const [skipTroll, setSkipTroll] = useState<boolean>(() => {
+    try { return localStorage.getItem("waterfall_skip_troll") === "1"; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("waterfall_skip_troll", skipTroll ? "1" : "0"); } catch {}
+  }, [skipTroll]);
+
   const appendLog = useCallback((e: Omit<SimLogEntry, "ts">) => {
     setSimLog((prev) => [{ ...e, ts: Date.now() }, ...prev].slice(0, 500));
   }, []);
@@ -833,15 +841,22 @@ export default function WaterfallGrid() {
 
         // SIM TROLL: 10 buy/sell cycles on this wallet before forwarding
         let trollSpentLamports = 0;
-        for (let k = 1; k <= 10; k++) {
-          const jitter = 1 + (Math.random() * 0.4 - 0.2); // ±20%
-          const feeSol = SIM_TROLL_COST_PER_CYCLE * jitter;
-          trollSpentLamports += Math.floor(feeSol * LAMPORTS_PER_SOL);
+        if (skipTroll) {
           appendLog({
             col: columnIndex, row: hop.row, kind: "TROLL",
-            msg: `W${columnIndex + 1}·R${hop.row + 1}  troll ${k}/10  BUY→SELL $TROLL  −${feeSol.toFixed(5)} SOL`,
+            msg: `W${columnIndex + 1}·R${hop.row + 1}  TROLL skipped (SOL spread only)`,
           });
-          await new Promise((r) => setTimeout(r, 90));
+        } else {
+          for (let k = 1; k <= 10; k++) {
+            const jitter = 1 + (Math.random() * 0.4 - 0.2); // ±20%
+            const feeSol = SIM_TROLL_COST_PER_CYCLE * jitter;
+            trollSpentLamports += Math.floor(feeSol * LAMPORTS_PER_SOL);
+            appendLog({
+              col: columnIndex, row: hop.row, kind: "TROLL",
+              msg: `W${columnIndex + 1}·R${hop.row + 1}  troll ${k}/10  BUY→SELL $TROLL  −${feeSol.toFixed(5)} SOL`,
+            });
+            await new Promise((r) => setTimeout(r, 90));
+          }
         }
         // Deduct troll fees from the wallet's sim SOL up front
         setSimState((prev) => {
@@ -890,12 +905,14 @@ export default function WaterfallGrid() {
     if (plan.hops.some((h) => h.insufficient)) {
       return toast({ title: "Plan has insufficient hops", variant: "destructive" });
     }
-    if (!confirm(`EXECUTE cascade on column ${columnIndex + 1} with the previewed plan?\n~25 minutes. ~$1–$2.50 in fees.`)) return;
+    const eta = skipTroll ? "~2–4 minutes. ~$0.10 in fees." : "~25 minutes. ~$1–$2.50 in fees.";
+    const trollNote = skipTroll ? "\n(TROLL skipped — SOL spread only)" : "";
+    if (!confirm(`EXECUTE cascade on column ${columnIndex + 1} with the previewed plan?\n${eta}${trollNote}`)) return;
     const planPayload = plan.hops
       .filter((h) => h.row < 9)
       .map((h) => ({ row: h.row, leaveBehindLamports: h.leaveBehindLamports }));
     const { error } = await supabase.functions.invoke("waterfall-cascade", {
-      body: { columnIndex, plan: planPayload },
+      body: { columnIndex, plan: planPayload, skipTroll },
     });
     if (error) return toast({ title: "Cascade start failed", description: error.message, variant: "destructive" });
     toast({ title: `Cascade ${columnIndex + 1} started` });
@@ -1135,6 +1152,22 @@ export default function WaterfallGrid() {
               W{c + 1}
             </label>
           ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border/40">
+          <label className="flex items-center gap-2 text-xs font-medium cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={skipTroll}
+              onChange={() => setSkipTroll((v) => !v)}
+              className="h-3.5 w-3.5"
+            />
+            Skip TROLL process (cascade just spreads SOL across wallets)
+          </label>
+          {skipTroll && (
+            <span className="text-[11px] text-amber-600 dark:text-amber-400">
+              No buy/sell of $TROLL · ~2–4 min instead of ~25 min
+            </span>
+          )}
         </div>
       </div>
 
