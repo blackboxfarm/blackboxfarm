@@ -178,6 +178,14 @@ export default function WaterfallGrid() {
   const [sellingGrid, setSellingGrid] = useState<boolean>(false);
   const [buyingCol, setBuyingCol] = useState<number | null>(null);
 
+  // Skip TROLL buy/sell during cascade — just spread SOL across the wallets.
+  const [skipTroll, setSkipTroll] = useState<boolean>(() => {
+    try { return localStorage.getItem("waterfall_skip_troll") === "1"; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("waterfall_skip_troll", skipTroll ? "1" : "0"); } catch {}
+  }, [skipTroll]);
+
   const appendLog = useCallback((e: Omit<SimLogEntry, "ts">) => {
     setSimLog((prev) => [{ ...e, ts: Date.now() }, ...prev].slice(0, 500));
   }, []);
