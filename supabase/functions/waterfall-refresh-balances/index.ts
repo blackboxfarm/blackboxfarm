@@ -87,7 +87,7 @@ serve(async (req) => {
     const { data: wallets, error: walletsError } = await walletQuery;
     if (walletsError) throw walletsError;
     if (!wallets?.length) {
-      return new Response(JSON.stringify({ success: true, wallets: {} }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ success: true, partial: requestedPubkeys.length > 0, wallets: {} }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const results: Record<string, { sol: number; tokens: Array<{ mint: string; amount: number; decimals: number }>; tokenScanOk?: boolean }> = {};
@@ -192,7 +192,7 @@ serve(async (req) => {
       await assertDbWrite(del, "wallet_positions", "waterfall_refresh_positions_prune");
     }
 
-    return new Response(JSON.stringify({ success: true, wallets: results }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ success: true, partial: requestedPubkeys.length > 0, wallets: results }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("waterfall-refresh-balances", e);
     return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
