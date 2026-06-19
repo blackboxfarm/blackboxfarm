@@ -809,9 +809,39 @@ export default function WaterfallGrid() {
       .lte("row_index", 9)
       .order("column_index").order("row_index");
     if (error) toast({ title: "Load failed", description: error.message, variant: "destructive" });
-    setWallets((data ?? []) as WaterfallWallet[]);
+    const loaded = (data ?? []) as WaterfallWallet[];
+    setWallets(loaded);
+    // Seed persisted token holdings so every cell shows its tokens immediately,
+    // without waiting for a live RPC refresh.
+    const pubkeys = loaded.map((w) => w.pubkey).filter(Boolean);
+    if (pubkeys.length > 0) {
+      const { data: positions } = await supabase
+        .from("wallet_positions")
+        .select("wallet_address,token_mint,balance")
+        .in("wallet_address", pubkeys);
+      if (Array.isArray(positions) && positions.length > 0) {
+        const seeded: Record<string, { sol: number; tokens: TokenHolding[] }> = {};
+        for (const w of loaded) {
+          seeded[w.pubkey] = { sol: Number(w.sol_balance || 0), tokens: [] };
+        }
+        for (const p of positions as Array<{ wallet_address: string; token_mint: string; balance: number }>) {
+          const amt = Number(p.balance);
+          if (!Number.isFinite(amt) || amt <= 0) continue;
+          const slot = seeded[p.wallet_address] ?? (seeded[p.wallet_address] = { sol: 0, tokens: [] });
+          slot.tokens.push({ mint: p.token_mint, amount: amt, decimals: 6 });
+        }
+        setBalances((prev) => ({ ...seeded, ...prev }));
+        // Backfill prices for any persisted mints we don't already know.
+        const mints = Array.from(new Set(positions.map((p: any) => p.token_mint).filter(Boolean)));
+        if (mints.length > 0) {
+          fetchPricesFor(mints).then((next) => {
+            if (Object.keys(next).length > 0) setTokenPrices((prev) => ({ ...prev, ...next }));
+          }).catch(() => {});
+        }
+      }
+    }
     setLoading(false);
-  }, []);
+  }, [fetchPricesFor]);
 
   useEffect(() => { loadWallets(); }, [loadWallets]);
 
