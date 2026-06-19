@@ -13,6 +13,30 @@ const TOKEN_PROGRAMS = [
   "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
 ];
 
+function rawToUi(raw: unknown, decimals: unknown) {
+  const n = Number(raw ?? 0);
+  const d = Number(decimals ?? 0);
+  if (!Number.isFinite(n) || !Number.isFinite(d)) return 0;
+  return n / Math.pow(10, d);
+}
+
+function parseAssetTokens(result: any) {
+  const byMint = new Map<string, { mint: string; amount: number; decimals: number }>();
+  for (const asset of result?.items ?? []) {
+    const info = asset?.token_info;
+    const mint = asset?.id;
+    if (!mint || !info) continue;
+    const decimals = Number(info.decimals ?? 0);
+    const amount = typeof info.balance === "number"
+      ? rawToUi(info.balance, decimals)
+      : Number(info.ui_amount ?? info.amount ?? 0) || rawToUi(info.balance, decimals);
+    if (!(amount > 0)) continue;
+    const prev = byMint.get(mint);
+    byMint.set(mint, { mint, amount: (prev?.amount ?? 0) + amount, decimals });
+  }
+  return [...byMint.values()];
+}
+
 async function rpc(method: string, params: any[]) {
   const res = await fetch(getHeliusRpcUrl(), {
     method: "POST",
@@ -27,6 +51,13 @@ async function rpc(method: string, params: any[]) {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
+    const bodyText = await req.text().catch(() => "");
+    const body = bodyText ? JSON.parse(bodyText) : {};
+    const requestedPubkeys = Array.isArray(body?.pubkeys)
+      ? body.pubkeys.filter((p: unknown) => typeof p === "string" && p.length >= 32 && p.length <= 44).slice(0, 100)
+      : typeof body?.pubkey === "string" && body.pubkey.length >= 32 && body.pubkey.length <= 44
+        ? [body.pubkey]
+        : [];
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -41,11 +72,14 @@ serve(async (req) => {
     const { data: isSuper } = await admin.rpc("is_super_admin", { _user_id: user.id });
     if (!isSuper) return new Response(JSON.stringify({ error: "Super admin required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    const { data: wallets } = await admin
+    let walletQuery = admin
       .from("waterfall_wallets")
       .select("id,pubkey")
       .gte("row_index", 0)
       .lte("row_index", 9);
+    if (requestedPubkeys.length > 0) walletQuery = walletQuery.in("pubkey", requestedPubkeys);
+    const { data: wallets, error: walletsError } = await walletQuery;
+    if (walletsError) throw walletsError;
     if (!wallets?.length) {
       return new Response(JSON.stringify({ success: true, wallets: {} }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
