@@ -586,7 +586,7 @@ export default function WaterfallGrid() {
     if (!simMode) {
       setBuyingCol(col);
       try {
-        balanceSnapshot = await refreshBalancesForBuy();
+        balanceSnapshot = await refreshBalancesForBuy(wallets.filter((w) => w.column_index === col).map((w) => w.pubkey));
       } catch (e: any) {
         setBuyingCol(null);
         return toast({ title: "Live balance refresh failed", description: e?.message || String(e), variant: "destructive" });
@@ -1489,7 +1489,7 @@ function Cell({
   onPreview: () => void;
   onExecute: () => void;
   onCancelPlan: () => void;
-  onRefreshBalancesForBuy: () => Promise<Record<string, { sol: number; tokens: TokenHolding[] }>>;
+  onRefreshBalancesForBuy: (pubkeys?: string[]) => Promise<Record<string, { sol: number; tokens: TokenHolding[] }>>;
   simMode: boolean;
   onSimBuy: (w: WaterfallWallet, mint: string, lamportsIn: number) => void;
   onSimSell: (w: WaterfallWallet, mint: string) => void;
@@ -1538,7 +1538,7 @@ function Cell({
       if (!simMode) {
         setBusy("buy");
         try {
-          const fresh = await onRefreshBalancesForBuy();
+          const fresh = await onRefreshBalancesForBuy([w.pubkey]);
           liveSol = fresh[w.pubkey]?.sol ?? sol;
         } catch (e: any) {
           setBusy(null);
