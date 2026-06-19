@@ -580,17 +580,17 @@ export default function WaterfallGrid() {
     if (!mint) return toast({ title: `W${col + 1}: set a token mint first`, variant: "destructive" });
     const pct = Math.min(MAX_BUY_SIZE_PCT, Number(buySizePct) || 0);
     if (!(pct > 0 && pct <= MAX_BUY_SIZE_PCT)) return toast({ title: `Buy % must be between 1 and ${MAX_BUY_SIZE_PCT}`, variant: "destructive" });
+    let balanceSnapshot = balances;
     if (!simMode) {
       setBuyingCol(col);
       try {
-        await refreshBalancesForBuy();
+        balanceSnapshot = await refreshBalancesForBuy();
       } catch (e: any) {
         setBuyingCol(null);
         return toast({ title: "Live balance refresh failed", description: e?.message || String(e), variant: "destructive" });
       }
       setBuyingCol(null);
     }
-    const balanceSnapshot = !simMode ? await refreshBalancesForBuy().catch(() => balances) : balances;
     const sourceWallets = wallets.map((w) => {
       const live = balanceSnapshot[w.pubkey]?.sol;
       return typeof live === "number" && Number.isFinite(live) ? { ...w, sol_balance: live } : w;
@@ -1173,14 +1173,14 @@ export default function WaterfallGrid() {
               Per-waterfall mint inputs are shown in each column header below.
             </span>
           )}
-          <label className="text-xs font-medium whitespace-nowrap ml-2">Buy size (% of wallet SOL):</label>
+              <label className="text-xs font-medium whitespace-nowrap ml-2">Buy size (% of spendable SOL):</label>
           <Input
             value={buySizePct}
-            onChange={(e) => setBuySizePct(e.target.value)}
+                onChange={(e) => setBuySizePct(clampBuySizePct(e.target.value))}
             className="h-8 text-xs w-20"
             type="number"
             min={1}
-            max={99}
+                max={MAX_BUY_SIZE_PCT}
           />
           <span className="text-[11px] text-muted-foreground">%</span>
           {useSameMint && validTargetMint && tokenPrices[targetMint.trim()] && (
