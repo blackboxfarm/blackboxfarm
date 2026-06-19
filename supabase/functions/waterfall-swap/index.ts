@@ -19,6 +19,7 @@ const corsHeaders = {
 
 const SOL_MINT = "So11111111111111111111111111111111111111112";
 const DEFAULT_SLIPPAGE_BPS = 500;
+const JUP_SWAP_BASE = "https://lite-api.jup.ag/swap/v1";
 
 const MAX_JUP_ATTEMPTS = 4;
 const JUP_BACKOFF_MS = 1500;
@@ -65,11 +66,11 @@ async function jupQuote(params: Record<string, string>) {
   const qs = new URLSearchParams(params).toString();
   // Cache-bust + force fresh route: add a nonce so any intermediate CDN/edge cache misses
   const nonce = `_t=${Date.now()}`;
-  const r = await fetchJupWithRetry("quote", `https://quote-api.jup.ag/v6/quote?${qs}&${nonce}`);
+  const r = await fetchJupWithRetry("quote", `${JUP_SWAP_BASE}/quote?${qs}&${nonce}`);
   return r.json();
 }
 async function jupSwap(quoteResponse: unknown, userPublicKey: string) {
-  const r = await fetchJupWithRetry("swap", "https://quote-api.jup.ag/v6/swap", {
+  const r = await fetchJupWithRetry("swap", `${JUP_SWAP_BASE}/swap`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
