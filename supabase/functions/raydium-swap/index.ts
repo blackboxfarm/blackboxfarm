@@ -2065,7 +2065,7 @@ serve(withRunLog('raydium-swap', async (req) => {
         String(outputMint).endsWith('pump') ||
         String(inputMint).endsWith('pump');
       const baseSlippage = Number(slippageBps);
-      const effectiveSlippage = isPumpToken ? Math.max(baseSlippage, 1000) : baseSlippage; // 10% min for pump tokens
+      const effectiveSlippage = isPumpToken ? Math.max(baseSlippage, 5000) : baseSlippage; // 50% for fast pump.fun buys
       const maxRetrySlippage = isPumpToken ? 5000 : 2500; // up to 50% for pump tokens
       
       console.log(`Jupiter fallback with slippage: ${effectiveSlippage} bps (pump token: ${isPumpToken}), reason: ${jupReason}`);
@@ -2280,6 +2280,15 @@ serve(withRunLog('raydium-swap', async (req) => {
           } else {
             console.log('Jupiter retry quote also failed:', ("error" in j2) ? j2.error : 'no txs');
           }
+        }
+
+        if (purePumpPortalFailureReason) {
+          console.log(`Pure pump.fun BC: PumpPortal and Jupiter failed; not trying unrelated AMM APIs. Jupiter: ${jupiterFailureMessage}`);
+          const curveRejected = isPumpCurveRejectError(`${purePumpPortalFailureReason} ${jupiterFailureMessage}`);
+          const hint = curveRejected
+            ? `pump.fun/Jupiter rejected buy after transaction build — wallet SOL was below executable amount or price moved too fast (${jupiterFailureMessage})`
+            : `pump.fun/Jupiter could not execute buy (${jupiterFailureMessage})`;
+          return ok({ error: hint, error_code: "PUMPFUN_CURVE_REJECTED", underlying: purePumpPortalFailureReason }, 200);
         }
 
         // Jupiter also failed - try Meteora direct API for DLMM pools (graduated tokens)
