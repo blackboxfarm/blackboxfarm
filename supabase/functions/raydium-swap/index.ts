@@ -106,7 +106,7 @@ const corsHeaders = {
 
 const SWAP_HOST = "https://transaction-v1.raydium.io"; // compute + transaction host from docs
 const DEFAULT_BUY_FEE_RESERVE_LAMPORTS = 1_000_000;
-const PUMP_BUY_FEE_RENT_RESERVE_LAMPORTS = 3_500_000;
+const PUMP_BUY_FEE_RENT_RESERVE_LAMPORTS = 6_000_000;
 
 function ok(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -1879,22 +1879,18 @@ serve(withRunLog('raydium-swap', async (req) => {
       }
     }
 
-    // FAST-PATH: For pumpswap-best-dex tokens, PumpPortal is the primary route. If it failed,
-    // skip the Raydium/Jupiter/Meteora compute cascade (which blows the function's memory limit).
-    // Only try bags.fm directly when the token actually lives on bags.fm. For pure pump.fun BC
-    // tokens, return the PumpPortal error cleanly so the caller can act on it.
-    // Pure pump.fun BC (pre-graduation): no AMM exists, only PumpPortal can route.
-    // Graduated PumpSwap tokens have a real AMM — let Jupiter handle pump-amm routing.
+    // Pure pump.fun BC (pre-graduation): PumpPortal is first, but Jupiter can also
+    // quote Pump.fun directly. Do not abort here on PumpPortal 0x1/rent errors —
+    // try Jupiter before surfacing a hard failure. Still prevent the later heavy
+    // Meteora/bags cascade for pure pump.fun tokens if Jupiter cannot build/send.
     const isPurePumpPortalBuy = isBondingCurveToken && isPumpToken && !hasAmmLiquidity && !isBagsToken && !isPumpSwapBestDex;
-    if (isBondingCurveToken && isPurePumpPortalBuy && needJupiter && side === "buy") {
-      const curveRejected = isPumpCurveRejectError(jupReason);
-      if (!isBagsToken) {
-        console.log(`Pure pump.fun BC: PumpPortal failed, no AMM to fall through to. Reason: ${jupReason}`);
-        const hint = curveRejected
-          ? "pump.fun curve rejected the buy — likely insufficient SOL in wallet (need amount + ~0.001 SOL fees + rent) or slippage too tight"
-          : jupReason;
-        return ok({ error: hint, error_code: "PUMPFUN_CURVE_REJECTED", underlying: jupReason }, 200);
-      }
+    const purePumpPortalFailureReason = isPurePumpPortalBuy && needJupiter && side === "buy" ? jupReason : undefined;
+    if (purePumpPortalFailureReason) {
+      console.log(`Pure pump.fun BC: PumpPortal failed; trying Jupiter Pump.fun route before failing. Reason: ${purePumpPortalFailureReason}`);
+    }
+
+    // bags.fm fast-path is only valid for actual bags.fm tokens.
+    if (isBondingCurveToken && isBagsToken && needJupiter && side === "buy") {
       console.log(`Pumpswap fast-path: skipping heavy DEX cascade, trying bags.fm directly. Reason: ${jupReason}`);
       try {
         const bagsFmResult = await tryBagsFmSwap({
@@ -2069,7 +2065,7 @@ serve(withRunLog('raydium-swap', async (req) => {
         String(outputMint).endsWith('pump') ||
         String(inputMint).endsWith('pump');
       const baseSlippage = Number(slippageBps);
-      const effectiveSlippage = isPumpToken ? Math.max(baseSlippage, 1000) : baseSlippage; // 10% min for pump tokens
+      const effectiveSlippage = isPumpToken ? Math.max(baseSlippage, 5000) : baseSlippage; // 50% for fast pump.fun buys
       const maxRetrySlippage = isPumpToken ? 5000 : 2500; // up to 50% for pump tokens
       
       console.log(`Jupiter fallback with slippage: ${effectiveSlippage} bps (pump token: ${isPumpToken}), reason: ${jupReason}`);
@@ -2102,7 +2098,7 @@ serve(withRunLog('raydium-swap', async (req) => {
             tx.recentBlockhash = blockhash;
             if (!tx.feePayer) tx.feePayer = owner.publicKey;
             tx.sign(owner);
-            let sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
+            let sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: false, maxRetries: 2 });
             
             // ALWAYS use hard confirmation for reliability
             const confirmResult = await hardConfirmTransaction(connection, sig, blockhash, lastValidBlockHeight, 30000);
@@ -2139,7 +2135,7 @@ serve(withRunLog('raydium-swap', async (req) => {
                   retryTx.recentBlockhash = fresh.blockhash;
                   if (!retryTx.feePayer) retryTx.feePayer = owner.publicKey;
                   retryTx.sign(owner);
-                  sig = await connection.sendRawTransaction(retryTx.serialize(), { skipPreflight: true, maxRetries: 2 });
+                  sig = await connection.sendRawTransaction(retryTx.serialize(), { skipPreflight: false, maxRetries: 2 });
                   
                   const retryResult = await hardConfirmTransaction(connection, sig, fresh.blockhash, fresh.lastValidBlockHeight, 30000);
                   if (!retryResult.confirmed) {
@@ -2154,7 +2150,7 @@ serve(withRunLog('raydium-swap', async (req) => {
                 const fresh = await connection.getLatestBlockhash("confirmed");
                 tx.recentBlockhash = fresh.blockhash;
                 tx.sign(owner);
-                sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
+                sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: false, maxRetries: 2 });
                 
                 const retryResult = await hardConfirmTransaction(connection, sig, fresh.blockhash, fresh.lastValidBlockHeight, 30000);
                 if (!retryResult.confirmed) {
@@ -2175,7 +2171,7 @@ serve(withRunLog('raydium-swap', async (req) => {
             // @ts-ignore - message is mutable in this context
             (vtx as any).message.recentBlockhash = fresh.blockhash;
             vtx.sign([owner]);
-            let sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
+            let sig = await connection.sendTransaction(vtx, { skipPreflight: false, maxRetries: 2 });
             
             // ALWAYS use hard confirmation for reliability
             const confirmResult = await hardConfirmTransaction(connection, sig, fresh.blockhash, fresh.lastValidBlockHeight, 30000);
@@ -2210,7 +2206,7 @@ serve(withRunLog('raydium-swap', async (req) => {
                   const newer = await connection.getLatestBlockhash("confirmed");
                   (retryVtx as any).message.recentBlockhash = newer.blockhash;
                   retryVtx.sign([owner]);
-                  sig = await connection.sendTransaction(retryVtx, { skipPreflight: true, maxRetries: 2 });
+                  sig = await connection.sendTransaction(retryVtx, { skipPreflight: false, maxRetries: 2 });
                   
                   const retryResult = await hardConfirmTransaction(connection, sig, newer.blockhash, newer.lastValidBlockHeight, 30000);
                   if (!retryResult.confirmed) {
@@ -2225,7 +2221,7 @@ serve(withRunLog('raydium-swap', async (req) => {
                 const newer = await connection.getLatestBlockhash("confirmed");
                 (vtx as any).message.recentBlockhash = newer.blockhash;
                 vtx.sign([owner]);
-                sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
+                sig = await connection.sendTransaction(vtx, { skipPreflight: false, maxRetries: 2 });
                 
                 const retryResult = await hardConfirmTransaction(connection, sig, newer.blockhash, newer.lastValidBlockHeight, 30000);
                 if (!retryResult.confirmed) {
@@ -2284,6 +2280,15 @@ serve(withRunLog('raydium-swap', async (req) => {
           } else {
             console.log('Jupiter retry quote also failed:', ("error" in j2) ? j2.error : 'no txs');
           }
+        }
+
+        if (purePumpPortalFailureReason) {
+          console.log(`Pure pump.fun BC: PumpPortal and Jupiter failed; not trying unrelated AMM APIs. Jupiter: ${jupiterFailureMessage}`);
+          const curveRejected = isPumpCurveRejectError(`${purePumpPortalFailureReason} ${jupiterFailureMessage}`);
+          const hint = curveRejected
+            ? `pump.fun/Jupiter rejected buy after transaction build — wallet SOL was below executable amount or price moved too fast (${jupiterFailureMessage})`
+            : `pump.fun/Jupiter could not execute buy (${jupiterFailureMessage})`;
+          return ok({ error: hint, error_code: "PUMPFUN_CURVE_REJECTED", underlying: purePumpPortalFailureReason }, 200);
         }
 
         // Jupiter also failed - try Meteora direct API for DLMM pools (graduated tokens)
