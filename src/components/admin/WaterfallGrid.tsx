@@ -1301,6 +1301,9 @@ export default function WaterfallGrid() {
                           {colMintMeta.symbol} · ${colMintMeta.priceUsd.toFixed(8).replace(/\.?0+$/, "")}
                         </div>
                       )}
+                      <div className="text-[10px] mt-0.5 font-semibold text-emerald-600 dark:text-emerald-400">
+                        Tokens: ${tokenUsdByCol[c].toFixed(2)}
+                      </div>
                       <div className="flex gap-1 mt-1">
                         <button
                           onClick={() => buyColumn(c)}
