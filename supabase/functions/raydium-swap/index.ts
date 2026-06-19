@@ -108,6 +108,7 @@ const SWAP_HOST = "https://transaction-v1.raydium.io"; // compute + transaction 
 const DEFAULT_BUY_FEE_RESERVE_LAMPORTS = 1_000_000;
 const PUMP_BUY_SELL_FEE_RESERVE_LAMPORTS = 12_000_000;
 const MIN_EXECUTABLE_BUY_LAMPORTS = 500_000;
+const MAX_BACKEND_BUY_PCT = 90;
 
 function ok(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -120,9 +121,9 @@ function bad(message: string, status = 400) {
   return ok({ error: message }, status);
 }
 
-function softError(code: string, message: string) {
+function softError(code: string, message: string, extra: Record<string, unknown> = {}) {
   // Return 200 so callers can reliably read the error payload.
-  return ok({ error: message, error_code: code }, 200);
+  return ok({ error: message, error_code: code, ...extra }, 200);
 }
 
 function isPumpCurveRejectError(message?: string) {
