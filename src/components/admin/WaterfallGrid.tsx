@@ -176,6 +176,7 @@ export default function WaterfallGrid() {
   const [lastPriceRefresh, setLastPriceRefresh] = useState<number>(0);
   const [pricesRefreshing, setPricesRefreshing] = useState(false);
   const [, forceTick] = useState(0);
+  const balanceRefreshInFlightRef = useRef(false);
 
   // Funding toolbar state
   const [simFundCol, setSimFundCol] = useState<string>(PERSISTED_INIT.simFundCol ?? "all"); // "all" or "0".."9"
@@ -1064,16 +1065,20 @@ export default function WaterfallGrid() {
     if (wallets.length === 0) return;
     let cancelled = false;
     const run = async () => {
+      if (balanceRefreshInFlightRef.current) return;
+      balanceRefreshInFlightRef.current = true;
       try {
         const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances");
         if (error) throw error;
         if (!cancelled) applyRefreshPayload(data);
       } catch (e) {
         console.warn("[WaterfallGrid] auto-refresh failed", e);
+      } finally {
+        balanceRefreshInFlightRef.current = false;
       }
     };
     run();
-    const id = window.setInterval(run, 20_000);
+    const id = window.setInterval(run, 60_000);
     return () => { cancelled = true; window.clearInterval(id); };
   }, [wallets.length, applyRefreshPayload]);
 
