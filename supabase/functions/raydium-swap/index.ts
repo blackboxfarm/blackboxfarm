@@ -1866,6 +1866,57 @@ serve(withRunLog('raydium-swap', async (req) => {
       }
     }
 
+    // FAST-PATH: For pumpswap-best-dex tokens, PumpPortal is the primary route. If it failed,
+    // skip the Raydium/Jupiter/Meteora compute cascade (which has been blowing the function's
+    // memory limit) and try bags.fm Trade API directly. If that also fails, return the real
+    // error so the caller (waterfall-swap) can act on it instead of OOM-crashing.
+    if (isBondingCurveToken && isPumpSwapBestDex && needJupiter && side === "buy") {
+      console.log(`Pumpswap fast-path: skipping heavy DEX cascade, trying bags.fm directly. Reason: ${jupReason}`);
+      try {
+        const bagsFmResult = await tryBagsFmSwap({
+          inputMint: String(inputMint),
+          outputMint: String(outputMint),
+          amount: amount as any,
+          slippageBps: Number(slippageBps),
+          userPublicKey: owner.publicKey.toBase58(),
+        });
+        if ("tx" in bagsFmResult) {
+          const u8 = b64ToU8(bagsFmResult.tx);
+          const vtx = VersionedTransaction.deserialize(u8);
+          const _hk = getHeliusApiKey();
+          const txRpc = _hk
+            ? new Connection(getHeliusRpcUrl(_hk), { commitment: "confirmed" })
+            : connection;
+          const { blockhash, lastValidBlockHeight } = await txRpc.getLatestBlockhash("confirmed");
+          (vtx as any).message.recentBlockhash = blockhash;
+          vtx.sign([owner]);
+          const sig = await txRpc.sendTransaction(vtx, { skipPreflight: true, maxRetries: 3 });
+          const confirmResult = await hardConfirmTransaction(txRpc, sig, blockhash, lastValidBlockHeight, 30000);
+          if (confirmResult.confirmed) {
+            console.log(`Pumpswap fast-path bags.fm ${side} successful:`, sig);
+            const solInputLamports =
+              side === "buy" && String(inputMint) === NATIVE_MINT.toBase58() && Number.isFinite(Number(amount))
+                ? Number(amount)
+                : null;
+            return ok({ signatures: [sig], source: "bags.fm-fastpath", outAmount: bagsFmResult.outAmount || null, solInputLamports });
+          }
+          return new Response(
+            JSON.stringify({ error: `Pumpswap buy failed via PumpPortal and bags.fm. PumpPortal: ${jupReason}. bags.fm tx: ${confirmResult.error || "unconfirmed"}` }),
+            { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        return new Response(
+          JSON.stringify({ error: `Pumpswap buy failed via PumpPortal and bags.fm. PumpPortal: ${jupReason}. bags.fm: ${bagsFmResult.error}` }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch (fastErr) {
+        return new Response(
+          JSON.stringify({ error: `Pumpswap fast-path failed: ${(fastErr as Error).message}. Underlying: ${jupReason}` }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     // Compute route (with SOL fallback for buys if USDC route lacks liquidity)
     let usedFallbackToSOL = false;
     let swapResponse: any;
