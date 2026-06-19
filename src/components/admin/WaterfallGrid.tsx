@@ -1611,7 +1611,7 @@ function Cell({
       </div>
       {tokens.length > 0 && (
         <div className="text-[10px] space-y-0.5">
-          {tokens.slice(0, 4).map((t) => {
+          {tokens.map((t) => {
             const meta = tokenPrices[t.mint];
             const usd = meta ? meta.priceUsd * t.amount : 0;
             const solEq = solUsd > 0 ? usd / solUsd : 0;
@@ -1659,7 +1659,6 @@ function Cell({
               </div>
             );
           })}
-          {tokens.length > 4 && <div className="text-muted-foreground">+{tokens.length - 4} more…</div>}
           {(() => {
             const tokensUsd = tokens.reduce((s, t) => s + (tokenPrices[t.mint]?.priceUsd ?? 0) * t.amount, 0);
             const solValueUsd = sol * solUsd;
