@@ -1,51 +1,49 @@
-Do I know what the issue is? Yes.
+## Problem
 
-**What happened in the screenshot**
-- The UI calculated W1 buy from the stored DB balance: `0.1333 SOL` with a persisted `95%` setting.
-- It sent `115,277,917 lamports` to `waterfall-swap` for wallet `475NMKG1`.
-- `waterfall-swap` delegated to `raydium-swap`.
-- `raydium-swap` checked the live on-chain balance, reserved `0.012 SOL`, and found `0` executable SOL.
-- So the buy stopped before any real venue trade. It did **not** get to a successful PumpPortal/Raydium/Jupiter buy.
+The Sell buttons (per-wallet SELL, bulk "Sell W1", "SELL GRID") are gated on the column's **configured target mint**:
 
-**Root problem**
-- The frontend is still sizing buys from stale `waterfall_wallets.sol_balance`.
-- The old saved local setting still shows `95%`, even though the intended default is 90%.
-- The backend is correctly refusing to spend fee reserve, but the frontend should not be sending stale fixed lamports in the first place.
+- Per-wallet `SELL` is `disabled` unless `targetHeld` (a token matching the column's `targetMint`) exists in that wallet.
+- "Sell W1" is `disabled` unless `colMint` is set for the column.
 
-**Fix plan**
-1. **Force buy size to 90 max**
-   - Clamp saved/local `buySizePct` to `90` if it is higher.
-   - Set the input max to `90`.
-   - Make the label clear it is `% of spendable SOL after fees`, not raw wallet SOL.
+W1 currently holds `JBXS…pump` (yns), but if the W1 target-mint slot isn't set to that exact mint, every Sell control stays greyed out — even though the tokens are clearly visible on-chain. That's why you can't sell yns.
 
-2. **Stop trusting stale DB SOL for live buys**
-   - Before executing a live column buy, call `waterfall-refresh-balances` first.
-   - Use the refreshed balances for eligibility and per-wallet buy sizing.
-   - Update the grid immediately with refreshed balances before sending swaps.
+On top of that, `waterfall-swap` defaults `priorityFeeMode` to `"medium"`, and there's no one-click way to sweep all remaining SOL from every wallet back to a main wallet.
 
-3. **Move final buy sizing to the backend**
-   - Send `buyPct` and reserve settings to `waterfall-swap` / `raydium-swap`, not only precomputed stale `buyLamports`.
-   - `raydium-swap` will fetch live SOL and compute:
-     `floor((liveSolLamports - buySellFeeReserveLamports) * buyPct / 100)`
-   - This guarantees every wallet buys from live chain balance and keeps sell-fee reserve.
+## Plan
 
-4. **Make failures useful, not misleading**
-   - If a wallet has no spendable SOL after reserve, show: wallet short pubkey, live SOL, reserve, computed buy size.
-   - Toast/log should say `skipped no spendable SOL` instead of looking like a venue/trade failure.
+### 1. Sell ANY held token, not just the configured target mint
 
-5. **Deploy and verify**
-   - Deploy `waterfall-swap` and `raydium-swap`.
-   - Test W1 buy path and confirm logs show backend-calculated live buy lamports, not stale UI lamports.
+In `src/components/admin/WaterfallGrid.tsx`, inside each wallet card's token list:
 
-**Files to change**
-- `src/components/admin/WaterfallGrid.tsx`
-- `supabase/functions/waterfall-swap/index.ts`
-- `supabase/functions/raydium-swap/index.ts`
+- Render a tiny red `Sell` button next to every token row that has `amount > 0` (right beside the existing "Tokens: $X.XX" / per-token line).
+- Clicking it calls the existing `waterfall-swap` edge function with that token's mint and `side: "sell"` (100% of holdings) — same path the current per-wallet SELL uses, just with the row's mint instead of `targetMint`.
+- Confirm dialog shows the mint + amount before executing.
 
-<presentation-actions>
-  <presentation-open-history>View History</presentation-open-history>
-</presentation-actions>
+This unblocks selling yns in W1 immediately without touching the column target mint.
 
-<presentation-actions>
-<presentation-link url="https://docs.lovable.dev/tips-tricks/troubleshooting">Troubleshooting docs</presentation-link>
-</presentation-actions>
+### 2. "Sell ALL Holdings" — per wallet and per column
+
+- Add a small `Sell All` button on each wallet card (next to the existing SELL/BUY pair) that iterates over every non-SOL token in `balances[w.pubkey].tokens` and calls `waterfall-swap` sequentially (200ms gap between calls). Confirms once up front with the full list.
+- Add a `Sell ALL W{n}` button in each column header next to the existing `Sell W{n}` — same behavior across every wallet in that column.
+
+### 3. One-click "Sweep SOL → Main Wallet"
+
+- Add a `Sweep SOL` button in the top toolbar (near the existing SELL GRID / BUY GRID buttons).
+- Prompts once for the destination address (remembers it in `localStorage` for next time).
+- Iterates over every wallet with SOL > 0.000015 (dust threshold = rent + fee) and calls the existing `waterfall-withdraw` edge function with `mint: "SOL", amount: -1` (the existing "sweep" sentinel that already drains all SOL minus the 5000-lamport fee).
+- Sequential with a 200ms gap, progress toast, summary at the end.
+
+### 4. Reduce fees to the minimum
+
+- In `src/components/admin/WaterfallGrid.tsx`, change every `waterfall-swap` invocation body to pass `priorityFeeMode: "low"` (currently inherits the function's `"medium"` default).
+- In `supabase/functions/waterfall-swap/index.ts`, change the default fallback from `"medium"` to `"low"` so any other caller also benefits.
+- `waterfall-withdraw` already uses the minimum 5000-lamport base fee with no priority fee — no change needed there.
+
+Slippage stays at the existing 1500 bps (15%) default — already loose enough for tail liquidity on pump.fun graduates; tightening it would just cause more rejected sells, which is the opposite of what you want right now.
+
+### Files touched
+
+- `src/components/admin/WaterfallGrid.tsx` — per-token Sell button, Sell-All-Holdings per wallet + per column, Sweep SOL toolbar button, switch swap calls to `priorityFeeMode: "low"`.
+- `supabase/functions/waterfall-swap/index.ts` — default `priorityFeeMode` → `"low"`.
+
+No DB migrations, no new edge functions — reuses `waterfall-swap` and `waterfall-withdraw` exactly as they exist.
