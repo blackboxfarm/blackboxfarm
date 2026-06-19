@@ -1620,6 +1620,8 @@ function Cell({
   const [val, setVal] = useState(w.nickname ?? "");
   const [trolling, setTrolling] = useState(false);
   const [busy, setBusy] = useState<null | "buy" | "sell">(null);
+  const [sellingMint, setSellingMint] = useState<string | null>(null);
+  const [sellingAll, setSellingAll] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const sol = solOverride !== undefined ? solOverride : Number(w.sol_balance || 0);
   const cascadeRunning = !!cascade;
