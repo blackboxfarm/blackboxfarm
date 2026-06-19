@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useSolPrice } from "@/hooks/useSolPrice";
 import { Button } from "@/components/ui/button";
@@ -1033,6 +1033,45 @@ export default function WaterfallGrid() {
 
   const isEmpty = wallets.length === 0;
 
+  // USD value of tokens held in each column (sum across all 10 wallets of that column).
+  const tokenUsdByCol = useMemo(() => {
+    const out: number[] = Array.from({ length: 10 }, () => 0);
+    for (const w of wallets) {
+      const toks = balances[w.pubkey]?.tokens ?? [];
+      let sum = 0;
+      for (const t of toks) {
+        const px = tokenPrices[t.mint]?.priceUsd ?? 0;
+        sum += px * t.amount;
+      }
+      if (w.column_index >= 0 && w.column_index < 10) out[w.column_index] += sum;
+    }
+    return out;
+  }, [wallets, balances, tokenPrices]);
+  const totalTokenUsd = useMemo(() => tokenUsdByCol.reduce((a, b) => a + b, 0), [tokenUsdByCol]);
+  const totalWalletsWithTokens = useMemo(() => {
+    let n = 0;
+    for (const w of wallets) if ((balances[w.pubkey]?.tokens ?? []).some((t) => t.amount > 0)) n++;
+    return n;
+  }, [wallets, balances]);
+
+  // Auto-load on-chain balances + token holdings once wallets are loaded so the
+  // grid shows tokens + USD value WITHOUT the user clicking "Refresh".
+  const didAutoRefreshRef = useRef(false);
+  useEffect(() => {
+    if (didAutoRefreshRef.current) return;
+    if (wallets.length === 0) return;
+    didAutoRefreshRef.current = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances");
+        if (error) throw error;
+        applyRefreshPayload(data);
+      } catch (e) {
+        console.warn("[WaterfallGrid] auto-refresh failed", e);
+      }
+    })();
+  }, [wallets, applyRefreshPayload]);
+
   return (
     <div className="p-4 space-y-4">
       {simMode && (
@@ -1102,6 +1141,10 @@ export default function WaterfallGrid() {
           <p className="text-xs text-muted-foreground">
             10 isolated columns · 10 wallets per column · {wallets.length}/100 wallets · Total: {totalSol.toFixed(4)} SOL
             {solUsd > 0 && ` (≈ $${(totalSol * solUsd).toFixed(2)})`}
+          </p>
+          <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+            🪙 Tokens held: ${totalTokenUsd.toFixed(2)} across {totalWalletsWithTokens} wallet{totalWalletsWithTokens === 1 ? "" : "s"}
+            {solUsd > 0 && ` · Grand total (SOL + tokens) ≈ $${(totalSol * solUsd + totalTokenUsd).toFixed(2)}`}
           </p>
         </div>
         <div className="flex gap-2">
@@ -1258,6 +1301,9 @@ export default function WaterfallGrid() {
                           {colMintMeta.symbol} · ${colMintMeta.priceUsd.toFixed(8).replace(/\.?0+$/, "")}
                         </div>
                       )}
+                      <div className="text-[10px] mt-0.5 font-semibold text-emerald-600 dark:text-emerald-400">
+                        Tokens: ${tokenUsdByCol[c].toFixed(2)}
+                      </div>
                       <div className="flex gap-1 mt-1">
                         <button
                           onClick={() => buyColumn(c)}
