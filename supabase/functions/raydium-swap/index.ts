@@ -2171,7 +2171,7 @@ serve(withRunLog('raydium-swap', async (req) => {
             // @ts-ignore - message is mutable in this context
             (vtx as any).message.recentBlockhash = fresh.blockhash;
             vtx.sign([owner]);
-            let sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
+            let sig = await connection.sendTransaction(vtx, { skipPreflight: false, maxRetries: 2 });
             
             // ALWAYS use hard confirmation for reliability
             const confirmResult = await hardConfirmTransaction(connection, sig, fresh.blockhash, fresh.lastValidBlockHeight, 30000);
@@ -2206,7 +2206,7 @@ serve(withRunLog('raydium-swap', async (req) => {
                   const newer = await connection.getLatestBlockhash("confirmed");
                   (retryVtx as any).message.recentBlockhash = newer.blockhash;
                   retryVtx.sign([owner]);
-                  sig = await connection.sendTransaction(retryVtx, { skipPreflight: true, maxRetries: 2 });
+                  sig = await connection.sendTransaction(retryVtx, { skipPreflight: false, maxRetries: 2 });
                   
                   const retryResult = await hardConfirmTransaction(connection, sig, newer.blockhash, newer.lastValidBlockHeight, 30000);
                   if (!retryResult.confirmed) {
@@ -2221,7 +2221,7 @@ serve(withRunLog('raydium-swap', async (req) => {
                 const newer = await connection.getLatestBlockhash("confirmed");
                 (vtx as any).message.recentBlockhash = newer.blockhash;
                 vtx.sign([owner]);
-                sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
+                sig = await connection.sendTransaction(vtx, { skipPreflight: false, maxRetries: 2 });
                 
                 const retryResult = await hardConfirmTransaction(connection, sig, newer.blockhash, newer.lastValidBlockHeight, 30000);
                 if (!retryResult.confirmed) {
