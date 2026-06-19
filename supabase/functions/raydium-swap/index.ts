@@ -105,6 +105,8 @@ const corsHeaders = {
 };
 
 const SWAP_HOST = "https://transaction-v1.raydium.io"; // compute + transaction host from docs
+const DEFAULT_BUY_FEE_RESERVE_LAMPORTS = 1_000_000;
+const PUMP_BUY_FEE_RENT_RESERVE_LAMPORTS = 3_500_000;
 
 function ok(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -120,6 +122,11 @@ function bad(message: string, status = 400) {
 function softError(code: string, message: string) {
   // Return 200 so callers can reliably read the error payload.
   return ok({ error: message, error_code: code }, 200);
+}
+
+function isPumpCurveRejectError(message?: string) {
+  const s = String(message || "");
+  return /custom program error:\s*0x1|"Custom"\s*:\s*1|InsufficientFundsForRent|insufficient funds for rent|SlippageToleranceExceeded|simulation failed/i.test(s);
 }
 
 function isTickArray6023(err?: string) {
@@ -1205,7 +1212,10 @@ serve(withRunLog('raydium-swap', async (req) => {
             wantedLamports = Math.floor((usd / approxPrice) * 1_000_000_000);
           }
 
-          const feeReserveLamports = 1_000_000; // 0.001 SOL (reduced for micro-buys)
+          const looksLikePumpBuy = String(tokenMint || "").toLowerCase().endsWith("pump");
+          const feeReserveLamports = looksLikePumpBuy
+            ? PUMP_BUY_FEE_RENT_RESERVE_LAMPORTS
+            : DEFAULT_BUY_FEE_RESERVE_LAMPORTS;
           let solBal: number | null = null;
           try { solBal = await connection.getBalance(owner.publicKey); } catch { solBal = null; }
           let lamports = wantedLamports;
@@ -1651,8 +1661,7 @@ serve(withRunLog('raydium-swap', async (req) => {
                         break;
                       }
 
-                      const isCustom1 = msg.includes('custom program error: 0x1') || msg.includes('"Custom":1');
-                      if (isCustom1) {
+                      if (isPumpCurveRejectError(msg)) {
                         sawSlippageError = true;
                         break;
                       }
@@ -1678,8 +1687,7 @@ serve(withRunLog('raydium-swap', async (req) => {
                         break;
                       }
 
-                      const isCustom1 = txError.includes('"Custom":1');
-                      if (isCustom1) {
+                      if (isPumpCurveRejectError(txError)) {
                         sawSlippageError = true;
                         break;
                       }
@@ -1875,8 +1883,9 @@ serve(withRunLog('raydium-swap', async (req) => {
     // skip the Raydium/Jupiter/Meteora compute cascade (which blows the function's memory limit).
     // Only try bags.fm directly when the token actually lives on bags.fm. For pure pump.fun BC
     // tokens, return the PumpPortal error cleanly so the caller can act on it.
-    if (isBondingCurveToken && isPumpSwapBestDex && needJupiter && side === "buy") {
-      const curveRejected = typeof jupReason === "string" && /custom program error|0x1\b|simulation failed/i.test(jupReason);
+    const isPurePumpPortalBuy = isBondingCurveToken && isPumpToken && !hasAmmLiquidity && !isBagsToken;
+    if (isBondingCurveToken && (isPumpSwapBestDex || isPurePumpPortalBuy) && needJupiter && side === "buy") {
+      const curveRejected = isPumpCurveRejectError(jupReason);
       if (!isBagsToken) {
         console.log(`Pumpswap fast-path: PumpPortal failed for pump.fun BC token, skipping bags.fm (not a bags token). Reason: ${jupReason}`);
         const hint = curveRejected
@@ -2391,7 +2400,7 @@ serve(withRunLog('raydium-swap', async (req) => {
           }
         }
         
-        const poolsToTry: Array<'pump' | 'bonk' | 'auto'> = Array.from(
+        const poolsToTry: Array<'pump' | 'bonk' | 'pump-amm' | 'auto'> = Array.from(
           new Set([getBondingCurvePool(), 'auto'])
         );
         let lastPumpPortalError: string | null = null;
