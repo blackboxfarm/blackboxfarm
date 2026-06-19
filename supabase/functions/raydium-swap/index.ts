@@ -1212,7 +1212,10 @@ serve(withRunLog('raydium-swap', async (req) => {
             wantedLamports = Math.floor((usd / approxPrice) * 1_000_000_000);
           }
 
-          const feeReserveLamports = DEFAULT_BUY_FEE_RESERVE_LAMPORTS;
+          const looksLikePumpBuy = String(tokenMint || "").toLowerCase().endsWith("pump");
+          const feeReserveLamports = looksLikePumpBuy
+            ? PUMP_BUY_FEE_RENT_RESERVE_LAMPORTS
+            : DEFAULT_BUY_FEE_RESERVE_LAMPORTS;
           let solBal: number | null = null;
           try { solBal = await connection.getBalance(owner.publicKey); } catch { solBal = null; }
           let lamports = wantedLamports;
