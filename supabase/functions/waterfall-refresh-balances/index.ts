@@ -37,6 +37,12 @@ function parseAssetTokens(result: any) {
   return [...byMint.values()];
 }
 
+function parseNativeSol(result: any) {
+  const native = result?.nativeBalance;
+  const lamports = typeof native === "number" ? native : native?.lamports;
+  return typeof lamports === "number" && Number.isFinite(lamports) ? lamports / 1e9 : null;
+}
+
 async function rpc(method: string, params: any) {
   const res = await fetch(getHeliusRpcUrl(), {
     method: "POST",
@@ -94,9 +100,7 @@ serve(async (req) => {
       while (idx < wallets.length) {
         const w = wallets[idx++];
         try {
-          const bal = await rpc("getBalance", [w.pubkey]);
-          const sol = (bal?.value ?? 0) / 1e9;
-          let tokens = parseAssetTokens(await rpc("getAssetsByOwner", {
+          const assetResult = await rpc("getAssetsByOwner", {
             ownerAddress: w.pubkey,
             page: 1,
             limit: 1000,
@@ -104,7 +108,13 @@ serve(async (req) => {
           }).catch((e) => {
             console.warn("asset fetch failed for", w.pubkey, e);
             return null;
-          }));
+          });
+          let sol = parseNativeSol(assetResult);
+          if (sol == null) {
+            const bal = await rpc("getBalance", [w.pubkey]);
+            sol = (bal?.value ?? 0) / 1e9;
+          }
+          let tokens = parseAssetTokens(assetResult);
           const byMint = new Map<string, { mint: string; amount: number; decimals: number }>();
           if (tokens.length === 0 && requestedPubkeys.length > 0) {
             const tokenAccounts = await Promise.all(
