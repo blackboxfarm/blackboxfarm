@@ -2400,7 +2400,7 @@ serve(withRunLog('raydium-swap', async (req) => {
           }
         }
         
-        const poolsToTry: Array<'pump' | 'bonk' | 'auto'> = Array.from(
+        const poolsToTry: Array<'pump' | 'bonk' | 'pump-amm' | 'auto'> = Array.from(
           new Set([getBondingCurvePool(), 'auto'])
         );
         let lastPumpPortalError: string | null = null;
