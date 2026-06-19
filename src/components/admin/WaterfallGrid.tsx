@@ -1469,16 +1469,29 @@ function Cell({
     if (!targetMint) return toast({ title: "Set a token address at the top", variant: "destructive" });
     if (side === "buy") {
       if (!buyEnabled) return;
-      if (!(buySizePct > 0 && buySizePct < 100)) return toast({ title: "Buy % must be between 1 and 99", variant: "destructive" });
-      if (sol < 0.002) {
-        return toast({ title: "Not enough SOL", description: `Wallet has ${sol.toFixed(6)} SOL.`, variant: "destructive" });
+      const pct = Math.min(MAX_BUY_SIZE_PCT, buySizePct || 0);
+      if (!(pct > 0 && pct <= MAX_BUY_SIZE_PCT)) return toast({ title: `Buy % must be between 1 and ${MAX_BUY_SIZE_PCT}`, variant: "destructive" });
+      let liveSol = sol;
+      if (!simMode) {
+        setBusy("buy");
+        try {
+          const fresh = await onRefreshBalancesForBuy();
+          liveSol = fresh[w.pubkey]?.sol ?? sol;
+        } catch (e: any) {
+          setBusy(null);
+          return toast({ title: "Live balance refresh failed", description: e?.message || String(e), variant: "destructive" });
+        }
+        setBusy(null);
       }
-      var buyLamportsCalc = Math.floor(Math.max(0, sol - BUY_SELL_FEE_RESERVE_SOL) * (buySizePct / 100) * LAMPORTS_PER_SOL);
+      if (liveSol < 0.002) {
+        return toast({ title: "Not enough SOL", description: `Wallet has ${liveSol.toFixed(6)} SOL.`, variant: "destructive" });
+      }
+      var buyLamportsCalc = Math.floor(Math.max(0, liveSol - BUY_SELL_FEE_RESERVE_SOL) * (pct / 100) * LAMPORTS_PER_SOL);
       if (buyLamportsCalc < MIN_BUY_LAMPORTS) {
-        return toast({ title: "Buy size too small", description: `~${(buyLamportsCalc / LAMPORTS_PER_SOL).toFixed(6)} SOL.`, variant: "destructive" });
+        return toast({ title: "No spendable SOL", description: `Live ${liveSol.toFixed(6)} SOL; reserve ${BUY_SELL_FEE_RESERVE_SOL.toFixed(3)} SOL for buy/sell fees.`, variant: "destructive" });
       }
       if (simMode) { onSimBuy(w, targetMint, buyLamportsCalc); return; }
-      if (!confirm(`BUY ${(buyLamportsCalc / LAMPORTS_PER_SOL).toFixed(4)} SOL (${buySizePct}% after ${BUY_SELL_FEE_RESERVE_SOL.toFixed(3)} SOL fee reserve) of ${targetMint.slice(0, 6)}… from ${w.nickname || "wallet"}?`)) return;
+      if (!confirm(`BUY ${(buyLamportsCalc / LAMPORTS_PER_SOL).toFixed(4)} SOL (${pct}% of live spendable SOL after ${BUY_SELL_FEE_RESERVE_SOL.toFixed(3)} SOL fee reserve) of ${targetMint.slice(0, 6)}… from ${w.nickname || "wallet"}?`)) return;
     } else {
       const held = tokens.find((t) => t.mint === targetMint);
       if (!held || held.amount <= 0) return toast({ title: "No balance to sell", variant: "destructive" });
@@ -1491,7 +1504,10 @@ function Cell({
         walletId: w.id,
         mint: targetMint,
         side,
-        buyLamports: side === "buy" ? Math.floor(Math.max(0, sol - BUY_SELL_FEE_RESERVE_SOL) * (buySizePct / 100) * LAMPORTS_PER_SOL) : undefined,
+        buyLamports: side === "buy" ? buyLamportsCalc : undefined,
+        buyPct: side === "buy" ? Math.min(MAX_BUY_SIZE_PCT, buySizePct || 0) : undefined,
+        buySellFeeReserveLamports: side === "buy" ? Math.floor(BUY_SELL_FEE_RESERVE_SOL * LAMPORTS_PER_SOL) : undefined,
+        minBuyLamports: side === "buy" ? MIN_BUY_LAMPORTS : undefined,
       },
     });
     setBusy(null);
