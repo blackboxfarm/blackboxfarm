@@ -106,7 +106,7 @@ const corsHeaders = {
 
 const SWAP_HOST = "https://transaction-v1.raydium.io"; // compute + transaction host from docs
 const DEFAULT_BUY_FEE_RESERVE_LAMPORTS = 1_000_000;
-const PUMP_BUY_FEE_RENT_RESERVE_LAMPORTS = 3_500_000;
+const PUMP_BUY_FEE_RENT_RESERVE_LAMPORTS = 6_000_000;
 
 function ok(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
