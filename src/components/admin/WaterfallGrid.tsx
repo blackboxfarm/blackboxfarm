@@ -811,37 +811,8 @@ export default function WaterfallGrid() {
     if (error) toast({ title: "Load failed", description: error.message, variant: "destructive" });
     const loaded = (data ?? []) as WaterfallWallet[];
     setWallets(loaded);
-    // Seed persisted token holdings so every cell shows its tokens immediately,
-    // without waiting for a live RPC refresh.
-    const pubkeys = loaded.map((w) => w.pubkey).filter(Boolean);
-    if (pubkeys.length > 0) {
-      const { data: positions } = await supabase
-        .from("wallet_positions")
-        .select("wallet_address,token_mint,balance")
-        .in("wallet_address", pubkeys);
-      if (Array.isArray(positions) && positions.length > 0) {
-        const seeded: Record<string, { sol: number; tokens: TokenHolding[] }> = {};
-        for (const w of loaded) {
-          seeded[w.pubkey] = { sol: Number(w.sol_balance || 0), tokens: [] };
-        }
-        for (const p of positions as Array<{ wallet_address: string; token_mint: string; balance: number }>) {
-          const amt = Number(p.balance);
-          if (!Number.isFinite(amt) || amt <= 0) continue;
-          const slot = seeded[p.wallet_address] ?? (seeded[p.wallet_address] = { sol: 0, tokens: [] });
-          slot.tokens.push({ mint: p.token_mint, amount: amt, decimals: 6 });
-        }
-        setBalances((prev) => ({ ...seeded, ...prev }));
-        // Backfill prices for any persisted mints we don't already know.
-        const mints = Array.from(new Set(positions.map((p: any) => p.token_mint).filter(Boolean)));
-        if (mints.length > 0) {
-          fetchPricesFor(mints).then((next) => {
-            if (Object.keys(next).length > 0) setTokenPrices((prev) => ({ ...prev, ...next }));
-          }).catch(() => {});
-        }
-      }
-    }
     setLoading(false);
-  }, [fetchPricesFor]);
+  }, []);
 
   useEffect(() => { loadWallets(); }, [loadWallets]);
 
@@ -1086,20 +1057,24 @@ export default function WaterfallGrid() {
 
   // Auto-load on-chain balances + token holdings once wallets are loaded so the
   // grid shows tokens + USD value WITHOUT the user clicking "Refresh".
-  const didAutoRefreshRef = useRef(false);
+  // Re-poll every 20s so newly-bought tokens appear on their own and stale
+  // holdings disappear after a sell — always read live from on-chain (Helius
+  // RPC inside the edge function), never from the database.
   useEffect(() => {
-    if (didAutoRefreshRef.current) return;
     if (wallets.length === 0) return;
-    didAutoRefreshRef.current = true;
-    (async () => {
+    let cancelled = false;
+    const run = async () => {
       try {
         const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances");
         if (error) throw error;
-        applyRefreshPayload(data);
+        if (!cancelled) applyRefreshPayload(data);
       } catch (e) {
         console.warn("[WaterfallGrid] auto-refresh failed", e);
       }
-    })();
+    };
+    run();
+    const id = window.setInterval(run, 20_000);
+    return () => { cancelled = true; window.clearInterval(id); };
   }, [wallets, applyRefreshPayload]);
 
   return (
