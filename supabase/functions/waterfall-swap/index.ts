@@ -20,14 +20,46 @@ const corsHeaders = {
 const SOL_MINT = "So11111111111111111111111111111111111111112";
 const DEFAULT_SLIPPAGE_BPS = 500;
 
+const MAX_JUP_ATTEMPTS = 4;
+const JUP_BACKOFF_MS = 1500;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function fetchJupWithRetry(label: string, url: string, init?: RequestInit): Promise<Response> {
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= MAX_JUP_ATTEMPTS; attempt++) {
+    try {
+      const r = await fetch(url, init);
+      if (r.ok) return r;
+      // Retry on 429 and 5xx; fail fast on other 4xx (bad mint, no route, etc.)
+      if (r.status === 429 || r.status >= 500) {
+        const body = await r.text().catch(() => "");
+        console.warn(`[waterfall-swap] ${label} attempt ${attempt}/${MAX_JUP_ATTEMPTS} HTTP ${r.status}: ${body.slice(0, 200)}`);
+        lastErr = new Error(`${label} ${r.status}: ${body}`);
+      } else {
+        const body = await r.text().catch(() => "");
+        throw new Error(`${label} ${r.status}: ${body}`);
+      }
+    } catch (e) {
+      const msg = (e as Error)?.message ?? String(e);
+      // Only retry transient network/DNS errors
+      const transient = /dns|network|connect|timeout|fetch failed|sending request|EAI_AGAIN|ECONNRESET/i.test(msg)
+        || /\b(429|5\d\d)\b/.test(msg);
+      console.warn(`[waterfall-swap] ${label} attempt ${attempt}/${MAX_JUP_ATTEMPTS} error: ${msg}`);
+      lastErr = e;
+      if (!transient) throw e;
+    }
+    if (attempt < MAX_JUP_ATTEMPTS) await sleep(JUP_BACKOFF_MS * attempt);
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(`${label} failed after ${MAX_JUP_ATTEMPTS} attempts`);
+}
+
 async function jupQuote(params: Record<string, string>) {
   const qs = new URLSearchParams(params).toString();
-  const r = await fetch(`https://quote-api.jup.ag/v6/quote?${qs}`);
-  if (!r.ok) throw new Error(`quote ${r.status}: ${await r.text()}`);
+  const r = await fetchJupWithRetry("quote", `https://quote-api.jup.ag/v6/quote?${qs}`);
   return r.json();
 }
 async function jupSwap(quoteResponse: unknown, userPublicKey: string) {
-  const r = await fetch("https://quote-api.jup.ag/v6/swap", {
+  const r = await fetchJupWithRetry("swap", "https://quote-api.jup.ag/v6/swap", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -38,7 +70,6 @@ async function jupSwap(quoteResponse: unknown, userPublicKey: string) {
       prioritizationFeeLamports: "auto",
     }),
   });
-  if (!r.ok) throw new Error(`swap ${r.status}: ${await r.text()}`);
   return r.json() as Promise<{ swapTransaction: string }>;
 }
 async function execSwap(
