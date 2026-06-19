@@ -2777,15 +2777,22 @@ serve(withRunLog('raydium-swap', async (req) => {
     return ok({ signatures: sigs, source: "raydium", outAmount: expectedOutAmount, solInputLamports });
   } catch (e) {
     console.error("raydium-swap error", e);
+    const errorMessage = (e as Error).message || String(e);
     console.error("Error details:", {
-      message: (e as Error).message,
+      message: errorMessage,
       stack: (e as Error).stack,
       inputMint: inputMint || 'undefined',
       outputMint: outputMint || 'undefined', 
       amount: amount || 'undefined',
       ownerPubkey: owner?.publicKey?.toBase58() || 'undefined'
     });
-    return bad(`Unexpected error: ${(e as Error).message}`, 500);
+    if (side === "buy" && tokenMint && isPumpCurveRejectError(errorMessage)) {
+      return softError(
+        "PUMPFUN_CURVE_REJECTED",
+        `pump.fun/Jupiter rejected buy after transaction build — price moved too fast or executable SOL was too small: ${errorMessage}`
+      );
+    }
+    return bad(`Unexpected error: ${errorMessage}`, 500);
   }
 }));
 
