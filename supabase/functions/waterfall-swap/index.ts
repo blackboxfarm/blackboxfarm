@@ -28,7 +28,15 @@ async function fetchJupWithRetry(label: string, url: string, init?: RequestInit)
   let lastErr: unknown = null;
   for (let attempt = 1; attempt <= MAX_JUP_ATTEMPTS; attempt++) {
     try {
-      const r = await fetch(url, init);
+      const r = await fetch(url, {
+        ...(init ?? {}),
+        cache: "no-store",
+        headers: {
+          ...(init?.headers ?? {}),
+          "Cache-Control": "no-cache",
+          "Pragma": "no-cache",
+        },
+      });
       if (r.ok) return r;
       // Retry on 429 and 5xx; fail fast on other 4xx (bad mint, no route, etc.)
       if (r.status === 429 || r.status >= 500) {
@@ -55,7 +63,9 @@ async function fetchJupWithRetry(label: string, url: string, init?: RequestInit)
 
 async function jupQuote(params: Record<string, string>) {
   const qs = new URLSearchParams(params).toString();
-  const r = await fetchJupWithRetry("quote", `https://quote-api.jup.ag/v6/quote?${qs}`);
+  // Cache-bust + force fresh route: add a nonce so any intermediate CDN/edge cache misses
+  const nonce = `_t=${Date.now()}`;
+  const r = await fetchJupWithRetry("quote", `https://quote-api.jup.ag/v6/quote?${qs}&${nonce}`);
   return r.json();
 }
 async function jupSwap(quoteResponse: unknown, userPublicKey: string) {
@@ -80,7 +90,24 @@ async function execSwap(
   amount: string,
   slippageBps: number,
 ) {
-  const quote = await jupQuote({ inputMint, outputMint, amount, slippageBps: String(slippageBps), onlyDirectRoutes: "false" });
+  // Fresh quote — Jupiter v6 returns the best-priced route across all DEXes at this instant
+  const quote = await jupQuote({
+    inputMint,
+    outputMint,
+    amount,
+    slippageBps: String(slippageBps),
+    onlyDirectRoutes: "false",
+    swapMode: "ExactIn",
+    maxAccounts: "64",
+  });
+  try {
+    const inAmt = (quote as { inAmount?: string }).inAmount;
+    const outAmt = (quote as { outAmount?: string }).outAmount;
+    const route = ((quote as { routePlan?: Array<{ swapInfo?: { label?: string } }> }).routePlan ?? [])
+      .map((h) => h.swapInfo?.label ?? "?")
+      .join(" -> ");
+    console.log(`[waterfall-swap] fresh quote ${inputMint.slice(0,4)}..->${outputMint.slice(0,4)}.. in=${inAmt} out=${outAmt} route=${route}`);
+  } catch { /* logging only */ }
   const { swapTransaction } = await jupSwap(quote, kp.publicKey.toBase58());
   const txBuf = Uint8Array.from(atob(swapTransaction), (c) => c.charCodeAt(0));
   const vtx = VersionedTransaction.deserialize(txBuf);
