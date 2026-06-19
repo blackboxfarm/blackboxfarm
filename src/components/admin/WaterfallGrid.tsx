@@ -1690,6 +1690,7 @@ function Cell({
         buyPct: side === "buy" ? Math.min(MAX_BUY_SIZE_PCT, buySizePct || 0) : undefined,
         buySellFeeReserveLamports: side === "buy" ? Math.floor(BUY_SELL_FEE_RESERVE_SOL * LAMPORTS_PER_SOL) : undefined,
         minBuyLamports: side === "buy" ? MIN_BUY_LAMPORTS : undefined,
+        priorityFeeMode: "low",
       },
     });
     setBusy(null);
