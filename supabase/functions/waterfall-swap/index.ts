@@ -28,7 +28,15 @@ async function fetchJupWithRetry(label: string, url: string, init?: RequestInit)
   let lastErr: unknown = null;
   for (let attempt = 1; attempt <= MAX_JUP_ATTEMPTS; attempt++) {
     try {
-      const r = await fetch(url, init);
+      const r = await fetch(url, {
+        ...(init ?? {}),
+        cache: "no-store",
+        headers: {
+          ...(init?.headers ?? {}),
+          "Cache-Control": "no-cache",
+          "Pragma": "no-cache",
+        },
+      });
       if (r.ok) return r;
       // Retry on 429 and 5xx; fail fast on other 4xx (bad mint, no route, etc.)
       if (r.status === 429 || r.status >= 500) {
