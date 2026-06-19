@@ -1651,6 +1651,12 @@ serve(withRunLog('raydium-swap', async (req) => {
                         break;
                       }
 
+                      const isCustom1 = msg.includes('custom program error: 0x1') || msg.includes('"Custom":1');
+                      if (isCustom1) {
+                        sawSlippageError = true;
+                        break;
+                      }
+
                       needJupiter = true;
                       jupReason = `PumpPortal send failed: ${msg}`;
                       break;
