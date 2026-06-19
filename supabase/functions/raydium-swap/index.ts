@@ -108,6 +108,7 @@ const SWAP_HOST = "https://transaction-v1.raydium.io"; // compute + transaction 
 const DEFAULT_BUY_FEE_RESERVE_LAMPORTS = 1_000_000;
 const PUMP_BUY_SELL_FEE_RESERVE_LAMPORTS = 12_000_000;
 const MIN_EXECUTABLE_BUY_LAMPORTS = 500_000;
+const MAX_BACKEND_BUY_PCT = 90;
 
 function ok(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -120,9 +121,9 @@ function bad(message: string, status = 400) {
   return ok({ error: message }, status);
 }
 
-function softError(code: string, message: string) {
+function softError(code: string, message: string, extra: Record<string, unknown> = {}) {
   // Return 200 so callers can reliably read the error payload.
-  return ok({ error: message, error_code: code }, 200);
+  return ok({ error: message, error_code: code, ...extra }, 200);
 }
 
 function isPumpCurveRejectError(message?: string) {
@@ -1198,9 +1199,15 @@ serve(withRunLog('raydium-swap', async (req) => {
           // NEW: Prefer exact SOL input (lamports) from caller to avoid SOL↔USD double conversion.
           const explicitLamports = Number(body?.solAmountLamports ?? body?.solLamports ?? 0);
           const explicitSol = Number(body?.solAmountSol ?? body?.solAmount ?? 0);
+          const requestedBuyPct = Number(body?.buyPct ?? body?.buySizePct ?? 0);
+          const buyPct = Number.isFinite(requestedBuyPct) && requestedBuyPct > 0
+            ? Math.min(MAX_BACKEND_BUY_PCT, Math.max(1, requestedBuyPct))
+            : 0;
 
           let wantedLamports: number;
-          if (Number.isFinite(explicitLamports) && explicitLamports > 0) {
+          if (buyPct > 0) {
+            wantedLamports = Number.MAX_SAFE_INTEGER;
+          } else if (Number.isFinite(explicitLamports) && explicitLamports > 0) {
             wantedLamports = Math.floor(explicitLamports);
           } else if (Number.isFinite(explicitSol) && explicitSol > 0) {
             wantedLamports = Math.floor(explicitSol * 1_000_000_000);
@@ -1215,18 +1222,36 @@ serve(withRunLog('raydium-swap', async (req) => {
 
           // Always leave enough SOL for this buy attempt plus the later sell.
           // Do not clamp stale UI balances down into dust-sized swaps.
-          const feeReserveLamports = PUMP_BUY_SELL_FEE_RESERVE_LAMPORTS;
+          const bodyReserveLamports = Number(body?.buySellFeeReserveLamports ?? body?.feeReserveLamports ?? 0);
+          const feeReserveLamports = Number.isFinite(bodyReserveLamports) && bodyReserveLamports > 0
+            ? Math.max(PUMP_BUY_SELL_FEE_RESERVE_LAMPORTS, Math.floor(bodyReserveLamports))
+            : PUMP_BUY_SELL_FEE_RESERVE_LAMPORTS;
+          const bodyMinBuyLamports = Number(body?.minBuyLamports ?? 0);
+          const minExecutableBuyLamports = Number.isFinite(bodyMinBuyLamports) && bodyMinBuyLamports > 0
+            ? Math.max(MIN_EXECUTABLE_BUY_LAMPORTS, Math.floor(bodyMinBuyLamports))
+            : MIN_EXECUTABLE_BUY_LAMPORTS;
           let solBal: number | null = null;
           try { solBal = await connection.getBalance(owner.publicKey); } catch { solBal = null; }
+          if (buyPct > 0 && solBal === null) {
+            return softError(
+              "LIVE_BALANCE_UNAVAILABLE",
+              "Could not fetch live wallet SOL to calculate percentage buy. No trade was sent.",
+              { reserveLamports: feeReserveLamports, buyPct }
+            );
+          }
           let lamports = wantedLamports;
           if (solBal !== null) {
             const spendable = Math.max(0, solBal - feeReserveLamports);
-            lamports = Math.min(wantedLamports, spendable);
+            lamports = buyPct > 0
+              ? Math.floor(spendable * (buyPct / 100))
+              : Math.min(wantedLamports, spendable);
           }
-          if (!Number.isFinite(lamports) || lamports < MIN_EXECUTABLE_BUY_LAMPORTS) {
+          console.log(`[raydium-swap] live buy sizing wallet=${owner.publicKey.toBase58().slice(0,8)} liveSol=${solBal === null ? "unknown" : (solBal / 1_000_000_000).toFixed(9)} reserveLamports=${feeReserveLamports} buyPct=${buyPct || "explicit"} requestedLamports=${wantedLamports} executableLamports=${lamports}`);
+          if (!Number.isFinite(lamports) || lamports < minExecutableBuyLamports) {
             return softError(
               "INSUFFICIENT_SPENDABLE_SOL",
-              `Live wallet SOL is below executable buy size after reserving ${(feeReserveLamports / 1_000_000_000).toFixed(3)} SOL for buy/sell fees. Requested ${(wantedLamports / 1_000_000_000).toFixed(6)} SOL, executable ${(Math.max(0, lamports || 0) / 1_000_000_000).toFixed(6)} SOL.`
+              `Live wallet SOL is below executable buy size after reserving ${(feeReserveLamports / 1_000_000_000).toFixed(3)} SOL for buy/sell fees. Live ${(Math.max(0, solBal ?? 0) / 1_000_000_000).toFixed(6)} SOL, requested ${buyPct > 0 ? `${buyPct}% of spendable` : `${(wantedLamports / 1_000_000_000).toFixed(6)} SOL`}, executable ${(Math.max(0, lamports || 0) / 1_000_000_000).toFixed(6)} SOL.`,
+              { liveSolLamports: solBal, reserveLamports: feeReserveLamports, executableLamports: Math.max(0, lamports || 0), buyPct: buyPct || null }
             );
           }
           inputMint = NATIVE_MINT.toBase58();

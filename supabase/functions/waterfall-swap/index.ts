@@ -29,6 +29,9 @@ serve(async (req) => {
     const mint: string = body.mint;
     const side: "buy" | "sell" = body.side;
     const buyLamports: number = Number(body.buyLamports ?? 10_000_000); // default 0.01 SOL
+    const buyPct: number = Number(body.buyPct ?? body.buySizePct ?? 0);
+    const buySellFeeReserveLamports: number = Number(body.buySellFeeReserveLamports ?? 0);
+    const minBuyLamports: number = Number(body.minBuyLamports ?? 0);
     const slippageBps: number = Number(body.slippageBps ?? DEFAULT_SLIPPAGE_BPS);
 
     if (!walletId) throw new Error("walletId required");
@@ -58,9 +61,12 @@ serve(async (req) => {
     if (side === "buy") {
       swapBody.buyWithSol = true;
       swapBody.solAmountLamports = buyLamports;
+      if (Number.isFinite(buyPct) && buyPct > 0) swapBody.buyPct = buyPct;
+      if (Number.isFinite(buySellFeeReserveLamports) && buySellFeeReserveLamports > 0) swapBody.buySellFeeReserveLamports = Math.floor(buySellFeeReserveLamports);
+      if (Number.isFinite(minBuyLamports) && minBuyLamports > 0) swapBody.minBuyLamports = Math.floor(minBuyLamports);
     }
 
-    console.log(`[waterfall-swap] delegating to raydium-swap: side=${side} mint=${mint.slice(0,8)} wallet=${(w.pubkey as string).slice(0,8)} lamports=${side === "buy" ? buyLamports : "ALL"}`);
+    console.log(`[waterfall-swap] delegating to raydium-swap: side=${side} mint=${mint.slice(0,8)} wallet=${(w.pubkey as string).slice(0,8)} lamports=${side === "buy" ? buyLamports : "ALL"} buyPct=${side === "buy" ? (buyPct || "explicit") : "n/a"}`);
 
     const { data: swapResult, error: swapError } = await admin.functions.invoke("raydium-swap", {
       body: swapBody,
@@ -81,7 +87,7 @@ serve(async (req) => {
         const prefix = swapResult.error_code === "PUMPFUN_CURVE_REJECTED"
           ? "pump.fun rejected buy"
           : "buy skipped";
-        return new Response(JSON.stringify({ success: false, skipReason, wallet: w.pubkey, error: `${prefix}: ${swapResult.error}` }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return new Response(JSON.stringify({ success: false, skipReason, wallet: w.pubkey, error: `${prefix}: ${swapResult.error}`, liveSolLamports: swapResult.liveSolLamports, reserveLamports: swapResult.reserveLamports, executableLamports: swapResult.executableLamports }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       throw new Error(`raydium-swap: ${swapResult.error_code ? `[${swapResult.error_code}] ` : ""}${swapResult.error}`);
     }
@@ -98,7 +104,7 @@ serve(async (req) => {
       success: true,
       side,
       signature,
-      buyLamports: side === "buy" ? buyLamports : undefined,
+      buyLamports: side === "buy" ? (swapResult?.solInputLamports ?? buyLamports) : undefined,
       venue: swapResult?.venue ?? swapResult?.source ?? null,
       outAmount: swapResult?.outAmount ?? null,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
