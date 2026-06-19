@@ -1153,6 +1153,22 @@ export default function WaterfallGrid() {
             </label>
           ))}
         </div>
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border/40">
+          <label className="flex items-center gap-2 text-xs font-medium cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={skipTroll}
+              onChange={() => setSkipTroll((v) => !v)}
+              className="h-3.5 w-3.5"
+            />
+            Skip TROLL process (cascade just spreads SOL across wallets)
+          </label>
+          {skipTroll && (
+            <span className="text-[11px] text-amber-600 dark:text-amber-400">
+              No buy/sell of $TROLL · ~2–4 min instead of ~25 min
+            </span>
+          )}
+        </div>
       </div>
 
       {loading && <div className="text-sm text-muted-foreground">Loading…</div>}
