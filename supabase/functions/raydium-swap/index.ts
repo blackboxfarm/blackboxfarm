@@ -1876,10 +1876,7 @@ serve(withRunLog('raydium-swap', async (req) => {
         const hint = curveRejected
           ? "pump.fun curve rejected the buy — likely insufficient SOL in wallet (need amount + ~0.001 SOL fees + rent) or slippage too tight"
           : jupReason;
-        return new Response(
-          JSON.stringify({ error: hint, error_code: "PUMPFUN_CURVE_REJECTED", underlying: jupReason }),
-          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return ok({ error: hint, error_code: "PUMPFUN_CURVE_REJECTED", underlying: jupReason }, 200);
       }
       console.log(`Pumpswap fast-path: skipping heavy DEX cascade, trying bags.fm directly. Reason: ${jupReason}`);
       try {
