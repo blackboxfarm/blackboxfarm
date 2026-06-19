@@ -1661,8 +1661,7 @@ serve(withRunLog('raydium-swap', async (req) => {
                         break;
                       }
 
-                      const isCustom1 = msg.includes('custom program error: 0x1') || msg.includes('"Custom":1');
-                      if (isCustom1) {
+                      if (isPumpCurveRejectError(msg)) {
                         sawSlippageError = true;
                         break;
                       }
@@ -1688,8 +1687,7 @@ serve(withRunLog('raydium-swap', async (req) => {
                         break;
                       }
 
-                      const isCustom1 = txError.includes('"Custom":1');
-                      if (isCustom1) {
+                      if (isPumpCurveRejectError(txError)) {
                         sawSlippageError = true;
                         break;
                       }
