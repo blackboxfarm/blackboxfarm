@@ -1296,6 +1296,17 @@ export default function WaterfallGrid() {
             {sellingGrid ? <Loader2 className="h-4 w-4 animate-spin" /> : <DollarSign className="h-4 w-4" />}
             <span className="ml-2">SELL GRID</span>
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-amber-500 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
+            onClick={sweepAllSol}
+            disabled={sweeping || isEmpty}
+            title="Sweep all remaining SOL from every wallet to a main address"
+          >
+            {sweeping ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowDownToLine className="h-4 w-4" />}
+            <span className="ml-2">SWEEP SOL</span>
+          </Button>
         </div>
       </div>
 
