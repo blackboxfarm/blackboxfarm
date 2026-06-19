@@ -37,7 +37,7 @@ function parseAssetTokens(result: any) {
   return [...byMint.values()];
 }
 
-async function rpc(method: string, params: any[]) {
+async function rpc(method: string, params: any) {
   const res = await fetch(getHeliusRpcUrl(), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -87,8 +87,8 @@ serve(async (req) => {
     const results: Record<string, { sol: number; tokens: Array<{ mint: string; amount: number; decimals: number }> }> = {};
     const updates: { id: string; sol: number }[] = [];
 
-    // Limit concurrency
-    const concurrency = 8;
+    // Limit concurrency so live on-chain reads don't rate-limit and come back empty.
+    const concurrency = requestedPubkeys.length > 0 ? 4 : 2;
     let idx = 0;
     async function worker() {
       while (idx < wallets.length) {
@@ -96,28 +96,39 @@ serve(async (req) => {
         try {
           const bal = await rpc("getBalance", [w.pubkey]);
           const sol = (bal?.value ?? 0) / 1e9;
-          const tokenAccounts = await Promise.all(
-            TOKEN_PROGRAMS.map((programId) =>
-              rpc("getTokenAccountsByOwner", [w.pubkey, { programId }, { encoding: "jsonParsed" }])
-                .then((r) => r?.value ?? [])
-                .catch((e) => {
-                  console.warn("token account fetch failed for", w.pubkey, programId, e);
-                  return [];
-                }),
-            ),
-          );
+          let tokens = parseAssetTokens(await rpc("getAssetsByOwner", {
+            ownerAddress: w.pubkey,
+            page: 1,
+            limit: 1000,
+            displayOptions: { showFungible: true },
+          }).catch((e) => {
+            console.warn("asset fetch failed for", w.pubkey, e);
+            return null;
+          }));
           const byMint = new Map<string, { mint: string; amount: number; decimals: number }>();
-          for (const acc of tokenAccounts.flat()) {
-            const info = acc?.account?.data?.parsed?.info;
-            const tokenAmount = info?.tokenAmount;
-            if (!info?.mint || !tokenAmount) continue;
-            const decimals = Number(tokenAmount.decimals ?? 0);
-            const amount = Number(tokenAmount.uiAmountString ?? tokenAmount.uiAmount ?? 0);
-            if (!(amount > 0)) continue;
-            const prev = byMint.get(info.mint);
-            byMint.set(info.mint, { mint: info.mint, amount: (prev?.amount ?? 0) + amount, decimals });
+          if (tokens.length === 0 && requestedPubkeys.length > 0) {
+            const tokenAccounts = await Promise.all(
+              TOKEN_PROGRAMS.map((programId) =>
+                rpc("getTokenAccountsByOwner", [w.pubkey, { programId }, { encoding: "jsonParsed" }])
+                  .then((r) => r?.value ?? [])
+                  .catch((e) => {
+                    console.warn("token account fetch failed for", w.pubkey, programId, e);
+                    return [];
+                  }),
+              ),
+            );
+            for (const acc of tokenAccounts.flat()) {
+              const info = acc?.account?.data?.parsed?.info;
+              const tokenAmount = info?.tokenAmount;
+              if (!info?.mint || !tokenAmount) continue;
+              const decimals = Number(tokenAmount.decimals ?? 0);
+              const amount = Number(tokenAmount.uiAmountString ?? tokenAmount.uiAmount ?? 0);
+              if (!(amount > 0)) continue;
+              const prev = byMint.get(info.mint);
+              byMint.set(info.mint, { mint: info.mint, amount: (prev?.amount ?? 0) + amount, decimals });
+            }
+            tokens = [...byMint.values()];
           }
-          const tokens = [...byMint.values()];
           results[w.pubkey] = { sol, tokens };
           updates.push({ id: w.id, sol });
         } catch (e) {
