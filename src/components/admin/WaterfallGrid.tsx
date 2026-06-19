@@ -176,6 +176,7 @@ export default function WaterfallGrid() {
   const [lastPriceRefresh, setLastPriceRefresh] = useState<number>(0);
   const [pricesRefreshing, setPricesRefreshing] = useState(false);
   const [, forceTick] = useState(0);
+  const balancesRef = useRef<Record<string, { sol: number; tokens: TokenHolding[] }>>({});
   const balanceRefreshInFlightRef = useRef(false);
 
   // Funding toolbar state
@@ -788,13 +789,15 @@ export default function WaterfallGrid() {
   const applyRefreshPayload = useCallback((payload: any) => {
     const refreshed = (payload?.wallets ?? {}) as Record<string, { sol: number; tokens: TokenHolding[] }>;
     const partial = Boolean(payload?.partial);
-    setBalances((prev) => partial ? { ...prev, ...refreshed } : refreshed);
+    const nextBalances = partial ? { ...balancesRef.current, ...refreshed } : refreshed;
+    balancesRef.current = nextBalances;
+    setBalances(nextBalances);
     setWallets((prev) => prev.map((w) => {
       const live = refreshed[w.pubkey]?.sol;
       return typeof live === "number" && Number.isFinite(live) && live !== Number(w.sol_balance || 0) ? { ...w, sol_balance: live } : w;
     }));
-    return partial ? { ...balances, ...refreshed } : refreshed;
-  }, [balances]);
+    return nextBalances;
+  }, []);
 
   const refreshBalancesForBuy = useCallback(async (pubkeys?: string[]) => {
     const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances", {
