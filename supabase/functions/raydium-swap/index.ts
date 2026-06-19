@@ -105,6 +105,8 @@ const corsHeaders = {
 };
 
 const SWAP_HOST = "https://transaction-v1.raydium.io"; // compute + transaction host from docs
+const DEFAULT_BUY_FEE_RESERVE_LAMPORTS = 1_000_000;
+const PUMP_BUY_FEE_RENT_RESERVE_LAMPORTS = 3_500_000;
 
 function ok(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -120,6 +122,11 @@ function bad(message: string, status = 400) {
 function softError(code: string, message: string) {
   // Return 200 so callers can reliably read the error payload.
   return ok({ error: message, error_code: code }, 200);
+}
+
+function isPumpCurveRejectError(message?: string) {
+  const s = String(message || "");
+  return /custom program error:\s*0x1|"Custom"\s*:\s*1|InsufficientFundsForRent|insufficient funds for rent|SlippageToleranceExceeded|simulation failed/i.test(s);
 }
 
 function isTickArray6023(err?: string) {
