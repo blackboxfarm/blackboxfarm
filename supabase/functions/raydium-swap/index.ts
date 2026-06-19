@@ -1879,22 +1879,18 @@ serve(withRunLog('raydium-swap', async (req) => {
       }
     }
 
-    // FAST-PATH: For pumpswap-best-dex tokens, PumpPortal is the primary route. If it failed,
-    // skip the Raydium/Jupiter/Meteora compute cascade (which blows the function's memory limit).
-    // Only try bags.fm directly when the token actually lives on bags.fm. For pure pump.fun BC
-    // tokens, return the PumpPortal error cleanly so the caller can act on it.
-    // Pure pump.fun BC (pre-graduation): no AMM exists, only PumpPortal can route.
-    // Graduated PumpSwap tokens have a real AMM — let Jupiter handle pump-amm routing.
+    // Pure pump.fun BC (pre-graduation): PumpPortal is first, but Jupiter can also
+    // quote Pump.fun directly. Do not abort here on PumpPortal 0x1/rent errors —
+    // try Jupiter before surfacing a hard failure. Still prevent the later heavy
+    // Meteora/bags cascade for pure pump.fun tokens if Jupiter cannot build/send.
     const isPurePumpPortalBuy = isBondingCurveToken && isPumpToken && !hasAmmLiquidity && !isBagsToken && !isPumpSwapBestDex;
-    if (isBondingCurveToken && isPurePumpPortalBuy && needJupiter && side === "buy") {
-      const curveRejected = isPumpCurveRejectError(jupReason);
-      if (!isBagsToken) {
-        console.log(`Pure pump.fun BC: PumpPortal failed, no AMM to fall through to. Reason: ${jupReason}`);
-        const hint = curveRejected
-          ? "pump.fun curve rejected the buy — likely insufficient SOL in wallet (need amount + ~0.001 SOL fees + rent) or slippage too tight"
-          : jupReason;
-        return ok({ error: hint, error_code: "PUMPFUN_CURVE_REJECTED", underlying: jupReason }, 200);
-      }
+    const purePumpPortalFailureReason = isPurePumpPortalBuy && needJupiter && side === "buy" ? jupReason : undefined;
+    if (purePumpPortalFailureReason) {
+      console.log(`Pure pump.fun BC: PumpPortal failed; trying Jupiter Pump.fun route before failing. Reason: ${purePumpPortalFailureReason}`);
+    }
+
+    // bags.fm fast-path is only valid for actual bags.fm tokens.
+    if (isBondingCurveToken && isBagsToken && needJupiter && side === "buy") {
       console.log(`Pumpswap fast-path: skipping heavy DEX cascade, trying bags.fm directly. Reason: ${jupReason}`);
       try {
         const bagsFmResult = await tryBagsFmSwap({
