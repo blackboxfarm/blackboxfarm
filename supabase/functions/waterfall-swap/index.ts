@@ -38,7 +38,7 @@ serve(async (req) => {
 
     const { data: w, error: werr } = await admin
       .from("waterfall_wallets")
-      .select("pubkey,secret_key_encrypted")
+      .select("pubkey")
       .eq("id", walletId)
       .single();
     if (werr || !w) throw new Error("wallet not found");
@@ -52,6 +52,8 @@ serve(async (req) => {
       tokenMint: mint,
       slippageBps,
       priorityFeeMode: body.priorityFeeMode ?? "medium",
+      walletId,
+      walletSource: "waterfall_wallets",
     };
     if (side === "buy") {
       swapBody.buyWithSol = true;
@@ -62,7 +64,6 @@ serve(async (req) => {
 
     const { data: swapResult, error: swapError } = await admin.functions.invoke("raydium-swap", {
       body: swapBody,
-      headers: { "x-owner-secret": w.secret_key_encrypted as string },
     });
 
     if (swapError) throw new Error(`raydium-swap invoke failed: ${swapError.message}`);
