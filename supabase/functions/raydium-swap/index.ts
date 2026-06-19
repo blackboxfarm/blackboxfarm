@@ -1883,11 +1883,13 @@ serve(withRunLog('raydium-swap', async (req) => {
     // skip the Raydium/Jupiter/Meteora compute cascade (which blows the function's memory limit).
     // Only try bags.fm directly when the token actually lives on bags.fm. For pure pump.fun BC
     // tokens, return the PumpPortal error cleanly so the caller can act on it.
-    const isPurePumpPortalBuy = isBondingCurveToken && isPumpToken && !hasAmmLiquidity && !isBagsToken;
-    if (isBondingCurveToken && (isPumpSwapBestDex || isPurePumpPortalBuy) && needJupiter && side === "buy") {
+    // Pure pump.fun BC (pre-graduation): no AMM exists, only PumpPortal can route.
+    // Graduated PumpSwap tokens have a real AMM — let Jupiter handle pump-amm routing.
+    const isPurePumpPortalBuy = isBondingCurveToken && isPumpToken && !hasAmmLiquidity && !isBagsToken && !isPumpSwapBestDex;
+    if (isBondingCurveToken && isPurePumpPortalBuy && needJupiter && side === "buy") {
       const curveRejected = isPumpCurveRejectError(jupReason);
       if (!isBagsToken) {
-        console.log(`Pumpswap fast-path: PumpPortal failed for pump.fun BC token, skipping bags.fm (not a bags token). Reason: ${jupReason}`);
+        console.log(`Pure pump.fun BC: PumpPortal failed, no AMM to fall through to. Reason: ${jupReason}`);
         const hint = curveRejected
           ? "pump.fun curve rejected the buy — likely insufficient SOL in wallet (need amount + ~0.001 SOL fees + rent) or slippage too tight"
           : jupReason;
