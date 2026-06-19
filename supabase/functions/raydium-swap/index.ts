@@ -1883,8 +1883,9 @@ serve(withRunLog('raydium-swap', async (req) => {
     // skip the Raydium/Jupiter/Meteora compute cascade (which blows the function's memory limit).
     // Only try bags.fm directly when the token actually lives on bags.fm. For pure pump.fun BC
     // tokens, return the PumpPortal error cleanly so the caller can act on it.
-    if (isBondingCurveToken && isPumpSwapBestDex && needJupiter && side === "buy") {
-      const curveRejected = typeof jupReason === "string" && /custom program error|0x1\b|simulation failed/i.test(jupReason);
+    const isPurePumpPortalBuy = isBondingCurveToken && isPumpToken && !hasAmmLiquidity && !isBagsToken;
+    if (isBondingCurveToken && (isPumpSwapBestDex || isPurePumpPortalBuy) && needJupiter && side === "buy") {
+      const curveRejected = isPumpCurveRejectError(jupReason);
       if (!isBagsToken) {
         console.log(`Pumpswap fast-path: PumpPortal failed for pump.fun BC token, skipping bags.fm (not a bags token). Reason: ${jupReason}`);
         const hint = curveRejected
