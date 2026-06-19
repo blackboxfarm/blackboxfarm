@@ -90,7 +90,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true, wallets: {} }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const results: Record<string, { sol: number; tokens: Array<{ mint: string; amount: number; decimals: number }> }> = {};
+    const results: Record<string, { sol: number; tokens: Array<{ mint: string; amount: number; decimals: number }>; tokenScanOk?: boolean }> = {};
     const updates: { id: string; sol: number }[] = [];
 
     // Limit concurrency so live on-chain reads don't rate-limit and come back empty.
@@ -109,6 +109,7 @@ serve(async (req) => {
             console.warn("asset fetch failed for", w.pubkey, e);
             return null;
           });
+          const tokenScanOk = assetResult != null;
           let sol = parseNativeSol(assetResult);
           if (sol == null) {
             if (requestedPubkeys.length > 0) {
@@ -143,7 +144,7 @@ serve(async (req) => {
             }
             tokens = [...byMint.values()];
           }
-          results[w.pubkey] = { sol, tokens };
+          results[w.pubkey] = { sol, tokens, tokenScanOk };
           updates.push({ id: w.id, sol });
         } catch (e) {
           console.error("balance fetch failed for", w.pubkey, e);
