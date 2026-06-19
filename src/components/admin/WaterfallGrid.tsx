@@ -576,6 +576,98 @@ export default function WaterfallGrid() {
     }
   };
 
+  // ─── SELL ANY HELD TOKEN (not just the column target) ──────────────────
+  const sellMintLive = useCallback(async (w: WaterfallWallet, mint: string) => {
+    const { data, error } = await supabase.functions.invoke("waterfall-swap", {
+      body: { walletId: w.id, mint, side: "sell", priorityFeeMode: "low" },
+    });
+    if (error) throw new Error(error.message);
+    if (data && (data as any).success === false) {
+      throw new Error((data as any).error || (data as any).skipReason || "sell failed");
+    }
+    return (data as any)?.signature as string | undefined;
+  }, []);
+
+  // ─── SELL ALL TOKENS IN ONE WALLET ─────────────────────────────────────
+  const sellAllInWallet = useCallback(async (w: WaterfallWallet) => {
+    const held = (balancesRef.current[w.pubkey]?.tokens ?? []).filter((t) => t.amount > 0);
+    if (held.length === 0) { toast({ title: "No tokens to sell" }); return { ok: 0, total: 0 }; }
+    if (!confirm(`Sell ALL ${held.length} token(s) in ${w.nickname || SHORT(w.pubkey)}?`)) return { ok: 0, total: 0 };
+    let ok = 0; let firstErr = "";
+    for (const t of held) {
+      try { await sellMintLive(w, t.mint); ok++; }
+      catch (e: any) { if (!firstErr) firstErr = e?.message || String(e); }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    toast({ title: `Sold ${ok}/${held.length}`, description: firstErr || "Submitted.", variant: firstErr ? "destructive" : "default" });
+    void refreshBalancesForBuy([w.pubkey]);
+    return { ok, total: held.length };
+  }, [sellMintLive]);
+
+  // ─── SELL ALL HOLDINGS IN AN ENTIRE COLUMN ─────────────────────────────
+  const [sellingAllCol, setSellingAllCol] = useState<number | null>(null);
+  const sellAllInColumn = useCallback(async (col: number) => {
+    const colWallets = wallets.filter((w) => w.column_index === col);
+    const targets = colWallets
+      .map((w) => ({ w, held: (balancesRef.current[w.pubkey]?.tokens ?? []).filter((t) => t.amount > 0) }))
+      .filter((x) => x.held.length > 0);
+    if (targets.length === 0) return toast({ title: `W${col + 1}: no token holdings`, variant: "destructive" });
+    const totalSells = targets.reduce((s, x) => s + x.held.length, 0);
+    if (!confirm(`Sell ALL holdings across W${col + 1}?\n${targets.length} wallet(s), ${totalSells} sell(s) total.`)) return;
+    setSellingAllCol(col);
+    let ok = 0; let firstErr = "";
+    try {
+      for (const { w, held } of targets) {
+        for (const t of held) {
+          try { await sellMintLive(w, t.mint); ok++; }
+          catch (e: any) { if (!firstErr) firstErr = e?.message || String(e); }
+          await new Promise((r) => setTimeout(r, 250));
+        }
+      }
+      toast({ title: `W${col + 1}: sold ${ok}/${totalSells}`, description: firstErr || "Submitted.", variant: firstErr ? "destructive" : "default" });
+      void refreshBalancesForBuy(targets.map((x) => x.w.pubkey));
+    } finally { setSellingAllCol(null); }
+  }, [wallets, sellMintLive]);
+
+  // ─── SWEEP ALL SOL → MAIN WALLET ───────────────────────────────────────
+  const SWEEP_DEST_KEY = "waterfall_sweep_destination";
+  const [sweeping, setSweeping] = useState(false);
+  const sweepAllSol = useCallback(async () => {
+    const remembered = (() => { try { return localStorage.getItem(SWEEP_DEST_KEY) || ""; } catch { return ""; } })();
+    const dest = window.prompt("Sweep ALL SOL from every wallet to which address?", remembered) || "";
+    const trimmed = dest.trim();
+    if (!trimmed) return;
+    if (trimmed.length < 32 || trimmed.length > 44) return toast({ title: "Invalid Solana address", variant: "destructive" });
+    try { localStorage.setItem(SWEEP_DEST_KEY, trimmed); } catch {}
+    const DUST = 0.000015;
+    const candidates = wallets.filter((w) => {
+      const live = balancesRef.current[w.pubkey]?.sol;
+      const sol = typeof live === "number" ? live : Number(w.sol_balance || 0);
+      return sol > DUST;
+    });
+    if (candidates.length === 0) return toast({ title: "No wallets with sweepable SOL" });
+    if (!confirm(`Sweep SOL from ${candidates.length} wallet(s) → ${trimmed.slice(0, 6)}…${trimmed.slice(-4)}?`)) return;
+    setSweeping(true);
+    let ok = 0; let firstErr = "";
+    try {
+      for (const w of candidates) {
+        try {
+          const { data, error } = await supabase.functions.invoke("waterfall-withdraw", {
+            body: { walletId: w.id, mint: "SOL", amount: -1, destination: trimmed },
+          });
+          if (error) throw new Error(error.message);
+          if (data && (data as any).error) throw new Error((data as any).error);
+          ok++;
+        } catch (e: any) {
+          if (!firstErr) firstErr = `${SHORT(w.pubkey)}: ${e?.message || String(e)}`;
+        }
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      toast({ title: `Swept ${ok}/${candidates.length}`, description: firstErr || `Sent to ${SHORT(trimmed)}`, variant: firstErr ? "destructive" : "default" });
+      void refreshBalancesForBuy(candidates.map((w) => w.pubkey));
+    } finally { setSweeping(false); }
+  }, [wallets]);
+
   // ─── BULK BUY (per column) ─────────────────────────────────────────────
   const buyColumn = async (col: number) => {
     const mint = mintForCol(col);
