@@ -8,7 +8,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const TOKEN_PROGRAMS = [
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+];
 
 async function rpc(method: string, params: any[]) {
   const res = await fetch(getHeliusRpcUrl(), {
@@ -59,15 +62,28 @@ serve(async (req) => {
         try {
           const bal = await rpc("getBalance", [w.pubkey]);
           const sol = (bal?.value ?? 0) / 1e9;
-          const tokensRes = await rpc("getTokenAccountsByOwner", [w.pubkey, { programId: TOKEN_PROGRAM }, { encoding: "jsonParsed" }]);
-          const tokens = (tokensRes?.value ?? []).map((acc: any) => {
-            const info = acc.account.data.parsed.info;
-            return {
-              mint: info.mint,
-              amount: Number(info.tokenAmount.uiAmount ?? 0),
-              decimals: Number(info.tokenAmount.decimals ?? 0),
-            };
-          }).filter((t: any) => t.amount > 0);
+          const tokenAccounts = await Promise.all(
+            TOKEN_PROGRAMS.map((programId) =>
+              rpc("getTokenAccountsByOwner", [w.pubkey, { programId }, { encoding: "jsonParsed" }])
+                .then((r) => r?.value ?? [])
+                .catch((e) => {
+                  console.warn("token account fetch failed for", w.pubkey, programId, e);
+                  return [];
+                }),
+            ),
+          );
+          const byMint = new Map<string, { mint: string; amount: number; decimals: number }>();
+          for (const acc of tokenAccounts.flat()) {
+            const info = acc?.account?.data?.parsed?.info;
+            const tokenAmount = info?.tokenAmount;
+            if (!info?.mint || !tokenAmount) continue;
+            const decimals = Number(tokenAmount.decimals ?? 0);
+            const amount = Number(tokenAmount.uiAmountString ?? tokenAmount.uiAmount ?? 0);
+            if (!(amount > 0)) continue;
+            const prev = byMint.get(info.mint);
+            byMint.set(info.mint, { mint: info.mint, amount: (prev?.amount ?? 0) + amount, decimals });
+          }
+          const tokens = [...byMint.values()];
           results[w.pubkey] = { sol, tokens };
           updates.push({ id: w.id, sol });
         } catch (e) {
