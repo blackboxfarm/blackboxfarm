@@ -639,7 +639,8 @@ export default function WaterfallGrid() {
             if (resp && (resp as any).success === false) throw new Error((resp as any).error || (resp as any).skipReason || "buy skipped");
             // Record per-wallet cost basis for LIVE buys so the cell's USD
             // value can colour green/red against the buy price.
-            const solIn = lamports / LAMPORTS_PER_SOL;
+            const actualLamports = Number((resp as any)?.buyLamports ?? lamports);
+            const solIn = actualLamports / LAMPORTS_PER_SOL;
             const solPriceUsd = solUsd || 0;
             const usdIn = solIn * solPriceUsd * 0.99;
             const priceUsd = effective?.priceUsd ?? 0;
@@ -1512,6 +1513,9 @@ function Cell({
     });
     setBusy(null);
     if (error) return toast({ title: `${side.toUpperCase()} failed`, description: error.message, variant: "destructive" });
+    if (data && (data as any).success === false) {
+      return toast({ title: `${side.toUpperCase()} skipped`, description: (data as any).error || (data as any).skipReason || "No executable trade.", variant: "destructive" });
+    }
     toast({ title: `${side.toUpperCase()} sent`, description: `Tx: ${((data as any)?.signature ?? "").slice(0, 16)}…` });
   };
 
