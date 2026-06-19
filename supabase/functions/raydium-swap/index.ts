@@ -1867,10 +1867,21 @@ serve(withRunLog('raydium-swap', async (req) => {
     }
 
     // FAST-PATH: For pumpswap-best-dex tokens, PumpPortal is the primary route. If it failed,
-    // skip the Raydium/Jupiter/Meteora compute cascade (which has been blowing the function's
-    // memory limit) and try bags.fm Trade API directly. If that also fails, return the real
-    // error so the caller (waterfall-swap) can act on it instead of OOM-crashing.
+    // skip the Raydium/Jupiter/Meteora compute cascade (which blows the function's memory limit).
+    // Only try bags.fm directly when the token actually lives on bags.fm. For pure pump.fun BC
+    // tokens, return the PumpPortal error cleanly so the caller can act on it.
     if (isBondingCurveToken && isPumpSwapBestDex && needJupiter && side === "buy") {
+      const curveRejected = typeof jupReason === "string" && /custom program error|0x1\b|simulation failed/i.test(jupReason);
+      if (!isBagsToken) {
+        console.log(`Pumpswap fast-path: PumpPortal failed for pump.fun BC token, skipping bags.fm (not a bags token). Reason: ${jupReason}`);
+        const hint = curveRejected
+          ? "pump.fun curve rejected the buy — likely insufficient SOL in wallet (need amount + ~0.001 SOL fees + rent) or slippage too tight"
+          : jupReason;
+        return new Response(
+          JSON.stringify({ error: hint, error_code: "PUMPFUN_CURVE_REJECTED", underlying: jupReason }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       console.log(`Pumpswap fast-path: skipping heavy DEX cascade, trying bags.fm directly. Reason: ${jupReason}`);
       try {
         const bagsFmResult = await tryBagsFmSwap({
