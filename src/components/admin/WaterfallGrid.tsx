@@ -683,6 +683,7 @@ export default function WaterfallGrid() {
         description: firstErr ? `First fail: ${firstErr}` : simMode ? "Simulation complete." : "Submitted.",
         variant: firstErr && ok === 0 ? "destructive" : "default",
       });
+      if (!simMode && ok > 0) void refreshBalancesForBuy(colWallets.map((w) => w.pubkey));
     } finally {
       setBuyingCol(null);
     }
@@ -1578,6 +1579,7 @@ function Cell({
     if (data && (data as any).success === false) {
       return toast({ title: `${side.toUpperCase()} skipped`, description: (data as any).error || (data as any).skipReason || "No executable trade.", variant: "destructive" });
     }
+    if (!simMode) void onRefreshBalancesForBuy([w.pubkey]);
     toast({ title: `${side.toUpperCase()} sent`, description: `Tx: ${((data as any)?.signature ?? "").slice(0, 16)}…` });
   };
 
