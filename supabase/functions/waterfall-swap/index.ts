@@ -67,7 +67,12 @@ serve(async (req) => {
     });
 
     if (swapError) throw new Error(`raydium-swap invoke failed: ${swapError.message}`);
-    if (swapResult?.error) throw new Error(`raydium-swap: ${swapResult.error_code ? `[${swapResult.error_code}] ` : ""}${swapResult.error}`);
+    if (swapResult?.error) {
+      if (swapResult.error_code === "PUMPFUN_CURVE_REJECTED") {
+        throw new Error(`pump.fun rejected buy — top up wallet ${(w.pubkey as string).slice(0,8)}.. with more SOL or lower buyLamports (${swapResult.error})`);
+      }
+      throw new Error(`raydium-swap: ${swapResult.error_code ? `[${swapResult.error_code}] ` : ""}${swapResult.error}`);
+    }
 
     const signature: string | null =
       swapResult?.signature ??
