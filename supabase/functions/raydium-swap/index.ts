@@ -107,6 +107,7 @@ const corsHeaders = {
 const SWAP_HOST = "https://transaction-v1.raydium.io"; // compute + transaction host from docs
 const DEFAULT_BUY_FEE_RESERVE_LAMPORTS = 1_000_000;
 const PUMP_BUY_SELL_FEE_RESERVE_LAMPORTS = 12_000_000;
+const MIN_EXECUTABLE_BUY_LAMPORTS = 500_000;
 
 function ok(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -1212,10 +1213,9 @@ serve(withRunLog('raydium-swap', async (req) => {
             wantedLamports = Math.floor((usd / approxPrice) * 1_000_000_000);
           }
 
-          const looksLikePumpBuy = String(tokenMint || "").toLowerCase().endsWith("pump");
-          const feeReserveLamports = looksLikePumpBuy
-            ? PUMP_BUY_SELL_FEE_RESERVE_LAMPORTS
-            : DEFAULT_BUY_FEE_RESERVE_LAMPORTS;
+          // Always leave enough SOL for this buy attempt plus the later sell.
+          // Do not clamp stale UI balances down into dust-sized swaps.
+          const feeReserveLamports = PUMP_BUY_SELL_FEE_RESERVE_LAMPORTS;
           let solBal: number | null = null;
           try { solBal = await connection.getBalance(owner.publicKey); } catch { solBal = null; }
           let lamports = wantedLamports;
@@ -1223,7 +1223,12 @@ serve(withRunLog('raydium-swap', async (req) => {
             const spendable = Math.max(0, solBal - feeReserveLamports);
             lamports = Math.min(wantedLamports, spendable);
           }
-          if (!Number.isFinite(lamports) || lamports <= 0) return bad("Not enough SOL balance to buy with SOL");
+          if (!Number.isFinite(lamports) || lamports < MIN_EXECUTABLE_BUY_LAMPORTS) {
+            return softError(
+              "INSUFFICIENT_SPENDABLE_SOL",
+              `Live wallet SOL is below executable buy size after reserving ${(feeReserveLamports / 1_000_000_000).toFixed(3)} SOL for buy/sell fees. Requested ${(wantedLamports / 1_000_000_000).toFixed(6)} SOL, executable ${(Math.max(0, lamports || 0) / 1_000_000_000).toFixed(6)} SOL.`
+            );
+          }
           inputMint = NATIVE_MINT.toBase58();
           outputMint = tokenMint;
           amount = lamports;
