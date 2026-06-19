@@ -106,7 +106,7 @@ const corsHeaders = {
 
 const SWAP_HOST = "https://transaction-v1.raydium.io"; // compute + transaction host from docs
 const DEFAULT_BUY_FEE_RESERVE_LAMPORTS = 1_000_000;
-const PUMP_BUY_FEE_RENT_RESERVE_LAMPORTS = 6_000_000;
+const PUMP_BUY_SELL_FEE_RESERVE_LAMPORTS = 12_000_000;
 
 function ok(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -1214,7 +1214,7 @@ serve(withRunLog('raydium-swap', async (req) => {
 
           const looksLikePumpBuy = String(tokenMint || "").toLowerCase().endsWith("pump");
           const feeReserveLamports = looksLikePumpBuy
-            ? PUMP_BUY_FEE_RENT_RESERVE_LAMPORTS
+            ? PUMP_BUY_SELL_FEE_RESERVE_LAMPORTS
             : DEFAULT_BUY_FEE_RESERVE_LAMPORTS;
           let solBal: number | null = null;
           try { solBal = await connection.getBalance(owner.publicKey); } catch { solBal = null; }
@@ -1517,10 +1517,12 @@ serve(withRunLog('raydium-swap', async (req) => {
         }
       }
 
-      // Use the USER slippage for bonding curve tokens.
-      // CRITICAL: do NOT auto-increase slippage to 10-50% (that can cause massive overpay fills).
+      // Use the USER slippage first. For buys on fast pump.fun curves, retry
+      // wider so the buy can land instead of failing on normal curve movement.
       const basePumpSlippage = Math.max(1, Number(slippageBps));
-      const slippageCandidates = [basePumpSlippage]
+      const slippageCandidates = (side === "buy"
+        ? Array.from(new Set([basePumpSlippage, Math.max(basePumpSlippage, 2500), 5000]))
+        : [basePumpSlippage])
         .filter((n) => Number.isFinite(n) && n > 0)
         .map((n) => Math.floor(n));
 

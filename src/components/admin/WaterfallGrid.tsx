@@ -10,6 +10,8 @@ import { WaterfallWalletDrawer, type WaterfallWallet, type TokenHolding } from "
 const SHORT = (k: string) => `${k.slice(0, 4)}…${k.slice(-4)}`;
 const LAMPORTS_PER_SOL = 1_000_000_000;
 const FEE_BUFFER_LAMPORTS = 10_000;
+const BUY_SELL_FEE_RESERVE_SOL = 0.012;
+const MIN_BUY_LAMPORTS = 500_000;
 const SIM_STORAGE_KEY = "waterfall_sim_mode";
 const PERSIST_KEY = "waterfall-grid:v1";
 
@@ -125,7 +127,7 @@ export default function WaterfallGrid() {
 
   // Buy target — single token mint pasted at the top, with per-column enable checkboxes.
   const [targetMint, setTargetMint] = useState<string>(PERSISTED_INIT.targetMint ?? "");
-  const [buySizePct, setBuySizePct] = useState<string>(PERSISTED_INIT.buySizePct ?? "95");
+  const [buySizePct, setBuySizePct] = useState<string>(PERSISTED_INIT.buySizePct ?? "90");
   const [buyEnabled, setBuyEnabled] = useState<boolean[]>(() => {
     const p = PERSISTED_INIT.buyEnabled;
     if (Array.isArray(p) && p.length === 10) return p.map(Boolean);
@@ -573,19 +575,27 @@ export default function WaterfallGrid() {
     const pct = Number(buySizePct) || 0;
     if (!(pct > 0 && pct < 100)) return toast({ title: "Buy % must be between 1 and 99", variant: "destructive" });
     const colWallets = wallets.filter((w) => w.column_index === col);
-    // Eligible = enough SOL to make a meaningful buy.
+    const skipped: string[] = [];
+    const buyLamportsByWallet = new Map<string, number>();
     const eligible = colWallets.filter((w) => {
       const s = simMode ? (simState[w.id]?.sol ?? Number(w.sol_balance || 0)) : Number(w.sol_balance || 0);
-      return s >= 0.002 && Math.floor(s * (pct / 100) * LAMPORTS_PER_SOL) >= 1_000_000;
+      const usableSol = Math.max(0, s - BUY_SELL_FEE_RESERVE_SOL);
+      const lamports = Math.floor(usableSol * (pct / 100) * LAMPORTS_PER_SOL);
+      buyLamportsByWallet.set(w.id, lamports);
+      if (lamports < MIN_BUY_LAMPORTS) {
+        skipped.push(`${w.pubkey?.slice(0, 8) || w.id.slice(0, 8)}.. leaves ${BUY_SELL_FEE_RESERVE_SOL.toFixed(3)} SOL fee reserve`);
+        return false;
+      }
+      return true;
     });
-    if (eligible.length === 0) return toast({ title: `W${col + 1}: no wallets with enough SOL`, variant: "destructive" });
-    if (!confirm(`BUY ${mint.slice(0, 6)}… in every wallet of W${col + 1} (${eligible.length}/${colWallets.length} eligible) at ${pct}% of wallet SOL?`)) return;
+    if (eligible.length === 0) return toast({ title: `W${col + 1}: no usable SOL after fee reserve`, description: `Leaving ${BUY_SELL_FEE_RESERVE_SOL.toFixed(3)} SOL for buy/sell fees.`, variant: "destructive" });
+    skipped.forEach((msg) => appendLog({ col, row: -1, kind: "BUY", msg: `W${col + 1}  SKIP  ${msg}` }));
+    if (!confirm(`BUY ${mint.slice(0, 6)}… in every wallet of W${col + 1} (${eligible.length}/${colWallets.length} eligible) at ${pct}% of SOL after reserving ${BUY_SELL_FEE_RESERVE_SOL.toFixed(3)} SOL?`)) return;
     setBuyingCol(col);
     let ok = 0; let firstErr = "";
     try {
       for (const w of eligible) {
-        const s = simMode ? (simState[w.id]?.sol ?? Number(w.sol_balance || 0)) : Number(w.sol_balance || 0);
-        const lamports = Math.floor(s * (pct / 100) * LAMPORTS_PER_SOL);
+        const lamports = buyLamportsByWallet.get(w.id) ?? 0;
         // Fetch a FRESH price for THIS wallet's buy moment, so per-wallet
         // PnL reflects intra-waterfall price drift instead of a single
         // column-wide snapshot.
@@ -601,10 +611,11 @@ export default function WaterfallGrid() {
         try {
           if (simMode) simBuy(w, mint, lamports, priceMeta);
           else {
-            const { error } = await supabase.functions.invoke("waterfall-swap", {
+            const { data: resp, error } = await supabase.functions.invoke("waterfall-swap", {
               body: { walletId: w.id, mint, side: "buy", buyLamports: lamports },
             });
             if (error) throw new Error(error.message);
+            if (resp && (resp as any).success === false) throw new Error((resp as any).error || (resp as any).skipReason || "buy skipped");
             // Record per-wallet cost basis for LIVE buys so the cell's USD
             // value can colour green/red against the buy price.
             const solIn = lamports / LAMPORTS_PER_SOL;
@@ -636,15 +647,17 @@ export default function WaterfallGrid() {
           }
           ok++;
         } catch (e: any) {
-          if (!firstErr) firstErr = e?.message || String(e);
+          const em = e?.message || String(e);
+          if (!firstErr) firstErr = `${w.pubkey?.slice(0, 8) || w.id.slice(0, 8)}.. ${em}`;
+          appendLog({ col: w.column_index, row: w.row_index, kind: "BUY", msg: `W${w.column_index + 1}·R${w.row_index + 1}  FAIL  ${em.slice(0, 140)}` });
         }
         await new Promise((r) => setTimeout(r, simMode ? 80 : 250));
       }
       if (simMode) appendLog({ col, row: -1, kind: "BUY", msg: `W${col + 1}  SIM BUY WATERFALL  (${ok}/${eligible.length} wallets)` });
       toast({
-        title: `W${col + 1} bought ${ok}/${eligible.length}`,
-        description: firstErr ? `First error: ${firstErr}` : simMode ? "Simulation complete." : "Submitted.",
-        variant: firstErr ? "destructive" : "default",
+        title: `W${col + 1} bought ${ok}/${eligible.length}${skipped.length ? ` · skipped ${skipped.length}` : ""}`,
+        description: firstErr ? `First fail: ${firstErr}` : simMode ? "Simulation complete." : "Submitted.",
+        variant: firstErr && ok === 0 ? "destructive" : "default",
       });
     } finally {
       setBuyingCol(null);
@@ -1420,12 +1433,12 @@ function Cell({
       if (sol < 0.002) {
         return toast({ title: "Not enough SOL", description: `Wallet has ${sol.toFixed(6)} SOL.`, variant: "destructive" });
       }
-      var buyLamportsCalc = Math.floor(sol * (buySizePct / 100) * LAMPORTS_PER_SOL);
-      if (buyLamportsCalc < 1_000_000) {
+      var buyLamportsCalc = Math.floor(Math.max(0, sol - BUY_SELL_FEE_RESERVE_SOL) * (buySizePct / 100) * LAMPORTS_PER_SOL);
+      if (buyLamportsCalc < MIN_BUY_LAMPORTS) {
         return toast({ title: "Buy size too small", description: `~${(buyLamportsCalc / LAMPORTS_PER_SOL).toFixed(6)} SOL.`, variant: "destructive" });
       }
       if (simMode) { onSimBuy(w, targetMint, buyLamportsCalc); return; }
-      if (!confirm(`BUY ${(buyLamportsCalc / LAMPORTS_PER_SOL).toFixed(4)} SOL (${buySizePct}% of ${sol.toFixed(4)}) of ${targetMint.slice(0, 6)}… from ${w.nickname || "wallet"}?`)) return;
+      if (!confirm(`BUY ${(buyLamportsCalc / LAMPORTS_PER_SOL).toFixed(4)} SOL (${buySizePct}% after ${BUY_SELL_FEE_RESERVE_SOL.toFixed(3)} SOL fee reserve) of ${targetMint.slice(0, 6)}… from ${w.nickname || "wallet"}?`)) return;
     } else {
       const held = tokens.find((t) => t.mint === targetMint);
       if (!held || held.amount <= 0) return toast({ title: "No balance to sell", variant: "destructive" });
@@ -1438,7 +1451,7 @@ function Cell({
         walletId: w.id,
         mint: targetMint,
         side,
-        buyLamports: side === "buy" ? Math.floor(sol * (buySizePct / 100) * LAMPORTS_PER_SOL) : undefined,
+        buyLamports: side === "buy" ? Math.floor(Math.max(0, sol - BUY_SELL_FEE_RESERVE_SOL) * (buySizePct / 100) * LAMPORTS_PER_SOL) : undefined,
       },
     });
     setBusy(null);

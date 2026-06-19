@@ -71,13 +71,13 @@ serve(async (req) => {
       const detailError = details && typeof details === "object" ? (details.error ?? details.message) : null;
       const detailCode = details && typeof details === "object" ? details.error_code : null;
       if (detailCode === "PUMPFUN_CURVE_REJECTED") {
-        throw new Error(`pump.fun rejected buy — top up wallet ${(w.pubkey as string).slice(0,8)}.. with more SOL or lower buyLamports (${detailError ?? swapError.message})`);
+        return new Response(JSON.stringify({ success: false, skipReason: "pumpfun_curve_rejected", wallet: w.pubkey, error: `pump.fun rejected buy (likely curve moved or slippage too tight): ${detailError ?? swapError.message}` }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       throw new Error(`raydium-swap invoke failed${detailError ? `: ${detailError}` : `: ${swapError.message}`}`);
     }
     if (swapResult?.error) {
       if (swapResult.error_code === "PUMPFUN_CURVE_REJECTED") {
-        throw new Error(`pump.fun rejected buy — top up wallet ${(w.pubkey as string).slice(0,8)}.. with more SOL or lower buyLamports (${swapResult.error})`);
+        return new Response(JSON.stringify({ success: false, skipReason: "pumpfun_curve_rejected", wallet: w.pubkey, error: `pump.fun rejected buy (likely curve moved or slippage too tight): ${swapResult.error}` }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       throw new Error(`raydium-swap: ${swapResult.error_code ? `[${swapResult.error_code}] ` : ""}${swapResult.error}`);
     }
