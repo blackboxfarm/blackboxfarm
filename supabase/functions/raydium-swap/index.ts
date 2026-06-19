@@ -2098,7 +2098,7 @@ serve(withRunLog('raydium-swap', async (req) => {
             tx.recentBlockhash = blockhash;
             if (!tx.feePayer) tx.feePayer = owner.publicKey;
             tx.sign(owner);
-            let sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
+            let sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: false, maxRetries: 2 });
             
             // ALWAYS use hard confirmation for reliability
             const confirmResult = await hardConfirmTransaction(connection, sig, blockhash, lastValidBlockHeight, 30000);
@@ -2135,7 +2135,7 @@ serve(withRunLog('raydium-swap', async (req) => {
                   retryTx.recentBlockhash = fresh.blockhash;
                   if (!retryTx.feePayer) retryTx.feePayer = owner.publicKey;
                   retryTx.sign(owner);
-                  sig = await connection.sendRawTransaction(retryTx.serialize(), { skipPreflight: true, maxRetries: 2 });
+                  sig = await connection.sendRawTransaction(retryTx.serialize(), { skipPreflight: false, maxRetries: 2 });
                   
                   const retryResult = await hardConfirmTransaction(connection, sig, fresh.blockhash, fresh.lastValidBlockHeight, 30000);
                   if (!retryResult.confirmed) {
@@ -2150,7 +2150,7 @@ serve(withRunLog('raydium-swap', async (req) => {
                 const fresh = await connection.getLatestBlockhash("confirmed");
                 tx.recentBlockhash = fresh.blockhash;
                 tx.sign(owner);
-                sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
+                sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: false, maxRetries: 2 });
                 
                 const retryResult = await hardConfirmTransaction(connection, sig, fresh.blockhash, fresh.lastValidBlockHeight, 30000);
                 if (!retryResult.confirmed) {
