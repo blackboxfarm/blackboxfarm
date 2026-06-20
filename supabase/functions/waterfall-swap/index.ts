@@ -65,6 +65,10 @@ serve(async (req) => {
       if (Number.isFinite(buySellFeeReserveLamports) && buySellFeeReserveLamports > 0) swapBody.buySellFeeReserveLamports = Math.floor(buySellFeeReserveLamports);
       if (Number.isFinite(minBuyLamports) && minBuyLamports > 0) swapBody.minBuyLamports = Math.floor(minBuyLamports);
     }
+    if (side === "sell") {
+      // Sell 100% of the wallet's holdings of this mint.
+      swapBody.sellAll = true;
+    }
 
     console.log(`[waterfall-swap] delegating to raydium-swap: side=${side} mint=${mint.slice(0,8)} wallet=${(w.pubkey as string).slice(0,8)} lamports=${side === "buy" ? buyLamports : "ALL"} buyPct=${side === "buy" ? (buyPct || "explicit") : "n/a"}`);
 
