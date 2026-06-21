@@ -1417,6 +1417,17 @@ export default function WaterfallGrid() {
             {sweeping ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowDownToLine className="h-4 w-4" />}
             <span className="ml-2">SWEEP SOL</span>
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-cyan-500 text-cyan-600 hover:bg-cyan-50 dark:hover:bg-cyan-950"
+            onClick={sweepAllToW1}
+            disabled={sweepingToW1 || isEmpty}
+            title="Sweep ALL SOL across the grid into W1·Wallet 1"
+          >
+            {sweepingToW1 ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowDownToLine className="h-4 w-4" />}
+            <span className="ml-2">SWEEP → W1·W1</span>
+          </Button>
         </div>
       </div>
 
