@@ -1573,6 +1573,16 @@ export default function WaterfallGrid() {
                           {sellingAllCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>Sell ALL W{c + 1}</>}
                         </button>
                       </div>
+                      <div className="flex gap-1 mt-1">
+                        <button
+                          onClick={() => consolidateColumn(c)}
+                          disabled={consolidatingCol !== null || sellingGrid || sellingCol !== null || sellingAllCol !== null || buyingCol !== null || !colMint}
+                          className="flex-1 text-[10px] px-1.5 py-0.5 rounded bg-cyan-700 hover:bg-cyan-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold flex items-center justify-center gap-1"
+                          title={!colMint ? "Set this waterfall's mint to enable" : `Move ALL tokens + SOL from W${c + 1}·R2–R10 into W${c + 1}·Wallet 1`}
+                        >
+                          {consolidatingCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>Consolidate → W{c + 1}·W1</>}
+                        </button>
+                      </div>
                       {simMode && (
                         <div className="flex gap-1 mt-1">
                           <button
