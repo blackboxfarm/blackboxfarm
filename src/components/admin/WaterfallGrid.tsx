@@ -632,6 +632,8 @@ export default function WaterfallGrid() {
   // ─── SWEEP ALL SOL → MAIN WALLET ───────────────────────────────────────
   const SWEEP_DEST_KEY = "waterfall_sweep_destination";
   const [sweeping, setSweeping] = useState(false);
+  const [consolidatingCol, setConsolidatingCol] = useState<number | null>(null);
+  const [sweepingToW1, setSweepingToW1] = useState(false);
   const sweepAllSol = useCallback(async () => {
     const remembered = (() => { try { return localStorage.getItem(SWEEP_DEST_KEY) || ""; } catch { return ""; } })();
     const dest = window.prompt("Sweep ALL SOL from every wallet to which address?", remembered) || "";
@@ -666,6 +668,114 @@ export default function WaterfallGrid() {
       toast({ title: `Swept ${ok}/${candidates.length}`, description: firstErr || `Sent to ${SHORT(trimmed)}`, variant: firstErr ? "destructive" : "default" });
       void refreshBalancesForBuy(candidates.map((w) => w.pubkey));
     } finally { setSweeping(false); }
+  }, [wallets]);
+
+  // ─── CONSOLIDATE COLUMN → Wallet 1 (tokens + SOL) ──────────────────────
+  // For wallets 2..10 in the column: transfer their target-mint token balance
+  // to Wallet 1, then sweep their remaining SOL to Wallet 1. After this,
+  // Wallet 1 holds all tokens AND has enough SOL to pay the sell fee.
+  const consolidateColumn = useCallback(async (col: number) => {
+    const mint = mintForCol(col);
+    if (!mint) return toast({ title: `W${col + 1}: set a token mint first`, variant: "destructive" });
+    const colWallets = wallets.filter((w) => w.column_index === col).sort((a, b) => a.row_index - b.row_index);
+    const w1 = colWallets.find((w) => w.row_index === 0);
+    if (!w1) return toast({ title: `W${col + 1}: Wallet 1 not found`, variant: "destructive" });
+    const others = colWallets.filter((w) => w.row_index !== 0);
+    const DUST_SOL = 0.000015;
+    const tokenSenders = others
+      .map((w) => {
+        const held = (balancesRef.current[w.pubkey]?.tokens ?? []).find((t) => t.mint === mint);
+        return held && held.amount > 0 ? { w, amount: held.amount } : null;
+      })
+      .filter((x): x is { w: WaterfallWallet; amount: number } => !!x);
+    const solSenders = others.filter((w) => {
+      const live = balancesRef.current[w.pubkey]?.sol;
+      const sol = typeof live === "number" ? live : Number(w.sol_balance || 0);
+      return sol > DUST_SOL;
+    });
+    if (tokenSenders.length === 0 && solSenders.length === 0) {
+      return toast({ title: `W${col + 1}: nothing to consolidate`, description: "Wallets 2–10 have no tokens or sweepable SOL." });
+    }
+    if (!confirm(`Consolidate W${col + 1} → Wallet 1?\n• Move ${mint.slice(0, 6)}… from ${tokenSenders.length} wallet(s)\n• Sweep SOL from ${solSenders.length} wallet(s)\nThis runs ${tokenSenders.length + solSenders.length} on-chain transfers.`)) return;
+    setConsolidatingCol(col);
+    let ok = 0; let firstErr = "";
+    const total = tokenSenders.length + solSenders.length;
+    try {
+      // 1) Tokens first (so SOL sweep can include any rent reclaimed)
+      for (const { w, amount } of tokenSenders) {
+        try {
+          const { data, error } = await supabase.functions.invoke("waterfall-withdraw", {
+            body: { walletId: w.id, mint, amount, destination: w1.pubkey },
+          });
+          if (error) throw new Error(error.message);
+          if (data && (data as any).error) throw new Error((data as any).error);
+          ok++;
+        } catch (e: any) {
+          if (!firstErr) firstErr = `${SHORT(w.pubkey)} token: ${e?.message || String(e)}`;
+        }
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      // 2) SOL sweep
+      for (const w of solSenders) {
+        try {
+          const { data, error } = await supabase.functions.invoke("waterfall-withdraw", {
+            body: { walletId: w.id, mint: "SOL", amount: -1, destination: w1.pubkey },
+          });
+          if (error) throw new Error(error.message);
+          if (data && (data as any).error) throw new Error((data as any).error);
+          ok++;
+        } catch (e: any) {
+          if (!firstErr) firstErr = `${SHORT(w.pubkey)} SOL: ${e?.message || String(e)}`;
+        }
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      toast({
+        title: `W${col + 1} consolidated ${ok}/${total}`,
+        description: firstErr || `Wallet 1 now holds the bag. Click Sell W${col + 1}.`,
+        variant: firstErr ? "destructive" : "default",
+      });
+      void refreshBalancesForBuy([w1.pubkey, ...others.map((w) => w.pubkey)]);
+    } finally {
+      setConsolidatingCol(null);
+    }
+  }, [wallets, mintForCol]);
+
+  // ─── SWEEP ENTIRE GRID SOL → W1·Wallet 1 ───────────────────────────────
+  const sweepAllToW1 = useCallback(async () => {
+    const w1 = wallets.find((w) => w.column_index === 0 && w.row_index === 0);
+    if (!w1) return toast({ title: "W1·Wallet 1 not found", variant: "destructive" });
+    const DUST = 0.000015;
+    const candidates = wallets.filter((w) => {
+      if (w.id === w1.id) return false;
+      const live = balancesRef.current[w.pubkey]?.sol;
+      const sol = typeof live === "number" ? live : Number(w.sol_balance || 0);
+      return sol > DUST;
+    });
+    if (candidates.length === 0) return toast({ title: "No wallets with sweepable SOL" });
+    if (!confirm(`Sweep SOL from ${candidates.length} wallet(s) → W1·Wallet 1 (${SHORT(w1.pubkey)})?`)) return;
+    setSweepingToW1(true);
+    let ok = 0; let firstErr = "";
+    try {
+      for (const w of candidates) {
+        try {
+          const { data, error } = await supabase.functions.invoke("waterfall-withdraw", {
+            body: { walletId: w.id, mint: "SOL", amount: -1, destination: w1.pubkey },
+          });
+          if (error) throw new Error(error.message);
+          if (data && (data as any).error) throw new Error((data as any).error);
+          ok++;
+        } catch (e: any) {
+          if (!firstErr) firstErr = `${SHORT(w.pubkey)}: ${e?.message || String(e)}`;
+        }
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      toast({
+        title: `Swept ${ok}/${candidates.length} → W1·Wallet 1`,
+        description: firstErr || `All SOL consolidated in ${SHORT(w1.pubkey)}`,
+        variant: firstErr ? "destructive" : "default",
+      });
+      void refreshBalancesForBuy([w1.pubkey, ...candidates.map((w) => w.pubkey)]);
+    } finally { setSweepingToW1(false); }
   }, [wallets]);
 
   // ─── BULK BUY (per column) ─────────────────────────────────────────────
