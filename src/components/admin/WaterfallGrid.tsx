@@ -1673,6 +1673,16 @@ export default function WaterfallGrid() {
                           {consolidatingCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>Consolidate → W{c + 1}·W1</>}
                         </button>
                       </div>
+                      <div className="flex gap-1 mt-1">
+                        <button
+                          onClick={() => smartSellDustColumn(c)}
+                          disabled={smartSellingCol !== null || consolidatingCol !== null || sellingGrid || sellingCol !== null || sellingAllCol !== null || buyingCol !== null || !colMint}
+                          className="flex-1 text-[10px] px-1.5 py-0.5 rounded bg-fuchsia-700 hover:bg-fuchsia-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold flex items-center justify-center gap-1"
+                          title={!colMint ? "Set this waterfall's mint to enable" : `For each wallet of W${c + 1} that holds the target token: fund 0.05 SOL from W1 if needed, sell, then sweep SOL back to W1`}
+                        >
+                          {smartSellingCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>Smart-Sell Dust W{c + 1}</>}
+                        </button>
+                      </div>
                       {simMode && (
                         <div className="flex gap-1 mt-1">
                           <button
