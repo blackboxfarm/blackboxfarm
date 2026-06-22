@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getHeliusRpcUrl } from "../_shared/helius-client.ts";
+import { assertDbWrite } from "../_shared/db-assert.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,12 +25,45 @@ async function solscanGet(url: string) {
   return res.json();
 }
 
+function numeric(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+async function rpc(method: string, params: any) {
+  const res = await fetch(getHeliusRpcUrl(), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+  });
+  const j = await res.json();
+  if (j.error) throw new Error(j.error.message ?? "rpc error");
+  return j.result;
+}
+
 async function fetchSol(addr: string): Promise<number | null> {
   try {
     const j = await solscanGet(`${SOLSCAN_BASE}/account/detail?address=${addr}`);
-    const lam = j?.data?.lamports ?? j?.data?.account?.lamports;
-    if (typeof lam === "number" && Number.isFinite(lam)) return lam / 1e9;
+    const data = j?.data ?? {};
+    const lam = numeric(data?.lamports ?? data?.account?.lamports ?? data?.nativeBalance?.lamports ?? data?.balance_lamports);
+    if (lam != null) return lam / 1e9;
+    const sol = numeric(data?.sol_balance ?? data?.solBalance ?? data?.balance);
+    if (sol != null) return sol > 1_000_000 ? sol / 1e9 : sol;
     return null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function fetchRpcSol(addr: string): Promise<number | null> {
+  try {
+    const bal = await rpc("getBalance", [addr]);
+    const lamports = numeric(bal?.value);
+    return lamports == null ? null : lamports / 1e9;
   } catch (_) {
     return null;
   }
