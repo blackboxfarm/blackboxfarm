@@ -1199,8 +1199,24 @@ export default function WaterfallGrid() {
       const live = refreshed[w.pubkey]?.sol;
       return typeof live === "number" && Number.isFinite(live) && live !== Number(w.sol_balance || 0) ? { ...w, sol_balance: live } : w;
     }));
+    // Always recompute live USD/SOL token values on every refresh — never
+    // rely on stale cached prices from the original buy.
+    const mintsInRefresh = new Set<string>();
+    for (const entry of Object.values(refreshed)) {
+      for (const t of entry.tokens ?? []) if (t.amount > 0) mintsInRefresh.add(t.mint);
+    }
+    const mintList = [...mintsInRefresh];
+    if (mintList.length > 0) {
+      void (async () => {
+        try {
+          const fresh = await fetchPricesFor(mintList);
+          setTokenPrices((prev) => ({ ...prev, ...fresh }));
+          setLastPriceRefresh(Date.now());
+        } catch { /* keep prior prices */ }
+      })();
+    }
     return nextBalances;
-  }, []);
+  }, [fetchPricesFor]);
 
   const refreshBalancesForBuy = useCallback(async (pubkeys?: string[]) => {
     const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances-solscan", {
