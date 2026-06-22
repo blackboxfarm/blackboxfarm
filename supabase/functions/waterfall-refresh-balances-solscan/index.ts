@@ -143,10 +143,11 @@ serve(async (req) => {
       while (idx < wallets.length) {
         const i = idx++;
         const w = wallets[i] as { id: string; pubkey: string; sol_balance: number | null };
-        const [sol, tokens] = await Promise.all([fetchSol(w.pubkey), fetchTokens(w.pubkey)]);
-        const finalSol = typeof sol === "number" ? sol : Number(w.sol_balance ?? 0);
+        const [solscanSol, tokens] = await Promise.all([fetchSol(w.pubkey), fetchTokens(w.pubkey)]);
+        const rpcSol = await fetchRpcSol(w.pubkey);
+        const finalSol = typeof rpcSol === "number" ? rpcSol : typeof solscanSol === "number" ? solscanSol : Number(w.sol_balance ?? 0);
         results[w.pubkey] = { sol: finalSol, tokens };
-        if (typeof sol === "number" && sol !== Number(w.sol_balance ?? 0)) {
+        if ((typeof rpcSol === "number" || typeof solscanSol === "number") && finalSol !== Number(w.sol_balance ?? 0)) {
           updates.push({ id: w.id, sol: finalSol });
         }
       }
@@ -155,11 +156,15 @@ serve(async (req) => {
 
     // Persist SOL deltas so the DB stays roughly in sync (best-effort; UI uses live values regardless).
     if (updates.length) {
-      await Promise.all(updates.map((u) =>
-        admin.from("waterfall_wallets")
-          .update({ sol_balance: u.sol, last_balance_at: new Date().toISOString() })
-          .eq("id", u.id)
-      ));
+      for (const u of updates) {
+        await assertDbWrite(
+          admin.from("waterfall_wallets")
+            .update({ sol_balance: u.sol, last_balance_at: new Date().toISOString() })
+            .eq("id", u.id),
+          "waterfall_wallets",
+          "waterfall_refresh_solscan_balance_update",
+        );
+      }
     }
 
     return new Response(
