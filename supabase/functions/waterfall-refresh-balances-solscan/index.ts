@@ -195,7 +195,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true, partial: requestedPubkeys.length > 0, source: "solscan", wallets: {} }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const results: Record<string, { sol: number; tokens: Array<{ mint: string; amount: number; decimals: number }> }> = {};
+    const results: Record<string, { sol: number; tokens: LiveToken[]; tokenScanOk?: boolean }> = {};
     const updates: { id: string; sol: number }[] = [];
 
     // Solscan Pro is rate-limited; cap concurrency.
@@ -205,10 +205,15 @@ serve(async (req) => {
       while (idx < wallets.length) {
         const i = idx++;
         const w = wallets[i] as { id: string; pubkey: string; sol_balance: number | null };
-        const [solscanSol, tokens] = await Promise.all([fetchSol(w.pubkey), fetchTokens(w.pubkey)]);
-        const rpcSol = await fetchRpcSol(w.pubkey);
+        const [solscanSol, solscanTokens, rpcSol, rpcTokens] = await Promise.all([
+          fetchSol(w.pubkey),
+          fetchTokens(w.pubkey),
+          fetchRpcSol(w.pubkey),
+          fetchRpcTokens(w.pubkey),
+        ]);
         const finalSol = typeof rpcSol === "number" ? rpcSol : typeof solscanSol === "number" ? solscanSol : Number(w.sol_balance ?? 0);
-        results[w.pubkey] = { sol: finalSol, tokens };
+        const tokens = mergeTokens(solscanTokens, rpcTokens);
+        results[w.pubkey] = { sol: finalSol, tokens, tokenScanOk: solscanTokens.length > 0 || rpcTokens.length > 0 };
         if ((typeof rpcSol === "number" || typeof solscanSol === "number") && finalSol !== Number(w.sol_balance ?? 0)) {
           updates.push({ id: w.id, sol: finalSol });
         }
@@ -227,6 +232,28 @@ serve(async (req) => {
           "waterfall_refresh_solscan_balance_update",
         );
       }
+    }
+
+    const nowIso = new Date().toISOString();
+    for (const [pubkey, { tokens }] of Object.entries(results)) {
+      const mints = tokens.map((t) => t.mint);
+      if (tokens.length > 0) {
+        await assertDbWrite(
+          admin.from("wallet_positions").upsert(tokens.map((t) => ({
+            wallet_address: pubkey,
+            token_mint: t.mint,
+            balance: t.amount,
+            total_invested_usd: 0,
+            last_transaction_at: nowIso,
+            updated_at: nowIso,
+          })), { onConflict: "wallet_address,token_mint" }),
+          "wallet_positions",
+          "waterfall_refresh_solscan_positions_upsert",
+        );
+      }
+      let del = admin.from("wallet_positions").delete().eq("wallet_address", pubkey);
+      if (mints.length > 0) del = del.not("token_mint", "in", `(${mints.map((m) => `"${m}"`).join(",")})`);
+      await assertDbWrite(del, "wallet_positions", "waterfall_refresh_solscan_positions_prune");
     }
 
     return new Response(
