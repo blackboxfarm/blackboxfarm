@@ -912,12 +912,29 @@ export default function WaterfallGrid() {
           if (!firstErr) firstErr = `${SHORT(w.pubkey)}: ${e?.message || String(e)}`;
         }
       }
+      // 4) Final cleanup: sweep ANY residual SOL from every non-W1 wallet in the
+      // column back to W1 (covers wallets that received hop SOL but weren't
+      // holders, or wallets whose forward-sweep failed mid-chain).
+      await new Promise((r) => setTimeout(r, 2000));
+      const cleanupTargets = colWallets.filter((x) => x.id !== w1.id);
+      let sweptBack = 0;
+      for (const x of cleanupTargets) {
+        try {
+          const { data, error } = await supabase.functions.invoke("waterfall-withdraw", {
+            body: { walletId: x.id, mint: "SOL", amount: -1, destination: w1.pubkey },
+          });
+          if (error) continue;
+          if (data && (data as any).error) continue;
+          sweptBack++;
+          await new Promise((r) => setTimeout(r, 800));
+        } catch { /* ignore — wallet may simply have no sweepable SOL */ }
+      }
       toast({
         title: `W${col + 1}: chain-sold ${okSells}/${totalSells}`,
-        description: firstErr || `SOL chained through ${holders.length} wallet(s) and landed in W${col + 1}·Wallet 1.`,
+        description: firstErr || `SOL chained through ${holders.length} wallet(s); final cleanup swept ${sweptBack} wallet(s) back to W${col + 1}·Wallet 1.`,
         variant: firstErr ? "destructive" : "default",
       });
-      void refreshBalancesForBuy([w1.pubkey, ...holders.map((h) => h.w.pubkey)]);
+      void refreshBalancesForBuy(colWallets.map((x) => x.pubkey));
     } finally {
       setChainSellingCol(null);
     }
