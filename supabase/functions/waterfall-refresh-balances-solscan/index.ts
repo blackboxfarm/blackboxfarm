@@ -209,15 +209,15 @@ serve(async (req) => {
       while (idx < wallets.length) {
         const i = idx++;
         const w = wallets[i] as { id: string; pubkey: string; sol_balance: number | null };
-        const [solscanSol, solscanTokens, rpcSol, rpcTokens] = await Promise.all([
+        const [solscanSol, solscanScan, rpcSol, rpcScan] = await Promise.all([
           fetchSol(w.pubkey),
           fetchTokens(w.pubkey),
           fetchRpcSol(w.pubkey),
           fetchRpcTokens(w.pubkey),
         ]);
         const finalSol = typeof rpcSol === "number" ? rpcSol : typeof solscanSol === "number" ? solscanSol : Number(w.sol_balance ?? 0);
-        const tokens = mergeTokens(solscanTokens, rpcTokens);
-        results[w.pubkey] = { sol: finalSol, tokens, tokenScanOk: solscanTokens.length > 0 || rpcTokens.length > 0 };
+        const tokens = mergeTokens(solscanScan.tokens, rpcScan.tokens);
+        results[w.pubkey] = { sol: finalSol, tokens, tokenScanOk: solscanScan.ok || rpcScan.ok };
         if ((typeof rpcSol === "number" || typeof solscanSol === "number") && finalSol !== Number(w.sol_balance ?? 0)) {
           updates.push({ id: w.id, sol: finalSol });
         }
@@ -239,7 +239,8 @@ serve(async (req) => {
     }
 
     const nowIso = new Date().toISOString();
-    for (const [pubkey, { tokens }] of Object.entries(results)) {
+    for (const [pubkey, { tokens, tokenScanOk }] of Object.entries(results)) {
+      if (!tokenScanOk) continue;
       const mints = tokens.map((t) => t.mint);
       if (tokens.length > 0) {
         await assertDbWrite(
