@@ -1821,6 +1821,16 @@ export default function WaterfallGrid() {
                           {chainSellingCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>Chain-Sell W{c + 1}</>}
                         </button>
                       </div>
+                      <div className="flex gap-1 mt-1">
+                        <button
+                          onClick={() => refreshColumn(c)}
+                          disabled={refreshingCol !== null}
+                          className="flex-1 text-[10px] px-1.5 py-0.5 rounded bg-sky-700 hover:bg-sky-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold flex items-center justify-center gap-1"
+                          title={`Refresh the 10 wallets of W${c + 1} live from Solscan.io (SOL + token holdings)`}
+                        >
+                          {refreshingCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>↻ Refresh W{c + 1} (Solscan)</>}
+                        </button>
+                      </div>
                       {simMode && (
                         <div className="flex gap-1 mt-1">
                           <button
