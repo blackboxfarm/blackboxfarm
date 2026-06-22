@@ -2133,7 +2133,7 @@ function Cell({
             const meta = tokenPrices[t.mint];
             const usd = meta ? meta.priceUsd * t.amount : 0;
             const solEq = solUsd > 0 ? usd / solUsd : 0;
-            const sym = meta?.symbol ?? "?";
+            const sym = t.symbol ?? meta?.symbol ?? "?";
             const tokenLabel = sym && sym !== "?" ? sym : SHORT(t.mint);
             const isTarget = targetMint === t.mint;
             const amt = t.amount >= 1000
