@@ -102,7 +102,15 @@ async function fetchTokens(addr: string): Promise<{ tokens: LiveToken[]; ok: boo
     while (page <= 10) {
       const url = `${SOLSCAN_BASE}/account/token-accounts?address=${addr}&type=token&page=${page}&page_size=100&hide_zero=true`;
       const j = await solscanGet(url);
-      const items = Array.isArray(j?.data) ? j.data : Array.isArray(j?.data?.tokenAccounts) ? j.data.tokenAccounts : [];
+      const items = Array.isArray(j?.data)
+        ? j.data
+        : Array.isArray(j?.data?.tokenAccounts)
+          ? j.data.tokenAccounts
+          : Array.isArray(j?.data?.items)
+            ? j.data.items
+            : Array.isArray(j?.data?.tokens)
+              ? j.data.tokens
+              : [];
       ok = true;
       if (!items.length) break;
       for (const it of items) {
