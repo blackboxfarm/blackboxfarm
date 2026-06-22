@@ -832,6 +832,97 @@ export default function WaterfallGrid() {
   }, [wallets, mintForCol, sellMintLive]);
 
   // ─── SWEEP ENTIRE GRID SOL → W1·Wallet 1 ───────────────────────────────
+  // ─── CHAIN-SELL: walk wallets in a column that hold ANY non-SOL token. ─
+  // For each holder (in row order): ensure it has SOL (top up from the
+  // previous holder if possible, otherwise from W1·Wallet1 of THIS column),
+  // sell every non-SOL token it holds, then sweep its SOL forward to the
+  // next holder. After the last holder, sweep the SOL back to Wallet 1.
+  const chainSellColumn = useCallback(async (col: number) => {
+    const colWallets = wallets.filter((w) => w.column_index === col).sort((a, b) => a.row_index - b.row_index);
+    const w1 = colWallets.find((w) => w.row_index === 0);
+    if (!w1) return toast({ title: `W${col + 1}: Wallet 1 not found`, variant: "destructive" });
+    const holders = colWallets
+      .map((w) => {
+        const toks = (balancesRef.current[w.pubkey]?.tokens ?? []).filter((t) => t.amount > 0);
+        return toks.length > 0 ? { w, tokens: toks } : null;
+      })
+      .filter((x): x is { w: WaterfallWallet; tokens: TokenHolding[] } => !!x);
+    if (holders.length === 0) return toast({ title: `W${col + 1}: no wallets hold non-SOL tokens` });
+    const totalSells = holders.reduce((s, h) => s + h.tokens.length, 0);
+    if (!confirm(
+      `Chain-Sell W${col + 1}: ${holders.length} wallet(s) hold non-SOL tokens (${totalSells} sell call(s)).\n` +
+      `• Each wallet will be funded if SOL < ${MIN_SOL_FOR_SELL}\n` +
+      `• After selling, SOL hops forward to the next holder\n` +
+      `• Final wallet sweeps SOL back to W${col + 1}·Wallet 1\n\nProceed?`
+    )) return;
+    setChainSellingCol(col);
+    let okSells = 0; let firstErr = "";
+    const solOf = (pk: string, fallback: number) => {
+      const live = balancesRef.current[pk]?.sol;
+      return typeof live === "number" ? live : fallback;
+    };
+    try {
+      for (let i = 0; i < holders.length; i++) {
+        const { w, tokens } = holders[i];
+        const isW1 = w.id === w1.id;
+        try {
+          // 1) Ensure SOL for fees.
+          let solHere = solOf(w.pubkey, Number(w.sol_balance || 0));
+          if (solHere < MIN_SOL_FOR_SELL && !isW1) {
+            const funder = w1; // top up from this column's W1
+            const funderSol = solOf(funder.pubkey, Number(funder.sol_balance || 0));
+            if (funderSol < SMART_FUND_SOL + 0.002) {
+              throw new Error(`needs ${SMART_FUND_SOL} SOL but W1 only has ${funderSol.toFixed(4)}`);
+            }
+            const { data, error } = await supabase.functions.invoke("waterfall-withdraw", {
+              body: { walletId: funder.id, mint: "SOL", amount: SMART_FUND_SOL, destination: w.pubkey },
+            });
+            if (error) throw new Error(`fund: ${error.message}`);
+            if (data && (data as any).error) throw new Error(`fund: ${(data as any).error}`);
+            // local cache so chain math stays consistent
+            const prevW = balancesRef.current[w.pubkey] ?? { sol: 0, tokens: [] };
+            balancesRef.current[w.pubkey] = { ...prevW, sol: (prevW.sol || 0) + SMART_FUND_SOL };
+            const prevF = balancesRef.current[funder.pubkey] ?? { sol: 0, tokens: [] };
+            balancesRef.current[funder.pubkey] = { ...prevF, sol: Math.max(0, (prevF.sol || 0) - SMART_FUND_SOL) };
+            await new Promise((r) => setTimeout(r, 3000));
+          }
+          // 2) Sell every non-SOL token in this wallet.
+          for (const t of tokens) {
+            try { await sellMintLive(w, t.mint); okSells++; }
+            catch (e: any) { if (!firstErr) firstErr = `${SHORT(w.pubkey)} ${t.mint.slice(0,6)}…: ${e?.message || String(e)}`; }
+            await new Promise((r) => setTimeout(r, 400));
+          }
+          // 3) Wait for sell SOL to land, then sweep to next holder (or back to W1).
+          await new Promise((r) => setTimeout(r, 4500));
+          const nextHolder = holders[i + 1];
+          const dest = nextHolder ? nextHolder.w : w1;
+          if (dest.id !== w.id) {
+            try {
+              const { data, error } = await supabase.functions.invoke("waterfall-withdraw", {
+                body: { walletId: w.id, mint: "SOL", amount: -1, destination: dest.pubkey },
+              });
+              if (error) throw new Error(error.message);
+              if (data && (data as any).error) throw new Error((data as any).error);
+              await new Promise((r) => setTimeout(r, 2500));
+            } catch (e: any) {
+              if (!firstErr) firstErr = `${SHORT(w.pubkey)} sweep→${SHORT(dest.pubkey)}: ${e?.message || String(e)}`;
+            }
+          }
+        } catch (e: any) {
+          if (!firstErr) firstErr = `${SHORT(w.pubkey)}: ${e?.message || String(e)}`;
+        }
+      }
+      toast({
+        title: `W${col + 1}: chain-sold ${okSells}/${totalSells}`,
+        description: firstErr || `SOL chained through ${holders.length} wallet(s) and landed in W${col + 1}·Wallet 1.`,
+        variant: firstErr ? "destructive" : "default",
+      });
+      void refreshBalancesForBuy([w1.pubkey, ...holders.map((h) => h.w.pubkey)]);
+    } finally {
+      setChainSellingCol(null);
+    }
+  }, [wallets, sellMintLive]);
+
   const sweepAllToW1 = useCallback(async () => {
     const w1 = wallets.find((w) => w.column_index === 0 && w.row_index === 0);
     if (!w1) return toast({ title: "W1·Wallet 1 not found", variant: "destructive" });
