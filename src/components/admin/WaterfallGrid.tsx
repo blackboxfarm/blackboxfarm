@@ -1391,12 +1391,30 @@ export default function WaterfallGrid() {
 
   const refresh = async () => {
     setRefreshing(true);
-    const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances");
+    const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances-solscan");
     setRefreshing(false);
     if (error) return toast({ title: "Refresh failed", description: error.message, variant: "destructive" });
     applyRefreshPayload(data);
     loadWallets();
-    toast({ title: "Balances refreshed" });
+    toast({ title: "Balances refreshed", description: "Live from Solscan.io (all 100 wallets)" });
+  };
+
+  const refreshColumn = async (col: number) => {
+    const colWallets = wallets.filter((w) => w.column_index === col);
+    if (colWallets.length === 0) return toast({ title: `W${col + 1}: no wallets` });
+    setRefreshingCol(col);
+    try {
+      const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances-solscan", {
+        body: { pubkeys: colWallets.map((w) => w.pubkey) },
+      });
+      if (error) throw new Error(error.message);
+      applyRefreshPayload(data);
+      toast({ title: `W${col + 1}: balances refreshed`, description: `Live from Solscan.io (${colWallets.length} wallets)` });
+    } catch (e: any) {
+      toast({ title: `W${col + 1}: refresh failed`, description: e?.message || String(e), variant: "destructive" });
+    } finally {
+      setRefreshingCol(null);
+    }
   };
 
   const exportKeys = async () => {
