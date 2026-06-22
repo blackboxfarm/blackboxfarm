@@ -94,14 +94,16 @@ async function fetchRpcSol(addr: string): Promise<number | null> {
   }
 }
 
-async function fetchTokens(addr: string): Promise<LiveToken[]> {
+async function fetchTokens(addr: string): Promise<{ tokens: LiveToken[]; ok: boolean }> {
   const byMint = new Map<string, LiveToken>();
+  let ok = false;
   try {
     let page = 1;
     while (page <= 10) {
       const url = `${SOLSCAN_BASE}/account/token-accounts?address=${addr}&type=token&page=${page}&page_size=100&hide_zero=true`;
       const j = await solscanGet(url);
       const items = Array.isArray(j?.data) ? j.data : Array.isArray(j?.data?.tokenAccounts) ? j.data.tokenAccounts : [];
+      ok = true;
       if (!items.length) break;
       for (const it of items) {
         const mint = it.token_address ?? it.tokenAddress ?? it.mint ?? it.token?.address ?? it.token?.token_address;
@@ -123,20 +125,22 @@ async function fetchTokens(addr: string): Promise<LiveToken[]> {
       page++;
     }
   } catch (_) { /* swallow; partial ok */ }
-  return [...byMint.values()];
+  return { tokens: [...byMint.values()], ok };
 }
 
-async function fetchRpcTokens(addr: string): Promise<LiveToken[]> {
+async function fetchRpcTokens(addr: string): Promise<{ tokens: LiveToken[]; ok: boolean }> {
   const byMint = new Map<string, LiveToken>();
+  let ok = false;
   try {
     const scans = await Promise.all(
       TOKEN_PROGRAMS.map((programId) =>
         rpc("getTokenAccountsByOwner", [addr, { programId }, { encoding: "jsonParsed" }])
-          .then((r) => r?.value ?? [])
-          .catch(() => []),
+          .then((r) => ({ ok: true, value: r?.value ?? [] }))
+          .catch(() => ({ ok: false, value: [] })),
       ),
     );
-    for (const acc of scans.flat()) {
+    ok = scans.some((s) => s.ok);
+    for (const acc of scans.flatMap((s) => s.value)) {
       const info = acc?.account?.data?.parsed?.info;
       const tokenAmount = info?.tokenAmount;
       if (!info?.mint || !tokenAmount) continue;
@@ -146,7 +150,7 @@ async function fetchRpcTokens(addr: string): Promise<LiveToken[]> {
       upsertToken(byMint, { mint: info.mint, amount, decimals });
     }
   } catch (_) { /* swallow; partial ok */ }
-  return [...byMint.values()];
+  return { tokens: [...byMint.values()], ok };
 }
 
 function mergeTokens(solscanTokens: LiveToken[], rpcTokens: LiveToken[]) {
