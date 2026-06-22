@@ -634,6 +634,7 @@ export default function WaterfallGrid() {
   const [sweeping, setSweeping] = useState(false);
   const [consolidatingCol, setConsolidatingCol] = useState<number | null>(null);
   const [sweepingToW1, setSweepingToW1] = useState(false);
+  const [smartSellingCol, setSmartSellingCol] = useState<number | null>(null);
   const sweepAllSol = useCallback(async () => {
     const remembered = (() => { try { return localStorage.getItem(SWEEP_DEST_KEY) || ""; } catch { return ""; } })();
     const dest = window.prompt("Sweep ALL SOL from every wallet to which address?", remembered) || "";
