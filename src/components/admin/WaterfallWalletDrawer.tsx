@@ -18,7 +18,7 @@ export type WaterfallWallet = {
   last_balance_at: string | null;
 };
 
-export type TokenHolding = { mint: string; amount: number; decimals: number };
+export type TokenHolding = { mint: string; amount: number; decimals: number; symbol?: string | null; name?: string | null };
 
 export function WaterfallWalletDrawer({
   wallet, tokens, solUsd, onClose, onRename, onWithdrawComplete,
@@ -144,9 +144,9 @@ function DrawerBody({
                 </div>
                 {tokens.length === 0 && <div className="text-xs text-muted-foreground">No SPL tokens.</div>}
                 {tokens.map((t) => (
-                  <div key={t.mint} className="flex justify-between text-xs">
-                    <a href={`https://solscan.io/token/${t.mint}`} target="_blank" rel="noreferrer" className="font-mono hover:underline">
-                      {t.mint.slice(0, 6)}…{t.mint.slice(-4)}
+                  <div key={t.mint} className="flex justify-between gap-3 text-xs">
+                    <a href={`https://solscan.io/token/${t.mint}`} target="_blank" rel="noreferrer" className="font-mono hover:underline truncate">
+                      {t.symbol ? `${t.symbol} · ` : ""}{t.mint.slice(0, 6)}…{t.mint.slice(-4)}
                     </a>
                     <span className="font-mono">{t.amount}</span>
                   </div>

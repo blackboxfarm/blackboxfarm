@@ -9,6 +9,12 @@ const corsHeaders = {
 };
 
 const SOLSCAN_BASE = "https://pro-api.solscan.io/v2.0";
+const TOKEN_PROGRAMS = [
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+];
+
+type LiveToken = { mint: string; amount: number; decimals: number; symbol?: string | null; name?: string | null };
 
 function authHeaders() {
   const key = Deno.env.get("SOLSCAN_API_KEY");
@@ -28,10 +34,29 @@ async function solscanGet(url: string) {
 function numeric(v: unknown): number | null {
   if (typeof v === "number" && Number.isFinite(v)) return v;
   if (typeof v === "string" && v.trim() !== "") {
-    const n = Number(v);
+    const n = Number(v.replace(/,/g, "").trim());
     if (Number.isFinite(n)) return n;
   }
   return null;
+}
+
+function rawToUi(raw: unknown, decimals: unknown): number {
+  const n = numeric(raw);
+  const d = numeric(decimals) ?? 0;
+  if (n == null || !Number.isFinite(d)) return 0;
+  return n / Math.pow(10, d);
+}
+
+function upsertToken(map: Map<string, LiveToken>, token: LiveToken, replace = false) {
+  if (!token.mint || !(token.amount > 0)) return;
+  const prev = map.get(token.mint);
+  map.set(token.mint, {
+    mint: token.mint,
+    amount: replace ? token.amount : (prev?.amount ?? 0) + token.amount,
+    decimals: Number.isFinite(token.decimals) ? token.decimals : (prev?.decimals ?? 0),
+    symbol: token.symbol ?? prev?.symbol ?? null,
+    name: token.name ?? prev?.name ?? null,
+  });
 }
 
 async function rpc(method: string, params: any) {
@@ -69,31 +94,80 @@ async function fetchRpcSol(addr: string): Promise<number | null> {
   }
 }
 
-async function fetchTokens(addr: string) {
-  const out: Array<{ mint: string; amount: number; decimals: number }> = [];
+async function fetchTokens(addr: string): Promise<{ tokens: LiveToken[]; ok: boolean }> {
+  const byMint = new Map<string, LiveToken>();
+  let ok = false;
   try {
     let page = 1;
-    while (page <= 3) {
-      const url = `${SOLSCAN_BASE}/account/token-accounts?address=${addr}&type=token&page=${page}&page_size=40&hide_zero=true`;
+    while (page <= 10) {
+      const url = `${SOLSCAN_BASE}/account/token-accounts?address=${addr}&type=token&page=${page}&page_size=100&hide_zero=true`;
       const j = await solscanGet(url);
-      const items = Array.isArray(j?.data) ? j.data : Array.isArray(j?.data?.tokenAccounts) ? j.data.tokenAccounts : [];
+      const items = Array.isArray(j?.data)
+        ? j.data
+        : Array.isArray(j?.data?.tokenAccounts)
+          ? j.data.tokenAccounts
+          : Array.isArray(j?.data?.items)
+            ? j.data.items
+            : Array.isArray(j?.data?.tokens)
+              ? j.data.tokens
+              : [];
+      ok = true;
       if (!items.length) break;
       for (const it of items) {
-        const mint = it.token_address ?? it.tokenAddress ?? it.mint;
+        const mint = it.token_address ?? it.tokenAddress ?? it.mint ?? it.token?.address ?? it.token?.token_address;
         if (!mint) continue;
-        const decimals = Number(it.token_decimals ?? it.decimals ?? 0);
-        const raw = it.amount ?? it.balance ?? 0;
-        const ui = typeof it.ui_amount === "number"
-          ? Number(it.ui_amount)
-          : Number(raw) / Math.pow(10, decimals);
+        const decimals = Number(it.token_decimals ?? it.decimals ?? it.token?.decimals ?? 0);
+        const tokenAmount = it.tokenAmount ?? it.token_amount;
+        const ui = numeric(it.ui_amount ?? it.uiAmount ?? it.uiAmountString ?? tokenAmount?.uiAmountString ?? tokenAmount?.uiAmount)
+          ?? rawToUi(it.amount ?? it.balance ?? tokenAmount?.amount, decimals);
         if (!(ui > 0)) continue;
-        out.push({ mint, amount: ui, decimals });
+        upsertToken(byMint, {
+          mint,
+          amount: ui,
+          decimals,
+          symbol: it.token_symbol ?? it.symbol ?? it.token?.symbol ?? null,
+          name: it.token_name ?? it.name ?? it.token?.name ?? null,
+        });
       }
-      if (items.length < 40) break;
+      if (items.length < 100) break;
       page++;
     }
   } catch (_) { /* swallow; partial ok */ }
-  return out;
+  return { tokens: [...byMint.values()], ok };
+}
+
+async function fetchRpcTokens(addr: string): Promise<{ tokens: LiveToken[]; ok: boolean }> {
+  const byMint = new Map<string, LiveToken>();
+  let ok = false;
+  try {
+    const scans = await Promise.all(
+      TOKEN_PROGRAMS.map((programId) =>
+        rpc("getTokenAccountsByOwner", [addr, { programId }, { encoding: "jsonParsed" }])
+          .then((r) => ({ ok: true, value: r?.value ?? [] }))
+          .catch(() => ({ ok: false, value: [] })),
+      ),
+    );
+    ok = scans.some((s) => s.ok);
+    for (const acc of scans.flatMap((s) => s.value)) {
+      const info = acc?.account?.data?.parsed?.info;
+      const tokenAmount = info?.tokenAmount;
+      if (!info?.mint || !tokenAmount) continue;
+      const decimals = Number(tokenAmount.decimals ?? 0);
+      const amount = numeric(tokenAmount.uiAmountString ?? tokenAmount.uiAmount) ?? rawToUi(tokenAmount.amount, decimals);
+      if (!(amount > 0)) continue;
+      upsertToken(byMint, { mint: info.mint, amount, decimals });
+    }
+  } catch (_) { /* swallow; partial ok */ }
+  return { tokens: [...byMint.values()], ok };
+}
+
+function mergeTokens(solscanTokens: LiveToken[], rpcTokens: LiveToken[]) {
+  const byMint = new Map<string, LiveToken>();
+  for (const t of solscanTokens) upsertToken(byMint, t);
+  // RPC token accounts are the final live account state; replace Solscan amounts
+  // for matching mints while preserving any Solscan symbol/name metadata.
+  for (const t of rpcTokens) upsertToken(byMint, t, true);
+  return [...byMint.values()].sort((a, b) => b.amount - a.amount);
 }
 
 serve(async (req) => {
@@ -133,7 +207,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true, partial: requestedPubkeys.length > 0, source: "solscan", wallets: {} }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const results: Record<string, { sol: number; tokens: Array<{ mint: string; amount: number; decimals: number }> }> = {};
+    const results: Record<string, { sol: number; tokens: LiveToken[]; tokenScanOk?: boolean }> = {};
     const updates: { id: string; sol: number }[] = [];
 
     // Solscan Pro is rate-limited; cap concurrency.
@@ -143,10 +217,15 @@ serve(async (req) => {
       while (idx < wallets.length) {
         const i = idx++;
         const w = wallets[i] as { id: string; pubkey: string; sol_balance: number | null };
-        const [solscanSol, tokens] = await Promise.all([fetchSol(w.pubkey), fetchTokens(w.pubkey)]);
-        const rpcSol = await fetchRpcSol(w.pubkey);
+        const [solscanSol, solscanScan, rpcSol, rpcScan] = await Promise.all([
+          fetchSol(w.pubkey),
+          fetchTokens(w.pubkey),
+          fetchRpcSol(w.pubkey),
+          fetchRpcTokens(w.pubkey),
+        ]);
         const finalSol = typeof rpcSol === "number" ? rpcSol : typeof solscanSol === "number" ? solscanSol : Number(w.sol_balance ?? 0);
-        results[w.pubkey] = { sol: finalSol, tokens };
+        const tokens = mergeTokens(solscanScan.tokens, rpcScan.tokens);
+        results[w.pubkey] = { sol: finalSol, tokens, tokenScanOk: solscanScan.ok || rpcScan.ok };
         if ((typeof rpcSol === "number" || typeof solscanSol === "number") && finalSol !== Number(w.sol_balance ?? 0)) {
           updates.push({ id: w.id, sol: finalSol });
         }
@@ -165,6 +244,29 @@ serve(async (req) => {
           "waterfall_refresh_solscan_balance_update",
         );
       }
+    }
+
+    const nowIso = new Date().toISOString();
+    for (const [pubkey, { tokens, tokenScanOk }] of Object.entries(results)) {
+      if (!tokenScanOk) continue;
+      const mints = tokens.map((t) => t.mint);
+      if (tokens.length > 0) {
+        await assertDbWrite(
+          admin.from("wallet_positions").upsert(tokens.map((t) => ({
+            wallet_address: pubkey,
+            token_mint: t.mint,
+            balance: t.amount,
+            total_invested_usd: 0,
+            last_transaction_at: nowIso,
+            updated_at: nowIso,
+          })), { onConflict: "wallet_address,token_mint" }),
+          "wallet_positions",
+          "waterfall_refresh_solscan_positions_upsert",
+        );
+      }
+      let del = admin.from("wallet_positions").delete().eq("wallet_address", pubkey);
+      if (mints.length > 0) del = del.not("token_mint", "in", `(${mints.map((m) => `"${m}"`).join(",")})`);
+      await assertDbWrite(del, "wallet_positions", "waterfall_refresh_solscan_positions_prune");
     }
 
     return new Response(
