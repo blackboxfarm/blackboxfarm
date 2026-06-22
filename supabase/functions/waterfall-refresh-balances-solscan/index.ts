@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getHeliusRpcUrl } from "../_shared/helius-client.ts";
+import { assertDbWrite } from "../_shared/db-assert.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,12 +25,45 @@ async function solscanGet(url: string) {
   return res.json();
 }
 
+function numeric(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+async function rpc(method: string, params: any) {
+  const res = await fetch(getHeliusRpcUrl(), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+  });
+  const j = await res.json();
+  if (j.error) throw new Error(j.error.message ?? "rpc error");
+  return j.result;
+}
+
 async function fetchSol(addr: string): Promise<number | null> {
   try {
     const j = await solscanGet(`${SOLSCAN_BASE}/account/detail?address=${addr}`);
-    const lam = j?.data?.lamports ?? j?.data?.account?.lamports;
-    if (typeof lam === "number" && Number.isFinite(lam)) return lam / 1e9;
+    const data = j?.data ?? {};
+    const lam = numeric(data?.lamports ?? data?.account?.lamports ?? data?.nativeBalance?.lamports ?? data?.balance_lamports);
+    if (lam != null) return lam / 1e9;
+    const sol = numeric(data?.sol_balance ?? data?.solBalance ?? data?.balance);
+    if (sol != null) return sol > 1_000_000 ? sol / 1e9 : sol;
     return null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function fetchRpcSol(addr: string): Promise<number | null> {
+  try {
+    const bal = await rpc("getBalance", [addr]);
+    const lamports = numeric(bal?.value);
+    return lamports == null ? null : lamports / 1e9;
   } catch (_) {
     return null;
   }
@@ -108,10 +143,11 @@ serve(async (req) => {
       while (idx < wallets.length) {
         const i = idx++;
         const w = wallets[i] as { id: string; pubkey: string; sol_balance: number | null };
-        const [sol, tokens] = await Promise.all([fetchSol(w.pubkey), fetchTokens(w.pubkey)]);
-        const finalSol = typeof sol === "number" ? sol : Number(w.sol_balance ?? 0);
+        const [solscanSol, tokens] = await Promise.all([fetchSol(w.pubkey), fetchTokens(w.pubkey)]);
+        const rpcSol = await fetchRpcSol(w.pubkey);
+        const finalSol = typeof rpcSol === "number" ? rpcSol : typeof solscanSol === "number" ? solscanSol : Number(w.sol_balance ?? 0);
         results[w.pubkey] = { sol: finalSol, tokens };
-        if (typeof sol === "number" && sol !== Number(w.sol_balance ?? 0)) {
+        if ((typeof rpcSol === "number" || typeof solscanSol === "number") && finalSol !== Number(w.sol_balance ?? 0)) {
           updates.push({ id: w.id, sol: finalSol });
         }
       }
@@ -120,11 +156,15 @@ serve(async (req) => {
 
     // Persist SOL deltas so the DB stays roughly in sync (best-effort; UI uses live values regardless).
     if (updates.length) {
-      await Promise.all(updates.map((u) =>
-        admin.from("waterfall_wallets")
-          .update({ sol_balance: u.sol, last_balance_at: new Date().toISOString() })
-          .eq("id", u.id)
-      ));
+      for (const u of updates) {
+        await assertDbWrite(
+          admin.from("waterfall_wallets")
+            .update({ sol_balance: u.sol, last_balance_at: new Date().toISOString() })
+            .eq("id", u.id),
+          "waterfall_wallets",
+          "waterfall_refresh_solscan_balance_update",
+        );
+      }
     }
 
     return new Response(

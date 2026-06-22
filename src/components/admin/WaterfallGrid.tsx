@@ -1203,7 +1203,7 @@ export default function WaterfallGrid() {
   }, []);
 
   const refreshBalancesForBuy = useCallback(async (pubkeys?: string[]) => {
-    const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances", {
+    const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances-solscan", {
       body: pubkeys?.length ? { pubkeys } : {},
     });
     if (error) throw new Error(error.message);
@@ -1486,8 +1486,8 @@ export default function WaterfallGrid() {
   // Auto-load on-chain balances + token holdings once wallets are loaded so the
   // grid shows tokens + USD value WITHOUT the user clicking "Refresh".
   // Re-poll every 20s so newly-bought tokens appear on their own and stale
-  // holdings disappear after a sell — always read live from on-chain (Helius
-  // RPC inside the edge function), never from the database.
+    // holdings disappear after a sell — always read live from Solscan with RPC
+    // confirmation, never from stale database balances.
   useEffect(() => {
     if (wallets.length === 0) return;
     let cancelled = false;
@@ -1495,7 +1495,7 @@ export default function WaterfallGrid() {
       if (balanceRefreshInFlightRef.current) return;
       balanceRefreshInFlightRef.current = true;
       try {
-        const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances");
+        const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances-solscan");
         if (error) throw error;
         if (!cancelled) applyRefreshPayload(data);
       } catch (e) {
