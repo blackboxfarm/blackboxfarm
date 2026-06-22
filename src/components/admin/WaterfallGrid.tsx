@@ -634,6 +634,7 @@ export default function WaterfallGrid() {
   const [sweeping, setSweeping] = useState(false);
   const [consolidatingCol, setConsolidatingCol] = useState<number | null>(null);
   const [sweepingToW1, setSweepingToW1] = useState(false);
+  const [smartSellingCol, setSmartSellingCol] = useState<number | null>(null);
   const sweepAllSol = useCallback(async () => {
     const remembered = (() => { try { return localStorage.getItem(SWEEP_DEST_KEY) || ""; } catch { return ""; } })();
     const dest = window.prompt("Sweep ALL SOL from every wallet to which address?", remembered) || "";
@@ -739,6 +740,95 @@ export default function WaterfallGrid() {
       setConsolidatingCol(null);
     }
   }, [wallets, mintForCol]);
+
+  // ─── SMART SELL DUST: fund -> sell -> sweep back ───────────────────────
+  // For each wallet in the column holding the target token but lacking SOL
+  // for the sell fee: send 0.05 SOL from W1, wait for confirmation, sell
+  // 100% of the token, then sweep remaining SOL back to W1. W1 itself just
+  // sells (no fund/sweep).
+  const MIN_SOL_FOR_SELL = 0.003;
+  const SMART_FUND_SOL = 0.05;
+  const smartSellDustColumn = useCallback(async (col: number) => {
+    const mint = mintForCol(col);
+    if (!mint) return toast({ title: `W${col + 1}: set a token mint first`, variant: "destructive" });
+    const colWallets = wallets.filter((w) => w.column_index === col).sort((a, b) => a.row_index - b.row_index);
+    const w1 = colWallets.find((w) => w.row_index === 0);
+    if (!w1) return toast({ title: `W${col + 1}: Wallet 1 not found`, variant: "destructive" });
+    const holders = colWallets
+      .map((w) => {
+        const held = (balancesRef.current[w.pubkey]?.tokens ?? []).find((t) => t.mint === mint);
+        return held && held.amount > 0 ? { w, amount: held.amount } : null;
+      })
+      .filter((x): x is { w: WaterfallWallet; amount: number } => !!x);
+    if (holders.length === 0) return toast({ title: `W${col + 1}: no wallets hold ${mint.slice(0, 6)}…` });
+    const w1Sol = (() => {
+      const live = balancesRef.current[w1.pubkey]?.sol;
+      return typeof live === "number" ? live : Number(w1.sol_balance || 0);
+    })();
+    const needsFunding = holders.filter(({ w }) => {
+      if (w.id === w1.id) return false;
+      const live = balancesRef.current[w.pubkey]?.sol;
+      const sol = typeof live === "number" ? live : Number(w.sol_balance || 0);
+      return sol < MIN_SOL_FOR_SELL;
+    });
+    const requiredFundSol = needsFunding.length * SMART_FUND_SOL;
+    if (w1Sol < requiredFundSol + 0.002) {
+      return toast({
+        title: `W${col + 1}·W1 needs ~${(requiredFundSol + 0.002).toFixed(3)} SOL`,
+        description: `Has ${w1Sol.toFixed(4)}. Sweep more SOL into W${col + 1}·W1 first.`,
+        variant: "destructive",
+      });
+    }
+    if (!confirm(`Smart-Sell W${col + 1}: ${holders.length} wallet(s) hold ${mint.slice(0, 6)}…\n• ${needsFunding.length} need ${SMART_FUND_SOL} SOL fueled from W1\n• Each will be sold and SOL swept back to W1\n\nProceed?`)) return;
+    setSmartSellingCol(col);
+    let ok = 0; let firstErr = "";
+    try {
+      for (const { w } of holders) {
+        const isW1 = w.id === w1.id;
+        try {
+          if (!isW1) {
+            const live = balancesRef.current[w.pubkey]?.sol;
+            const sol = typeof live === "number" ? live : Number(w.sol_balance || 0);
+            if (sol < MIN_SOL_FOR_SELL) {
+              const { data, error } = await supabase.functions.invoke("waterfall-withdraw", {
+                body: { walletId: w1.id, mint: "SOL", amount: SMART_FUND_SOL, destination: w.pubkey },
+              });
+              if (error) throw new Error(`fund: ${error.message}`);
+              if (data && (data as any).error) throw new Error(`fund: ${(data as any).error}`);
+              // Update local cache so the next iteration sees the funded balance.
+              const prev = balancesRef.current[w.pubkey] ?? { sol: 0, tokens: [] };
+              balancesRef.current[w.pubkey] = { ...prev, sol: (prev.sol || 0) + SMART_FUND_SOL };
+              await new Promise((r) => setTimeout(r, 3000));
+            }
+          }
+          await sellMintLive(w, mint);
+          ok++;
+          // Wait for the swap to land before sweeping.
+          await new Promise((r) => setTimeout(r, 4000));
+          if (!isW1) {
+            try {
+              await supabase.functions.invoke("waterfall-withdraw", {
+                body: { walletId: w.id, mint: "SOL", amount: -1, destination: w1.pubkey },
+              });
+            } catch (e: any) {
+              if (!firstErr) firstErr = `${SHORT(w.pubkey)} sweep: ${e?.message || String(e)}`;
+            }
+          }
+        } catch (e: any) {
+          if (!firstErr) firstErr = `${SHORT(w.pubkey)}: ${e?.message || String(e)}`;
+        }
+        await new Promise((r) => setTimeout(r, 400));
+      }
+      toast({
+        title: `W${col + 1}: smart-sold ${ok}/${holders.length}`,
+        description: firstErr || `Tokens sold. SOL swept back to W${col + 1}·Wallet 1.`,
+        variant: firstErr ? "destructive" : "default",
+      });
+      void refreshBalancesForBuy([w1.pubkey, ...holders.map((h) => h.w.pubkey)]);
+    } finally {
+      setSmartSellingCol(null);
+    }
+  }, [wallets, mintForCol, sellMintLive]);
 
   // ─── SWEEP ENTIRE GRID SOL → W1·Wallet 1 ───────────────────────────────
   const sweepAllToW1 = useCallback(async () => {
@@ -1581,6 +1671,16 @@ export default function WaterfallGrid() {
                           title={!colMint ? "Set this waterfall's mint to enable" : `Move ALL tokens + SOL from W${c + 1}·R2–R10 into W${c + 1}·Wallet 1`}
                         >
                           {consolidatingCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>Consolidate → W{c + 1}·W1</>}
+                        </button>
+                      </div>
+                      <div className="flex gap-1 mt-1">
+                        <button
+                          onClick={() => smartSellDustColumn(c)}
+                          disabled={smartSellingCol !== null || consolidatingCol !== null || sellingGrid || sellingCol !== null || sellingAllCol !== null || buyingCol !== null || !colMint}
+                          className="flex-1 text-[10px] px-1.5 py-0.5 rounded bg-fuchsia-700 hover:bg-fuchsia-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold flex items-center justify-center gap-1"
+                          title={!colMint ? "Set this waterfall's mint to enable" : `For each wallet of W${c + 1} that holds the target token: fund 0.05 SOL from W1 if needed, sell, then sweep SOL back to W1`}
+                        >
+                          {smartSellingCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>Smart-Sell Dust W{c + 1}</>}
                         </button>
                       </div>
                       {simMode && (
