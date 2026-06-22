@@ -1775,6 +1775,16 @@ export default function WaterfallGrid() {
                           {smartSellingCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>Smart-Sell Dust W{c + 1}</>}
                         </button>
                       </div>
+                      <div className="flex gap-1 mt-1">
+                        <button
+                          onClick={() => chainSellColumn(c)}
+                          disabled={chainSellingCol !== null || smartSellingCol !== null || consolidatingCol !== null || sellingGrid || sellingCol !== null || sellingAllCol !== null || buyingCol !== null}
+                          className="flex-1 text-[10px] px-1.5 py-0.5 rounded bg-orange-700 hover:bg-orange-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold flex items-center justify-center gap-1"
+                          title={`Walk every wallet of W${c + 1} holding ANY non-SOL token: fund if dry, sell all tokens, then hop SOL forward to the next holder (last hop returns to Wallet 1).`}
+                        >
+                          {chainSellingCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>Chain-Sell W{c + 1}</>}
+                        </button>
+                      </div>
                       {simMode && (
                         <div className="flex gap-1 mt-1">
                           <button
