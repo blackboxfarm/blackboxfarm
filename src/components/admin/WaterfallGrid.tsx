@@ -636,6 +636,7 @@ export default function WaterfallGrid() {
   const [sweepingToW1, setSweepingToW1] = useState(false);
   const [smartSellingCol, setSmartSellingCol] = useState<number | null>(null);
   const [chainSellingCol, setChainSellingCol] = useState<number | null>(null);
+  const [refreshingCol, setRefreshingCol] = useState<number | null>(null);
   const sweepAllSol = useCallback(async () => {
     const remembered = (() => { try { return localStorage.getItem(SWEEP_DEST_KEY) || ""; } catch { return ""; } })();
     const dest = window.prompt("Sweep ALL SOL from every wallet to which address?", remembered) || "";
@@ -1390,12 +1391,30 @@ export default function WaterfallGrid() {
 
   const refresh = async () => {
     setRefreshing(true);
-    const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances");
+    const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances-solscan");
     setRefreshing(false);
     if (error) return toast({ title: "Refresh failed", description: error.message, variant: "destructive" });
     applyRefreshPayload(data);
     loadWallets();
-    toast({ title: "Balances refreshed" });
+    toast({ title: "Balances refreshed", description: "Live from Solscan.io (all 100 wallets)" });
+  };
+
+  const refreshColumn = async (col: number) => {
+    const colWallets = wallets.filter((w) => w.column_index === col);
+    if (colWallets.length === 0) return toast({ title: `W${col + 1}: no wallets` });
+    setRefreshingCol(col);
+    try {
+      const { data, error } = await supabase.functions.invoke("waterfall-refresh-balances-solscan", {
+        body: { pubkeys: colWallets.map((w) => w.pubkey) },
+      });
+      if (error) throw new Error(error.message);
+      applyRefreshPayload(data);
+      toast({ title: `W${col + 1}: balances refreshed`, description: `Live from Solscan.io (${colWallets.length} wallets)` });
+    } catch (e: any) {
+      toast({ title: `W${col + 1}: refresh failed`, description: e?.message || String(e), variant: "destructive" });
+    } finally {
+      setRefreshingCol(null);
+    }
   };
 
   const exportKeys = async () => {
@@ -1800,6 +1819,16 @@ export default function WaterfallGrid() {
                           title={`Walk every wallet of W${c + 1} holding ANY non-SOL token: fund if dry, sell all tokens, then hop SOL forward to the next holder (last hop returns to Wallet 1).`}
                         >
                           {chainSellingCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>Chain-Sell W{c + 1}</>}
+                        </button>
+                      </div>
+                      <div className="flex gap-1 mt-1">
+                        <button
+                          onClick={() => refreshColumn(c)}
+                          disabled={refreshingCol !== null}
+                          className="flex-1 text-[10px] px-1.5 py-0.5 rounded bg-sky-700 hover:bg-sky-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold flex items-center justify-center gap-1"
+                          title={`Refresh the 10 wallets of W${c + 1} live from Solscan.io (SOL + token holdings)`}
+                        >
+                          {refreshingCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>↻ Refresh W{c + 1} (Solscan)</>}
                         </button>
                       </div>
                       {simMode && (
