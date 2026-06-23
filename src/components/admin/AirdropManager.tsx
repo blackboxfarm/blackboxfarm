@@ -81,6 +81,14 @@ interface TokenPrice {
 
 const MEMO_MAX_CHARS = 280;
 
+// Estimate SOL needed to airdrop to N recipients.
+// Per recipient: ~0.00203928 SOL ATA rent + ~0.000005 SOL tx fee. +10% buffer.
+function estimateAirdropSol(recipientCount: number): number {
+  if (!recipientCount || recipientCount <= 0) return 0;
+  const perRecipient = 0.00203928 + 0.000005;
+  return recipientCount * perRecipient * 1.1;
+}
+
 export function AirdropManager() {
   const [wallets, setWallets] = useState<AirdropWallet[]>([]);
   const [configs, setConfigs] = useState<Record<string, AirdropConfig[]>>({});
