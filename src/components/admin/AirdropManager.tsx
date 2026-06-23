@@ -985,6 +985,7 @@ export function AirdropManager() {
                                     )}
                                   </div>
                                   <div>{config.amount_per_wallet.toLocaleString()} tokens → {config.recipients.length} recipients</div>
+                                  <div className="text-xs">Needs: <span className="font-semibold text-foreground">{(config.amount_per_wallet * config.recipients.length).toLocaleString()}</span> tokens • <span className="font-semibold text-fuchsia-400">~{estimateAirdropSol(config.recipients.length).toFixed(4)} SOL</span></div>
                                   {config.memo && <div className="italic">Memo: {config.memo}</div>}
                                   {config.last_executed_at && (
                                     <div>Last run: {format(new Date(config.last_executed_at), "MMM d, yyyy HH:mm")}</div>
