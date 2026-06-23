@@ -19,7 +19,11 @@
 import { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { broadcastToBlackBox } from "./telegram-broadcast.ts";
 
-const DRRICK_FALLBACK_CHAT_ID = 5549703183;
+// Dr_Rick DM alerts disabled per user request (2026-06-23).
+// Fallback set to 0 so the chat-ID guard below short-circuits even if the
+// system_settings row is missing. To re-enable, set system_settings.drrick_dm_chat_id
+// to a non-zero Telegram chat ID.
+const DRRICK_FALLBACK_CHAT_ID = 0;
 
 export interface MintAlertNotifyParams {
   tokenMint: string;
