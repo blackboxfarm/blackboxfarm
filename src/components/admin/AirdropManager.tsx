@@ -81,6 +81,14 @@ interface TokenPrice {
 
 const MEMO_MAX_CHARS = 280;
 
+// Estimate SOL needed to airdrop to N recipients.
+// Per recipient: ~0.00203928 SOL ATA rent + ~0.000005 SOL tx fee. +10% buffer.
+function estimateAirdropSol(recipientCount: number): number {
+  if (!recipientCount || recipientCount <= 0) return 0;
+  const perRecipient = 0.00203928 + 0.000005;
+  return recipientCount * perRecipient * 1.1;
+}
+
 export function AirdropManager() {
   const [wallets, setWallets] = useState<AirdropWallet[]>([]);
   const [configs, setConfigs] = useState<Record<string, AirdropConfig[]>>({});
@@ -977,6 +985,7 @@ export function AirdropManager() {
                                     )}
                                   </div>
                                   <div>{config.amount_per_wallet.toLocaleString()} tokens → {config.recipients.length} recipients</div>
+                                  <div className="text-xs">Needs: <span className="font-semibold text-foreground">{(config.amount_per_wallet * config.recipients.length).toLocaleString()}</span> tokens • <span className="font-semibold text-fuchsia-400">~{estimateAirdropSol(config.recipients.length).toFixed(4)} SOL</span></div>
                                   {config.memo && <div className="italic">Memo: {config.memo}</div>}
                                   {config.last_executed_at && (
                                     <div>Last run: {format(new Date(config.last_executed_at), "MMM d, yyyy HH:mm")}</div>
@@ -1145,7 +1154,7 @@ export function AirdropManager() {
             {parsedRecipientCount > 0 && configForm.amount_per_wallet && (
               <Card className="bg-muted/50">
                 <CardContent className="py-4">
-                  <div className="grid grid-cols-3 gap-4 text-center">
+                  <div className="grid grid-cols-4 gap-4 text-center">
                     <div>
                       <p className="text-2xl font-bold">{parsedRecipientCount}</p>
                       <p className="text-xs text-muted-foreground">Recipients</p>
@@ -1160,7 +1169,16 @@ export function AirdropManager() {
                       </p>
                       <p className="text-xs text-muted-foreground">Total Tokens</p>
                     </div>
+                    <div>
+                      <p className="text-2xl font-bold text-fuchsia-400">
+                        ~{estimateAirdropSol(parsedRecipientCount).toFixed(4)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">SOL Needed</p>
+                    </div>
                   </div>
+                  <p className="text-[10px] text-muted-foreground text-center mt-2">
+                    Estimate: ~0.00204 SOL ATA rent + ~0.000005 SOL tx fee per recipient (10% buffer)
+                  </p>
                 </CardContent>
               </Card>
             )}
