@@ -1,0 +1,1 @@
+INSERT INTO public.system_settings (key, value) VALUES ('drrick_dm_chat_id', '0'::jsonb) ON CONFLICT (key) DO UPDATE SET value = '0'::jsonb, updated_at = now();
