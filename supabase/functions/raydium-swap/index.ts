@@ -924,6 +924,8 @@ serve(withRunLog('raydium-swap', async (req) => {
       // Optional: specify which table the wallet is in
       walletSource,
     } = body;
+    side = _side;
+    tokenMint = _tokenMint;
 
     // Build list of RPC endpoints to try (with fallback)
     const rpcEndpoints = getRpcEndpoints();
