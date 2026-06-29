@@ -287,33 +287,95 @@ export function WalletTokenManager({
               priorityFeeMode,
             };
 
-        const { data, error } = await supabase.functions.invoke('raydium-swap', {
-          body,
-        });
+        // Dead-liquidity / no-route detector. When all aggregator routes refuse
+        // to quote (Jupiter 0x1788 / Custom:6024, "no route", "INSUFFICIENT_LIQUIDITY"),
+        // it usually means the requested size exceeds available LP depth. For
+        // non-pump tokens we can shrink the sell amount and retry — for pump-curve
+        // sellAll we have to bail because the server computes the amount itself.
+        const isDeadLiquidityError = (msg: string) => {
+          const s = String(msg || '');
+          return (
+            /0x1788/i.test(s) ||
+            /custom program error:\s*0x1788/i.test(s) ||
+            /"?custom"?\s*:\s*6024/i.test(s) ||
+            /\b6024\b/.test(s) ||
+            /no\s*route/i.test(s) ||
+            /no\s*meteora\s*routes/i.test(s) ||
+            /insufficient[_\s-]?liquidity/i.test(s) ||
+            /could not find any route/i.test(s) ||
+            /routes\s*not\s*found/i.test(s)
+          );
+        };
 
-        if (error) {
-          const ctx = (error as any)?.context;
-          const bodyText = ctx?.bodyText ?? ctx?.responseText ?? ctx?.body;
-          if (typeof bodyText === 'string' && bodyText.trim()) {
-            try {
-              const parsed = JSON.parse(bodyText);
-              throw new Error(parsed?.error || parsed?.message || bodyText);
-            } catch {
-              throw new Error(bodyText);
+        const invokeSwap = async (b: Record<string, unknown>) => {
+          const { data, error } = await supabase.functions.invoke('raydium-swap', { body: b });
+          if (error) {
+            const ctx = (error as any)?.context;
+            const bodyText = ctx?.bodyText ?? ctx?.responseText ?? ctx?.body;
+            let parsedMsg: string | null = null;
+            if (typeof bodyText === 'string' && bodyText.trim()) {
+              try {
+                const parsed = JSON.parse(bodyText);
+                parsedMsg = parsed?.error || parsed?.message || bodyText;
+              } catch {
+                parsedMsg = bodyText;
+              }
             }
+            throw new Error(parsedMsg || error.message);
           }
-          throw new Error(error.message);
-        }
+          if (data?.error) throw new Error(data.error);
+          return data;
+        };
 
-        if (data?.error) {
-          throw new Error(data.error);
+        // Attempt full size first; if dead-liquidity, halve up to 5 times.
+        // Only the explicit-amount (non-pump) path can be shrunk client-side.
+        const canShrink = !isPumpToken;
+        const maxShrinkAttempts = 5;
+        let attempt = 0;
+        let currentBody: Record<string, unknown> = { ...body };
+        const originalAmount =
+          'amount' in currentBody && typeof currentBody.amount === 'number'
+            ? (currentBody.amount as number)
+            : null;
+        let data: any = null;
+        let lastErr: Error | null = null;
+
+        // Reduce slippage by widening on each retry — thinner pools need more
+        // headroom. Start from the user's slippage, escalate up to 2000 bps (20%).
+        const baseSlippage = Number((currentBody as any).slippageBps) || slippageBps;
+
+        while (true) {
+          try {
+            data = await invokeSwap(currentBody);
+            break;
+          } catch (err) {
+            lastErr = err as Error;
+            const msg = (err as Error).message;
+            if (!canShrink || attempt >= maxShrinkAttempts || !isDeadLiquidityError(msg) || originalAmount == null) {
+              throw err;
+            }
+            attempt += 1;
+            const shrunk = Math.floor(originalAmount / Math.pow(2, attempt));
+            if (!Number.isFinite(shrunk) || shrunk <= 0) throw err;
+            const widerSlippage = Math.min(2000, Math.max(baseSlippage, baseSlippage + attempt * 250));
+            currentBody = { ...currentBody, amount: shrunk, slippageBps: widerSlippage };
+            console.warn(
+              `[WalletTokenManager] Sell route empty (${msg.slice(0, 80)}). ` +
+              `Shrinking to ${(shrunk / Math.pow(10, token.decimals)).toFixed(2)} ${token.symbol} ` +
+              `(attempt ${attempt}/${maxShrinkAttempts}, slippage ${widerSlippage}bps).`
+            );
+          }
         }
 
         const sig = data?.signature || data?.signatures?.[0] || data?.data?.signature || data?.data?.signatures?.[0];
-        
+        const wasShrunk = attempt > 0;
+        const filledPct = wasShrunk ? (100 / Math.pow(2, attempt)).toFixed(1) : '100';
+
         toast({
-          title: "Sell executed!",
-          description: sig ? `TX: ${sig.slice(0, 8)}...` : `Sold ${description}`,
+          title: wasShrunk ? `Partial sell executed (${filledPct}%)` : 'Sell executed!',
+          description: wasShrunk
+            ? `Pool depth only allowed ${filledPct}% of ${token.symbol}. ${sig ? `TX: ${sig.slice(0, 8)}…` : ''}`
+            : sig ? `TX: ${sig.slice(0, 8)}...` : `Sold ${description}`,
         });
       } else {
         // Original blackbox command approach
