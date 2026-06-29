@@ -890,6 +890,8 @@ serve(withRunLog('raydium-swap', async (req) => {
   let outputMint: string | undefined;
   let amount: number | string | undefined;
   let owner: Keypair | undefined;
+  let side: string | undefined;
+  let tokenMint: string | undefined;
 
   try {
     // Authentication via x-owner-secret header or ownerSecret body param
@@ -905,8 +907,8 @@ serve(withRunLog('raydium-swap', async (req) => {
       wrapSol = false,
       unwrapSol = false,
       // high-level params (optional)
-      side,
-      tokenMint,
+      side: _side,
+      tokenMint: _tokenMint,
       usdcAmount,
       sellAll,
       // fast mode and fee override
@@ -922,6 +924,8 @@ serve(withRunLog('raydium-swap', async (req) => {
       // Optional: specify which table the wallet is in
       walletSource,
     } = body;
+    side = _side;
+    tokenMint = _tokenMint;
 
     // Build list of RPC endpoints to try (with fallback)
     const rpcEndpoints = getRpcEndpoints();
