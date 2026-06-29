@@ -2821,6 +2821,12 @@ serve(withRunLog('raydium-swap', async (req) => {
         `pump.fun/Jupiter rejected buy after transaction build — price moved too fast or executable SOL was too small: ${errorMessage}`
       );
     }
+    // Dead-liquidity / pool-overflow signals — return as soft error so the
+    // client-side halve-and-retry loop can shrink the size and try again.
+    const deadLiqRegex = /0x1788|custom program error:\s*0x1788|\b6024\b|TickArray|Overflow|insufficient liquidity|no route|exceeds desired|slippage tolerance exceeded|Error processing Instruction/i;
+    if (deadLiqRegex.test(errorMessage)) {
+      return softError("DEAD_LIQUIDITY", `Swap reverted (pool too thin / overflow): ${errorMessage}`);
+    }
     return bad(`Unexpected error: ${errorMessage}`, 500);
   }
 }));
