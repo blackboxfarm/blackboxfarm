@@ -8,6 +8,46 @@ const corsHeaders = {
 
 const SOL_MINT = "So11111111111111111111111111111111111111112";
 const DEFAULT_SLIPPAGE_BPS = 1500;
+const DEAD_LIQ_REGEX = /0x1788|6024|TickArray|Overflow|insufficient liquidity|no route|exceeds desired|slippage tolerance exceeded|Error processing Instruction|DEAD_LIQUIDITY/i;
+
+async function rpcCall(method: string, params: unknown[]): Promise<any> {
+  const url = "https://api.mainnet-beta.solana.com";
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+  });
+  const j = await resp.json();
+  if (j.error) throw new Error(j.error.message || JSON.stringify(j.error));
+  return j.result;
+}
+
+async function getTokenBalanceRaw(owner: string, mint: string): Promise<{ raw: bigint; decimals: number }> {
+  const r = await rpcCall("getTokenAccountsByOwner", [owner, { mint }, { encoding: "jsonParsed" }]);
+  const accs = r?.value || [];
+  if (accs.length === 0) return { raw: 0n, decimals: 0 };
+  let totalRaw = 0n;
+  let decimals = 0;
+  for (const a of accs) {
+    const info = a.account.data.parsed.info;
+    const amt = info.tokenAmount;
+    decimals = amt.decimals;
+    totalRaw += BigInt(amt.amount || "0");
+  }
+  return { raw: totalRaw, decimals };
+}
+
+function looksDead(swapError: any, swapResult: any): boolean {
+  if (swapResult?.error_code === "DEAD_LIQUIDITY") return true;
+  const text = [
+    swapResult?.error,
+    swapResult?.message,
+    swapError?.message,
+    (swapError as any)?.context?.body,
+    JSON.stringify((swapError as any)?.context?.json ?? {}),
+  ].filter(Boolean).join(" ");
+  return DEAD_LIQ_REGEX.test(text);
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
