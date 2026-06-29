@@ -8,6 +8,46 @@ const corsHeaders = {
 
 const SOL_MINT = "So11111111111111111111111111111111111111112";
 const DEFAULT_SLIPPAGE_BPS = 1500;
+const DEAD_LIQ_REGEX = /0x1788|6024|TickArray|Overflow|insufficient liquidity|no route|exceeds desired|slippage tolerance exceeded|Error processing Instruction|DEAD_LIQUIDITY/i;
+
+async function rpcCall(method: string, params: unknown[]): Promise<any> {
+  const url = "https://api.mainnet-beta.solana.com";
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+  });
+  const j = await resp.json();
+  if (j.error) throw new Error(j.error.message || JSON.stringify(j.error));
+  return j.result;
+}
+
+async function getTokenBalanceRaw(owner: string, mint: string): Promise<{ raw: bigint; decimals: number }> {
+  const r = await rpcCall("getTokenAccountsByOwner", [owner, { mint }, { encoding: "jsonParsed" }]);
+  const accs = r?.value || [];
+  if (accs.length === 0) return { raw: 0n, decimals: 0 };
+  let totalRaw = 0n;
+  let decimals = 0;
+  for (const a of accs) {
+    const info = a.account.data.parsed.info;
+    const amt = info.tokenAmount;
+    decimals = amt.decimals;
+    totalRaw += BigInt(amt.amount || "0");
+  }
+  return { raw: totalRaw, decimals };
+}
+
+function looksDead(swapError: any, swapResult: any): boolean {
+  if (swapResult?.error_code === "DEAD_LIQUIDITY") return true;
+  const text = [
+    swapResult?.error,
+    swapResult?.message,
+    swapError?.message,
+    (swapError as any)?.context?.body,
+    JSON.stringify((swapError as any)?.context?.json ?? {}),
+  ].filter(Boolean).join(" ");
+  return DEAD_LIQ_REGEX.test(text);
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -72,9 +112,68 @@ serve(async (req) => {
 
     console.log(`[waterfall-swap] delegating to raydium-swap: side=${side} mint=${mint.slice(0,8)} wallet=${(w.pubkey as string).slice(0,8)} lamports=${side === "buy" ? buyLamports : "ALL"} buyPct=${side === "buy" ? (buyPct || "explicit") : "n/a"}`);
 
-    const { data: swapResult, error: swapError } = await admin.functions.invoke("raydium-swap", {
+    let { data: swapResult, error: swapError } = await admin.functions.invoke("raydium-swap", {
       body: swapBody,
     });
+
+    // Sell-side halve-retry: if dead-liq detected, fetch on-chain balance and try
+    // progressively smaller chunks (50%, 25%, 12.5%, 6.25%, 3.125%, 1.5625%)
+    // with widening slippage, until something fills or we exhaust attempts.
+    let halveAttempts = 0;
+    let halveFilledPct: number | null = null;
+    if (side === "sell" && looksDead(swapError, swapResult)) {
+      try {
+        const { raw: totalRaw, decimals } = await getTokenBalanceRaw(w.pubkey as string, mint);
+        if (totalRaw > 0n) {
+          console.log(`[waterfall-swap] dead-liq detected — entering halve-retry. balance_raw=${totalRaw} decimals=${decimals}`);
+          const slippageLadder = [1500, 1800, 2200, 2500, 3000, 3500];
+          for (let attempt = 1; attempt <= 6; attempt++) {
+            const denom = BigInt(2) ** BigInt(attempt);
+            const chunkRaw = totalRaw / denom;
+            if (chunkRaw === 0n) break;
+            const pct = 100 / Number(denom);
+            const slip = slippageLadder[attempt - 1] ?? 3500;
+            const retryBody: Record<string, unknown> = {
+              side: "sell",
+              tokenMint: mint,
+              slippageBps: slip,
+              priorityFeeMode: body.priorityFeeMode ?? "low",
+              walletId,
+              walletSource: "waterfall_wallets",
+              sellAll: false,
+              amount: chunkRaw.toString(),
+              amountRaw: chunkRaw.toString(),
+            };
+            console.log(`[waterfall-swap] halve-retry attempt ${attempt}/6: ${pct.toFixed(3)}% (raw=${chunkRaw}) slip=${slip}bps`);
+            const r = await admin.functions.invoke("raydium-swap", { body: retryBody });
+            swapResult = r.data;
+            swapError = r.error;
+            if (!swapError && !swapResult?.error && (swapResult?.signature || (Array.isArray(swapResult?.signatures) && swapResult.signatures[0]))) {
+              halveAttempts = attempt;
+              halveFilledPct = pct;
+              console.log(`[waterfall-swap] ✓ halve-retry filled at ${pct.toFixed(3)}% on attempt ${attempt}`);
+              break;
+            }
+            if (!looksDead(swapError, swapResult)) {
+              console.log(`[waterfall-swap] halve-retry attempt ${attempt} non-dead error, stopping ladder`);
+              break;
+            }
+          }
+          if (halveFilledPct === null) {
+            // Pool too thin even at smallest chunk — return clean message.
+            return new Response(JSON.stringify({
+              success: false,
+              skipReason: "dead_liquidity",
+              wallet: w.pubkey,
+              error: "pool too thin even at 1.5% — token effectively unsellable",
+              halveAttempts: 6,
+            }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+        }
+      } catch (e) {
+        console.error("[waterfall-swap] halve-retry threw:", (e as Error).message);
+      }
+    }
 
     if (swapError) {
       const details = (swapError as any)?.context?.json ?? (swapError as any)?.context?.body ?? null;
@@ -111,6 +210,9 @@ serve(async (req) => {
       buyLamports: side === "buy" ? (swapResult?.solInputLamports ?? buyLamports) : undefined,
       venue: swapResult?.venue ?? swapResult?.source ?? null,
       outAmount: swapResult?.outAmount ?? null,
+      partial: halveFilledPct !== null,
+      filledPct: halveFilledPct,
+      halveAttempts: halveAttempts || undefined,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("waterfall-swap", e);
