@@ -1630,6 +1630,53 @@ export type Database = {
         }
         Relationships: []
       }
+      assist_requests: {
+        Row: {
+          assigned_to: string | null
+          created_at: string
+          fee_cents: number
+          fee_paid_at: string | null
+          id: string
+          notes: string | null
+          project_id: string
+          request_type: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string
+          fee_cents?: number
+          fee_paid_at?: string | null
+          id?: string
+          notes?: string | null
+          project_id: string
+          request_type: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string
+          fee_cents?: number
+          fee_paid_at?: string | null
+          id?: string
+          notes?: string | null
+          project_id?: string
+          request_type?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assist_requests_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "vip_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       autopsy_backlog: {
         Row: {
           ath_at: string | null
@@ -3623,6 +3670,50 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      call_logs_elevenlabs: {
+        Row: {
+          agent_id: string | null
+          call_sid: string | null
+          cost_cents: number | null
+          created_at: string
+          duration_s: number | null
+          id: string
+          metadata: Json | null
+          project_id: string
+          transcript_url: string | null
+        }
+        Insert: {
+          agent_id?: string | null
+          call_sid?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          duration_s?: number | null
+          id?: string
+          metadata?: Json | null
+          project_id: string
+          transcript_url?: string | null
+        }
+        Update: {
+          agent_id?: string | null
+          call_sid?: string | null
+          cost_cents?: number | null
+          created_at?: string
+          duration_s?: number | null
+          id?: string
+          metadata?: Json | null
+          project_id?: string
+          transcript_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_logs_elevenlabs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "vip_projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       campaign_notifications: {
         Row: {
@@ -6355,6 +6446,53 @@ export type Database = {
         }
         Relationships: []
       }
+      elevenlabs_agents: {
+        Row: {
+          agent_id: string | null
+          created_at: string
+          id: string
+          knowledge_base_id: string | null
+          last_synced_at: string | null
+          project_id: string
+          system_prompt_hash: string | null
+          twilio_phone_id: string | null
+          updated_at: string
+          voice_id: string | null
+        }
+        Insert: {
+          agent_id?: string | null
+          created_at?: string
+          id?: string
+          knowledge_base_id?: string | null
+          last_synced_at?: string | null
+          project_id: string
+          system_prompt_hash?: string | null
+          twilio_phone_id?: string | null
+          updated_at?: string
+          voice_id?: string | null
+        }
+        Update: {
+          agent_id?: string | null
+          created_at?: string
+          id?: string
+          knowledge_base_id?: string | null
+          last_synced_at?: string | null
+          project_id?: string
+          system_prompt_hash?: string | null
+          twilio_phone_id?: string | null
+          updated_at?: string
+          voice_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "elevenlabs_agents_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "vip_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_preferences: {
         Row: {
           created_at: string
@@ -6771,6 +6909,47 @@ export type Database = {
           win_rate?: number | null
         }
         Relationships: []
+      }
+      faq_entries: {
+        Row: {
+          active: boolean
+          answer: string
+          created_at: string
+          id: string
+          project_id: string
+          question: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          answer: string
+          created_at?: string
+          id?: string
+          project_id: string
+          question: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          answer?: string
+          created_at?: string
+          id?: string
+          project_id?: string
+          question?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "faq_entries_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "vip_projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       feature_suspensions: {
         Row: {
@@ -11207,6 +11386,250 @@ export type Database = {
         }
         Relationships: []
       }
+      menu_specials: {
+        Row: {
+          active: boolean
+          created_at: string
+          description: string | null
+          discount_type: string
+          discount_value: number
+          ends_at: string | null
+          id: string
+          name: string
+          project_id: string
+          starts_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          discount_type?: string
+          discount_value?: number
+          ends_at?: string | null
+          id?: string
+          name: string
+          project_id: string
+          starts_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          discount_type?: string
+          discount_value?: number
+          ends_at?: string | null
+          id?: string
+          name?: string
+          project_id?: string
+          starts_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_specials_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "vip_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      menu_wizard_drafts: {
+        Row: {
+          approved: boolean
+          approved_at: string | null
+          created_at: string
+          id: string
+          parsed_categories: Json | null
+          parsed_items: Json | null
+          project_id: string
+          raw: Json | null
+          source_type: string
+          source_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          approved?: boolean
+          approved_at?: string | null
+          created_at?: string
+          id?: string
+          parsed_categories?: Json | null
+          parsed_items?: Json | null
+          project_id: string
+          raw?: Json | null
+          source_type: string
+          source_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          approved?: boolean
+          approved_at?: string | null
+          created_at?: string
+          id?: string
+          parsed_categories?: Json | null
+          parsed_items?: Json | null
+          project_id?: string
+          raw?: Json | null
+          source_type?: string
+          source_url?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_wizard_drafts_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "vip_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_accounts: {
+        Row: {
+          created_at: string
+          id: string
+          project_id: string
+          role: Database["public"]["Enums"]["agentic_app_role"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          project_id: string
+          role?: Database["public"]["Enums"]["agentic_app_role"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          project_id?: string
+          role?: Database["public"]["Enums"]["agentic_app_role"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_accounts_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "vip_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_invoices: {
+        Row: {
+          amount_due_cents: number
+          amount_paid_cents: number
+          created_at: string
+          currency: string
+          hosted_invoice_url: string | null
+          id: string
+          invoice_pdf: string | null
+          issued_at: string | null
+          project_id: string
+          status: string | null
+          stripe_invoice_id: string | null
+        }
+        Insert: {
+          amount_due_cents?: number
+          amount_paid_cents?: number
+          created_at?: string
+          currency?: string
+          hosted_invoice_url?: string | null
+          id?: string
+          invoice_pdf?: string | null
+          issued_at?: string | null
+          project_id: string
+          status?: string | null
+          stripe_invoice_id?: string | null
+        }
+        Update: {
+          amount_due_cents?: number
+          amount_paid_cents?: number
+          created_at?: string
+          currency?: string
+          hosted_invoice_url?: string | null
+          id?: string
+          invoice_pdf?: string | null
+          issued_at?: string | null
+          project_id?: string
+          status?: string | null
+          stripe_invoice_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_invoices_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "vip_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_subscriptions: {
+        Row: {
+          created_at: string
+          current_period_end: string | null
+          current_period_start: string | null
+          id: string
+          orders_included: number
+          orders_used_this_period: number
+          project_id: string
+          setup_fee_paid_at: string | null
+          status: string
+          stripe_customer_id: string | null
+          stripe_meter_item_id: string | null
+          stripe_subscription_id: string | null
+          tier: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          orders_included?: number
+          orders_used_this_period?: number
+          project_id: string
+          setup_fee_paid_at?: string | null
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_meter_item_id?: string | null
+          stripe_subscription_id?: string | null
+          tier?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          orders_included?: number
+          orders_used_this_period?: number
+          project_id?: string
+          setup_fee_paid_at?: string | null
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_meter_item_id?: string | null
+          stripe_subscription_id?: string | null
+          tier?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_subscriptions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "vip_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mesh_growth_daily: {
         Row: {
           coverage_pct: number | null
@@ -12498,6 +12921,44 @@ export type Database = {
         }
         Relationships: []
       }
+      onboarding_progress: {
+        Row: {
+          completed_steps: number[]
+          created_at: string
+          current_step: number
+          data: Json
+          id: string
+          project_id: string
+          updated_at: string
+        }
+        Insert: {
+          completed_steps?: number[]
+          created_at?: string
+          current_step?: number
+          data?: Json
+          id?: string
+          project_id: string
+          updated_at?: string
+        }
+        Update: {
+          completed_steps?: number[]
+          created_at?: string
+          current_step?: number
+          data?: Json
+          id?: string
+          project_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "onboarding_progress_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "vip_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       one_time_action_tokens: {
         Row: {
           action_type: string
@@ -12594,6 +13055,99 @@ export type Database = {
           processed?: boolean
           reactivation_token?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      phone_assignments: {
+        Row: {
+          assigned_at: string
+          created_at: string
+          id: string
+          inbound_route: string
+          phone_number: string
+          phone_pool_id: string
+          project_id: string
+          released_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_at?: string
+          created_at?: string
+          id?: string
+          inbound_route?: string
+          phone_number: string
+          phone_pool_id: string
+          project_id: string
+          released_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_at?: string
+          created_at?: string
+          id?: string
+          inbound_route?: string
+          phone_number?: string
+          phone_pool_id?: string
+          project_id?: string
+          released_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "phone_assignments_phone_pool_id_fkey"
+            columns: ["phone_pool_id"]
+            isOneToOne: false
+            referencedRelation: "phone_pool"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "phone_assignments_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "vip_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      phone_pool: {
+        Row: {
+          area_code: string | null
+          country: string
+          created_at: string
+          id: string
+          monthly_cost_cents: number
+          phone_number: string
+          purchased_at: string
+          released_at: string | null
+          status: string
+          twilio_sid: string | null
+          updated_at: string
+        }
+        Insert: {
+          area_code?: string | null
+          country?: string
+          created_at?: string
+          id?: string
+          monthly_cost_cents?: number
+          phone_number: string
+          purchased_at?: string
+          released_at?: string | null
+          status?: string
+          twilio_sid?: string | null
+          updated_at?: string
+        }
+        Update: {
+          area_code?: string | null
+          country?: string
+          created_at?: string
+          id?: string
+          monthly_cost_cents?: number
+          phone_number?: string
+          purchased_at?: string
+          released_at?: string | null
+          status?: string
+          twilio_sid?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -13347,6 +13901,56 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      promo_codes_vip: {
+        Row: {
+          active: boolean
+          code: string
+          created_at: string
+          discount_type: string
+          discount_value: number
+          expires_at: string | null
+          id: string
+          max_uses: number | null
+          project_id: string
+          updated_at: string
+          uses: number
+        }
+        Insert: {
+          active?: boolean
+          code: string
+          created_at?: string
+          discount_type?: string
+          discount_value?: number
+          expires_at?: string | null
+          id?: string
+          max_uses?: number | null
+          project_id: string
+          updated_at?: string
+          uses?: number
+        }
+        Update: {
+          active?: boolean
+          code?: string
+          created_at?: string
+          discount_type?: string
+          discount_value?: number
+          expires_at?: string | null
+          id?: string
+          max_uses?: number | null
+          project_id?: string
+          updated_at?: string
+          uses?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "promo_codes_vip_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "vip_projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       promo_redemptions: {
         Row: {
@@ -22792,6 +23396,64 @@ export type Database = {
         }
         Relationships: []
       }
+      upsell_rules: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          project_id: string
+          script: string
+          suggested_item_id: string | null
+          trigger_category: string | null
+          trigger_item_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          project_id: string
+          script: string
+          suggested_item_id?: string | null
+          trigger_category?: string | null
+          trigger_item_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          project_id?: string
+          script?: string
+          suggested_item_id?: string | null
+          trigger_category?: string | null
+          trigger_item_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upsell_rules_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "vip_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_rules_suggested_item_id_fkey"
+            columns: ["suggested_item_id"]
+            isOneToOne: false
+            referencedRelation: "vip_menu_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_rules_trigger_item_id_fkey"
+            columns: ["trigger_item_id"]
+            isOneToOne: false
+            referencedRelation: "vip_menu_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_2fa_secrets: {
         Row: {
           created_at: string
@@ -25998,6 +26660,10 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: undefined
       }
+      is_merchant_of: {
+        Args: { _project_id: string; _user_id: string }
+        Returns: boolean
+      }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       is_user_banned: { Args: { target_user_id: string }; Returns: boolean }
       lock_entry_mcap: {
@@ -26152,6 +26818,7 @@ export type Database = {
         | "exit"
         | "graduated"
         | "expired"
+      agentic_app_role: "admin" | "owner" | "staff"
       ai_access_level: "summary" | "analysis" | "overview" | "full" | "api"
       app_role: "super_admin" | "admin" | "moderator" | "user"
       bot_guardrail_severity: "soft" | "hard" | "critical"
@@ -26330,6 +26997,7 @@ export const Constants = {
         "graduated",
         "expired",
       ],
+      agentic_app_role: ["admin", "owner", "staff"],
       ai_access_level: ["summary", "analysis", "overview", "full", "api"],
       app_role: ["super_admin", "admin", "moderator", "user"],
       bot_guardrail_severity: ["soft", "hard", "critical"],
