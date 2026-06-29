@@ -310,16 +310,29 @@ export function WalletTokenManager({
         const invokeSwap = async (b: Record<string, unknown>) => {
           const { data, error } = await supabase.functions.invoke('raydium-swap', { body: b });
           if (error) {
-            const ctx = (error as any)?.context;
-            const bodyText = ctx?.bodyText ?? ctx?.responseText ?? ctx?.body;
             let parsedMsg: string | null = null;
-            if (typeof bodyText === 'string' && bodyText.trim()) {
-              try {
-                const parsed = JSON.parse(bodyText);
-                parsedMsg = parsed?.error || parsed?.message || bodyText;
-              } catch {
-                parsedMsg = bodyText;
+            const ctx: any = (error as any)?.context;
+            // supabase-js v2: context is the raw Response when non-2xx.
+            try {
+              let bodyText: string | undefined =
+                ctx?.bodyText ?? ctx?.responseText ?? ctx?.body;
+              if (!bodyText && ctx && typeof ctx.text === 'function') {
+                bodyText = await ctx.text();
               }
+              if (typeof bodyText === 'string' && bodyText.trim()) {
+                try {
+                  const parsed = JSON.parse(bodyText);
+                  parsedMsg =
+                    parsed?.error ||
+                    parsed?.message ||
+                    parsed?.details ||
+                    bodyText;
+                } catch {
+                  parsedMsg = bodyText;
+                }
+              }
+            } catch (readErr) {
+              console.warn('[WalletTokenManager] failed to read swap error body', readErr);
             }
             throw new Error(parsedMsg || error.message);
           }
