@@ -45,7 +45,8 @@ serve(async (req) => {
 
     const { walletId, mint, amount, destination } = await req.json();
     const numericAmount = Number(amount);
-    if (!walletId || !mint || !destination || (mint !== "SOL" && !(numericAmount > 0)) || (mint === "SOL" && !(numericAmount > 0) && numericAmount !== -1)) {
+    const isMax = numericAmount === -1;
+    if (!walletId || !mint || !destination || (!isMax && !(numericAmount > 0))) {
       throw new Error("walletId, mint, amount and destination required");
     }
     if (destination.length < 32 || destination.length > 44) throw new Error("invalid destination");
@@ -83,7 +84,14 @@ serve(async (req) => {
       if (!toAccountExists) {
         tx.add(createAssociatedTokenAccountInstruction(kp.publicKey, toAta, destPk, mintPk, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID));
       }
-      const rawAmount = BigInt(Math.floor(numericAmount * 10 ** mintInfo.decimals));
+      let rawAmount: bigint;
+      if (isMax) {
+        const fromAcc = await getAccount(connection, fromAta);
+        rawAmount = fromAcc.amount;
+        if (rawAmount === 0n) throw new Error("no token balance to withdraw");
+      } else {
+        rawAmount = BigInt(Math.floor(numericAmount * 10 ** mintInfo.decimals));
+      }
       tx.add(createTransferCheckedInstruction(fromAta, mintPk, toAta, kp.publicKey, rawAmount, mintInfo.decimals));
     }
 
