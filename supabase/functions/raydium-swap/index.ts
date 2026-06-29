@@ -2284,6 +2284,18 @@ serve(withRunLog('raydium-swap', async (req) => {
       const jupiterFailureMessage =
         jupiterFailureForFallback ?? (("txs" in j) ? "Jupiter transaction failed after retries" : j.error);
 
+      // Dead-liquidity short-circuit: if Jupiter on-chain reverted with tick-array
+      // overflow / 0x1788 / 6024, there's no point trying Meteora/Raydium fallbacks
+      // for the same dust position. Return a soft error so the client halve-retry
+      // loop shrinks the chunk and retries immediately.
+      {
+        const deadLiqRegex = /0x1788|custom program error:\s*0x1788|\b6024\b|TickArray|Overflow|insufficient liquidity|no route|exceeds desired|slippage tolerance exceeded|Error processing Instruction/i;
+        if (jupiterFailureMessage && deadLiqRegex.test(String(jupiterFailureMessage))) {
+          console.log(`Jupiter dead-liquidity detected, short-circuiting fallback chain: ${jupiterFailureMessage}`);
+          return softError("DEAD_LIQUIDITY", `Swap reverted (pool too thin / overflow): ${jupiterFailureMessage}`);
+        }
+      }
+
       if (!("txs" in j) || jupiterFailureForFallback) {
         // If this is a 6024 graduated token and Jupiter said NOT_TRADABLE, retry once after another delay
         const jupFailed = jupiterFailureForFallback ?? (j as any)?.error ?? '';
