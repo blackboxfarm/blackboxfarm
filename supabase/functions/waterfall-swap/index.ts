@@ -112,9 +112,68 @@ serve(async (req) => {
 
     console.log(`[waterfall-swap] delegating to raydium-swap: side=${side} mint=${mint.slice(0,8)} wallet=${(w.pubkey as string).slice(0,8)} lamports=${side === "buy" ? buyLamports : "ALL"} buyPct=${side === "buy" ? (buyPct || "explicit") : "n/a"}`);
 
-    const { data: swapResult, error: swapError } = await admin.functions.invoke("raydium-swap", {
+    let { data: swapResult, error: swapError } = await admin.functions.invoke("raydium-swap", {
       body: swapBody,
     });
+
+    // Sell-side halve-retry: if dead-liq detected, fetch on-chain balance and try
+    // progressively smaller chunks (50%, 25%, 12.5%, 6.25%, 3.125%, 1.5625%)
+    // with widening slippage, until something fills or we exhaust attempts.
+    let halveAttempts = 0;
+    let halveFilledPct: number | null = null;
+    if (side === "sell" && looksDead(swapError, swapResult)) {
+      try {
+        const { raw: totalRaw, decimals } = await getTokenBalanceRaw(w.pubkey as string, mint);
+        if (totalRaw > 0n) {
+          console.log(`[waterfall-swap] dead-liq detected — entering halve-retry. balance_raw=${totalRaw} decimals=${decimals}`);
+          const slippageLadder = [1500, 1800, 2200, 2500, 3000, 3500];
+          for (let attempt = 1; attempt <= 6; attempt++) {
+            const denom = BigInt(2) ** BigInt(attempt);
+            const chunkRaw = totalRaw / denom;
+            if (chunkRaw === 0n) break;
+            const pct = 100 / Number(denom);
+            const slip = slippageLadder[attempt - 1] ?? 3500;
+            const retryBody: Record<string, unknown> = {
+              side: "sell",
+              tokenMint: mint,
+              slippageBps: slip,
+              priorityFeeMode: body.priorityFeeMode ?? "low",
+              walletId,
+              walletSource: "waterfall_wallets",
+              sellAll: false,
+              amount: chunkRaw.toString(),
+              amountRaw: chunkRaw.toString(),
+            };
+            console.log(`[waterfall-swap] halve-retry attempt ${attempt}/6: ${pct.toFixed(3)}% (raw=${chunkRaw}) slip=${slip}bps`);
+            const r = await admin.functions.invoke("raydium-swap", { body: retryBody });
+            swapResult = r.data;
+            swapError = r.error;
+            if (!swapError && !swapResult?.error && (swapResult?.signature || (Array.isArray(swapResult?.signatures) && swapResult.signatures[0]))) {
+              halveAttempts = attempt;
+              halveFilledPct = pct;
+              console.log(`[waterfall-swap] ✓ halve-retry filled at ${pct.toFixed(3)}% on attempt ${attempt}`);
+              break;
+            }
+            if (!looksDead(swapError, swapResult)) {
+              console.log(`[waterfall-swap] halve-retry attempt ${attempt} non-dead error, stopping ladder`);
+              break;
+            }
+          }
+          if (halveFilledPct === null) {
+            // Pool too thin even at smallest chunk — return clean message.
+            return new Response(JSON.stringify({
+              success: false,
+              skipReason: "dead_liquidity",
+              wallet: w.pubkey,
+              error: "pool too thin even at 1.5% — token effectively unsellable",
+              halveAttempts: 6,
+            }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+        }
+      } catch (e) {
+        console.error("[waterfall-swap] halve-retry threw:", (e as Error).message);
+      }
+    }
 
     if (swapError) {
       const details = (swapError as any)?.context?.json ?? (swapError as any)?.context?.body ?? null;
@@ -151,6 +210,9 @@ serve(async (req) => {
       buyLamports: side === "buy" ? (swapResult?.solInputLamports ?? buyLamports) : undefined,
       venue: swapResult?.venue ?? swapResult?.source ?? null,
       outAmount: swapResult?.outAmount ?? null,
+      partial: halveFilledPct !== null,
+      filledPct: halveFilledPct,
+      halveAttempts: halveAttempts || undefined,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("waterfall-swap", e);
