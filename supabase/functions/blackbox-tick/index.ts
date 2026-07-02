@@ -12,6 +12,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { parseReply } from "../_shared/blackbox-parsers/index.ts";
 import { assertInsert, assertUpdate, assertUpsert } from "../_shared/db-assert.ts";
+import { VarBag, ingestReplyIntoBag, buildUnionView } from "../_shared/var-bag.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
