@@ -95,7 +95,9 @@ async function ingestMessages(
     if (!mentionsCA && !isTraderBot) continue;
     const userId: number | null = m.callerUserId || m.fromId || null;
     const display: string | null = m.callerName || m.fromName || null;
-    const { parser, fields } = parseReply(username, text);
+    const linkUrls: string[] = Array.isArray(m.linkUrls) ? m.linkUrls : [];
+    const webPreview = m.webPreview || null;
+    const { parser, fields } = parseReply(username, text, { linkUrls, webPreview });
     const row = {
       probe_run_id: probe_run_id ?? null,
       token_mint,
