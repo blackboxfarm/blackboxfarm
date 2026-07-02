@@ -138,6 +138,7 @@ const App = () => {
                       <Route path="/web3-manifesto" element={<Web3Manifesto />} />
                       <Route path="/super-admin" element={<SuperAdmin />} />
                       <Route path="/twilio-ideas" element={<TwilioIdeas />} />
+                      <Route path="/nolube" element={<SuperAdminRoute><NoLube /></SuperAdminRoute>} />
                       <Route path="/super-admin/phanes-batch" element={<SuperAdminRoute><PhanesBatch /></SuperAdminRoute>} />
                       <Route path="/developer/:walletAddress" element={<Developer />} />
                       <Route path="/demo" element={<Demo />} />
