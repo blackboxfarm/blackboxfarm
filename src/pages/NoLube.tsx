@@ -165,6 +165,29 @@ export default function NoLube() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [replies, setReplies] = useState<Reply[]>([]);
   const [loadingReplies, setLoadingReplies] = useState(false);
+  const [bag, setBag] = useState<Record<string, any> | null>(null);
+  const [bagStage, setBagStage] = useState<string | null>(null);
+  const [bagCounts, setBagCounts] = useState<Record<string, any> | null>(null);
+  const [bagSearch, setBagSearch] = useState("");
+  const [bagBlanksOnly, setBagBlanksOnly] = useState(false);
+  const [enriching, setEnriching] = useState(false);
+
+  async function reEnrich() {
+    if (!selectedRun) return;
+    setEnriching(true);
+    try {
+      const { error } = await (supabase as any).functions.invoke('enrich-token', {
+        body: { runId: selectedRun.id, tokenMint: selectedRun.token_mint },
+      });
+      if (error) throw error;
+      toast.success('Enrichment triggered');
+      setTimeout(() => void loadReplies(selectedRun.id), 4000);
+    } catch (e: any) {
+      toast.error(`Enrich failed: ${e.message}`);
+    } finally {
+      setEnriching(false);
+    }
+  }
 
   async function loadRuns() {
     setLoadingRuns(true);
@@ -220,13 +243,23 @@ export default function NoLube() {
   async function loadReplies(runId: string) {
     setLoadingReplies(true);
     try {
-      const { data, error } = await (supabase as any)
+      const [{ data, error }, runRes] = await Promise.all([
+        (supabase as any)
         .from("blackbox_bot_replies")
         .select("*")
         .eq("run_id", runId)
-        .order("received_at", { ascending: true });
+        .order("received_at", { ascending: true }),
+        (supabase as any)
+        .from("blackbox_aggregator_runs")
+        .select("var_bag_jsonb, var_bag_stage, var_bag_counts")
+        .eq("id", runId)
+        .maybeSingle(),
+      ]);
       if (error) throw error;
       setReplies((data || []) as Reply[]);
+      setBag((runRes as any)?.data?.var_bag_jsonb || null);
+      setBagStage((runRes as any)?.data?.var_bag_stage || null);
+      setBagCounts((runRes as any)?.data?.var_bag_counts || null);
     } catch (e: any) {
       toast.error(`Failed to load replies: ${e.message}`);
     } finally {
