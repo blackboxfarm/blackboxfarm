@@ -542,6 +542,11 @@ serve(async (req) => {
       });
 
       let saved = 0;
+      const bag = new VarBag();
+      bag.set('meta', 'run_id', run.id, { source: 'system', mutability: 'immutable' });
+      bag.set('meta', 'token_mint', run.token_mint, { source: 'system', mutability: 'immutable' });
+      bag.set('meta', 'ca_posted_at', run.ca_posted_at || run.posted_at, { source: 'system', mutability: 'immutable' });
+      const botKeysSeen: Set<string> = new Set();
       for (const m of repliesRaw) {
         const username = m.callerUsername || null;
         const body = m.text || m.message || m.caption || '';
@@ -564,6 +569,48 @@ serve(async (req) => {
           'blackbox_bot_replies',
         );
         saved++;
+        // Derive a compact bot key: strip _bot / trojan / bot suffixes for tidy namespace
+        const botKey = (username || parser || 'unknown').toLowerCase()
+          .replace(/^@/, '')
+          .replace(/_?bot$/, '')
+          .replace(/_?trojanbot$/, '_trojan')
+          .replace(/[^a-z0-9_]/g, '_') || 'unknown';
+        botKeysSeen.add(botKey);
+        ingestReplyIntoBag(bag, botKey, {
+          raw_text: body,
+          parsed_jsonb: fields as any,
+          link_urls: linkUrls,
+          entities_jsonb: entities as any,
+          web_preview: webPreview,
+          parser_used: parser,
+          bot_username: username,
+          message_id: Number(m.messageId || m.id || 0),
+          received_at: new Date().toISOString(),
+        });
+      }
+      // Build cross-bot union view for the core parsed fields
+      if (botKeysSeen.size) {
+        buildUnionView(bag, Array.from(botKeysSeen), [
+          'symbol','name','mint','price_usd','price_sol','market_cap_usd','fdv_usd',
+          'liquidity_usd','volume_24h_usd','volume_1h_usd',
+          'price_change_5m_pct','price_change_1h_pct','price_change_24h_pct',
+          'buy_tax_pct','sell_tax_pct','lp_locked_pct','lp_burned',
+          'mint_authority_revoked','freeze_authority_revoked',
+          'holders','top10_holders_pct','dev_holdings_pct','insiders_pct','snipers_pct','bundlers_pct',
+          'age_text','age_minutes','ath_usd','ath_drawdown_pct','ath_age_text',
+          'fresh_wallets_pct','dev_sold','twitter_url','telegram_url','website_url',
+        ]);
+      }
+      // Persist Stage 1 bag onto the run
+      try { await bag.persist(supabase, run.id, run.token_mint, 'scrape'); }
+      catch (e) { console.warn('[blackbox-tick] var bag persist failed', (e as any)?.message); }
+      // Kick off Stage 2/3/4 enrichment in background — never block harvest completion
+      try {
+        supabase.functions.invoke('enrich-token', {
+          body: { runId: run.id, tokenMint: run.token_mint },
+        }).catch((e: any) => console.warn('[blackbox-tick] enrich-token dispatch error', e?.message));
+      } catch (e: any) {
+        console.warn('[blackbox-tick] enrich-token invoke failed', e?.message);
       }
 
       // Passive parser-sample capture — dump verbatim copies of every reply
