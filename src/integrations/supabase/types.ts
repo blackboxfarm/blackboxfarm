@@ -2818,6 +2818,10 @@ export type Database = {
           status: string
           token_mint: string
           updated_at: string
+          var_bag_counts: Json | null
+          var_bag_jsonb: Json | null
+          var_bag_stage: string | null
+          var_bag_updated: string | null
         }
         Insert: {
           ca_post_message_id?: number | null
@@ -2837,6 +2841,10 @@ export type Database = {
           status?: string
           token_mint: string
           updated_at?: string
+          var_bag_counts?: Json | null
+          var_bag_jsonb?: Json | null
+          var_bag_stage?: string | null
+          var_bag_updated?: string | null
         }
         Update: {
           ca_post_message_id?: number | null
@@ -2856,6 +2864,10 @@ export type Database = {
           status?: string
           token_mint?: string
           updated_at?: string
+          var_bag_counts?: Json | null
+          var_bag_jsonb?: Json | null
+          var_bag_stage?: string | null
+          var_bag_updated?: string | null
         }
         Relationships: []
       }
@@ -22485,6 +22497,60 @@ export type Database = {
           token_mint?: string
           twitter?: string | null
           website?: string | null
+        }
+        Relationships: []
+      }
+      token_var_history: {
+        Row: {
+          captured_at: string
+          id: number
+          run_id: string | null
+          source: string | null
+          token_mint: string
+          value_jsonb: Json | null
+          var_key: string
+        }
+        Insert: {
+          captured_at?: string
+          id?: number
+          run_id?: string | null
+          source?: string | null
+          token_mint: string
+          value_jsonb?: Json | null
+          var_key: string
+        }
+        Update: {
+          captured_at?: string
+          id?: number
+          run_id?: string | null
+          source?: string | null
+          token_mint?: string
+          value_jsonb?: Json | null
+          var_key?: string
+        }
+        Relationships: []
+      }
+      token_var_immutable: {
+        Row: {
+          captured_at: string
+          source: string | null
+          token_mint: string
+          value_jsonb: Json | null
+          var_key: string
+        }
+        Insert: {
+          captured_at?: string
+          source?: string | null
+          token_mint: string
+          value_jsonb?: Json | null
+          var_key: string
+        }
+        Update: {
+          captured_at?: string
+          source?: string | null
+          token_mint?: string
+          value_jsonb?: Json | null
+          var_key?: string
         }
         Relationships: []
       }

@@ -104,6 +104,10 @@ type Run = {
   posted_at: string | null;
   status: string | null;
   replies_collected: number | null;
+  var_bag_jsonb?: Record<string, any> | null;
+  var_bag_stage?: string | null;
+  var_bag_counts?: Record<string, any> | null;
+  var_bag_updated?: string | null;
 };
 
 type Reply = {
@@ -151,6 +155,132 @@ function CoverageBar({ pct }: { pct: number }) {
 }
 
 // ---------------------------------------------------------------------------
+// Master Variable Bag — flat key/var registry, grouped by top-2 prefix.
+// Each leaf: { value, source, captured_at, mutability, ttl? }
+// ---------------------------------------------------------------------------
+type BagLeaf = { value: any; source: string; captured_at: string; mutability: 'immutable' | 'transient'; ttl?: number | null };
+
+function shortValue(v: any): string {
+  if (v === null || v === undefined) return "—";
+  if (typeof v === "boolean") return v ? "true" : "false";
+  if (typeof v === "number") return v.toLocaleString();
+  if (typeof v === "string") return v.length > 140 ? v.slice(0, 140) + "…" : v;
+  if (Array.isArray(v)) return `[${v.length}] ` + JSON.stringify(v).slice(0, 120);
+  if (typeof v === "object") return JSON.stringify(v).slice(0, 140);
+  return String(v);
+}
+
+function MasterVarBag({
+  bag, counts, stage, search, onSearch, blanksOnly, onBlanksOnly,
+}: {
+  bag: Record<string, BagLeaf>;
+  counts: Record<string, any> | null;
+  stage: string | null;
+  search: string;
+  onSearch: (s: string) => void;
+  blanksOnly: boolean;
+  onBlanksOnly: (b: boolean) => void;
+}) {
+  const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>({});
+
+  const grouped = useMemo(() => {
+    const g: Record<string, Array<{ key: string; leaf: BagLeaf }>> = {};
+    const q = search.trim().toLowerCase();
+    for (const [key, leaf] of Object.entries(bag)) {
+      if (blanksOnly) {
+        // "blank" = value is null/undefined/empty — bag skips these, so this filter shows nothing.
+        // Reinterpret: show only keys with primitive-ish "empty-looking" values.
+        const v = leaf?.value;
+        const empty = v === null || v === undefined || v === '' || v === 0 || (Array.isArray(v) && v.length === 0);
+        if (!empty) continue;
+      }
+      if (q && !key.toLowerCase().includes(q) && !JSON.stringify(leaf?.value ?? '').toLowerCase().includes(q)) continue;
+      const parts = key.split('.');
+      const groupKey = parts.slice(0, 2).join('.');
+      (g[groupKey] = g[groupKey] || []).push({ key, leaf });
+    }
+    for (const k of Object.keys(g)) g[k].sort((a, b) => a.key.localeCompare(b.key));
+    return g;
+  }, [bag, search, blanksOnly]);
+
+  const groupNames = Object.keys(grouped).sort();
+  const totalShown = groupNames.reduce((sum, g) => sum + grouped[g].length, 0);
+
+  return (
+    <div className="border-2 border-primary/40 rounded-md">
+      <div className="px-3 py-2 border-b bg-primary/5 flex items-center gap-2 flex-wrap">
+        <span className="text-sm font-semibold">Master Variable Bag</span>
+        {stage && <Badge variant="outline" className="text-[10px]">stage: {stage}</Badge>}
+        {counts && (
+          <>
+            <Badge className="text-[10px]">total {counts.total ?? Object.keys(bag).length}</Badge>
+            <Badge variant="secondary" className="text-[10px]">immut {counts.immutable ?? 0}</Badge>
+            <Badge variant="secondary" className="text-[10px]">trans {counts.transient ?? 0}</Badge>
+          </>
+        )}
+        <span className="text-[11px] text-muted-foreground">Showing {totalShown} of {Object.keys(bag).length}</span>
+        <div className="flex-1" />
+        <Input
+          placeholder="Search keys / values…"
+          value={search}
+          onChange={(e) => onSearch(e.target.value)}
+          className="h-8 w-56 text-xs"
+        />
+        <label className="text-xs flex items-center gap-1">
+          <input type="checkbox" checked={blanksOnly} onChange={(e) => onBlanksOnly(e.target.checked)} />
+          empty only
+        </label>
+      </div>
+      <div className="divide-y">
+        {groupNames.map((g) => {
+          const rows = grouped[g];
+          const open = openGroups[g] !== false; // default open
+          return (
+            <div key={g}>
+              <button
+                onClick={() => setOpenGroups((s) => ({ ...s, [g]: !open }))}
+                className="w-full flex items-center gap-2 px-3 py-1.5 bg-muted/30 hover:bg-muted/60 text-left"
+              >
+                <span className="text-xs font-mono font-semibold">{g}</span>
+                <Badge variant="outline" className="text-[10px]">{rows.length}</Badge>
+                <span className="ml-auto text-[10px] text-muted-foreground">{open ? '▾' : '▸'}</span>
+              </button>
+              {open && (
+                <ul className="divide-y">
+                  {rows.map(({ key, leaf }) => (
+                    <li key={key} className="px-3 py-1.5 text-xs flex items-start gap-2">
+                      <span className={`mt-1 h-1.5 w-1.5 rounded-full flex-shrink-0 ${leaf.mutability === 'immutable' ? 'bg-emerald-500' : 'bg-amber-400'}`}
+                            title={leaf.mutability} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <code className="bg-muted px-1 rounded text-[11px]">{key}</code>
+                          <Badge variant="outline" className="text-[9px] py-0">{leaf.source}</Badge>
+                          {leaf.mutability === 'immutable'
+                            ? <Badge className="text-[9px] py-0 bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/40">immut</Badge>
+                            : <Badge className="text-[9px] py-0 bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40">trans</Badge>}
+                          <span className="text-[10px] text-muted-foreground">
+                            {leaf.captured_at ? new Date(leaf.captured_at).toLocaleTimeString() : ''}
+                          </span>
+                          <CopyBtn text={typeof leaf.value === 'string' ? leaf.value : JSON.stringify(leaf.value)} />
+                        </div>
+                        <div className="font-mono text-[11px] break-all mt-0.5">{shortValue(leaf.value)}</div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          );
+        })}
+        {groupNames.length === 0 && (
+          <div className="px-3 py-4 text-xs text-muted-foreground">No keys match your filters.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 export default function NoLube() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [runCoverage, setRunCoverage] = useState<Record<string, number>>({});
@@ -161,13 +291,36 @@ export default function NoLube() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [replies, setReplies] = useState<Reply[]>([]);
   const [loadingReplies, setLoadingReplies] = useState(false);
+  const [bag, setBag] = useState<Record<string, any> | null>(null);
+  const [bagStage, setBagStage] = useState<string | null>(null);
+  const [bagCounts, setBagCounts] = useState<Record<string, any> | null>(null);
+  const [bagSearch, setBagSearch] = useState("");
+  const [bagBlanksOnly, setBagBlanksOnly] = useState(false);
+  const [enriching, setEnriching] = useState(false);
+
+  async function reEnrich() {
+    if (!selectedRun) return;
+    setEnriching(true);
+    try {
+      const { error } = await (supabase as any).functions.invoke('enrich-token', {
+        body: { runId: selectedRun.id, tokenMint: selectedRun.token_mint },
+      });
+      if (error) throw error;
+      toast.success('Enrichment triggered');
+      setTimeout(() => void loadReplies(selectedRun.id), 4000);
+    } catch (e: any) {
+      toast.error(`Enrich failed: ${e.message}`);
+    } finally {
+      setEnriching(false);
+    }
+  }
 
   async function loadRuns() {
     setLoadingRuns(true);
     try {
       let q = (supabase as any)
         .from("blackbox_aggregator_runs")
-        .select("id, token_mint, posted_at, status, replies_collected")
+        .select("id, token_mint, posted_at, status, replies_collected, var_bag_stage, var_bag_counts, var_bag_updated")
         .order("posted_at", { ascending: false })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
       if (status !== "all") q = q.eq("status", status);
@@ -216,13 +369,23 @@ export default function NoLube() {
   async function loadReplies(runId: string) {
     setLoadingReplies(true);
     try {
-      const { data, error } = await (supabase as any)
+      const [{ data, error }, runRes] = await Promise.all([
+        (supabase as any)
         .from("blackbox_bot_replies")
         .select("*")
         .eq("run_id", runId)
-        .order("received_at", { ascending: true });
+        .order("received_at", { ascending: true }),
+        (supabase as any)
+        .from("blackbox_aggregator_runs")
+        .select("var_bag_jsonb, var_bag_stage, var_bag_counts")
+        .eq("id", runId)
+        .maybeSingle(),
+      ]);
       if (error) throw error;
       setReplies((data || []) as Reply[]);
+      setBag((runRes as any)?.data?.var_bag_jsonb || null);
+      setBagStage((runRes as any)?.data?.var_bag_stage || null);
+      setBagCounts((runRes as any)?.data?.var_bag_counts || null);
     } catch (e: any) {
       toast.error(`Failed to load replies: ${e.message}`);
     } finally {
@@ -364,6 +527,20 @@ export default function NoLube() {
                     <Badge variant="outline">{selectedRun.status || "—"}</Badge>
                     <Badge>{selectedRun.replies_collected ?? 0} replies</Badge>
                     <Badge variant="secondary">{coveragePct}% coverage ({filledCount}/{ALL_FIELDS.length})</Badge>
+                    {bagStage && (
+                      <Badge variant={bagStage === 'complete' ? 'default' : 'outline'}>
+                        bag: {bagStage}
+                      </Badge>
+                    )}
+                    {bagCounts && typeof bagCounts.total === 'number' && (
+                      <Badge variant="secondary">
+                        {bagCounts.total} vars ({bagCounts.immutable ?? 0} immut / {bagCounts.transient ?? 0} trans)
+                      </Badge>
+                    )}
+                    <Button size="sm" variant="outline" disabled={enriching} onClick={reEnrich}>
+                      {enriching ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                      Enrich now
+                    </Button>
                   </div>
                   <div className="text-xs text-muted-foreground">
                     Posted {selectedRun.posted_at ? new Date(selectedRun.posted_at).toLocaleString() : "—"}
@@ -381,6 +558,25 @@ export default function NoLube() {
                 <p className="text-sm text-muted-foreground">Pick a run from the list.</p>
               ) : (
                 <div className="space-y-6">
+                  {/* Master Variable Bag */}
+                  {bag && Object.keys(bag).length > 0 && (
+                    <MasterVarBag
+                      bag={bag}
+                      counts={bagCounts}
+                      stage={bagStage}
+                      search={bagSearch}
+                      onSearch={setBagSearch}
+                      blanksOnly={bagBlanksOnly}
+                      onBlanksOnly={setBagBlanksOnly}
+                    />
+                  )}
+                  {(!bag || Object.keys(bag).length === 0) && (
+                    <div className="border rounded-md p-4 text-sm text-muted-foreground">
+                      Master Variable Bag is empty for this run — click <b>Enrich now</b> to build it, or wait for the
+                      next blackbox-tick harvest cycle to populate it automatically.
+                    </div>
+                  )}
+
                   {/* Variable menu */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {FIELD_MENU.map((section) => (
