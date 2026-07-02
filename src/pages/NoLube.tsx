@@ -401,6 +401,20 @@ export default function NoLube() {
                     <Badge variant="outline">{selectedRun.status || "—"}</Badge>
                     <Badge>{selectedRun.replies_collected ?? 0} replies</Badge>
                     <Badge variant="secondary">{coveragePct}% coverage ({filledCount}/{ALL_FIELDS.length})</Badge>
+                    {bagStage && (
+                      <Badge variant={bagStage === 'complete' ? 'default' : 'outline'}>
+                        bag: {bagStage}
+                      </Badge>
+                    )}
+                    {bagCounts && typeof bagCounts.total === 'number' && (
+                      <Badge variant="secondary">
+                        {bagCounts.total} vars ({bagCounts.immutable ?? 0} immut / {bagCounts.transient ?? 0} trans)
+                      </Badge>
+                    )}
+                    <Button size="sm" variant="outline" disabled={enriching} onClick={reEnrich}>
+                      {enriching ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                      Enrich now
+                    </Button>
                   </div>
                   <div className="text-xs text-muted-foreground">
                     Posted {selectedRun.posted_at ? new Date(selectedRun.posted_at).toLocaleString() : "—"}
@@ -418,6 +432,25 @@ export default function NoLube() {
                 <p className="text-sm text-muted-foreground">Pick a run from the list.</p>
               ) : (
                 <div className="space-y-6">
+                  {/* Master Variable Bag */}
+                  {bag && Object.keys(bag).length > 0 && (
+                    <MasterVarBag
+                      bag={bag}
+                      counts={bagCounts}
+                      stage={bagStage}
+                      search={bagSearch}
+                      onSearch={setBagSearch}
+                      blanksOnly={bagBlanksOnly}
+                      onBlanksOnly={setBagBlanksOnly}
+                    />
+                  )}
+                  {(!bag || Object.keys(bag).length === 0) && (
+                    <div className="border rounded-md p-4 text-sm text-muted-foreground">
+                      Master Variable Bag is empty for this run — click <b>Enrich now</b> to build it, or wait for the
+                      next blackbox-tick harvest cycle to populate it automatically.
+                    </div>
+                  )}
+
                   {/* Variable menu */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {FIELD_MENU.map((section) => (
