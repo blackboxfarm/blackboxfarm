@@ -1,4 +1,4 @@
-import { BotParser, NormalizedBotFields, parseMoney, parsePct, parseAgeMinutes } from './types.ts';
+import { BotParser, NormalizedBotFields, ParseContext, parseMoney, parsePct, parseAgeMinutes, pickTwitterUrl, pickTelegramUrl, pickWebsiteUrl } from './types.ts';
 
 // Fallback parser used for BonkBot, Photon, RickBot, Maestro, and any other
 // trader bot that shows up. They all expose roughly the same fields in
@@ -9,7 +9,7 @@ function build(displayName: string, match: (u: string) => boolean): BotParser {
   return {
     displayName,
     matches(u) { return !!u && match(u); },
-    parse(text: string): NormalizedBotFields {
+    parse(text: string, ctx?: ParseContext): NormalizedBotFields {
       const out: NormalizedBotFields = {};
       const sym = text.match(/\$([A-Z0-9]{2,15})\b/);
       if (sym) out.symbol = sym[1];
@@ -58,11 +58,11 @@ function build(displayName: string, match: (u: string) => boolean): BotParser {
       else if (/dev\s*hold(?:ing|s)?|dev\s*[:\-]?\s*hold/i.test(text)) out.dev_sold = false;
       // Socials
       const tw = text.match(/https?:\/\/(?:x\.com|twitter\.com)\/[A-Za-z0-9_\/]+/i);
-      if (tw) out.twitter_url = tw[0];
+      out.twitter_url = tw ? tw[0] : pickTwitterUrl(ctx?.linkUrls);
       const tg = text.match(/https?:\/\/t\.me\/[A-Za-z0-9_\/]+/i);
-      if (tg) out.telegram_url = tg[0];
+      out.telegram_url = tg ? tg[0] : pickTelegramUrl(ctx?.linkUrls);
       const web = text.match(/https?:\/\/(?!x\.com|twitter\.com|t\.me|pump\.fun|dexscreener|birdeye|solscan|gmgn|axiom)[A-Za-z0-9.\-]+\.[A-Za-z]{2,}(?:\/[^\s)]*)?/i);
-      if (web) out.website_url = web[0];
+      out.website_url = web ? web[0] : pickWebsiteUrl(ctx?.linkUrls);
       return out;
     },
   };
