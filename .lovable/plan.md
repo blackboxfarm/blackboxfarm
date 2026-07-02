@@ -1,25 +1,58 @@
-## Diagnosis
+# /nolube — Bot Scrape Variable Coverage Review
 
-**Insiders feed has been DEAD since 2026-06-14 09:04 UTC** (~12 days).
+## Goal
+After the two BlackBox.Farm group bots (rick, Phanes_bot, etc.) reply to a posted CA and their messages are parsed into `blackbox_bot_replies.parsed_jsonb`, give you a per-token view that shows the **full menu of variables we know how to extract** (from `NormalizedBotFields` in `supabase/functions/_shared/blackbox-parsers/types.ts`), each rendered as either **filled** (with value + which bot supplied it) or **blank** (nothing captured). Historical, browsable, per scrape run.
 
-Evidence:
-- `telegram_channel_calls WHERE channel_name='insiders'`: last row 2026-06-14, 0 rows in last 24h.
-- `insiders-lifecycle-builder-2min` (jobid 255) is active and running — but has no new input rows to chew on, so no lifecycle entries → no No Lube posts → nothing fired to your TG channels.
-- `telegram-mtproto-auth` IS polling every 5 min, but only for chat `-1003282110418` (fetches 100 msgs each run). Those messages are NOT landing as `channel_name='insiders'` rows.
-- No cron job is named anything like `telegram-monitor` / `insiders-scraper` — the writer that used to persist Insiders messages into `telegram_channel_calls` has either been removed, renamed, or is silently failing.
+## Data already in place — no schema changes
+- `blackbox_aggregator_runs` — one row per CA posted → harvest window (token_mint, posted_at, status, replies_collected, digest_jsonb).
+- `blackbox_bot_replies` — one row per bot message inside a run (`run_id`, `bot_username`, `parser_used`, `raw_text`, `parsed_jsonb`, `received_at`, `edit_count`).
+- `NormalizedBotFields` type = the canonical menu of ~35 variables (identity, market, safety/tax, distribution, age, ATH/freshness, socials, extras).
 
-So: **the No Lube pipeline (sweeper, poster, milestone) is healthy, but its source-of-truth scraper for the Insiders channel stopped writing 12 days ago.**
+Everything needed already exists. This is a read-only reporting surface.
 
-## Plan to fix
+## New route: `/nolube`
+Add page `src/pages/NoLube.tsx`, register in `src/App.tsx`. Behind existing super-admin guard (matches the rest of BlackBox admin surfaces).
 
-1. **Identify the Insiders ingest path.** Locate the edge function that previously wrote `channel_name='insiders'` rows into `telegram_channel_calls` (search `supabase/functions/` for `'insiders'` writes + check `cron.job` for any disabled/missing schedule that used to call it).
-2. **Confirm which chat_id is the current Insiders channel.** The 5-min MTProto poll is targeting `-1003282110418` — verify that's still the Insiders channel and that its messages parse into mints. If wrong chat_id, repoint it.
-3. **Check for silent write failure.** Run the ingest function manually with debug logging; look for parser rejections (`insiders_parse_failures` table) or `assertDbWrite` errors.
-4. **Re-enable / re-schedule** the Insiders scraper cron at its original cadence (likely every 1–2 min) once the writer works.
-5. **Backfill** the 12-day gap by replaying recent Insiders history via MTProto `fetch_recent_messages` (limit 200) so any still-live tokens get No Lube coverage.
-6. **Add a watchdog**: alert SMS/TG if `telegram_channel_calls WHERE channel_name='insiders'` has no rows for >30 min, so this doesn't silently rot again.
+### Layout — two panes
 
-## Answer to your question
-We **are** connected to Telegram and MTProto polling is alive, but the Insiders-channel ingest writer is broken — no Insiders rows since June 14 — so the pipeline has nothing to post.
+**Left: Runs list** (paginated, newest first)
+- Pulls `blackbox_aggregator_runs` ordered by `posted_at desc`, 50/page.
+- Row shows: ticker (from newest reply's `parsed_jsonb.symbol` or mint short), token_mint (copyable), posted_at, status, replies_collected, and a **coverage bar** = `filledFieldCount / totalFieldCount` across the union of all reply `parsed_jsonb` for that run.
+- Filters: search by mint/ticker, status (`pending|complete|timeout|error`), date range, "only runs with < N% coverage".
 
-Reply **"Plan Approved"** to proceed with the investigation + fix.
+**Right: Selected run detail**
+- Header: token_mint, ticker, posted_at, harvest window, status, list of bots that replied with `parser_used` badge + `edit_count`.
+- **Variable Menu (the core deliverable):** bulleted list of every key in `NormalizedBotFields`, grouped by section (Identity / Market / Safety & Tax / Distribution / Age / ATH & Freshness / Socials / Extras). For each variable:
+  - `{var_name}` in mono, human label beside it
+  - If any reply supplied it: green dot, value (formatted — $ / % / raw), and small chips showing which bot(s) supplied it and whether they agreed or diverged (show all distinct values if they differ).
+  - If no reply supplied it: grey dot, "— not captured".
+- **Per-bot raw view** (collapsed accordion per reply): `bot_username`, `parser_used`, `received_at`, raw message text, and the raw `parsed_jsonb` pretty-printed. Lets you eyeball what the parser missed vs. what was in the text.
+- **Extras panel:** anything landing in `parsed_jsonb.extras` (fields the parser saw but has no canonical slot for) — surfaced so you can decide whether to promote them into `NormalizedBotFields`.
+
+### Coverage math
+- `FIELD_MENU` constant in the page mirrors `NormalizedBotFields` keys (grouped, with labels + formatter hints). Single source of truth for the bullet list, coverage bar, and section headers.
+- A field counts as "filled" if **any** reply in the run has a non-null / non-empty value for it.
+
+## Data access
+Frontend-only reads via `supabase-js` against existing tables (both are super-admin-readable per current RLS on `blackbox_*`). No edge function needed; no new tables; no writes.
+
+Query pattern per selected run:
+```
+select * from blackbox_bot_replies where run_id = :id order by received_at asc
+```
+List query:
+```
+select id, token_mint, posted_at, status, replies_collected
+from blackbox_aggregator_runs
+order by posted_at desc limit 50 offset :o
+```
+
+## Files to add / touch
+- `src/pages/NoLube.tsx` — the page (list + detail, coverage calc, field menu constant).
+- `src/App.tsx` — register `/nolube` route behind `SuperAdminRoute`.
+- Optional link entry in `src/components/admin/tabs/BlackBoxTab.tsx` (small button "Open /nolube") for discoverability.
+
+## Non-goals (explicit)
+- No changes to scraping, parsing, or storage.
+- No new DB migration.
+- No editing of `NormalizedBotFields`; if variables are missing that you want to start collecting, that's a follow-up plan.
