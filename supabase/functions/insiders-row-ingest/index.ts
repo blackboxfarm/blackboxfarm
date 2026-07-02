@@ -222,6 +222,15 @@ serve(async (req) => {
     insiders_milestone: insidersMilestone,
   });
 
+  // IMMEDIATE bait post: kick blackbox-tick right now so the CA gets posted
+  // to blackbox_group without waiting for the 30s cron. Second kick ~20s later
+  // triggers the harvest pass once bot replies have arrived (HARVEST_WINDOW_SEC=15).
+  invokeFn(supabaseUrl, serviceKey, 'blackbox-tick', { trigger: 'insiders-row-ingest', mint });
+  (async () => {
+    await new Promise((r) => setTimeout(r, 20000));
+    await invokeFn(supabaseUrl, serviceKey, 'blackbox-tick', { trigger: 'insiders-row-ingest-harvest', mint });
+  })();
+
   // If dev_wallet is still in_process, fire background KYC genealogy walk
   // so the next compose (2x/3x repost) can include the missing pieces.
   if (devWalletSource === 'in_process' || !cache.kyc_root) {
