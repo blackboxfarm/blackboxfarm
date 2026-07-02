@@ -544,7 +544,10 @@ serve(async (req) => {
       for (const m of repliesRaw) {
         const username = m.callerUsername || null;
         const body = m.text || m.message || m.caption || '';
-        const { parser, fields } = parseReply(username, body);
+        const linkUrls: string[] = Array.isArray(m.linkUrls) ? m.linkUrls : [];
+        const entities = Array.isArray(m.entities) ? m.entities : null;
+        const webPreview = m.webPreview || null;
+        const { parser, fields } = parseReply(username, body, { linkUrls, webPreview });
         await assertUpsert(
           supabase.from('blackbox_bot_replies').upsert({
             run_id: run.id,
@@ -553,6 +556,9 @@ serve(async (req) => {
             raw_text: body,
             parsed_jsonb: fields,
             parser_used: parser,
+            entities_jsonb: entities,
+            link_urls: linkUrls.length ? linkUrls : null,
+            web_preview: webPreview,
           }, { onConflict: 'run_id,message_id' }),
           'blackbox_bot_replies',
         );
