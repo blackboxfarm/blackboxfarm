@@ -115,6 +115,9 @@ type Reply = {
   parsed_jsonb: Record<string, any> | null;
   received_at: string | null;
   edit_count: number | null;
+  entities_jsonb?: any[] | null;
+  link_urls?: string[] | null;
+  web_preview?: Record<string, any> | null;
 };
 
 const PAGE_SIZE = 50;
