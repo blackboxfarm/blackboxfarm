@@ -2865,39 +2865,48 @@ export type Database = {
           bot_username: string | null
           edit_count: number
           edited_at: string | null
+          entities_jsonb: Json | null
           id: string
+          link_urls: string[] | null
           message_id: number
           parsed_jsonb: Json | null
           parser_used: string | null
           raw_text: string
           received_at: string
           run_id: string
+          web_preview: Json | null
         }
         Insert: {
           bot_user_id?: number | null
           bot_username?: string | null
           edit_count?: number
           edited_at?: string | null
+          entities_jsonb?: Json | null
           id?: string
+          link_urls?: string[] | null
           message_id: number
           parsed_jsonb?: Json | null
           parser_used?: string | null
           raw_text: string
           received_at?: string
           run_id: string
+          web_preview?: Json | null
         }
         Update: {
           bot_user_id?: number | null
           bot_username?: string | null
           edit_count?: number
           edited_at?: string | null
+          entities_jsonb?: Json | null
           id?: string
+          link_urls?: string[] | null
           message_id?: number
           parsed_jsonb?: Json | null
           parser_used?: string | null
           raw_text?: string
           received_at?: string
           run_id?: string
+          web_preview?: Json | null
         }
         Relationships: [
           {
