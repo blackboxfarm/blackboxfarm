@@ -49,13 +49,57 @@ async function fetchRecentMessagesViaMTProto(opts: {
     // Fetch message history - use numeric ID for private groups, username for public
     const messages = await client.getHistory(peer, { limit });
 
+    const URL_RE = /https?:\/\/[^\s)>\]]+/gi;
+
     const mapped = messages.map((m: any) => {
       const text = m.text || '';
       const sender = m.sender;
       const callerUsername = sender?.username;
-      const callerDisplayName = sender?.displayName || sender?.firstName 
+      const callerDisplayName = sender?.displayName || sender?.firstName
         ? `${sender?.firstName || ''} ${sender?.lastName || ''}`.trim()
         : undefined;
+
+      // --- Normalize message entities (hidden hyperlinks, mentions, etc.) ---
+      // mtcute exposes each entity with a `type` string and optional fields
+      // like `url` (MessageEntityTextUrl) and `userId` (MessageEntityMentionName).
+      const rawEntities: any[] = Array.isArray(m.entities) ? m.entities : [];
+      const entities = rawEntities.map((e: any) => ({
+        type: e.type || e._ || null,
+        offset: typeof e.offset === 'number' ? e.offset : null,
+        length: typeof e.length === 'number' ? e.length : null,
+        url: e.url || null,
+        user_id: e.userId ? String(e.userId) : (e.user_id ? String(e.user_id) : null),
+        language: e.language || null,
+      }));
+
+      // --- Normalize link-preview card (DexScreener / X / etc.) ---
+      const wp = m.webPreview || m.web_preview || null;
+      const webPreview = wp ? {
+        url: wp.url || wp.displayUrl || null,
+        display_url: wp.displayUrl || wp.display_url || null,
+        site_name: wp.siteName || wp.site_name || null,
+        title: wp.title || null,
+        description: wp.description || null,
+        type: wp.type || null,
+      } : null;
+
+      // --- Flat de-duped list of every URL in the message ---
+      const urlSet = new Set<string>();
+      for (const e of entities) if (e.url) urlSet.add(e.url);
+      if (webPreview?.url) urlSet.add(webPreview.url);
+      // Plain-text URL fallback for bots that inline href instead of entity-linking
+      const textMatches = text.match(URL_RE) || [];
+      for (const u of textMatches) urlSet.add(u);
+      // Also extract URLs sitting inside entity slices (MessageEntityUrl carries
+      // no `url` field — the URL is the substring itself)
+      for (const e of entities) {
+        if (e.type && /Url$/i.test(String(e.type)) && !e.url &&
+            typeof e.offset === 'number' && typeof e.length === 'number') {
+          const slice = text.substring(e.offset, e.offset + e.length);
+          if (/^https?:\/\//i.test(slice)) urlSet.add(slice);
+        }
+      }
+      const linkUrls = Array.from(urlSet);
 
       return {
         messageId: String(m.id),
@@ -63,8 +107,11 @@ async function fetchRecentMessagesViaMTProto(opts: {
         date: m.date ? new Date(m.date * 1000).toISOString() : new Date().toISOString(),
         callerUsername,
         callerDisplayName,
+        entities,
+        webPreview,
+        linkUrls,
       };
-    }).filter((m: any) => m.text);
+    }).filter((m: any) => m.text || (m.linkUrls && m.linkUrls.length));
 
     console.log(`[telegram-mtproto-auth] Fetched ${mapped.length} messages from ${peerDisplay}`);
 

@@ -1,58 +1,78 @@
-# /nolube — Bot Scrape Variable Coverage Review
+# You're right — we're currently throwing the links away
 
-## Goal
-After the two BlackBox.Farm group bots (rick, Phanes_bot, etc.) reply to a posted CA and their messages are parsed into `blackbox_bot_replies.parsed_jsonb`, give you a per-token view that shows the **full menu of variables we know how to extract** (from `NormalizedBotFields` in `supabase/functions/_shared/blackbox-parsers/types.ts`), each rendered as either **filled** (with value + which bot supplied it) or **blank** (nothing captured). Historical, browsable, per scrape run.
+## What we're actually capturing today
 
-## Data already in place — no schema changes
-- `blackbox_aggregator_runs` — one row per CA posted → harvest window (token_mint, posted_at, status, replies_collected, digest_jsonb).
-- `blackbox_bot_replies` — one row per bot message inside a run (`run_id`, `bot_username`, `parser_used`, `raw_text`, `parsed_jsonb`, `received_at`, `edit_count`).
-- `NormalizedBotFields` type = the canonical menu of ~35 variables (identity, market, safety/tax, distribution, age, ATH/freshness, socials, extras).
+In `telegram-mtproto-auth` → `fetchRecentMessagesViaMTProto`, every message is mapped down to **just this**:
 
-Everything needed already exists. This is a read-only reporting surface.
-
-## New route: `/nolube`
-Add page `src/pages/NoLube.tsx`, register in `src/App.tsx`. Behind existing super-admin guard (matches the rest of BlackBox admin surfaces).
-
-### Layout — two panes
-
-**Left: Runs list** (paginated, newest first)
-- Pulls `blackbox_aggregator_runs` ordered by `posted_at desc`, 50/page.
-- Row shows: ticker (from newest reply's `parsed_jsonb.symbol` or mint short), token_mint (copyable), posted_at, status, replies_collected, and a **coverage bar** = `filledFieldCount / totalFieldCount` across the union of all reply `parsed_jsonb` for that run.
-- Filters: search by mint/ticker, status (`pending|complete|timeout|error`), date range, "only runs with < N% coverage".
-
-**Right: Selected run detail**
-- Header: token_mint, ticker, posted_at, harvest window, status, list of bots that replied with `parser_used` badge + `edit_count`.
-- **Variable Menu (the core deliverable):** bulleted list of every key in `NormalizedBotFields`, grouped by section (Identity / Market / Safety & Tax / Distribution / Age / ATH & Freshness / Socials / Extras). For each variable:
-  - `{var_name}` in mono, human label beside it
-  - If any reply supplied it: green dot, value (formatted — $ / % / raw), and small chips showing which bot(s) supplied it and whether they agreed or diverged (show all distinct values if they differ).
-  - If no reply supplied it: grey dot, "— not captured".
-- **Per-bot raw view** (collapsed accordion per reply): `bot_username`, `parser_used`, `received_at`, raw message text, and the raw `parsed_jsonb` pretty-printed. Lets you eyeball what the parser missed vs. what was in the text.
-- **Extras panel:** anything landing in `parsed_jsonb.extras` (fields the parser saw but has no canonical slot for) — surfaced so you can decide whether to promote them into `NormalizedBotFields`.
-
-### Coverage math
-- `FIELD_MENU` constant in the page mirrors `NormalizedBotFields` keys (grouped, with labels + formatter hints). Single source of truth for the bullet list, coverage bar, and section headers.
-- A field counts as "filled" if **any** reply in the run has a non-null / non-empty value for it.
-
-## Data access
-Frontend-only reads via `supabase-js` against existing tables (both are super-admin-readable per current RLS on `blackbox_*`). No edge function needed; no new tables; no writes.
-
-Query pattern per selected run:
-```
-select * from blackbox_bot_replies where run_id = :id order by received_at asc
-```
-List query:
-```
-select id, token_mint, posted_at, status, replies_collected
-from blackbox_aggregator_runs
-order by posted_at desc limit 50 offset :o
+```ts
+{ messageId, text: m.text, date, callerUsername, callerDisplayName }
 ```
 
-## Files to add / touch
-- `src/pages/NoLube.tsx` — the page (list + detail, coverage calc, field menu constant).
-- `src/App.tsx` — register `/nolube` route behind `SuperAdminRoute`.
-- Optional link entry in `src/components/admin/tabs/BlackBoxTab.tsx` (small button "Open /nolube") for discoverability.
+Everything else the MTProto client hands us — `m.entities` (the array with `MessageEntityTextUrl`, `MessageEntityUrl`, `MessageEntityMention`, `MessageEntityMentionName`), and `m.media` / `m.webPreview` (the DexScreener/X link-preview card) — is dropped on the floor before `blackbox-tick` ever sees it.
 
-## Non-goals (explicit)
-- No changes to scraping, parsing, or storage.
-- No new DB migration.
-- No editing of `NormalizedBotFields`; if variables are missing that you want to start collecting, that's a follow-up plan.
+So when Phanes writes **"Chart: DEX·DEF"** and hides `https://dexscreener.com/solana/<pair>` behind "DEX", we only save `"Chart: DEX·DEF"` as `raw_text`. The URL is gone. Same for the hidden X profile link behind the 🐦 icon, the "about" link, the [info]/[lens] links, etc. That's why `twitter_url`, `telegram_url`, `website_url` are stuck at *"not captured"* on `/nolube` even when the bot's message clearly contains them.
+
+**Nothing about HTML is stopping us — we just aren't asking for the entity list.**
+
+## The fix, in three layers
+
+### 1. MTProto mapper — stop dropping entities and previews
+`supabase/functions/telegram-mtproto-auth/index.ts` (the `mapped` block, lines 52–67):
+
+Add to each returned message:
+- `entities`: normalized array of `{ type, offset, length, url?, user_id?, language? }` from `m.entities`. Resolves `MessageEntityTextUrl.url` and `MessageEntityMentionName.userId` — the two that carry hidden links.
+- `webPreview`: `{ url, displayUrl, siteName, title, description }` from `m.webPreview` when present (the DexScreener/X card).
+- `linkUrls`: flat de-duped `string[]` of every URL found across entities + webPreview + a plain-text URL regex fallback. This is the field the parsers will actually read.
+
+Keep `text` unchanged so existing parsers keep working.
+
+### 2. Storage — persist the links so /nolube can show them
+Migration on `public.blackbox_bot_replies`:
+
+```sql
+ALTER TABLE public.blackbox_bot_replies
+  ADD COLUMN IF NOT EXISTS entities_jsonb jsonb,
+  ADD COLUMN IF NOT EXISTS link_urls      text[],
+  ADD COLUMN IF NOT EXISTS web_preview    jsonb;
+```
+
+No new grants/policies — table already has them.
+
+In `blackbox-tick` (around line 546), pass the new fields into the upsert alongside `raw_text` / `parsed_jsonb`. Also forward them into `blackbox-parser-probe`'s `messages` payload so the sample corpus grows with entities too.
+
+### 3. Parsers — actually use the hidden URLs
+`supabase/functions/_shared/blackbox-parsers/types.ts` — change `parse(rawText)` to `parse(rawText, ctx?: { linkUrls?: string[]; webPreview?: {...} })`. Existing parsers keep their regex-on-text path; the new ctx just fills fields the text can't:
+
+- `twitter_url` ← first `x.com|twitter.com` URL in `linkUrls`
+- `telegram_url` ← first `t.me` URL (excluding `t.me/<bot>` self-refs)
+- `website_url` ← first URL that isn't x/twitter/t.me/dexscreener/solscan/pump.fun/birdeye
+- Optional extras (nice to have, non-blocking): `chart_url` (dexscreener/dextools), `explorer_url` (solscan), `ath_source_url` etc., surfaced via `extras`.
+
+Fallback order per field: parsed-from-text → ctx URL → null.
+
+### 4. /nolube — surface what we now have
+`src/pages/NoLube.tsx` right-pane detail:
+- Under the existing "Socials / Links" group, if a field is filled from `linkUrls` vs. from body text, tag the source chip as `entity` vs `text` so you can eyeball which bot embedded the link vs printed it.
+- New collapsible block **"Raw links captured"** per reply showing `link_urls[]` and `web_preview` — this is the direct visual confirmation that we're now grabbing hyperlinks.
+- No changes to `FIELD_MENU` structure or coverage math.
+
+## What this does NOT touch
+- Command posting, MTProto auth flow, session storage, run scheduling.
+- Existing `raw_text` / `parsed_jsonb` shape — purely additive columns.
+- Parsers' text regex logic — only adds a URL-based fallback.
+
+## Technical notes
+- mtcute exposes entities as `m.entities` (array of tagged unions) and the link card as `m.webPreview` (or `m.media` when `_ === 'messageMediaWebPage'`). Both are already fetched by `getHistory` — no extra API call, no extra cost.
+- `MessageEntityTextUrl` is the important one: its `url` is the *real* href behind display text like "DEX" or "X". `MessageEntityUrl` covers auto-linked bare URLs. `MessageEntityMentionName` gives us the `user_id` behind an `@handle` mention (useful for Dr_Rick's `@JsonDevs`-style anchors).
+- Plain-text URL regex is only a safety net for bots that inline the URL rather than entity-linking it.
+
+## Files touched
+1. `supabase/functions/telegram-mtproto-auth/index.ts` — map entities + webPreview + linkUrls
+2. `supabase/migrations/<new>.sql` — 3 nullable columns on `blackbox_bot_replies`
+3. `supabase/functions/blackbox-tick/index.ts` — persist new fields, forward to probe
+4. `supabase/functions/_shared/blackbox-parsers/types.ts` + `index.ts` — parse(ctx)
+5. `supabase/functions/_shared/blackbox-parsers/{trojan,gmgn,generic}.ts` — URL fallbacks for twitter/telegram/website
+6. `src/pages/NoLube.tsx` — entity/text source chip + raw-links panel
+
+## Expected outcome after this ships
+On the next Phanes+Rick reply scrape you run, `/nolube` will show `twitter_url`, `telegram_url`, `website_url` filled (green dots) for tokens where the bots embedded those links, plus a "Raw links captured" panel listing every hidden href — proving we're now reading the whole message, entities and all, not just what your eye sees.

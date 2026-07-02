@@ -61,8 +61,52 @@ export interface BotParser {
   matches(usernameLower: string | null): boolean;
   /** Human display name for this bot. */
   displayName: string;
-  /** Parse a single raw Telegram message body. */
-  parse(rawText: string): NormalizedBotFields;
+  /** Parse a single raw Telegram message body. `ctx` carries hidden
+   *  hyperlinks + link-preview extracted from message entities. */
+  parse(rawText: string, ctx?: ParseContext): NormalizedBotFields;
+}
+
+export interface ParseContext {
+  linkUrls?: string[];
+  webPreview?: {
+    url?: string | null;
+    display_url?: string | null;
+    site_name?: string | null;
+    title?: string | null;
+    description?: string | null;
+    type?: string | null;
+  } | null;
+}
+
+/** Helpers to pick socials/links from an entity-derived URL list. */
+const NON_WEBSITE_HOSTS = /(?:^|\.)(x\.com|twitter\.com|t\.me|telegram\.me|pump\.fun|dexscreener\.com|dextools\.io|birdeye\.so|solscan\.io|gmgn\.ai|axiom\.trade|photon-sol\.tinyastro\.io|bullx\.io|jup\.ag|raydium\.io)$/i;
+
+export function pickTwitterUrl(urls: string[] | undefined): string | null {
+  if (!urls) return null;
+  for (const u of urls) if (/^https?:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//i.test(u)) return u;
+  return null;
+}
+export function pickTelegramUrl(urls: string[] | undefined): string | null {
+  if (!urls) return null;
+  for (const u of urls) {
+    if (!/^https?:\/\/(?:www\.)?(?:t\.me|telegram\.me)\//i.test(u)) continue;
+    // skip bot deep-links like t.me/HelenusTrojanBot?start=... (bots, not project TGs)
+    if (/[?&]start=/i.test(u)) continue;
+    if (/bot(?:\/|$|\?)/i.test(u)) continue;
+    return u;
+  }
+  return null;
+}
+export function pickWebsiteUrl(urls: string[] | undefined): string | null {
+  if (!urls) return null;
+  for (const u of urls) {
+    try {
+      const host = new URL(u).hostname.toLowerCase();
+      if (NON_WEBSITE_HOSTS.test(host)) continue;
+      return u;
+    } catch { /* ignore */ }
+  }
+  return null;
 }
 
 /** Helper: parse "$1.2M", "120k", "$717", etc. */

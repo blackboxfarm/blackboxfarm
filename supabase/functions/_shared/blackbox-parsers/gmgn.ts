@@ -1,4 +1,4 @@
-import { BotParser, NormalizedBotFields, parseMoney, parsePct, parseAgeMinutes } from './types.ts';
+import { BotParser, NormalizedBotFields, ParseContext, parseMoney, parsePct, parseAgeMinutes, pickTwitterUrl, pickTelegramUrl, pickWebsiteUrl } from './types.ts';
 
 // GMGN typical layout includes emoji-prefixed lines:
 //   🪙 $SYMBOL · Name
@@ -11,7 +11,7 @@ import { BotParser, NormalizedBotFields, parseMoney, parsePct, parseAgeMinutes }
 export const gmgn: BotParser = {
   displayName: 'GMGN',
   matches(u) { return !!u && /gmgn/.test(u); },
-  parse(text: string): NormalizedBotFields {
+  parse(text: string, ctx?: ParseContext): NormalizedBotFields {
     const out: NormalizedBotFields = {};
     const sym = text.match(/\$([A-Z0-9]{2,15})\b/);
     if (sym) out.symbol = sym[1];
@@ -41,6 +41,9 @@ export const gmgn: BotParser = {
     if (ins) out.insiders_pct = parsePct(ins[1]);
     const age = text.match(/(?:Age|Created)[:\s]*([\d.]+\s*[dhm](?:\s*[\d.]+\s*[dhm])*)/i);
     if (age) { out.age_text = age[1]; out.age_minutes = parseAgeMinutes(age[1]); }
+    out.twitter_url = pickTwitterUrl(ctx?.linkUrls);
+    out.telegram_url = pickTelegramUrl(ctx?.linkUrls);
+    out.website_url = pickWebsiteUrl(ctx?.linkUrls);
     return out;
   },
 };

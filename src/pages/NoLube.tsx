@@ -115,6 +115,9 @@ type Reply = {
   parsed_jsonb: Record<string, any> | null;
   received_at: string | null;
   edit_count: number | null;
+  entities_jsonb?: any[] | null;
+  link_urls?: string[] | null;
+  web_preview?: Record<string, any> | null;
 };
 
 const PAGE_SIZE = 50;
@@ -471,6 +474,39 @@ export default function NoLube() {
                             <div className="text-[10px] uppercase text-muted-foreground mb-1">parsed_jsonb</div>
                             <pre className="whitespace-pre-wrap text-xs bg-muted p-2 rounded max-h-[300px] overflow-auto">{JSON.stringify(rep.parsed_jsonb, null, 2)}</pre>
                           </div>
+                          <div className="md:col-span-2">
+                            <div className="text-[10px] uppercase text-muted-foreground mb-1">
+                              Raw links captured ({rep.link_urls?.length || 0})
+                            </div>
+                            {rep.link_urls && rep.link_urls.length ? (
+                              <ul className="text-xs bg-muted p-2 rounded space-y-1 max-h-[200px] overflow-auto">
+                                {rep.link_urls.map((u, i) => (
+                                  <li key={i} className="truncate">
+                                    <a href={u} target="_blank" rel="noreferrer"
+                                       className="text-primary hover:underline break-all">{u}</a>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-xs text-muted-foreground italic">
+                                No hyperlinks in this message (bot inlined plain text only, or entities capture not yet re-run for this reply).
+                              </p>
+                            )}
+                          </div>
+                          {rep.web_preview && (
+                            <div className="md:col-span-2">
+                              <div className="text-[10px] uppercase text-muted-foreground mb-1">web_preview (link card)</div>
+                              <pre className="whitespace-pre-wrap text-xs bg-muted p-2 rounded max-h-[160px] overflow-auto">{JSON.stringify(rep.web_preview, null, 2)}</pre>
+                            </div>
+                          )}
+                          {rep.entities_jsonb && Array.isArray(rep.entities_jsonb) && rep.entities_jsonb.length > 0 && (
+                            <div className="md:col-span-2">
+                              <div className="text-[10px] uppercase text-muted-foreground mb-1">
+                                entities_jsonb ({rep.entities_jsonb.length})
+                              </div>
+                              <pre className="whitespace-pre-wrap text-[10px] bg-muted p-2 rounded max-h-[200px] overflow-auto">{JSON.stringify(rep.entities_jsonb, null, 2)}</pre>
+                            </div>
+                          )}
                         </div>
                       </details>
                     ))}
