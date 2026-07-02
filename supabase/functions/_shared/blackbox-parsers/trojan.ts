@@ -1,4 +1,4 @@
-import { BotParser, NormalizedBotFields, parseMoney, parsePct, parseAgeMinutes } from './types.ts';
+import { BotParser, NormalizedBotFields, ParseContext, parseMoney, parsePct, parseAgeMinutes, pickTwitterUrl, pickTelegramUrl, pickWebsiteUrl } from './types.ts';
 
 // Trojan typical layout:
 //   $SYMBOL — Name
@@ -18,7 +18,7 @@ export const trojan: BotParser = {
     if (!u) return false;
     return USERNAMES.has(u) || /trojan/.test(u);
   },
-  parse(text: string): NormalizedBotFields {
+  parse(text: string, ctx?: ParseContext): NormalizedBotFields {
     const out: NormalizedBotFields = {};
     const symMatch = text.match(/\$([A-Z0-9]{2,15})\b/);
     if (symMatch) out.symbol = symMatch[1];
@@ -45,6 +45,10 @@ export const trojan: BotParser = {
     out.freeze_authority_revoked = /freeze\s*(?:revoked|renounced|disabled)/i.test(text) ? true : null;
     const age = text.match(/(?:Age|Created)[:\s]*([\d.]+\s*[dhm](?:\s*[\d.]+\s*[dhm])*)/i);
     if (age) { out.age_text = age[1]; out.age_minutes = parseAgeMinutes(age[1]); }
+    // Hidden hyperlinks (Trojan hides x/t.me/website behind glyphs)
+    out.twitter_url = pickTwitterUrl(ctx?.linkUrls);
+    out.telegram_url = pickTelegramUrl(ctx?.linkUrls);
+    out.website_url = pickWebsiteUrl(ctx?.linkUrls);
     return out;
   },
 };
