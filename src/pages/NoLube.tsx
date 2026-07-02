@@ -104,6 +104,10 @@ type Run = {
   posted_at: string | null;
   status: string | null;
   replies_collected: number | null;
+  var_bag_jsonb?: Record<string, any> | null;
+  var_bag_stage?: string | null;
+  var_bag_counts?: Record<string, any> | null;
+  var_bag_updated?: string | null;
 };
 
 type Reply = {
@@ -167,7 +171,7 @@ export default function NoLube() {
     try {
       let q = (supabase as any)
         .from("blackbox_aggregator_runs")
-        .select("id, token_mint, posted_at, status, replies_collected")
+        .select("id, token_mint, posted_at, status, replies_collected, var_bag_stage, var_bag_counts, var_bag_updated")
         .order("posted_at", { ascending: false })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
       if (status !== "all") q = q.eq("status", status);
