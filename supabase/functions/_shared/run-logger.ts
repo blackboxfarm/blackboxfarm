@@ -140,6 +140,12 @@ export function withRunLog(
   functionName: string,
   handler: (req: Request, logger?: RunLogger) => Promise<Response> | Response
 ): (req: Request) => Promise<Response> {
+  const finishRunLog = (promise: Promise<void>) => {
+    promise.catch((error) => {
+      console.warn(`[RunLogger] completion failed:`, error);
+    });
+  };
+
   return async (req: Request) => {
     // Pass through OPTIONS
     if (req.method === 'OPTIONS') {
@@ -165,14 +171,14 @@ export function withRunLog(
       const response = await handler(req, logger);
       const status = response.status;
       if (status >= 200 && status < 400) {
-        await logger.success({ httpStatus: status });
+        finishRunLog(logger.success({ httpStatus: status }));
       } else {
-        await logger.fail(`HTTP ${status}`, { httpStatus: status });
+        finishRunLog(logger.fail(`HTTP ${status}`, { httpStatus: status }));
       }
       return response;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      await logger.fail(msg);
+      finishRunLog(logger.fail(msg));
       throw error;
     }
   };
