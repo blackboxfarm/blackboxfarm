@@ -113,6 +113,7 @@ export function HoldersIntelTemplateEditor() {
   const { toast } = useToast();
   const [rows, setRows] = useState<TemplateRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [editedText, setEditedText] = useState<Record<string, string>>({});
   const [editedActive, setEditedActive] = useState<Record<string, boolean>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -122,11 +123,17 @@ export function HoldersIntelTemplateEditor() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    setLoadError(null);
+    const query = supabase
       .from("holders_intel_templates")
       .select("id, template_name, template_text, is_active, description, updated_at, last_used_at")
       .order("template_name");
+    const timeout = new Promise<{ data: null; error: { message: string } }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "Request timed out after 8s. Database may be overloaded." } }), 8000)
+    );
+    const { data, error } = (await Promise.race([query, timeout])) as any;
     if (error) {
+      setLoadError(error.message);
       toast({ title: "Failed to load templates", description: error.message, variant: "destructive" });
     } else {
       setRows((data || []) as TemplateRow[]);
@@ -188,6 +195,18 @@ export function HoldersIntelTemplateEditor() {
 
   if (loading) {
     return <div className="text-center py-8 text-muted-foreground">Loading templates…</div>;
+  }
+
+  if (loadError && rows.length === 0) {
+    return (
+      <div className="text-center py-8 space-y-3">
+        <div className="text-destructive font-medium">Couldn't load templates</div>
+        <div className="text-sm text-muted-foreground">{loadError}</div>
+        <Button size="sm" variant="outline" onClick={load}>
+          <RotateCcw className="h-3 w-3 mr-1" /> Retry
+        </Button>
+      </div>
+    );
   }
 
   // Group templates by destination.
