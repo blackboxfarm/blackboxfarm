@@ -1195,6 +1195,13 @@ serve(withRunLog('bagless-holders-report', async (req) => {
       dustPercentage: simpleTiers.dust.percentage,
       whaleCount: simpleTiers.whales.count,
       top10Pct: distributionStats?.top10Percentage ?? null,
+      whalesPct: simpleTiers.whales?.percentage ?? null,
+      whalesSupplyPct: simpleTiers.whales?.supplyPercentage ?? null,
+      seriousPct: simpleTiers.serious?.percentage ?? null,
+      retailPct: simpleTiers.retail?.percentage ?? null,
+      top10SupplyPct: distributionStats?.top10Percentage ?? null,
+      fdvUsd: inferredMarketCapUSD || null,
+      priceUsd: tokenPriceUSD || null,
       source: 'holders_query',
     });
 
