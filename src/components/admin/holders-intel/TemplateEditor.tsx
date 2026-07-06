@@ -147,9 +147,9 @@ export function HoldersIntelTemplateEditor() {
       setEditedActive(a);
     }
     setLoading(false);
-  }, [toast]);
+  }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, []);
 
   const save = async (row: TemplateRow) => {
     setSavingId(row.id);
