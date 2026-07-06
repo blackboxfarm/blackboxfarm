@@ -903,17 +903,15 @@ serve(async (req) => {
     const fmtPrice = (p: number | null) => {
       if (p == null || !isFinite(p) || p <= 0) return DASH;
       if (p >= 1) return `$${p.toFixed(4)}`;
-      if (p >= 0.001) return `$${p.toFixed(6)}`;
-      // Sub-cent prices: show with subscript zero-run notation, e.g. $0.0₅398
-      // Keeps things human-readable instead of exponent form.
+      if (p >= 0.01) return `$${p.toFixed(4)}`;
+      if (p >= 0.0001) return `$${p.toFixed(6)}`;
+      // Very small prices: plain decimals, enough digits to show 3 sig figs.
       const s = p.toFixed(20);
       const m = s.match(/^0\.(0+)(\d+)/);
       if (!m) return `$${p.toFixed(8)}`;
       const zeros = m[1].length;
       const sig = m[2].slice(0, 3);
-      const subs = ['₀','₁','₂','₃','₄','₅','₆','₇','₈','₉'];
-      const sub = String(zeros).split('').map((d) => subs[Number(d)]).join('');
-      return `$0.0${sub}${sig}`;
+      return `$0.${'0'.repeat(zeros)}${sig}`;
     };
 
     // Intel Alerts strings
