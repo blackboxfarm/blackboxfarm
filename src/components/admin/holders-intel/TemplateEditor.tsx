@@ -124,29 +124,35 @@ export function HoldersIntelTemplateEditor() {
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
-    const query = supabase
-      .from("holders_intel_templates")
-      .select("id, template_name, template_text, is_active, description, updated_at, last_used_at")
-      .order("template_name");
-    const timeout = new Promise<{ data: null; error: { message: string } }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "Request timed out after 8s. Database may be overloaded." } }), 8000)
-    );
-    const { data, error } = (await Promise.race([query, timeout])) as any;
-    if (error) {
-      setLoadError(error.message);
-      toast({ title: "Failed to load templates", description: error.message, variant: "destructive" });
-    } else {
-      setRows((data || []) as TemplateRow[]);
-      const t: Record<string, string> = {};
-      const a: Record<string, boolean> = {};
-      for (const r of data || []) {
-        t[r.id] = r.template_text;
-        a[r.id] = r.is_active;
+    try {
+      const query = supabase
+        .from("holders_intel_templates")
+        .select("id, template_name, template_text, is_active, description, updated_at, last_used_at")
+        .order("template_name");
+      const timeout = new Promise<{ data: null; error: { message: string } }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: { message: "Request timed out after 8s. Database may be overloaded." } }), 8000)
+      );
+      const { data, error } = (await Promise.race([query, timeout])) as any;
+      if (error) {
+        setLoadError(error.message);
+      } else {
+        setRows((data || []) as TemplateRow[]);
+        setEditedText((prev) => {
+          const t: Record<string, string> = { ...prev };
+          for (const r of data || []) if (t[r.id] === undefined) t[r.id] = r.template_text;
+          return t;
+        });
+        setEditedActive((prev) => {
+          const a: Record<string, boolean> = { ...prev };
+          for (const r of data || []) if (a[r.id] === undefined) a[r.id] = r.is_active;
+          return a;
+        });
       }
-      setEditedText(t);
-      setEditedActive(a);
+    } catch (e: any) {
+      setLoadError(e?.message || "Unknown error");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, []);
@@ -193,21 +199,8 @@ export function HoldersIntelTemplateEditor() {
     load();
   };
 
-  if (loading) {
-    return <div className="text-center py-8 text-muted-foreground">Loading templates…</div>;
-  }
-
-  if (loadError && rows.length === 0) {
-    return (
-      <div className="text-center py-8 space-y-3">
-        <div className="text-destructive font-medium">Couldn't load templates</div>
-        <div className="text-sm text-muted-foreground">{loadError}</div>
-        <Button size="sm" variant="outline" onClick={load}>
-          <RotateCcw className="h-3 w-3 mr-1" /> Retry
-        </Button>
-      </div>
-    );
-  }
+  // Fail-fast: never block the UI. Show sections immediately and surface
+  // load status/errors inline so the user can retry without a full-page block.
 
   // Group templates by destination.
   // Private: Snapshot (Quick Stats) + Intel Update + no_lube_private + legacy no_lube
@@ -251,6 +244,18 @@ export function HoldersIntelTemplateEditor() {
           </Button>
         </div>
       </div>
+
+      {(loading || loadError) && (
+        <div className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-xs ${loadError ? "border-destructive/40 bg-destructive/5 text-destructive" : "border-border/50 bg-muted/30 text-muted-foreground"}`}>
+          <span>
+            {loading && "Loading templates in background…"}
+            {!loading && loadError && `Couldn't load templates: ${loadError}`}
+          </span>
+          <Button size="sm" variant="outline" onClick={load} disabled={loading}>
+            <RotateCcw className="h-3 w-3 mr-1" /> Retry
+          </Button>
+        </div>
+      )}
 
       <Tabs value={groupTab} onValueChange={(v) => setGroupTab(v as any)}>
         <TabsList>
