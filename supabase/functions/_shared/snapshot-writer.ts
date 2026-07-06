@@ -17,6 +17,14 @@ export interface SnapshotInput {
   dustPercentage?: number;
   whaleCount?: number;
   top10Pct?: number | null;
+  whalesPct?: number | null;
+  whalesSupplyPct?: number | null;
+  seriousPct?: number | null;
+  retailPct?: number | null;
+  top10SupplyPct?: number | null;
+  fdvUsd?: number | null;
+  priceUsd?: number | null;
+  athMcapUsd?: number | null;
   source: string;
 }
 
@@ -55,6 +63,14 @@ export async function upsertHealthSnapshot(
         dust_percentage: input.dustPercentage || null,
         whale_count: input.whaleCount || null,
         top10_pct: input.top10Pct || null,
+        whales_pct: input.whalesPct ?? null,
+        whales_supply_pct: input.whalesSupplyPct ?? null,
+        serious_pct: input.seriousPct ?? null,
+        retail_pct: input.retailPct ?? null,
+        top10_supply_pct: input.top10SupplyPct ?? null,
+        fdv_usd: input.fdvUsd ?? null,
+        price_usd: input.priceUsd ?? null,
+        ath_mcap_usd: input.athMcapUsd ?? null,
         source: input.source,
       },
       { onConflict: 'token_mint,snapshot_hour' }
