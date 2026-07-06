@@ -904,7 +904,16 @@ serve(async (req) => {
       if (p == null || !isFinite(p) || p <= 0) return DASH;
       if (p >= 1) return `$${p.toFixed(4)}`;
       if (p >= 0.001) return `$${p.toFixed(6)}`;
-      return `$${p.toExponential(2)}`;
+      // Sub-cent prices: show with subscript zero-run notation, e.g. $0.0₅398
+      // Keeps things human-readable instead of exponent form.
+      const s = p.toFixed(20);
+      const m = s.match(/^0\.(0+)(\d+)/);
+      if (!m) return `$${p.toFixed(8)}`;
+      const zeros = m[1].length;
+      const sig = m[2].slice(0, 3);
+      const subs = ['₀','₁','₂','₃','₄','₅','₆','₇','₈','₉'];
+      const sub = String(zeros).split('').map((d) => subs[Number(d)]).join('');
+      return `$0.0${sub}${sig}`;
     };
 
     // Intel Alerts strings
