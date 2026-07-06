@@ -430,21 +430,40 @@ serve(async (req) => {
     // post isn't full of "—" when /holders has already been refreshed.
     const { data: healthRow } = await supabase
       .from('token_health_snapshots')
-      .select('dust_percentage, whale_count, total_holders, real_holders, top10_pct, health_score, health_grade, snapshot_hour')
+      .select('dust_percentage, whale_count, total_holders, real_holders, top10_pct, health_score, health_grade, snapshot_hour, whales_pct, whales_supply_pct, serious_pct, retail_pct, top10_supply_pct, fdv_usd, price_usd, ath_mcap_usd')
       .eq('token_mint', mint)
       .order('snapshot_hour', { ascending: false })
       .limit(1)
       .maybeSingle();
     if (healthRow) sources.health = 'token_health_snapshots';
 
-    // Pull the 4-bucket Wallet Distribution from bagless-holders-report (same
-    // source the /quick TG reply uses). Skipped on snapshot kind since snapshot
-    // is supposed to fire fast with zero enrichment cost.
+    // ATH from pumpfun_watchlist (fed by bagless-holders-report hydrate block)
+    const { data: wlRow } = await supabase
+      .from('pumpfun_watchlist')
+      .select('ath_market_cap_usd')
+      .eq('token_mint', mint)
+      .maybeSingle();
+    const athMcapUsd = (healthRow as any)?.ath_mcap_usd ?? wlRow?.ath_market_cap_usd ?? null;
+
+    // Pull the 4-bucket Wallet Distribution. HoldersIntel bot's Quick Stats
+    // reply is built by calling bagless-holders-report seconds before this
+    // function runs, and now persists all four tier percentages onto
+    // token_health_snapshots. So we only re-invoke bagless when the snapshot
+    // row is missing the tier columns — otherwise reuse the scrape.
     let simpleTiers: any = null;
     let baglessData: any = null;
     let earlyWarnings: any[] = [];
     let devRep: any = null;
-    if (kind === 'big_picture') {
+    const snapshotHasTiers =
+      healthRow &&
+      (healthRow as any).whales_pct != null &&
+      (healthRow as any).serious_pct != null &&
+      (healthRow as any).retail_pct != null &&
+      (healthRow as any).dust_percentage != null;
+    if (snapshotHasTiers) {
+      sources.distribution = 'token_health_snapshots';
+    }
+    if (!snapshotHasTiers) {
       try {
         const baglessResp = await fetch(
           `${Deno.env.get('SUPABASE_URL')}/functions/v1/bagless-holders-report`,
@@ -465,8 +484,11 @@ serve(async (req) => {
       } catch (e) {
         console.error('[no-lube-compose] bagless-holders-report fetch failed', e);
       }
+    }
 
-      // Intel Alerts — same source the bot's Quick Stats uses
+    // Intel Alerts — same source the bot's Quick Stats uses. Always fetch
+    // regardless of kind so snapshot posts also render the alert lines.
+    {
       try {
         const { data: warnings } = await supabase
           .from('token_early_warnings')
