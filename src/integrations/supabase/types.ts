@@ -21391,55 +21391,79 @@ export type Database = {
       }
       token_health_snapshots: {
         Row: {
+          ath_mcap_usd: number | null
           created_at: string | null
           dust_percentage: number | null
+          fdv_usd: number | null
           health_grade: string | null
           health_score: number | null
           id: string
+          price_usd: number | null
           real_holders: number | null
+          retail_pct: number | null
           risk_emoji: string | null
           risk_label: string | null
           risk_signal: string | null
+          serious_pct: number | null
           snapshot_hour: string
           source: string | null
           token_mint: string
           top10_pct: number | null
+          top10_supply_pct: number | null
           total_holders: number | null
           whale_count: number | null
+          whales_pct: number | null
+          whales_supply_pct: number | null
         }
         Insert: {
+          ath_mcap_usd?: number | null
           created_at?: string | null
           dust_percentage?: number | null
+          fdv_usd?: number | null
           health_grade?: string | null
           health_score?: number | null
           id?: string
+          price_usd?: number | null
           real_holders?: number | null
+          retail_pct?: number | null
           risk_emoji?: string | null
           risk_label?: string | null
           risk_signal?: string | null
+          serious_pct?: number | null
           snapshot_hour: string
           source?: string | null
           token_mint: string
           top10_pct?: number | null
+          top10_supply_pct?: number | null
           total_holders?: number | null
           whale_count?: number | null
+          whales_pct?: number | null
+          whales_supply_pct?: number | null
         }
         Update: {
+          ath_mcap_usd?: number | null
           created_at?: string | null
           dust_percentage?: number | null
+          fdv_usd?: number | null
           health_grade?: string | null
           health_score?: number | null
           id?: string
+          price_usd?: number | null
           real_holders?: number | null
+          retail_pct?: number | null
           risk_emoji?: string | null
           risk_label?: string | null
           risk_signal?: string | null
+          serious_pct?: number | null
           snapshot_hour?: string
           source?: string | null
           token_mint?: string
           top10_pct?: number | null
+          top10_supply_pct?: number | null
           total_holders?: number | null
           whale_count?: number | null
+          whales_pct?: number | null
+          whales_supply_pct?: number | null
         }
         Relationships: []
       }

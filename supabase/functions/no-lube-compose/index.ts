@@ -430,21 +430,40 @@ serve(async (req) => {
     // post isn't full of "—" when /holders has already been refreshed.
     const { data: healthRow } = await supabase
       .from('token_health_snapshots')
-      .select('dust_percentage, whale_count, total_holders, real_holders, top10_pct, health_score, health_grade, snapshot_hour')
+      .select('dust_percentage, whale_count, total_holders, real_holders, top10_pct, health_score, health_grade, snapshot_hour, whales_pct, whales_supply_pct, serious_pct, retail_pct, top10_supply_pct, fdv_usd, price_usd, ath_mcap_usd')
       .eq('token_mint', mint)
       .order('snapshot_hour', { ascending: false })
       .limit(1)
       .maybeSingle();
     if (healthRow) sources.health = 'token_health_snapshots';
 
-    // Pull the 4-bucket Wallet Distribution from bagless-holders-report (same
-    // source the /quick TG reply uses). Skipped on snapshot kind since snapshot
-    // is supposed to fire fast with zero enrichment cost.
+    // ATH from pumpfun_watchlist (fed by bagless-holders-report hydrate block)
+    const { data: wlRow } = await supabase
+      .from('pumpfun_watchlist')
+      .select('ath_market_cap_usd')
+      .eq('token_mint', mint)
+      .maybeSingle();
+    const athMcapUsd = (healthRow as any)?.ath_mcap_usd ?? wlRow?.ath_market_cap_usd ?? null;
+
+    // Pull the 4-bucket Wallet Distribution. HoldersIntel bot's Quick Stats
+    // reply is built by calling bagless-holders-report seconds before this
+    // function runs, and now persists all four tier percentages onto
+    // token_health_snapshots. So we only re-invoke bagless when the snapshot
+    // row is missing the tier columns — otherwise reuse the scrape.
     let simpleTiers: any = null;
     let baglessData: any = null;
     let earlyWarnings: any[] = [];
     let devRep: any = null;
-    if (kind === 'big_picture') {
+    const snapshotHasTiers =
+      healthRow &&
+      (healthRow as any).whales_pct != null &&
+      (healthRow as any).serious_pct != null &&
+      (healthRow as any).retail_pct != null &&
+      (healthRow as any).dust_percentage != null;
+    if (snapshotHasTiers) {
+      sources.distribution = 'token_health_snapshots';
+    }
+    if (!snapshotHasTiers) {
       try {
         const baglessResp = await fetch(
           `${Deno.env.get('SUPABASE_URL')}/functions/v1/bagless-holders-report`,
@@ -465,8 +484,11 @@ serve(async (req) => {
       } catch (e) {
         console.error('[no-lube-compose] bagless-holders-report fetch failed', e);
       }
+    }
 
-      // Intel Alerts — same source the bot's Quick Stats uses
+    // Intel Alerts — same source the bot's Quick Stats uses. Always fetch
+    // regardless of kind so snapshot posts also render the alert lines.
+    {
       try {
         const { data: warnings } = await supabase
           .from('token_early_warnings')
@@ -843,9 +865,47 @@ serve(async (req) => {
     const bagTop10 = baglessData?.distributionStats?.top10Percentage ?? null;
     const bagHealthScore = baglessData?.healthScore?.score ?? baglessData?.stabilityScore ?? null;
     const bagHealthGrade = baglessData?.healthScore?.grade ?? null;
-    const dustPctVal = simpleTiers?.dust?.percentage ?? null;
-    const whalesPctVal = simpleTiers?.whales?.percentage ?? null;
+    // Prefer persisted snapshot tiers (same numbers HoldersIntel Quick Stats
+    // just rendered) and fall back to bagless response when snapshot is missing.
+    const hrWhales = (healthRow as any)?.whales_pct;
+    const hrSerious = (healthRow as any)?.serious_pct;
+    const hrRetail = (healthRow as any)?.retail_pct;
+    const hrDust = healthRow?.dust_percentage;
+    const whalesPctResolved = hrWhales ?? simpleTiers?.whales?.percentage ?? null;
+    const seriousPctResolved = hrSerious ?? simpleTiers?.serious?.percentage ?? null;
+    const retailPctResolved = hrRetail ?? simpleTiers?.retail?.percentage ?? null;
+    const dustPctResolved = hrDust ?? simpleTiers?.dust?.percentage ?? null;
+    const dustPctVal = dustPctResolved;
+    const whalesPctVal = whalesPctResolved;
     const whalesCount = simpleTiers?.whales?.count ?? null;
+    const dexFdv = (dex as any)?.fdv ?? null;
+    const dexPriceUsd = (dex as any)?.priceUsd != null ? Number((dex as any).priceUsd) : null;
+    const fdvResolved = (healthRow as any)?.fdv_usd ?? dexFdv ?? mcUsd ?? null;
+    const priceResolved = (healthRow as any)?.price_usd ?? dexPriceUsd ?? null;
+    // Structure classifier — top-heavy vs balanced vs dust-heavy
+    let structureLabel: string = DASH;
+    const whalesSupply = (healthRow as any)?.whales_supply_pct ?? simpleTiers?.whales?.supplyPercentage ?? null;
+    if (whalesSupply != null && dustPctResolved != null) {
+      if (whalesSupply >= 40) structureLabel = 'Top-heavy';
+      else if (dustPctResolved >= 55) structureLabel = 'Dust-heavy';
+      else if (whalesSupply >= 20) structureLabel = 'Concentrated';
+      else structureLabel = 'Balanced';
+    }
+    // Activity classifier — volume / mcap ratio
+    let activityLabel: string = DASH;
+    if (typeof vol24 === 'number' && typeof mcUsd === 'number' && mcUsd > 0) {
+      const r = vol24 / mcUsd;
+      if (r >= 0.5) activityLabel = 'Hot';
+      else if (r >= 0.1) activityLabel = 'Warm';
+      else if (r > 0) activityLabel = 'Cold';
+      else activityLabel = 'Dead';
+    }
+    const fmtPrice = (p: number | null) => {
+      if (p == null || !isFinite(p) || p <= 0) return DASH;
+      if (p >= 1) return `$${p.toFixed(4)}`;
+      if (p >= 0.001) return `$${p.toFixed(6)}`;
+      return `$${p.toExponential(2)}`;
+    };
 
     // Intel Alerts strings
     const fmtAlert = (w: any) => {
@@ -890,9 +950,9 @@ serve(async (req) => {
       top10: top10Pct != null
         ? `${top10Pct.toFixed(1)}%`
         : (bagTop10 != null ? `${Number(bagTop10).toFixed(1)}%` : DASH),
-      freshWallets: healthRow?.dust_percentage != null
-        ? `${Number(healthRow.dust_percentage).toFixed(1)}% dust`
-        : (dustPctVal != null ? `${Math.round(dustPctVal)}% dust` : DASH),
+      freshWallets: dustPctResolved != null
+        ? `${Number(dustPctResolved).toFixed(1)}% dust`
+        : DASH,
       walletSpread: healthRow?.real_holders != null && healthRow?.total_holders != null
         ? `${healthRow.real_holders}/${healthRow.total_holders} real`
         : (bagRealHolders != null && bagTotalHolders != null
@@ -903,21 +963,21 @@ serve(async (req) => {
         : (whalesCount != null
             ? `${whalesCount} whales${whalesPctVal != null ? ` (${Math.round(whalesPctVal)}%)` : ''}`
             : DASH),
-      // ── Wallet Distribution buckets (from bagless-holders-report.simpleTiers) ──
-      whalesPct: simpleTiers?.whales?.percentage != null ? `${Math.round(simpleTiers.whales.percentage)}%` : DASH,
-      seriousPct: simpleTiers?.serious?.percentage != null ? `${Math.round(simpleTiers.serious.percentage)}%` : DASH,
-      retailPct: simpleTiers?.retail?.percentage != null ? `${Math.round(simpleTiers.retail.percentage)}%` : DASH,
-      dustPct: simpleTiers?.dust?.percentage != null ? `${Math.round(simpleTiers.dust.percentage)}%` : DASH,
-      whalesBar: simpleTiers?.whales?.percentage != null ? fmtBondingBar(simpleTiers.whales.percentage) : '░░░░░░░░░░',
-      seriousBar: simpleTiers?.serious?.percentage != null ? fmtBondingBar(simpleTiers.serious.percentage) : '░░░░░░░░░░',
-      retailBar: simpleTiers?.retail?.percentage != null ? fmtBondingBar(simpleTiers.retail.percentage) : '░░░░░░░░░░',
-      dustBar: simpleTiers?.dust?.percentage != null ? fmtBondingBar(simpleTiers.dust.percentage) : '░░░░░░░░░░',
-      walletDistBlock: simpleTiers
+      // ── Wallet Distribution buckets (persisted snapshot first, bagless fallback) ──
+      whalesPct: whalesPctResolved != null ? `${Math.round(whalesPctResolved)}%` : DASH,
+      seriousPct: seriousPctResolved != null ? `${Math.round(seriousPctResolved)}%` : DASH,
+      retailPct: retailPctResolved != null ? `${Math.round(retailPctResolved)}%` : DASH,
+      dustPct: dustPctResolved != null ? `${Math.round(dustPctResolved)}%` : DASH,
+      whalesBar: whalesPctResolved != null ? fmtBondingBar(whalesPctResolved) : '░░░░░░░░░░',
+      seriousBar: seriousPctResolved != null ? fmtBondingBar(seriousPctResolved) : '░░░░░░░░░░',
+      retailBar: retailPctResolved != null ? fmtBondingBar(retailPctResolved) : '░░░░░░░░░░',
+      dustBar: dustPctResolved != null ? fmtBondingBar(dustPctResolved) : '░░░░░░░░░░',
+      walletDistBlock: (whalesPctResolved != null || seriousPctResolved != null || retailPctResolved != null || dustPctResolved != null)
         ? [
-            `\`Whales  ${fmtBondingBar(simpleTiers.whales?.percentage ?? 0)} ${Math.round(simpleTiers.whales?.percentage ?? 0)}%\`  >$1K`,
-            `\`Serious ${fmtBondingBar(simpleTiers.serious?.percentage ?? 0)} ${Math.round(simpleTiers.serious?.percentage ?? 0)}%\`  $200-$1K`,
-            `\`Retail  ${fmtBondingBar(simpleTiers.retail?.percentage ?? 0)} ${Math.round(simpleTiers.retail?.percentage ?? 0)}%\`  $1-$199`,
-            `\`Dust    ${fmtBondingBar(simpleTiers.dust?.percentage ?? 0)} ${Math.round(simpleTiers.dust?.percentage ?? 0)}%\`  <$1`,
+            `\`Whales  ${fmtBondingBar(whalesPctResolved ?? 0)} ${Math.round(whalesPctResolved ?? 0)}%\`  >$1K`,
+            `\`Serious ${fmtBondingBar(seriousPctResolved ?? 0)} ${Math.round(seriousPctResolved ?? 0)}%\`  $200-$1K`,
+            `\`Retail  ${fmtBondingBar(retailPctResolved ?? 0)} ${Math.round(retailPctResolved ?? 0)}%\`  $1-$199`,
+            `\`Dust    ${fmtBondingBar(dustPctResolved ?? 0)} ${Math.round(dustPctResolved ?? 0)}%\`  <$1`,
           ].join('\n')
         : DASH,
       realHolders: healthRow?.real_holders != null
@@ -926,6 +986,15 @@ serve(async (req) => {
       totalHolders: healthRow?.total_holders != null
         ? String(healthRow.total_holders)
         : (bagTotalHolders != null ? String(bagTotalHolders) : DASH),
+      // Alias so templates using {holders} also resolve
+      holders: healthRow?.total_holders != null
+        ? String(healthRow.total_holders)
+        : (bagTotalHolders != null ? String(bagTotalHolders) : DASH),
+      fdv: fdvResolved != null ? fmtMoney(fdvResolved) : DASH,
+      price: fmtPrice(priceResolved),
+      ath: athMcapUsd != null ? fmtMoney(athMcapUsd) : DASH,
+      structure: structureLabel,
+      activity: activityLabel,
       healthScore: healthRow?.health_score != null
         ? String(healthRow.health_score)
         : (bagHealthScore != null ? String(bagHealthScore) : DASH),
