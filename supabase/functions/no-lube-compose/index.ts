@@ -981,10 +981,10 @@ serve(async (req) => {
       dustBar: dustPctResolved != null ? fmtBondingBar(dustPctResolved) : '░░░░░░░░░░',
       walletDistBlock: (whalesPctResolved != null || seriousPctResolved != null || retailPctResolved != null || dustPctResolved != null)
         ? [
-            `\`Whales  ${fmtBondingBar(whalesPctResolved ?? 0)} ${Math.round(whalesPctResolved ?? 0)}%\`  >$1K`,
-            `\`Serious ${fmtBondingBar(seriousPctResolved ?? 0)} ${Math.round(seriousPctResolved ?? 0)}%\`  $200-$1K`,
-            `\`Retail  ${fmtBondingBar(retailPctResolved ?? 0)} ${Math.round(retailPctResolved ?? 0)}%\`  $1-$199`,
-            `\`Dust    ${fmtBondingBar(dustPctResolved ?? 0)} ${Math.round(dustPctResolved ?? 0)}%\`  <$1`,
+            `🐋 \`Whales  ${fmtBondingBar(whalesPctResolved ?? 0)} ${Math.round(whalesPctResolved ?? 0)}%\`  >$1K`,
+            `💼 \`Serious ${fmtBondingBar(seriousPctResolved ?? 0)} ${Math.round(seriousPctResolved ?? 0)}%\`  $200-$1K`,
+            `🛒 \`Retail  ${fmtBondingBar(retailPctResolved ?? 0)} ${Math.round(retailPctResolved ?? 0)}%\`  $1-$199`,
+            `🧹 \`Dust    ${fmtBondingBar(dustPctResolved ?? 0)} ${Math.round(dustPctResolved ?? 0)}%\`  <$1`,
           ].join('\n')
         : DASH,
       realHolders: healthRow?.real_holders != null
