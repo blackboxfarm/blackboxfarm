@@ -120,6 +120,7 @@ type CascadeRun = {
 
 export default function WaterfallGrid() {
   const [wallets, setWallets] = useState<WaterfallWallet[]>([]);
+  const { user, loading: authLoading } = useAuth();
   const [balances, setBalances] = useState<Record<string, { sol: number; tokens: TokenHolding[] }>>({});
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
