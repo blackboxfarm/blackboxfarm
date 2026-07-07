@@ -2,6 +2,38 @@ import { useLauncherMintEvents } from "@/hooks/useLauncherProfiles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+
+type TickerInfo = { symbol?: string; name?: string };
+
+function useDexTickers(mints: string[]) {
+  const key = [...new Set(mints)].sort().join(",");
+  return useQuery({
+    queryKey: ["dex-tickers", key],
+    enabled: mints.length > 0,
+    staleTime: 60_000,
+    queryFn: async (): Promise<Record<string, TickerInfo>> => {
+      const addrs = [...new Set(mints)];
+      const chunks: string[][] = [];
+      for (let i = 0; i < addrs.length; i += 30) chunks.push(addrs.slice(i, i + 30));
+      const out: Record<string, TickerInfo> = {};
+      await Promise.all(
+        chunks.map(async (chunk) => {
+          try {
+            const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(",")}`);
+            if (!res.ok) return;
+            const json = await res.json();
+            for (const p of json?.pairs || []) {
+              const addr = p?.baseToken?.address;
+              if (addr && !out[addr]) out[addr] = { symbol: p.baseToken.symbol, name: p.baseToken.name };
+            }
+          } catch {}
+        }),
+      );
+      return out;
+    },
+  });
+}
 
 function statusVariant(s: string): "default" | "secondary" | "destructive" | "outline" {
   if (s === "sold") return "default";
@@ -12,6 +44,8 @@ function statusVariant(s: string): "default" | "secondary" | "destructive" | "ou
 
 export function LauncherMintTimeline({ profileId }: { profileId: string }) {
   const { data: events, isLoading } = useLauncherMintEvents(profileId);
+  const mints = (events || []).map((e) => e.mint_address);
+  const { data: tickers } = useDexTickers(mints);
 
   return (
     <Card>
@@ -23,7 +57,7 @@ export function LauncherMintTimeline({ profileId }: { profileId: string }) {
               <thead className="sticky top-0 bg-muted/50">
                 <tr className="text-left">
                   <th className="p-2">Detected</th>
-                  <th className="p-2">Mint</th>
+                  <th className="p-2">Ticker / Mint</th>
                   <th className="p-2">Dev buy</th>
                   <th className="p-2">Status</th>
                   <th className="p-2">Entry mcap</th>
@@ -42,6 +76,11 @@ export function LauncherMintTimeline({ profileId }: { profileId: string }) {
                     </td>
                     <td className="p-2 font-mono">
                       <div className="flex items-center gap-2">
+                        {tickers?.[e.mint_address]?.symbol ? (
+                          <span className="font-sans font-semibold text-foreground" title={tickers[e.mint_address].name || ""}>
+                            ${tickers[e.mint_address].symbol}
+                          </span>
+                        ) : null}
                         <a
                           href={`https://pump.fun/coin/${e.mint_address}`}
                           target="_blank"
