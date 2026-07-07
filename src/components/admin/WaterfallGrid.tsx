@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useSolPrice } from "@/hooks/useSolPrice";
 import { Button } from "@/components/ui/button";
@@ -120,6 +121,7 @@ type CascadeRun = {
 
 export default function WaterfallGrid() {
   const [wallets, setWallets] = useState<WaterfallWallet[]>([]);
+  const { user, loading: authLoading } = useAuth();
   const [balances, setBalances] = useState<Record<string, { sol: number; tokens: TokenHolding[] }>>({});
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -1240,7 +1242,10 @@ export default function WaterfallGrid() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { loadWallets(); }, [loadWallets]);
+  useEffect(() => {
+    if (authLoading) return;
+    loadWallets();
+  }, [loadWallets, authLoading, user?.id]);
 
   // Load any currently-running cascades + subscribe to updates
   useEffect(() => {
