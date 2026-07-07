@@ -41,9 +41,36 @@ export function LauncherMintTimeline({ profileId }: { profileId: string }) {
                       <div className="text-xs text-muted-foreground">{new Date(e.detected_at).toLocaleTimeString()}</div>
                     </td>
                     <td className="p-2 font-mono">
-                      <a href={`/?token=${e.mint_address}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:underline">
-                        {e.mint_address.slice(0, 6)}…{e.mint_address.slice(-4)} <ExternalLink className="h-3 w-3" />
-                      </a>
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={`https://pump.fun/coin/${e.mint_address}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 hover:underline"
+                          title="Open on Pump.fun"
+                        >
+                          {e.mint_address.slice(0, 6)}…{e.mint_address.slice(-4)}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                        <a
+                          href={`https://dexscreener.com/solana/${e.mint_address}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] text-muted-foreground hover:text-foreground hover:underline"
+                          title="Open on DexScreener"
+                        >
+                          DEX
+                        </a>
+                        <a
+                          href={`/?token=${e.mint_address}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] text-muted-foreground hover:text-foreground hover:underline"
+                          title="Open in HoldersIntel"
+                        >
+                          HI
+                        </a>
+                      </div>
                     </td>
                     <td className="p-2">{e.dev_initial_buy_sol?.toFixed(3) ?? "—"}</td>
                     <td className="p-2"><Badge variant={statusVariant(e.status)}>{e.status}</Badge>{e.skip_reason && <div className="text-[10px] text-muted-foreground">{e.skip_reason}</div>}</td>
