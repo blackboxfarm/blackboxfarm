@@ -1242,7 +1242,10 @@ export default function WaterfallGrid() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { loadWallets(); }, [loadWallets]);
+  useEffect(() => {
+    if (authLoading) return;
+    loadWallets();
+  }, [loadWallets, authLoading, user?.id]);
 
   // Load any currently-running cascades + subscribe to updates
   useEffect(() => {
