@@ -1469,9 +1469,14 @@ export function FlipItDashboard() {
     try {
       console.log('[FlipIt] loadWallets called, isPreviewAdmin:', isPreviewAdmin, 'isAuthenticated:', isAuthenticated);
       
-      // Get session for auth header
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData.session?.access_token;
+      // Get session for auth header (guard against navigator lock AbortError)
+      let accessToken: string | undefined;
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        accessToken = sessionData.session?.access_token;
+      } catch (sessErr: any) {
+        console.warn('[FlipIt] getSession aborted, continuing without token:', sessErr?.message);
+      }
       
       // Try direct DB query first if we have an authenticated session (RLS will work)
       if (accessToken) {
