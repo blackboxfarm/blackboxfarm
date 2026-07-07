@@ -36,7 +36,10 @@ export function LauncherMintTimeline({ profileId }: { profileId: string }) {
               <tbody>
                 {(events || []).map((e) => (
                   <tr key={e.id} className="border-t border-border/40 hover:bg-muted/30">
-                    <td className="p-2 whitespace-nowrap">{new Date(e.detected_at).toLocaleTimeString()}</td>
+                    <td className="p-2 whitespace-nowrap leading-tight">
+                      <div>{new Date(e.detected_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</div>
+                      <div className="text-xs text-muted-foreground">{new Date(e.detected_at).toLocaleTimeString()}</div>
+                    </td>
                     <td className="p-2 font-mono">
                       <a href={`/?token=${e.mint_address}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:underline">
                         {e.mint_address.slice(0, 6)}…{e.mint_address.slice(-4)} <ExternalLink className="h-3 w-3" />
