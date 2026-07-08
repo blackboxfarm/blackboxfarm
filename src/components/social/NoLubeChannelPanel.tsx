@@ -207,7 +207,7 @@ export function NoLubeChannelPanel({
       const isOneShotPrivate = kind === 'snapshot' || kind === 'intel_update';
       const pushChannel = isOneShotPrivate ? 'private' : kind;
       const { data, error } = await supabase.functions.invoke('no-lube-push', {
-        body: { text: composedText, log_id: logId, channel: pushChannel },
+        body: { text: composedText, log_id: logId, channel: pushChannel, override: true },
       });
       if (error) throw error;
       if (!data?.ok) throw new Error(data?.error?.description || data?.error || 'push failed');
