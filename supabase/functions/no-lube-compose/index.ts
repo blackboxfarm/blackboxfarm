@@ -663,6 +663,9 @@ serve(async (req) => {
     // lives on the pump.fun frontend API. Fetch it as a last resort so the
     // mint_pfp circle on the compose card never renders blank.
     let pumpImage: string | null = null;
+    let pumpWebsite: string | null = null;
+    let pumpTwitter: string | null = null;
+    let pumpTelegram: string | null = null;
     try {
       const pfRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
         headers: { Accept: 'application/json' },
@@ -672,6 +675,9 @@ serve(async (req) => {
         if (pfJson?.image_uri && typeof pfJson.image_uri === 'string') {
           pumpImage = pfJson.image_uri;
         }
+        if (typeof pfJson?.website === 'string' && pfJson.website) pumpWebsite = pfJson.website;
+        if (typeof pfJson?.twitter === 'string' && pfJson.twitter) pumpTwitter = pfJson.twitter;
+        if (typeof pfJson?.telegram === 'string' && pfJson.telegram) pumpTelegram = pfJson.telegram;
       }
     } catch (e) {
       console.warn('[no-lube-compose] pump.fun image fallback failed', (e as Error).message);
@@ -1143,6 +1149,20 @@ serve(async (req) => {
       twitterUrl: dex?.info?.socials?.find((s: any) => s.type === 'twitter')?.url || DASH,
       telegramUrl: dex?.info?.socials?.find((s: any) => s.type === 'telegram')?.url || DASH,
       websiteUrl: dex?.info?.websites?.[0]?.url || DASH,
+      mintsocials: (() => {
+        // DEX socials take precedence; fall back to pump.fun mint metadata.
+        const dexWww = dex?.info?.websites?.[0]?.url as string | undefined;
+        const dexX = dex?.info?.socials?.find((s: any) => s.type === 'twitter')?.url as string | undefined;
+        const dexTg = dex?.info?.socials?.find((s: any) => s.type === 'telegram')?.url as string | undefined;
+        const www = dexWww || pumpWebsite || '';
+        const x = dexX || pumpTwitter || '';
+        const tg = dexTg || pumpTelegram || '';
+        const parts: string[] = [];
+        if (www) parts.push(`WWW: ${www}`);
+        if (x) parts.push(`X: ${x}`);
+        if (tg) parts.push(`TG: ${tg}`);
+        return parts.length ? parts.join(' · ') : DASH;
+      })(),
       multiplier: multiplierLabel,
       multiplierLine,
       token_image_url: tokenImageUrl || DASH,
