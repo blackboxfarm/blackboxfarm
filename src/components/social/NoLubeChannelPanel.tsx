@@ -187,13 +187,12 @@ export function NoLubeChannelPanel({
       if (error) throw error;
       if (!data?.ok) throw new Error(data?.error || 'compose failed');
       setComposedText(data.text);
-      setEligible(!!data.post_eligible);
+      // Eligibility guard removed — always allow push. Verdict kept as advisory badge only.
+      setEligible(true);
       setVerdictClass(data.verdict_class || null);
       setBlockReason(data.block_reason || null);
       setLogId(data.log_id || null);
-      data.post_eligible
-        ? toast.success('Composed — review and Push when ready')
-        : toast.warning(`Blocked: ${data.block_reason || data.verdict_class}`);
+      toast.success('Composed — review and Push when ready');
     } catch (e: any) {
       toast.error(e.message || 'Failed to compose');
     } finally {
@@ -208,7 +207,7 @@ export function NoLubeChannelPanel({
       const isOneShotPrivate = kind === 'snapshot' || kind === 'intel_update';
       const pushChannel = isOneShotPrivate ? 'private' : kind;
       const { data, error } = await supabase.functions.invoke('no-lube-push', {
-        body: { text: composedText, log_id: logId, channel: pushChannel },
+        body: { text: composedText, log_id: logId, channel: pushChannel, override: true },
       });
       if (error) throw error;
       if (!data?.ok) throw new Error(data?.error?.description || data?.error || 'push failed');
@@ -485,14 +484,12 @@ export function NoLubeChannelPanel({
               <Button
                 className="w-full bg-pink-600 hover:bg-pink-700"
                 onClick={handlePush}
-                disabled={isPushing || !eligible}
-                title={!eligible ? (blockReason || 'Blocked') : 'Push'}
+                disabled={isPushing}
+                title="Push"
               >
                 {isPushing
                   ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Pushing…</>
-                  : !eligible
-                    ? <>⛔ Blocked — {blockReason}</>
-                    : <><Send className="h-4 w-4 mr-1" />Push to {
+                  : <><Send className="h-4 w-4 mr-1" />Push to {
                         kind === 'default' ? 'No Lube'
                         : kind === 'public' ? (postKind === 'snapshot' ? 'Private (snapshot)' : 'Public')
                         : kind === 'snapshot' ? 'Private (snapshot)'
@@ -500,34 +497,6 @@ export function NoLubeChannelPanel({
                         : (postKind === 'snapshot' ? 'Private (snapshot)' : 'Private')
                       }</>}
               </Button>
-              {!eligible && (
-                <Button
-                  variant="outline"
-                  className="w-full border-orange-500 text-orange-400 hover:bg-orange-500/10"
-                  disabled={isPushing}
-                  title="Bypass eligibility guard — admin test only"
-                  onClick={async () => {
-                    if (!composedText) return;
-                    setIsPushing(true);
-                    try {
-                      const isOneShotPrivate = kind === 'snapshot' || kind === 'intel_update';
-                      const pushChannel = isOneShotPrivate ? 'private' : kind;
-                      const { data, error } = await supabase.functions.invoke('no-lube-push', {
-                        body: { text: composedText, log_id: logId, channel: pushChannel, override: true },
-                      });
-                      if (error) throw error;
-                      if (!data?.ok) throw new Error(data?.error?.description || data?.error || 'push failed');
-                      toast.success(`Force-posted (msg ${data.message_id})`);
-                    } catch (e: any) {
-                      toast.error(typeof e.message === 'string' ? e.message : 'Failed to force-push');
-                    } finally {
-                      setIsPushing(false);
-                    }
-                  }}
-                >
-                  ⚠️ Force push anyway (test)
-                </Button>
-              )}
             </>
           )}
         </CardContent>
