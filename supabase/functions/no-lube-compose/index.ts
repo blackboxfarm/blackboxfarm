@@ -844,8 +844,86 @@ serve(async (req) => {
     const risk = classifyRisk(liq, ageMin);
     const verdict = classifyVerdict(momentum, risk);
 
+    // ── Phanes/DrRick/GMGN/Trojan safety block ────────────────────────────
+    // The blackbox aggregator parses every bot reply and unions the results
+    // into blackbox_aggregator_runs.var_bag_jsonb. We fetch the newest run
+    // for this mint and read the union view (`bb.union.parsed.*`). Fields we
+    // pull: mint_authority_revoked, freeze_authority_revoked, lp_burned,
+    // buy_tax_pct, sell_tax_pct, dev_holdings_pct, dev_sold.
+    // On-chain token_metadata.mint_authority / freeze_authority is used as a
+    // chain-side fallback for the two revoke flags (null authority = revoked).
+    let aggBag: any = null;
+    let tokenMeta: any = null;
+    try {
+      const [aggRes, metaRes] = await Promise.all([
+        supabase
+          .from('blackbox_aggregator_runs')
+          .select('var_bag_jsonb, updated_at')
+          .eq('token_mint', mint)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from('token_metadata')
+          .select('mint_authority, freeze_authority')
+          .eq('mint_address', mint)
+          .maybeSingle(),
+      ]);
+      aggBag = aggRes?.data?.var_bag_jsonb ?? null;
+      tokenMeta = metaRes?.data ?? null;
+    } catch (e) {
+      console.warn('[no-lube-compose] aggregator/meta lookup failed', (e as Error).message);
+    }
+    const bagParsed: Record<string, any> = (aggBag?.['bb.union.parsed'] as any) || {};
+    const bagVal = (k: string): any => {
+      const v = bagParsed[k];
+      if (v == null) return null;
+      // var_bag entries can be either scalars or { value, ... } shape
+      if (typeof v === 'object' && 'value' in v) return v.value;
+      return v;
+    };
+    const parsedMintRev = bagVal('mint_authority_revoked');
+    const parsedFreezeRev = bagVal('freeze_authority_revoked');
+    const parsedLpBurned = bagVal('lp_burned');
+    const parsedBuyTax = bagVal('buy_tax_pct');
+    const parsedSellTax = bagVal('sell_tax_pct');
+    const parsedDevHold = bagVal('dev_holdings_pct');
+    const parsedDevSold = bagVal('dev_sold');
+
+    // Chain-side fallback: authority = null means revoked.
+    const chainMintRev = tokenMeta
+      ? (tokenMeta.mint_authority == null ? true : false)
+      : null;
+    const chainFreezeRev = tokenMeta
+      ? (tokenMeta.freeze_authority == null ? true : false)
+      : null;
+
+    const resolvedMintRev = typeof parsedMintRev === 'boolean' ? parsedMintRev : chainMintRev;
+    const resolvedFreezeRev = typeof parsedFreezeRev === 'boolean' ? parsedFreezeRev : chainFreezeRev;
+    const resolvedLpBurned = typeof parsedLpBurned === 'boolean' ? parsedLpBurned : null;
+    const resolvedDevSold = typeof parsedDevSold === 'boolean' ? parsedDevSold : null;
+
+    const boolBadge = (v: boolean | null): string => v == null ? DASH : (v ? '✅' : '❌');
+    const yesNo = (v: boolean | null): string => v == null ? DASH : (v ? 'Yes' : 'No');
+    const numPct = (v: any): string => {
+      const n = typeof v === 'number' ? v : (typeof v === 'string' ? parseFloat(v) : NaN);
+      if (!isFinite(n)) return DASH;
+      return `${n.toFixed(n < 1 && n > 0 ? 2 : 1)}%`;
+    };
+
+    // ATH drawdown %: uses same athMcapUsd + current mcUsd already resolved.
+    const athDrawdownStr = (() => {
+      if (athMcapUsd == null || !isFinite(athMcapUsd) || athMcapUsd <= 0) return DASH;
+      if (mcUsd == null || !isFinite(mcUsd)) return DASH;
+      const dd = ((mcUsd - athMcapUsd) / athMcapUsd) * 100;
+      if (!isFinite(dd)) return DASH;
+      if (dd >= 0) return '0%';
+      return `${dd.toFixed(1)}%`;
+    })();
+
     // Postability classifier (gates the Push button)
-    const devSold = false; // signal not wired yet; keep neutral
+    // Feed the resolved dev_sold flag from bot replies (falls back to false when unknown).
+    const devSold = resolvedDevSold === true;
     const { verdict_class, block_reason } = classifyPostability({
       ageMin, mcUsd, vol24, liq, ch24, ch5m, top10Pct, devSold,
     });
@@ -997,9 +1075,22 @@ serve(async (req) => {
       holders: healthRow?.total_holders != null
         ? String(healthRow.total_holders)
         : (bagTotalHolders != null ? String(bagTotalHolders) : DASH),
+      // Alias so templates using {totalWallets} also resolve
+      totalWallets: healthRow?.total_holders != null
+        ? String(healthRow.total_holders)
+        : (bagTotalHolders != null ? String(bagTotalHolders) : DASH),
       fdv: fdvResolved != null ? fmtMoney(fdvResolved) : DASH,
       price: fmtPrice(priceResolved),
       ath: athMcapUsd != null ? fmtMoney(athMcapUsd) : DASH,
+      athDrawdown: athDrawdownStr,
+      // Security block (Phanes / Dr Rick / GMGN / Trojan + on-chain fallback)
+      mintRevoked: boolBadge(resolvedMintRev),
+      freezeRevoked: boolBadge(resolvedFreezeRev),
+      lpBurned: boolBadge(resolvedLpBurned),
+      buyTax: numPct(parsedBuyTax),
+      sellTax: numPct(parsedSellTax),
+      devHoldings: numPct(parsedDevHold),
+      devSold: yesNo(resolvedDevSold),
       structure: structureLabel,
       activity: activityLabel,
       healthScore: healthRow?.health_score != null
