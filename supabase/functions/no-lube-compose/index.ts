@@ -874,13 +874,29 @@ serve(async (req) => {
     } catch (e) {
       console.warn('[no-lube-compose] aggregator/meta lookup failed', (e as Error).message);
     }
-    const bagParsed: Record<string, any> = (aggBag?.['bb.union.parsed'] as any) || {};
-    const bagVal = (k: string): any => {
-      const v = bagParsed[k];
+    // var_bag_jsonb uses FLAT dotted keys at the top level, e.g.
+    //   { "bb.union.parsed.dev_sold": { value: true, source, ... }, ... }
+    // Each entry is either a scalar or a { value, ... } wrapper.
+    const bag: Record<string, any> = (aggBag && typeof aggBag === 'object') ? aggBag : {};
+    const unwrap = (v: any): any => {
       if (v == null) return null;
-      // var_bag entries can be either scalars or { value, ... } shape
       if (typeof v === 'object' && 'value' in v) return v.value;
       return v;
+    };
+    // Prefer union view; fall back to any bot-specific parsed value (phanes → rick → gmgn → trojan).
+    const bagVal = (field: string): any => {
+      const candidates = [
+        `bb.union.parsed.${field}`,
+        `bb.phanes.parsed.${field}`,
+        `bb.rick.parsed.${field}`,
+        `bb.gmgn.parsed.${field}`,
+        `bb.trojan.parsed.${field}`,
+      ];
+      for (const k of candidates) {
+        const v = unwrap(bag[k]);
+        if (v != null) return v;
+      }
+      return null;
     };
     const parsedMintRev = bagVal('mint_authority_revoked');
     const parsedFreezeRev = bagVal('freeze_authority_revoked');
