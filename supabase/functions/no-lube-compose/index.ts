@@ -1149,6 +1149,20 @@ serve(async (req) => {
       twitterUrl: dex?.info?.socials?.find((s: any) => s.type === 'twitter')?.url || DASH,
       telegramUrl: dex?.info?.socials?.find((s: any) => s.type === 'telegram')?.url || DASH,
       websiteUrl: dex?.info?.websites?.[0]?.url || DASH,
+      mintsocials: (() => {
+        // DEX socials take precedence; fall back to pump.fun mint metadata.
+        const dexWww = dex?.info?.websites?.[0]?.url as string | undefined;
+        const dexX = dex?.info?.socials?.find((s: any) => s.type === 'twitter')?.url as string | undefined;
+        const dexTg = dex?.info?.socials?.find((s: any) => s.type === 'telegram')?.url as string | undefined;
+        const www = dexWww || pumpWebsite || '';
+        const x = dexX || pumpTwitter || '';
+        const tg = dexTg || pumpTelegram || '';
+        const parts: string[] = [];
+        if (www) parts.push(`WWW: ${www}`);
+        if (x) parts.push(`X: ${x}`);
+        if (tg) parts.push(`TG: ${tg}`);
+        return parts.length ? parts.join(' · ') : DASH;
+      })(),
       multiplier: multiplierLabel,
       multiplierLine,
       token_image_url: tokenImageUrl || DASH,
