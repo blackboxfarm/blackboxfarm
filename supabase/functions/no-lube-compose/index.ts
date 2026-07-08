@@ -1075,9 +1075,22 @@ serve(async (req) => {
       holders: healthRow?.total_holders != null
         ? String(healthRow.total_holders)
         : (bagTotalHolders != null ? String(bagTotalHolders) : DASH),
+      // Alias so templates using {totalWallets} also resolve
+      totalWallets: healthRow?.total_holders != null
+        ? String(healthRow.total_holders)
+        : (bagTotalHolders != null ? String(bagTotalHolders) : DASH),
       fdv: fdvResolved != null ? fmtMoney(fdvResolved) : DASH,
       price: fmtPrice(priceResolved),
       ath: athMcapUsd != null ? fmtMoney(athMcapUsd) : DASH,
+      athDrawdown: athDrawdownStr,
+      // Security block (Phanes / Dr Rick / GMGN / Trojan + on-chain fallback)
+      mintRevoked: boolBadge(resolvedMintRev),
+      freezeRevoked: boolBadge(resolvedFreezeRev),
+      lpBurned: boolBadge(resolvedLpBurned),
+      buyTax: numPct(parsedBuyTax),
+      sellTax: numPct(parsedSellTax),
+      devHoldings: numPct(parsedDevHold),
+      devSold: yesNo(resolvedDevSold),
       structure: structureLabel,
       activity: activityLabel,
       healthScore: healthRow?.health_score != null
