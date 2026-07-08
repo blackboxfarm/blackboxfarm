@@ -187,13 +187,12 @@ export function NoLubeChannelPanel({
       if (error) throw error;
       if (!data?.ok) throw new Error(data?.error || 'compose failed');
       setComposedText(data.text);
-      setEligible(!!data.post_eligible);
+      // Eligibility guard removed — always allow push. Verdict kept as advisory badge only.
+      setEligible(true);
       setVerdictClass(data.verdict_class || null);
       setBlockReason(data.block_reason || null);
       setLogId(data.log_id || null);
-      data.post_eligible
-        ? toast.success('Composed — review and Push when ready')
-        : toast.warning(`Blocked: ${data.block_reason || data.verdict_class}`);
+      toast.success('Composed — review and Push when ready');
     } catch (e: any) {
       toast.error(e.message || 'Failed to compose');
     } finally {
