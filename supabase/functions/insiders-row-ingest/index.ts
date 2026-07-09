@@ -225,6 +225,29 @@ serve(async (req) => {
   // IMMEDIATE bait post: kick blackbox-tick right now so the CA gets posted
   // to blackbox_group without waiting for the 30s cron. Second kick ~20s later
   // triggers the harvest pass once bot replies have arrived (HARVEST_WINDOW_SEC=15).
+  // External Helix webhook: notify wise-wave-trader of the new insiders CA
+  // BEFORE we post to the blackbox channel. Fire-and-forget; must not block.
+  (async () => {
+    const secret = Deno.env.get('INSIDERS_WEBHOOK_SECRET');
+    if (!secret) {
+      console.warn('[insiders-row-ingest] INSIDERS_WEBHOOK_SECRET not set — skipping Helix webhook');
+      return;
+    }
+    try {
+      const res = await fetch('https://wise-wave-trader.lovable.app/api/public/hooks/insiders-token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-insiders-secret': secret,
+        },
+        body: JSON.stringify({ mint, caller: 'insiders', id: messageId }),
+      });
+      console.log(`[insiders-row-ingest] Helix webhook → ${res.status}`);
+    } catch (e) {
+      console.warn('[insiders-row-ingest] Helix webhook failed:', (e as Error).message);
+    }
+  })();
+
   invokeFn(supabaseUrl, serviceKey, 'blackbox-tick', { trigger: 'insiders-row-ingest', mint });
   (async () => {
     await new Promise((r) => setTimeout(r, 20000));
