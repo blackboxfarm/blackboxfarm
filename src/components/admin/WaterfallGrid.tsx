@@ -13,7 +13,7 @@ const LAMPORTS_PER_SOL = 1_000_000_000;
 const FEE_BUFFER_LAMPORTS = 10_000;
 const BUY_SELL_FEE_RESERVE_SOL = 0.012;
 const MIN_BUY_LAMPORTS = 500_000;
-const MAX_BUY_SIZE_PCT = 90;
+const MAX_BUY_SIZE_PCT = 95;
 const SIM_STORAGE_KEY = "waterfall_sim_mode";
 const PERSIST_KEY = "waterfall-grid:v1";
 
