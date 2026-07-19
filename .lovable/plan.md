@@ -1,54 +1,33 @@
 ## Goal
-A new page at `/insiders-recaps` that shows every unique token that appeared in an Insiders "PREMIUM INSIDERS DAILY / WEEKLY / MONTHLY RECAP" pinned post over the last 60 days, with the token name, full CA, and its best (highest) X-gain across the window.
+Add a third tab **"KYC Groupings"** to `/insiders-recaps` — same shape as Dev Groupings, but keyed by the KYC root wallet (the exchange/CEX or terminus wallet the dev's funding chain traces back to). Applied across all resolved tokens (~312).
 
-## Data source
-`telegram_channel_calls` already stores every message from the Insiders channel, including recap posts. Confirmed formats present in the DB:
+## Data sources (already in DB, no new tables)
+For each dev wallet already resolved on the page, look up:
+1. `developer_profiles` → `kyc_root_wallet`, `kyc_root_label`, `kyc_source_type`, `kyc_trail_status` (keyed by `master_wallet_address`)
+2. Fallback: `dev_wallet_reputation` → `trail_end_kyc_root`, `trail_end_reason` (keyed by `wallet_address`)
+3. Label enrichment: `known_cex_wallets` → `cex_name`, `cex_label`, `entity_type` for any KYC root not already labeled
 
-- Daily: `🗓 <Month D>` + `📌 PREMIUM INSIDERS DAILY RECAP` (Top 10)
-- Weekly: `🗓 <D1> - <D2>` + `🤫 PREMIUM INSIDERS WEEKLY RECAP` (Top 10)
-- Monthly: `🗓 <Month 1>` + `💃 PREMIUM INSIDERS MONTHLY RECAP` (Top 10)
+No Helius / on-chain tracing is triggered from this tab — it only surfaces KYC that's already been resolved by the existing genealogy pipeline. Devs with no KYC trail show under a **"Unresolved KYC"** group with a per-row status (e.g. `no_trail`, `dead_end`, `pending`).
 
-Each entry inside a recap has the shape:
-```
-👑 590x $GOBLIN
-$30.6k => $18.1M
-3KHMZhpthXuiCcgfTv7vVu9PpEz64KAEURFwi6Lopump
-```
-
-No scraping needed — everything is already ingested.
+## UI
+- New tab button: `Tokens | Dev Groupings | KYC Groupings`
+- Each KYC card:
+  - Header: CEX/label badge (e.g. "Binance Hot Wallet"), KYC root wallet (copy + solscan), token count, best X, distinct dev count
+  - Table of every token that rolls up to this KYC: `$Ticker | Dev (short + scan) | Best X | Entry MC | Peak MC | Recap | Date | Pump/Dex/Holders`
+- Same search box (matches ticker, CA, dev, KYC label, KYC wallet)
+- Toggle: **"Repeat KYC only"** (default ON) — groups with 2+ tokens
+- Progress indicator: `kyc: N/312 resolved`
 
 ## Implementation
-
-1. New Supabase edge function `insiders-recaps-list` (verify_jwt = false, read-only)
-   - Selects distinct-on-message_id recap rows from `telegram_channel_calls` where `channel_name ILIKE 'insiders'`, `message_timestamp > now() - interval '60 days'`, and `raw_message ILIKE '%INSIDERS%RECAP%'`.
-   - Parses each `raw_message` line-by-line with a small regex block:
-     - multiplier: `/([\d.]+)x\s*\$?([A-Za-z0-9_]+)/`
-     - entry/current MC: `/\$([\d.,]+[kKmMbB]?)\s*=>\s*\$([\d.,]+[kKmMbB]?)/`
-     - CA: `/([1-9A-HJ-NP-Za-km-z]{32,44})/` (Solana base58; accept `*pump` and non-pump)
-   - Classifies recap type from the header emoji (📌 daily / 🤫 weekly / 💃 monthly).
-   - Dedupes across all 60 days by `token_mint`, keeping the highest multiplier and the recap it came from.
-   - Returns JSON: `{ tokens: [{ mint, ticker, best_multiplier, entry_mc, peak_mc, recap_type, recap_date, message_id }], stats: { total_recaps, unique_tokens, daily_count, weekly_count, monthly_count } }`
-
-2. New page `src/pages/InsidersRecaps.tsx` + route in `src/App.tsx`
-   - Calls the edge function on mount.
-   - Renders a sortable table:
-     - Ticker | Full CA (with copy button + DexScreener link) | Best X | Entry MC | Peak MC | Recap Type | Recap Date
-   - Filter chips: All / Daily / Weekly / Monthly.
-   - Search box (ticker or CA substring).
-   - Sort by Best X desc by default; column-header click to resort.
-   - Header count: `N unique tokens across M recaps (last 60 days)`.
-   - Tailwind + existing shadcn table components — matches the app's dark aesthetic.
-
-3. No DB migration required. No writes. No new secrets.
-
-## Technical notes
-- Recap posts are sometimes reposted (same `message_id`, different `created_at` — see May 1 monthly recap). `DISTINCT ON (message_id)` in SQL handles it.
-- Ticker in `$GOBLIN` becomes `GOBLIN` (strip leading `$`).
-- Multiplier stored as float; display as `590×`.
-- CA validation: reject anything under 32 chars or containing non-base58 chars.
-- Page is read-only, publicly accessible (same tier as `/wtf`).
+1. New client effect in `src/pages/InsidersRecaps.tsx` that runs after `devs` populates:
+   - Collect unique dev wallets
+   - Batch-select from `developer_profiles` where `master_wallet_address IN (...)`
+   - For misses, batch-select from `dev_wallet_reputation`
+   - Batch-select `known_cex_wallets` for any KYC roots missing a label
+   - Store as `kyc: Record<devWallet, { root, label, source, status } | null>`
+2. New `useMemo` `kycGroups` — mirrors the existing `devGroups` structure but keys by `root`
+3. New tab render block — reuses the badge/table styling from Dev Groupings
 
 ## Out of scope
-- No auto-refresh / realtime — page fetches once on load with a manual Refresh button.
-- No CSV export in v1 (easy add later if wanted).
-- No cross-check against first-seen dates (that was the earlier July-18 task).
+- Triggering fresh Helius traces (would blow the credit budget); tab shows only what's already known. If the user wants a "Resolve missing KYC" button that fires `wallet-genealogy-scanner`/`mesh-kyc-deep-search` for unresolved devs, that's a follow-up.
+- No DB migrations, no new edge functions.

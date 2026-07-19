@@ -70,7 +70,9 @@ function parseRecap(raw: string, type: RecapType, ts: string, message_id: number
 }
 
 type SortKey = "multiplier" | "ticker" | "recap_date" | "recap_type";
-type Tab = "tokens" | "devs";
+type Tab = "tokens" | "devs" | "kyc";
+
+type KycInfo = { root: string; label: string | null; source: string | null; status: string | null };
 
 export default function InsidersRecaps() {
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -89,6 +91,131 @@ export default function InsidersRecaps() {
   const [devErrors, setDevErrors] = useState<string[]>([]);
   const [tab, setTab] = useState<Tab>("tokens");
   const [devsOnlyRepeat, setDevsOnlyRepeat] = useState(true);
+  const [kyc, setKyc] = useState<Record<string, KycInfo | null>>({}); // dev wallet -> KYC
+  const [kycLoading, setKycLoading] = useState(false);
+  const [kycProgress, setKycProgress] = useState<string>("");
+  const [kycOnlyRepeat, setKycOnlyRepeat] = useState(true);
+
+  // Resolve KYC for every known dev wallet
+  useEffect(() => {
+    const uniqueDevs = Array.from(new Set(Object.values(devs).filter(Boolean) as string[]));
+    if (uniqueDevs.length === 0) return;
+    (async () => {
+      setKycLoading(true);
+      const acc: Record<string, KycInfo | null> = {};
+      const chunk = <T,>(a: T[], n: number) => {
+        const o: T[][] = [];
+        for (let i = 0; i < a.length; i += n) o.push(a.slice(i, i + n));
+        return o;
+      };
+
+      // 1) developer_profiles (primary)
+      for (const batch of chunk(uniqueDevs, 200)) {
+        const { data } = await (supabase as any)
+          .from("developer_profiles")
+          .select("master_wallet_address, kyc_root_wallet, kyc_root_label, kyc_source_type, kyc_trail_status")
+          .in("master_wallet_address", batch);
+        for (const r of (data as any[]) || []) {
+          if (r?.kyc_root_wallet) {
+            acc[r.master_wallet_address] = {
+              root: r.kyc_root_wallet,
+              label: r.kyc_root_label || null,
+              source: r.kyc_source_type || null,
+              status: r.kyc_trail_status || "resolved",
+            };
+          } else if (r?.kyc_trail_status) {
+            acc[r.master_wallet_address] = null;
+          }
+        }
+      }
+
+      // 2) dev_wallet_reputation fallback
+      const missing = uniqueDevs.filter((d) => !acc[d]);
+      for (const batch of chunk(missing, 200)) {
+        const { data } = await (supabase as any)
+          .from("dev_wallet_reputation")
+          .select("wallet_address, trail_end_kyc_root, trail_end_reason")
+          .in("wallet_address", batch);
+        for (const r of (data as any[]) || []) {
+          if (r?.trail_end_kyc_root) {
+            acc[r.wallet_address] = {
+              root: r.trail_end_kyc_root,
+              label: null,
+              source: "dev_reputation",
+              status: r.trail_end_reason || "resolved",
+            };
+          }
+        }
+      }
+
+      // 3) Label enrichment via known_cex_wallets for any unlabeled roots
+      const rootsToLabel = Array.from(
+        new Set(Object.values(acc).filter((v): v is KycInfo => !!v && !v.label).map((v) => v.root)),
+      );
+      const labelMap = new Map<string, { name: string; entity: string | null }>();
+      for (const batch of chunk(rootsToLabel, 200)) {
+        const { data } = await (supabase as any)
+          .from("known_cex_wallets")
+          .select("wallet_address, cex_name, cex_label, entity_type")
+          .in("wallet_address", batch);
+        for (const r of (data as any[]) || []) {
+          labelMap.set(r.wallet_address, {
+            name: r.cex_label || r.cex_name || "",
+            entity: r.entity_type || null,
+          });
+        }
+      }
+      for (const dev of Object.keys(acc)) {
+        const v = acc[dev];
+        if (v && !v.label) {
+          const l = labelMap.get(v.root);
+          if (l) acc[dev] = { ...v, label: l.name, source: v.source || l.entity };
+        }
+      }
+
+      // Fill unresolved as null so UI can show "Unresolved KYC" bucket
+      for (const d of uniqueDevs) if (!(d in acc)) acc[d] = null;
+
+      setKyc(acc);
+      const resolved = Object.values(acc).filter(Boolean).length;
+      setKycProgress(`${resolved}/${uniqueDevs.length}`);
+      setKycLoading(false);
+    })();
+  }, [devs]);
+
+  // Group entries by KYC root
+  const kycGroups = useMemo(() => {
+    const g = new Map<string, { root: string; label: string | null; source: string | null; tokens: (Entry & { dev: string | null })[]; devs: Set<string> }>();
+    const UNRESOLVED = "__unresolved__";
+    for (const e of entries) {
+      const dev = devs[e.mint] || null;
+      const k = dev ? kyc[dev] : null;
+      const key = k?.root || UNRESOLVED;
+      const cur = g.get(key) || {
+        root: key,
+        label: k?.label || (key === UNRESOLVED ? "Unresolved KYC" : null),
+        source: k?.source || null,
+        tokens: [] as (Entry & { dev: string | null })[],
+        devs: new Set<string>(),
+      };
+      cur.tokens.push({ ...e, dev });
+      if (dev) cur.devs.add(dev);
+      g.set(key, cur);
+    }
+    let list = Array.from(g.values()).map((r) => ({
+      ...r,
+      tokens: [...r.tokens].sort((a, b) => b.multiplier - a.multiplier),
+      bestX: Math.max(...r.tokens.map((t) => t.multiplier)),
+    }));
+    if (kycOnlyRepeat) list = list.filter((r) => r.root !== UNRESOLVED && r.tokens.length > 1);
+    list.sort((a, b) => {
+      // Unresolved always last
+      if (a.root === UNRESOLVED) return 1;
+      if (b.root === UNRESOLVED) return -1;
+      return b.tokens.length - a.tokens.length || b.bestX - a.bestX;
+    });
+    return list;
+  }, [entries, devs, kyc, kycOnlyRepeat]);
 
   useEffect(() => {
     (async () => {
@@ -299,7 +426,7 @@ export default function InsidersRecaps() {
 
       <div className="flex flex-wrap gap-3 items-center mb-4">
         <div className="flex gap-1 mr-2">
-          {(["tokens", "devs"] as const).map((t) => (
+          {(["tokens", "devs", "kyc"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -309,7 +436,7 @@ export default function InsidersRecaps() {
                   : "bg-muted text-muted-foreground border-border hover:bg-muted/70"
               }`}
             >
-              {t === "tokens" ? "Tokens" : "Dev Groupings"}
+              {t === "tokens" ? "Tokens" : t === "devs" ? "Dev Groupings" : "KYC Groupings"}
             </button>
           ))}
         </div>
@@ -341,6 +468,9 @@ export default function InsidersRecaps() {
           {!loading && devProgress && (
             <span className="ml-2">· devs: {devProgress}{devLoading ? "…" : ""}</span>
           )}
+          {!loading && kycProgress && (
+            <span className="ml-2">· kyc: {kycProgress}{kycLoading ? "…" : ""}</span>
+          )}
           {!loading && tab === "tokens" && dupeCount > 0 && (
             <button
               onClick={() => setOnlyDupes((v) => !v)}
@@ -356,6 +486,14 @@ export default function InsidersRecaps() {
               className={`ml-2 px-2 py-0.5 rounded border ${devsOnlyRepeat ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted/60"}`}
             >
               {devsOnlyRepeat ? "Repeat devs only" : "All devs"}
+            </button>
+          )}
+          {!loading && tab === "kyc" && (
+            <button
+              onClick={() => setKycOnlyRepeat((v) => !v)}
+              className={`ml-2 px-2 py-0.5 rounded border ${kycOnlyRepeat ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted/60"}`}
+            >
+              {kycOnlyRepeat ? "Repeat KYC only" : "All KYC (incl. unresolved)"}
             </button>
           )}
         </div>
