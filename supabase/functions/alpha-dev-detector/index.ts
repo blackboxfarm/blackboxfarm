@@ -290,15 +290,114 @@ serve(async (req) => {
   // SMS
   let smsStatus = 'skipped';
   let smsError: string | null = null;
+
+  // ---------- LIVE BUY via FlipIt wallet ----------
+  let liveStatus: string = 'skipped';
+  let liveError: string | null = null;
+  let liveSol: number | null = null;
+  let liveUsd: number | null = null;
+  let liveSig: string | null = null;
+  try {
+    if (config.live_buy_enabled && config.live_buy_wallet_id) {
+      const buyUsd = Number(config.live_buy_usd || 100);
+      const capUsd = Number(config.live_buy_daily_cap_usd || 300);
+
+      // Daily cap: sum today's UTC executed live buys
+      const dayStart = new Date();
+      dayStart.setUTCHours(0, 0, 0, 0);
+      const { data: todayRows } = await supabase.from('alpha_paper_trades')
+        .select('live_buy_usd')
+        .eq('live_buy_status', 'executed')
+        .gte('live_buy_at', dayStart.toISOString());
+      const spentToday = (todayRows || []).reduce((s: number, r: any) => s + Number(r.live_buy_usd || 0), 0);
+      if (spentToday + buyUsd > capUsd) {
+        liveStatus = 'skipped_daily_cap';
+        liveError = `daily cap ${capUsd} reached (spent ${spentToday.toFixed(2)})`;
+      } else {
+        // Wallet lookup
+        const { data: w } = await supabase.from('super_admin_wallets')
+          .select('id, pubkey, is_active').eq('id', config.live_buy_wallet_id).maybeSingle();
+        if (!w || !w.is_active) {
+          liveStatus = 'skipped_no_wallet';
+          liveError = 'FlipIt wallet missing or inactive';
+        } else {
+          const [balSol, solPrice] = await Promise.all([fetchSolBalance(w.pubkey), fetchSolPriceUsd()]);
+          if (!balSol || !solPrice) {
+            liveStatus = 'skipped_chain_read';
+            liveError = `balSol=${balSol} solPrice=${solPrice}`;
+          } else {
+            const balUsd = balSol * solPrice;
+            if (balUsd < buyUsd) {
+              liveStatus = 'skipped_insufficient';
+              liveError = `wallet has $${balUsd.toFixed(2)} < $${buyUsd}`;
+            } else {
+              const buyAmountSol = Number((buyUsd / solPrice).toFixed(6));
+              try {
+                const { data: execRes, error: execErr } = await supabase.functions.invoke('flipit-execute', {
+                  body: {
+                    action: 'buy',
+                    tokenMint: mint,
+                    walletId: w.id,
+                    buyAmountSol,
+                    buyAmountUsd: buyUsd,
+                    slippageBps: Number(config.live_buy_slippage_bps || 3000),
+                    priorityFeeMicroLamports: Number(config.live_buy_priority_fee_microlamports || 300000),
+                    jitoTipLamports: Number(config.live_buy_jito_tip_lamports || 300000),
+                    priorityFeeMode: 'custom',
+                    source: 'alpha-dev-detector',
+                  },
+                });
+                if (execErr) {
+                  liveStatus = 'failed';
+                  liveError = execErr.message || 'invoke error';
+                } else if (execRes?.skipped) {
+                  liveStatus = 'skipped_execute';
+                  liveError = execRes?.reason || 'flipit-execute skipped';
+                } else if (execRes?.error) {
+                  liveStatus = 'failed';
+                  liveError = String(execRes.error).slice(0, 500);
+                } else {
+                  liveStatus = 'executed';
+                  liveSol = buyAmountSol;
+                  liveUsd = buyUsd;
+                  liveSig = execRes?.signature || execRes?.buyTxSignature || execRes?.tx || null;
+                }
+              } catch (e: any) {
+                liveStatus = 'failed';
+                liveError = (e?.message || String(e)).slice(0, 500);
+              }
+            }
+          }
+        }
+      }
+    } else {
+      liveStatus = config.live_buy_enabled ? 'skipped_no_wallet' : 'disabled';
+    }
+  } catch (e: any) {
+    liveStatus = 'failed';
+    liveError = (e?.message || String(e)).slice(0, 500);
+  }
+
   if (config.sms_enabled) {
     const shortDev = devWallet ? `${devWallet.slice(0, 4)}…${devWallet.slice(-4)}` : '—';
+    const liveLine =
+      liveStatus === 'executed'
+        ? `Live buy: $${liveUsd?.toFixed(0)} (${liveSol?.toFixed(4)} SOL) ✅`
+        : liveStatus === 'skipped_insufficient'
+          ? `Live buy: SKIP (${liveError})`
+          : liveStatus === 'skipped_daily_cap'
+            ? `Live buy: SKIP (daily cap)`
+            : liveStatus === 'disabled'
+              ? `Live buy: off`
+              : `Live buy: ${liveStatus}${liveError ? ` (${liveError.slice(0, 60)})` : ''}`;
     const smsBody =
       `🚨 ALPHA DEV DETECTED\n` +
       `$${ticker || mint.slice(0, 6)}\n` +
       `Entry MC: ${fmtMoney(entry.mcap)}\n` +
       `Match: ${matchKind === 'dev' ? `dev ${shortDev}` : `KYC ${kycLabel || kycRoot?.slice(0, 8)}`}\n` +
       `${reason}\n` +
-      `Paper buy: $${config.paper_size_usd} → HOLD\n\n` +
+      `Paper buy: $${config.paper_size_usd} → HOLD\n` +
+      `${liveLine}\n\n` +
       `CA (tap to copy):\n${mint}\n\n` +
       `Pump: https://pump.fun/coin/${mint}\n` +
       `Dex:  https://dexscreener.com/solana/${mint}`;
@@ -308,10 +407,17 @@ serve(async (req) => {
   }
   await supabase.from('alpha_paper_trades').update({
     sms_status: smsStatus, sms_error: smsError, sms_sent_at: new Date().toISOString(),
+    live_buy_status: liveStatus,
+    live_buy_signature: liveSig,
+    live_buy_sol: liveSol,
+    live_buy_usd: liveUsd,
+    live_buy_error: liveError,
+    live_buy_at: liveStatus === 'executed' ? new Date().toISOString() : null,
   }).eq('id', trade.id);
 
   return new Response(JSON.stringify({
     ok: true, matched: true, match_kind: matchKind, paper_trade_id: trade.id,
     ticker, entry_mcap: entry.mcap, reason, sms_status: smsStatus,
+    live_buy_status: liveStatus, live_buy_signature: liveSig, live_buy_error: liveError,
   }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 });
