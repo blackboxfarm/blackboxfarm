@@ -50,31 +50,33 @@ Deno.serve(async (req) => {
   const errors: string[] = [];
   if (resolve) {
     const unresolved = mints.filter((m) => !map.get(m));
-    // Cap resolver calls to keep response under function timeout
-    const cap = Math.min(unresolved.length, 120);
-    for (let i = 0; i < cap; i++) {
-      const mint = unresolved[i];
+    // Resolve all requested mints in parallel — the client already sends small chunks (~10)
+    const results = await Promise.all(unresolved.map(async (mint) => {
       try {
         const r = await resolveTokenCreator(mint, supabase, errors);
-        if (r.creatorWallet) {
-          map.set(mint, r.creatorWallet);
-          resolved++;
-          // Best-effort persist to scraped_tokens so next call is instant
-          const isPump = mint.endsWith('pump');
-          if (!isPump) {
-            await supabase.from('scraped_tokens')
-              .upsert({ token_mint: mint, creator_wallet: r.creatorWallet }, { onConflict: 'token_mint' });
-          }
-        }
-      } catch (e) { errors.push(`${mint}: ${(e as Error).message}`); }
-      await new Promise((r) => setTimeout(r, 120));
+        return { mint, wallet: r.creatorWallet, source: r.source };
+      } catch (e) {
+        errors.push(`${mint}: ${(e as Error).message}`);
+        return { mint, wallet: null, source: 'error' as const };
+      }
+    }));
+    const persistRows: any[] = [];
+    for (const { mint, wallet } of results) {
+      if (wallet) {
+        map.set(mint, wallet);
+        resolved++;
+        if (!mint.endsWith('pump')) persistRows.push({ token_mint: mint, creator_wallet: wallet });
+      }
+    }
+    if (persistRows.length) {
+      try { await supabase.from('scraped_tokens').upsert(persistRows, { onConflict: 'token_mint' }); } catch {}
     }
   }
 
   const out: Record<string, string | null> = {};
   for (const [k, v] of map) out[k] = v;
   const known = Object.values(out).filter(Boolean).length;
-  return new Response(JSON.stringify({ total: mints.length, known, resolved, errors: errors.slice(0, 5), devs: out }), {
+  return new Response(JSON.stringify({ total: mints.length, known, resolved, errors: errors.slice(0, 10), devs: out }), {
     headers: { ...cors, 'Content-Type': 'application/json' },
   });
 });
