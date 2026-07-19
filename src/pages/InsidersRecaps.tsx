@@ -725,6 +725,145 @@ export default function InsidersRecaps() {
           )}
         </div>
       )}
+
+      {!loading && !err && tab === "kyc" && (
+        <div className="space-y-4">
+          {kycGroups
+            .filter((g) => {
+              const term = q.trim().toLowerCase();
+              if (!term) return true;
+              if (g.root.toLowerCase().includes(term)) return true;
+              if ((g.label || "").toLowerCase().includes(term)) return true;
+              return g.tokens.some(
+                (t) =>
+                  t.ticker.toLowerCase().includes(term) ||
+                  t.mint.toLowerCase().includes(term) ||
+                  (t.dev || "").toLowerCase().includes(term),
+              );
+            })
+            .map((g) => {
+              const isUnresolved = g.root === "__unresolved__";
+              return (
+                <div key={g.root} className="rounded border border-border bg-muted/20">
+                  <div className="flex flex-wrap items-center gap-3 p-3 border-b border-border bg-muted/40">
+                    <span className="px-2 py-0.5 rounded bg-primary/20 text-primary text-xs font-bold">
+                      {g.tokens.length} tokens
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-secondary/50 text-foreground text-[10px]">
+                      {g.devs.size} dev{g.devs.size === 1 ? "" : "s"}
+                    </span>
+                    {g.label && (
+                      <span className="px-2 py-0.5 rounded bg-primary/30 text-primary text-xs font-semibold">
+                        {g.label}
+                      </span>
+                    )}
+                    {g.source && !isUnresolved && (
+                      <span className="text-[10px] text-muted-foreground uppercase">{g.source}</span>
+                    )}
+                    {!isUnresolved && (
+                      <>
+                        <button
+                          onClick={() => copy(g.root)}
+                          className="font-mono text-sm hover:text-primary"
+                          title={g.root}
+                        >
+                          {g.root}
+                        </button>
+                        {copied === g.root && <span className="text-primary text-xs">copied</span>}
+                        <a
+                          className="text-primary/80 hover:text-primary underline text-xs"
+                          href={`https://solscan.io/account/${g.root}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          solscan
+                        </a>
+                      </>
+                    )}
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      best <span className="text-primary font-bold">{g.bestX}×</span>
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="text-muted-foreground">
+                        <tr>
+                          <th className="p-2 text-left">Ticker</th>
+                          <th className="p-2 text-left">Dev</th>
+                          <th className="p-2 text-left">Best X</th>
+                          <th className="p-2 text-left">Entry MC</th>
+                          <th className="p-2 text-left">Peak MC</th>
+                          <th className="p-2 text-left">Recap</th>
+                          <th className="p-2 text-left">Date</th>
+                          <th className="p-2 text-left">Links</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {g.tokens.map((t) => (
+                          <tr key={t.mint} className="border-t border-border hover:bg-muted/30">
+                            <td className="p-2 font-semibold">${t.ticker}</td>
+                            <td className="p-2 font-mono">
+                              {t.dev ? (
+                                <a
+                                  className="hover:text-primary underline"
+                                  href={`https://solscan.io/account/${t.dev}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title={t.dev}
+                                >
+                                  {t.dev.slice(0, 6)}…{t.dev.slice(-4)}
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </td>
+                            <td className="p-2 font-bold text-primary">{t.multiplier}×</td>
+                            <td className="p-2">{t.entry_mc ? `$${t.entry_mc}` : "—"}</td>
+                            <td className="p-2">{t.peak_mc ? `$${t.peak_mc}` : "—"}</td>
+                            <td className="p-2">
+                              <span className={`px-2 py-0.5 rounded text-[10px] uppercase ${badgeCls(t.recap_type)}`}>
+                                {t.recap_type}
+                              </span>
+                            </td>
+                            <td className="p-2 whitespace-nowrap">
+                              {new Date(t.recap_date).toLocaleDateString()}
+                            </td>
+                            <td className="p-2 space-x-2 whitespace-nowrap">
+                              <a
+                                className="text-primary underline"
+                                href={`https://pump.fun/${t.mint}`}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Pump
+                              </a>
+                              <a
+                                className="text-primary underline"
+                                href={`https://dexscreener.com/solana/${t.mint}`}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Dex
+                              </a>
+                              <a className="text-primary underline" href={`/?token=${t.mint}`}>
+                                Holders
+                              </a>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })}
+          {kycGroups.length === 0 && (
+            <div className="p-6 text-center text-muted-foreground border border-border rounded">
+              {kycLoading ? "Resolving KYC roots…" : "No KYC groups yet."}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
