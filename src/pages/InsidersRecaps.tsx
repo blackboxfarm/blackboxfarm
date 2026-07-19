@@ -70,6 +70,7 @@ function parseRecap(raw: string, type: RecapType, ts: string, message_id: number
 }
 
 type SortKey = "multiplier" | "ticker" | "recap_date" | "recap_type";
+type Tab = "tokens" | "devs";
 
 export default function InsidersRecaps() {
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -86,6 +87,8 @@ export default function InsidersRecaps() {
   const [devProgress, setDevProgress] = useState<string>("");
   const [onlyDupes, setOnlyDupes] = useState(false);
   const [devErrors, setDevErrors] = useState<string[]>([]);
+  const [tab, setTab] = useState<Tab>("tokens");
+  const [devsOnlyRepeat, setDevsOnlyRepeat] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -219,6 +222,26 @@ export default function InsidersRecaps() {
     return n;
   }, [devCounts]);
 
+  // Group entries by dev wallet for the Dev Groupings tab
+  const devGroups = useMemo(() => {
+    const g = new Map<string, Entry[]>();
+    for (const e of entries) {
+      const d = devs[e.mint];
+      if (!d) continue;
+      const arr = g.get(d) || [];
+      arr.push(e);
+      g.set(d, arr);
+    }
+    let list = Array.from(g.entries()).map(([dev, toks]) => ({
+      dev,
+      tokens: [...toks].sort((a, b) => b.multiplier - a.multiplier),
+      bestX: Math.max(...toks.map((t) => t.multiplier)),
+    }));
+    if (devsOnlyRepeat) list = list.filter((r) => r.tokens.length > 1);
+    list.sort((a, b) => b.tokens.length - a.tokens.length || b.bestX - a.bestX);
+    return list;
+  }, [entries, devs, devsOnlyRepeat]);
+
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
     const rows = entries.filter((e) => {
@@ -275,6 +298,22 @@ export default function InsidersRecaps() {
       </p>
 
       <div className="flex flex-wrap gap-3 items-center mb-4">
+        <div className="flex gap-1 mr-2">
+          {(["tokens", "devs"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-3 py-1 text-xs rounded border ${
+                tab === t
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-muted text-muted-foreground border-border hover:bg-muted/70"
+              }`}
+            >
+              {t === "tokens" ? "Tokens" : "Dev Groupings"}
+            </button>
+          ))}
+        </div>
+        {tab === "tokens" && (
         <div className="flex gap-1">
           {(["all", "daily", "weekly", "monthly"] as const).map((t) => (
             <button
@@ -290,6 +329,7 @@ export default function InsidersRecaps() {
             </button>
           ))}
         </div>
+        )}
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -301,13 +341,21 @@ export default function InsidersRecaps() {
           {!loading && devProgress && (
             <span className="ml-2">· devs: {devProgress}{devLoading ? "…" : ""}</span>
           )}
-          {!loading && dupeCount > 0 && (
+          {!loading && tab === "tokens" && dupeCount > 0 && (
             <button
               onClick={() => setOnlyDupes((v) => !v)}
               className={`ml-2 px-2 py-0.5 rounded border ${onlyDupes ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted/60"}`}
               title="Show only devs that minted multiple tokens on this list"
             >
               {onlyDupes ? "Showing" : "Show"} repeat devs ({dupeCount})
+            </button>
+          )}
+          {!loading && tab === "devs" && (
+            <button
+              onClick={() => setDevsOnlyRepeat((v) => !v)}
+              className={`ml-2 px-2 py-0.5 rounded border ${devsOnlyRepeat ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted/60"}`}
+            >
+              {devsOnlyRepeat ? "Repeat devs only" : "All devs"}
             </button>
           )}
         </div>
@@ -323,7 +371,7 @@ export default function InsidersRecaps() {
         </div>
       )}
 
-      {!loading && !err && (
+      {!loading && !err && tab === "tokens" && (
         <div className="overflow-x-auto rounded border border-border">
           <table className="w-full text-xs">
             <thead className="bg-muted text-muted-foreground sticky top-0">
@@ -436,6 +484,107 @@ export default function InsidersRecaps() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {!loading && !err && tab === "devs" && (
+        <div className="space-y-4">
+          {devGroups
+            .filter((g) => {
+              const term = q.trim().toLowerCase();
+              if (!term) return true;
+              if (g.dev.toLowerCase().includes(term)) return true;
+              return g.tokens.some(
+                (t) => t.ticker.toLowerCase().includes(term) || t.mint.toLowerCase().includes(term),
+              );
+            })
+            .map((g) => (
+              <div key={g.dev} className="rounded border border-border bg-muted/20">
+                <div className="flex flex-wrap items-center gap-3 p-3 border-b border-border bg-muted/40">
+                  <span className="px-2 py-0.5 rounded bg-primary/20 text-primary text-xs font-bold">
+                    {g.tokens.length} tokens
+                  </span>
+                  <button
+                    onClick={() => copy(g.dev)}
+                    className="font-mono text-sm hover:text-primary"
+                    title={g.dev}
+                  >
+                    {g.dev}
+                  </button>
+                  {copied === g.dev && <span className="text-primary text-xs">copied</span>}
+                  <a
+                    className="text-primary/80 hover:text-primary underline text-xs"
+                    href={`https://solscan.io/account/${g.dev}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    solscan
+                  </a>
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    best <span className="text-primary font-bold">{g.bestX}×</span>
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="text-muted-foreground">
+                      <tr>
+                        <th className="p-2 text-left">Ticker</th>
+                        <th className="p-2 text-left">Best X</th>
+                        <th className="p-2 text-left">Entry MC</th>
+                        <th className="p-2 text-left">Peak MC</th>
+                        <th className="p-2 text-left">Recap</th>
+                        <th className="p-2 text-left">Date</th>
+                        <th className="p-2 text-left">Links</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {g.tokens.map((t) => (
+                        <tr key={t.mint} className="border-t border-border hover:bg-muted/30">
+                          <td className="p-2 font-semibold">${t.ticker}</td>
+                          <td className="p-2 font-bold text-primary">{t.multiplier}×</td>
+                          <td className="p-2">{t.entry_mc ? `$${t.entry_mc}` : "—"}</td>
+                          <td className="p-2">{t.peak_mc ? `$${t.peak_mc}` : "—"}</td>
+                          <td className="p-2">
+                            <span className={`px-2 py-0.5 rounded text-[10px] uppercase ${badgeCls(t.recap_type)}`}>
+                              {t.recap_type}
+                            </span>
+                          </td>
+                          <td className="p-2 whitespace-nowrap">
+                            {new Date(t.recap_date).toLocaleDateString()}
+                          </td>
+                          <td className="p-2 space-x-2 whitespace-nowrap">
+                            <a
+                              className="text-primary underline"
+                              href={`https://pump.fun/${t.mint}`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Pump
+                            </a>
+                            <a
+                              className="text-primary underline"
+                              href={`https://dexscreener.com/solana/${t.mint}`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Dex
+                            </a>
+                            <a className="text-primary underline" href={`/?token=${t.mint}`}>
+                              Holders
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          {devGroups.length === 0 && (
+            <div className="p-6 text-center text-muted-foreground border border-border rounded">
+              {devLoading ? "Resolving dev wallets…" : "No dev groups yet."}
+            </div>
+          )}
         </div>
       )}
     </div>
