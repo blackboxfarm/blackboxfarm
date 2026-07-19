@@ -931,6 +931,99 @@ export default function InsidersRecaps() {
           )}
         </div>
       )}
+
+      {!loading && !err && tab === "alpha" && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3 p-3 rounded border border-border bg-muted/20">
+            <span className="text-sm font-semibold">Alpha Watch</span>
+            <span className="text-xs text-muted-foreground">
+              Live paper-buys triggered when a new insiders token matches a known-alpha dev or KYC group.
+            </span>
+            <button
+              onClick={rebuildAlphaLists}
+              disabled={rebuilding}
+              className="ml-auto px-3 py-1 text-xs rounded border border-primary bg-primary text-primary-foreground disabled:opacity-50"
+            >
+              {rebuilding ? "Rebuilding…" : "Rebuild alpha lists from recaps"}
+            </button>
+            {rebuildMsg && <span className="text-xs text-muted-foreground">{rebuildMsg}</span>}
+          </div>
+          <div className="overflow-x-auto rounded border border-border">
+            <table className="w-full text-xs">
+              <thead className="bg-muted text-muted-foreground sticky top-0">
+                <tr>
+                  <th className="p-2 text-left">When</th>
+                  <th className="p-2 text-left">Ticker</th>
+                  <th className="p-2 text-left">Entry MC</th>
+                  <th className="p-2 text-left">Size</th>
+                  <th className="p-2 text-left">Match</th>
+                  <th className="p-2 text-left">Reason</th>
+                  <th className="p-2 text-left">SMS</th>
+                  <th className="p-2 text-left">Links</th>
+                </tr>
+              </thead>
+              <tbody>
+                {alphaTrades.map((t) => (
+                  <tr key={t.id} className="border-t border-border hover:bg-muted/40">
+                    <td className="p-2 whitespace-nowrap">
+                      {new Date(t.created_at).toLocaleString()}
+                    </td>
+                    <td className="p-2 font-semibold">${t.ticker || "?"}</td>
+                    <td className="p-2">
+                      {t.entry_market_cap
+                        ? t.entry_market_cap >= 1_000_000
+                          ? `$${(t.entry_market_cap / 1_000_000).toFixed(2)}M`
+                          : t.entry_market_cap >= 1_000
+                            ? `$${(t.entry_market_cap / 1_000).toFixed(1)}k`
+                            : `$${t.entry_market_cap.toFixed(0)}`
+                        : "—"}
+                    </td>
+                    <td className="p-2">${t.size_usd}</td>
+                    <td className="p-2">
+                      <span className="px-2 py-0.5 rounded bg-primary/20 text-primary text-[10px] uppercase">
+                        {t.match_kind}
+                      </span>
+                      {t.matched_kyc_label && (
+                        <span className="ml-1 text-[10px] text-muted-foreground">
+                          {t.matched_kyc_label}
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-2 text-muted-foreground">{t.reason || "—"}</td>
+                    <td className="p-2">
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] ${
+                          t.sms_status === "sent"
+                            ? "bg-primary/20 text-primary"
+                            : t.sms_status === "failed"
+                              ? "bg-destructive/20 text-destructive"
+                              : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {t.sms_status || "—"}
+                      </span>
+                    </td>
+                    <td className="p-2 space-x-2 whitespace-nowrap">
+                      <a className="text-primary underline" href={`https://dexscreener.com/solana/${t.mint}`} target="_blank" rel="noreferrer">Dex</a>
+                      <a className="text-primary underline" href={`https://pump.fun/${t.mint}`} target="_blank" rel="noreferrer">Pump</a>
+                      <a className="text-primary underline" href={`/?token=${t.mint}`}>Holders</a>
+                    </td>
+                  </tr>
+                ))}
+                {alphaTrades.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="p-6 text-center text-muted-foreground">
+                      {alphaLoading
+                        ? "Loading…"
+                        : "No alpha paper-buys yet. Rebuild the alpha lists, then the next insiders token that matches will land here."}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
