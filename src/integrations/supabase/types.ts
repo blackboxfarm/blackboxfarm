@@ -904,6 +904,13 @@ export type Database = {
           id: number
           kyc_min_avg_multiplier: number
           kyc_min_distinct_devs: number
+          live_buy_daily_cap_usd: number
+          live_buy_enabled: boolean
+          live_buy_jito_tip_lamports: number
+          live_buy_priority_fee_microlamports: number
+          live_buy_slippage_bps: number
+          live_buy_usd: number
+          live_buy_wallet_id: string | null
           min_best_multiplier: number
           min_repeat_avg_multiplier: number
           min_repeat_token_count: number
@@ -916,6 +923,13 @@ export type Database = {
           id?: number
           kyc_min_avg_multiplier?: number
           kyc_min_distinct_devs?: number
+          live_buy_daily_cap_usd?: number
+          live_buy_enabled?: boolean
+          live_buy_jito_tip_lamports?: number
+          live_buy_priority_fee_microlamports?: number
+          live_buy_slippage_bps?: number
+          live_buy_usd?: number
+          live_buy_wallet_id?: string | null
           min_best_multiplier?: number
           min_repeat_avg_multiplier?: number
           min_repeat_token_count?: number
@@ -928,6 +942,13 @@ export type Database = {
           id?: number
           kyc_min_avg_multiplier?: number
           kyc_min_distinct_devs?: number
+          live_buy_daily_cap_usd?: number
+          live_buy_enabled?: boolean
+          live_buy_jito_tip_lamports?: number
+          live_buy_priority_fee_microlamports?: number
+          live_buy_slippage_bps?: number
+          live_buy_usd?: number
+          live_buy_wallet_id?: string | null
           min_best_multiplier?: number
           min_repeat_avg_multiplier?: number
           min_repeat_token_count?: number
@@ -1043,6 +1064,12 @@ export type Database = {
           group_avg_multiplier: number | null
           group_token_count: number | null
           id: string
+          live_buy_at: string | null
+          live_buy_error: string | null
+          live_buy_signature: string | null
+          live_buy_sol: number | null
+          live_buy_status: string | null
+          live_buy_usd: number | null
           match_kind: string
           matched_dev_wallet: string | null
           matched_kyc_label: string | null
@@ -1069,6 +1096,12 @@ export type Database = {
           group_avg_multiplier?: number | null
           group_token_count?: number | null
           id?: string
+          live_buy_at?: string | null
+          live_buy_error?: string | null
+          live_buy_signature?: string | null
+          live_buy_sol?: number | null
+          live_buy_status?: string | null
+          live_buy_usd?: number | null
           match_kind: string
           matched_dev_wallet?: string | null
           matched_kyc_label?: string | null
@@ -1095,6 +1128,12 @@ export type Database = {
           group_avg_multiplier?: number | null
           group_token_count?: number | null
           id?: string
+          live_buy_at?: string | null
+          live_buy_error?: string | null
+          live_buy_signature?: string | null
+          live_buy_sol?: number | null
+          live_buy_status?: string | null
+          live_buy_usd?: number | null
           match_kind?: string
           matched_dev_wallet?: string | null
           matched_kyc_label?: string | null
