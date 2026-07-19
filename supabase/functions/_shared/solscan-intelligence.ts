@@ -396,36 +396,31 @@ export async function solscanCheckAccountLabel(
 }
 
 /**
- * Discover who funded a wallet by looking at SOL transfers TO the wallet.
- * Returns top funders sorted by amount.
+ * DISABLED — solscanDiscoverFunders has been retired.
+ * Kept as a no-op stub so existing callers compile; all Solscan funder
+ * discovery is now handled by Helius / funding-resolver.
  */
 export async function solscanDiscoverFunders(
+  _walletAddress: string,
+  _apiErrors: string[] = [],
+  _maxPages: number = 2
+): Promise<SolscanFunder[]> {
+  return [];
+}
+
+// Legacy body removed. The previous implementation and its scrape fallback
+// have been deleted intentionally — do not restore.
+async function _solscanDiscoverFunders_REMOVED(
   walletAddress: string,
   apiErrors: string[] = [],
   maxPages: number = 2
 ): Promise<SolscanFunder[]> {
-  const fallbackFromScrape = async (): Promise<SolscanFunder[]> => {
-    const scraped = await solscanScrapeFundingInfo(walletAddress, apiErrors);
-
-    if (scraped.fundedByWallet) {
-      return [{
-        wallet: scraped.fundedByWallet,
-        amountSol: 0,
-        timestamp: 0,
-      }];
-    }
-
-    if (scraped.fundedByLabel) {
-      console.log(`[Solscan Intel] Scrape fallback found funded_by label only for ${walletAddress.slice(0, 8)}...: ${scraped.fundedByLabel}`);
-    }
-
-    return [];
-  };
-
+  return [];
+  // eslint-disable-next-line no-unreachable
   const apiKey = getSolscanApiKey();
   if (!apiKey) {
     apiErrors.push('SOLSCAN_API_KEY not configured');
-    return await fallbackFromScrape();
+    return [];
   }
 
   const funders = new Map<string, SolscanFunder>();
