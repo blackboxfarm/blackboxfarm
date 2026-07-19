@@ -85,6 +85,7 @@ export default function InsidersRecaps() {
   const [devLoading, setDevLoading] = useState(false);
   const [devProgress, setDevProgress] = useState<string>("");
   const [onlyDupes, setOnlyDupes] = useState(false);
+  const [devErrors, setDevErrors] = useState<string[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -149,23 +150,38 @@ export default function InsidersRecaps() {
         setDevs({ ...acc });
         setDevProgress(`${Object.values(acc).filter(Boolean).length}/${mints.length} known`);
       } catch (e) { /* ignore */ }
-      // Resolver pass in chunks of 10, ordered by best multiplier first
+      // Resolver pass — chunks of 10, best-X first, 3 chunks in-flight in parallel
       const byBest = [...entries].sort((a, b) => b.multiplier - a.multiplier).map((e) => e.mint);
       const missing = byBest.filter((m) => !acc[m]);
       const chunkSize = 10;
-      for (let i = 0; i < missing.length; i += chunkSize) {
-        const chunk = missing.slice(i, i + chunkSize);
-        try {
-          const { data } = await supabase.functions.invoke("insiders-recaps-devs", {
-            body: { mints: chunk, resolve: true },
-          });
-          if (data?.devs) {
-            Object.assign(acc, data.devs);
-            setDevs({ ...acc });
-            setDevProgress(`${Object.values(acc).filter(Boolean).length}/${mints.length} resolved`);
+      const concurrency = 3;
+      const chunks: string[][] = [];
+      for (let i = 0; i < missing.length; i += chunkSize) chunks.push(missing.slice(i, i + chunkSize));
+      let cursor = 0;
+      const runOne = async () => {
+        while (cursor < chunks.length) {
+          const chunk = chunks[cursor++];
+          try {
+            const { data, error } = await supabase.functions.invoke("insiders-recaps-devs", {
+              body: { mints: chunk, resolve: true },
+            });
+            if (error) {
+              setDevErrors((prev) => [...prev, error.message].slice(-6));
+            }
+            if (data?.devs) {
+              Object.assign(acc, data.devs);
+              setDevs({ ...acc });
+              setDevProgress(`${Object.values(acc).filter(Boolean).length}/${mints.length} resolved`);
+            }
+            if (data?.errors?.length) {
+              setDevErrors((prev) => [...prev, ...data.errors].slice(-6));
+            }
+          } catch (e: any) {
+            setDevErrors((prev) => [...prev, e?.message || String(e)].slice(-6));
           }
-        } catch (e) { /* keep going */ }
-      }
+        }
+      };
+      await Promise.all(Array.from({ length: concurrency }, runOne));
       setDevLoading(false);
     })();
   }, [entries]);
@@ -282,6 +298,14 @@ export default function InsidersRecaps() {
       </div>
 
       {err && <div className="text-destructive mb-4">Error: {err}</div>}
+      {devErrors.length > 0 && (
+        <div className="mb-4 text-xs text-destructive/90 border border-destructive/40 rounded p-2 bg-destructive/5">
+          <div className="font-semibold mb-1">Resolver issues (last {devErrors.length}):</div>
+          <ul className="list-disc ml-4 space-y-0.5">
+            {devErrors.map((e, i) => (<li key={i} className="break-all">{e}</li>))}
+          </ul>
+        </div>
+      )}
 
       {!loading && !err && (
         <div className="overflow-x-auto rounded border border-border">
