@@ -31,9 +31,9 @@ Deno.serve(async (req) => {
     const buys: any[] = [];
     let pages = 0;
     let err: string | null = null;
-    while (pages < 5) {
+    while (pages < 15) {
       pages++;
-      const path = `/v0/addresses/${w}/transactions?type=SWAP&limit=100${before ? `&before=${before}` : ''}`;
+      const path = `/v0/addresses/${w}/transactions?limit=100${before ? `&before=${before}` : ''}`;
       let txs: any[] = [];
       try {
         const res = await heliusRestFetch(path);
