@@ -1,47 +1,54 @@
+## Goal
+A new page at `/insiders-recaps` that shows every unique token that appeared in an Insiders "PREMIUM INSIDERS DAILY / WEEKLY / MONTHLY RECAP" pinned post over the last 60 days, with the token name, full CA, and its best (highest) X-gain across the window.
 
-## Why those placeholders render as `{...}` or `pending`
+## Data source
+`telegram_channel_calls` already stores every message from the Insiders channel, including recap posts. Confirmed formats present in the DB:
 
-`supabase/functions/no-lube-compose/index.ts` builds a `vars` map (lines ~934-1045) that `renderTemplate` uses to substitute template placeholders. It never sets these keys, so the template either leaves the literal `{name}` or falls back to the `pending` collapser:
+- Daily: `🗓 <Month D>` + `📌 PREMIUM INSIDERS DAILY RECAP` (Top 10)
+- Weekly: `🗓 <D1> - <D2>` + `🤫 PREMIUM INSIDERS WEEKLY RECAP` (Top 10)
+- Monthly: `🗓 <Month 1>` + `💃 PREMIUM INSIDERS MONTHLY RECAP` (Top 10)
 
-- `totalWallets` — not in the vars map. The same number **is** already resolved as `totalHolders` / `holders` from `token_health_snapshots.total_holders` (+ bagless fallback). It's a missing alias, nothing more.
-- `athDrawdown` — not in the vars map. `athMcapUsd` and current `mcUsd` are both already resolved in that same block; no new data needed.
-- `mintRevoked`, `freezeRevoked`, `lpBurned`, `buyTax`, `sellTax`, `devHoldings`, `devSold` — never fetched. They come from Phanes / Dr Rick / GMGN / Trojan replies, which the blackbox aggregator already parses and unions into `blackbox_aggregator_runs.var_bag_jsonb` (fields: `mint_authority_revoked`, `freeze_authority_revoked`, `lp_burned`, `buy_tax_pct`, `sell_tax_pct`, `dev_holdings_pct`, `dev_sold`). Compose doesn't query that table today.
+Each entry inside a recap has the shape:
+```
+👑 590x $GOBLIN
+$30.6k => $18.1M
+3KHMZhpthXuiCcgfTv7vVu9PpEz64KAEURFwi6Lopump
+```
 
-## Fix (single file: `supabase/functions/no-lube-compose/index.ts`)
+No scraping needed — everything is already ingested.
 
-1. **Alias `totalWallets`** — mirror the existing `holders` resolution.
+## Implementation
 
-2. **Compute `athDrawdown`** — when `athMcapUsd > 0` and `mcUsd` is known, render `-XX.X%` (or `0%` at ATH); else `pending`.
+1. New Supabase edge function `insiders-recaps-list` (verify_jwt = false, read-only)
+   - Selects distinct-on-message_id recap rows from `telegram_channel_calls` where `channel_name ILIKE 'insiders'`, `message_timestamp > now() - interval '60 days'`, and `raw_message ILIKE '%INSIDERS%RECAP%'`.
+   - Parses each `raw_message` line-by-line with a small regex block:
+     - multiplier: `/([\d.]+)x\s*\$?([A-Za-z0-9_]+)/`
+     - entry/current MC: `/\$([\d.,]+[kKmMbB]?)\s*=>\s*\$([\d.,]+[kKmMbB]?)/`
+     - CA: `/([1-9A-HJ-NP-Za-km-z]{32,44})/` (Solana base58; accept `*pump` and non-pump)
+   - Classifies recap type from the header emoji (📌 daily / 🤫 weekly / 💃 monthly).
+   - Dedupes across all 60 days by `token_mint`, keeping the highest multiplier and the recap it came from.
+   - Returns JSON: `{ tokens: [{ mint, ticker, best_multiplier, entry_mc, peak_mc, recap_type, recap_date, message_id }], stats: { total_recaps, unique_tokens, daily_count, weekly_count, monthly_count } }`
 
-3. **Load latest aggregator run for the mint** (best-effort; skip silently on failure):
-   ```
-   supabase.from('blackbox_aggregator_runs')
-     .select('var_bag_jsonb, digest_jsonb, updated_at')
-     .eq('token_mint', mint)
-     .order('updated_at', { ascending: false })
-     .limit(1).maybeSingle()
-   ```
-   Read from `var_bag_jsonb` (the union view built by `buildUnionView`) with `token_metadata.mint_authority` / `freeze_authority` as a chain-side fallback for the two revoke flags (null authority = revoked).
+2. New page `src/pages/InsidersRecaps.tsx` + route in `src/App.tsx`
+   - Calls the edge function on mount.
+   - Renders a sortable table:
+     - Ticker | Full CA (with copy button + DexScreener link) | Best X | Entry MC | Peak MC | Recap Type | Recap Date
+   - Filter chips: All / Daily / Weekly / Monthly.
+   - Search box (ticker or CA substring).
+   - Sort by Best X desc by default; column-header click to resort.
+   - Header count: `N unique tokens across M recaps (last 60 days)`.
+   - Tailwind + existing shadcn table components — matches the app's dark aesthetic.
 
-4. **Add the new vars** using the same `DASH = 'pending'` convention as the rest of the file:
-   - `mintRevoked` / `freezeRevoked` / `lpBurned` → `✅` / `❌` / `pending`
-   - `buyTax` / `sellTax` → `"3%"` style, `pending` when unknown
-   - `devHoldings` → `"4.2%"`, `pending` when unknown
-   - `devSold` → `Yes` / `No` / `pending`
+3. No DB migration required. No writes. No new secrets.
 
-5. **Also feed the on-chain-derived `devSold` flag into `classifyPostability`** in place of the current hard-coded `false` (line 848), so postability scoring benefits from the same signal. (No behavior change when the value is unknown — stays `false`.)
+## Technical notes
+- Recap posts are sometimes reposted (same `message_id`, different `created_at` — see May 1 monthly recap). `DISTINCT ON (message_id)` in SQL handles it.
+- Ticker in `$GOBLIN` becomes `GOBLIN` (strip leading `$`).
+- Multiplier stored as float; display as `590×`.
+- CA validation: reject anything under 32 chars or containing non-base58 chars.
+- Page is read-only, publicly accessible (same tier as `/wtf`).
 
 ## Out of scope
-
-- No template edits — the template already references these vars.
-- No schema changes — every field comes from existing tables (`token_health_snapshots`, `blackbox_aggregator_runs.var_bag_jsonb`, `token_metadata`).
-- Server-side eligibility guard stays as-is per the prior decision.
-
-## Verification
-
-After deploy, re-render a No-Lube preview for a known token (e.g., `$BULLSET` from the screenshot) and confirm:
-- `Holders` shows the number instead of `pending`
-- `ATH` line shows drawdown %
-- Security block flips from all-`pending` to real values wherever Phanes/Dr Rick replied
-
-Any field still `pending` after that means the aggregator hasn't received a reply yet for that mint — not a compose bug.
+- No auto-refresh / realtime — page fetches once on load with a manual Refresh button.
+- No CSV export in v1 (easy add later if wanted).
+- No cross-check against first-seen dates (that was the earlier July-18 task).
