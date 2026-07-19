@@ -70,7 +70,27 @@ function parseRecap(raw: string, type: RecapType, ts: string, message_id: number
 }
 
 type SortKey = "multiplier" | "ticker" | "recap_date" | "recap_type";
-type Tab = "tokens" | "devs" | "kyc";
+type Tab = "tokens" | "devs" | "kyc" | "alpha";
+
+type AlphaTrade = {
+  id: string;
+  mint: string;
+  ticker: string | null;
+  entry_market_cap: number | null;
+  size_usd: number;
+  status: string;
+  match_kind: string;
+  matched_dev_wallet: string | null;
+  matched_kyc_root: string | null;
+  matched_kyc_label: string | null;
+  dev_best_multiplier: number | null;
+  dev_best_ticker: string | null;
+  group_token_count: number | null;
+  group_avg_multiplier: number | null;
+  reason: string | null;
+  sms_status: string | null;
+  created_at: string;
+};
 
 type KycInfo = { root: string; label: string | null; source: string | null; status: string | null };
 
@@ -95,6 +115,10 @@ export default function InsidersRecaps() {
   const [kycLoading, setKycLoading] = useState(false);
   const [kycProgress, setKycProgress] = useState<string>("");
   const [kycOnlyRepeat, setKycOnlyRepeat] = useState(true);
+  const [alphaTrades, setAlphaTrades] = useState<AlphaTrade[]>([]);
+  const [alphaLoading, setAlphaLoading] = useState(false);
+  const [rebuilding, setRebuilding] = useState(false);
+  const [rebuildMsg, setRebuildMsg] = useState<string | null>(null);
 
   // Resolve KYC for every known dev wallet
   useEffect(() => {
@@ -182,6 +206,43 @@ export default function InsidersRecaps() {
       setKycLoading(false);
     })();
   }, [devs]);
+
+  // Load alpha_paper_trades whenever the Alpha tab is opened (and refresh every 30s)
+  useEffect(() => {
+    if (tab !== "alpha") return;
+    let cancelled = false;
+    const load = async () => {
+      setAlphaLoading(true);
+      const { data } = await (supabase as any)
+        .from("alpha_paper_trades")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (!cancelled) {
+        setAlphaTrades((data as AlphaTrade[]) || []);
+        setAlphaLoading(false);
+      }
+    };
+    load();
+    const iv = setInterval(load, 30_000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [tab]);
+
+  async function rebuildAlphaLists() {
+    setRebuilding(true);
+    setRebuildMsg(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("alpha-lists-rebuild");
+      if (error) throw error;
+      setRebuildMsg(
+        `Rebuilt: ${data?.tokens ?? 0} tokens · ${data?.devs_upserted ?? 0} devs · ${data?.kyc_groups_upserted ?? 0} KYC groups`,
+      );
+    } catch (e: any) {
+      setRebuildMsg(`Failed: ${e?.message || String(e)}`);
+    } finally {
+      setRebuilding(false);
+    }
+  }
 
   // Group entries by KYC root
   const kycGroups = useMemo(() => {
@@ -426,7 +487,7 @@ export default function InsidersRecaps() {
 
       <div className="flex flex-wrap gap-3 items-center mb-4">
         <div className="flex gap-1 mr-2">
-          {(["tokens", "devs", "kyc"] as const).map((t) => (
+          {(["tokens", "devs", "kyc", "alpha"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -436,7 +497,13 @@ export default function InsidersRecaps() {
                   : "bg-muted text-muted-foreground border-border hover:bg-muted/70"
               }`}
             >
-              {t === "tokens" ? "Tokens" : t === "devs" ? "Dev Groupings" : "KYC Groupings"}
+              {t === "tokens"
+                ? "Tokens"
+                : t === "devs"
+                  ? "Dev Groupings"
+                  : t === "kyc"
+                    ? "KYC Groupings"
+                    : "Alpha Watch"}
             </button>
           ))}
         </div>
