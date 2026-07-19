@@ -898,6 +898,222 @@ export type Database = {
         }
         Relationships: []
       }
+      alpha_config: {
+        Row: {
+          enabled: boolean
+          id: number
+          kyc_min_avg_multiplier: number
+          kyc_min_distinct_devs: number
+          min_best_multiplier: number
+          min_repeat_avg_multiplier: number
+          min_repeat_token_count: number
+          paper_size_usd: number
+          sms_enabled: boolean
+          updated_at: string
+        }
+        Insert: {
+          enabled?: boolean
+          id?: number
+          kyc_min_avg_multiplier?: number
+          kyc_min_distinct_devs?: number
+          min_best_multiplier?: number
+          min_repeat_avg_multiplier?: number
+          min_repeat_token_count?: number
+          paper_size_usd?: number
+          sms_enabled?: boolean
+          updated_at?: string
+        }
+        Update: {
+          enabled?: boolean
+          id?: number
+          kyc_min_avg_multiplier?: number
+          kyc_min_distinct_devs?: number
+          min_best_multiplier?: number
+          min_repeat_avg_multiplier?: number
+          min_repeat_token_count?: number
+          paper_size_usd?: number
+          sms_enabled?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      alpha_dev_wallets: {
+        Row: {
+          avg_multiplier: number | null
+          best_mint: string | null
+          best_multiplier: number | null
+          best_ticker: string | null
+          created_at: string
+          dev_wallet: string
+          kyc_label: string | null
+          kyc_root: string | null
+          last_seen_at: string | null
+          mints: string[]
+          tickers: string[]
+          token_count: number
+          updated_at: string
+        }
+        Insert: {
+          avg_multiplier?: number | null
+          best_mint?: string | null
+          best_multiplier?: number | null
+          best_ticker?: string | null
+          created_at?: string
+          dev_wallet: string
+          kyc_label?: string | null
+          kyc_root?: string | null
+          last_seen_at?: string | null
+          mints?: string[]
+          tickers?: string[]
+          token_count?: number
+          updated_at?: string
+        }
+        Update: {
+          avg_multiplier?: number | null
+          best_mint?: string | null
+          best_multiplier?: number | null
+          best_ticker?: string | null
+          created_at?: string
+          dev_wallet?: string
+          kyc_label?: string | null
+          kyc_root?: string | null
+          last_seen_at?: string | null
+          mints?: string[]
+          tickers?: string[]
+          token_count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      alpha_kyc_groups: {
+        Row: {
+          avg_multiplier: number | null
+          best_mint: string | null
+          best_multiplier: number | null
+          best_ticker: string | null
+          created_at: string
+          dev_wallets: string[]
+          distinct_dev_count: number
+          kyc_label: string | null
+          kyc_root: string
+          last_seen_at: string | null
+          tickers: string[]
+          token_count: number
+          updated_at: string
+        }
+        Insert: {
+          avg_multiplier?: number | null
+          best_mint?: string | null
+          best_multiplier?: number | null
+          best_ticker?: string | null
+          created_at?: string
+          dev_wallets?: string[]
+          distinct_dev_count?: number
+          kyc_label?: string | null
+          kyc_root: string
+          last_seen_at?: string | null
+          tickers?: string[]
+          token_count?: number
+          updated_at?: string
+        }
+        Update: {
+          avg_multiplier?: number | null
+          best_mint?: string | null
+          best_multiplier?: number | null
+          best_ticker?: string | null
+          created_at?: string
+          dev_wallets?: string[]
+          distinct_dev_count?: number
+          kyc_label?: string | null
+          kyc_root?: string
+          last_seen_at?: string | null
+          tickers?: string[]
+          token_count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      alpha_paper_trades: {
+        Row: {
+          created_at: string
+          dev_best_multiplier: number | null
+          dev_best_ticker: string | null
+          entry_market_cap: number | null
+          entry_price_usd: number | null
+          group_avg_multiplier: number | null
+          group_token_count: number | null
+          id: string
+          match_kind: string
+          matched_dev_wallet: string | null
+          matched_kyc_label: string | null
+          matched_kyc_root: string | null
+          metadata: Json
+          mint: string
+          reason: string | null
+          size_usd: number
+          sms_error: string | null
+          sms_sent_at: string | null
+          sms_status: string | null
+          source: string
+          status: string
+          strategy: string
+          ticker: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          dev_best_multiplier?: number | null
+          dev_best_ticker?: string | null
+          entry_market_cap?: number | null
+          entry_price_usd?: number | null
+          group_avg_multiplier?: number | null
+          group_token_count?: number | null
+          id?: string
+          match_kind: string
+          matched_dev_wallet?: string | null
+          matched_kyc_label?: string | null
+          matched_kyc_root?: string | null
+          metadata?: Json
+          mint: string
+          reason?: string | null
+          size_usd?: number
+          sms_error?: string | null
+          sms_sent_at?: string | null
+          sms_status?: string | null
+          source?: string
+          status?: string
+          strategy?: string
+          ticker?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          dev_best_multiplier?: number | null
+          dev_best_ticker?: string | null
+          entry_market_cap?: number | null
+          entry_price_usd?: number | null
+          group_avg_multiplier?: number | null
+          group_token_count?: number | null
+          id?: string
+          match_kind?: string
+          matched_dev_wallet?: string | null
+          matched_kyc_label?: string | null
+          matched_kyc_root?: string | null
+          metadata?: Json
+          mint?: string
+          reason?: string | null
+          size_usd?: number
+          sms_error?: string | null
+          sms_sent_at?: string | null
+          sms_status?: string | null
+          source?: string
+          status?: string
+          strategy?: string
+          ticker?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       api_provider_config: {
         Row: {
           created_at: string | null

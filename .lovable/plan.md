@@ -1,33 +1,102 @@
-## Goal
-Add a third tab **"KYC Groupings"** to `/insiders-recaps` — same shape as Dev Groupings, but keyed by the KYC root wallet (the exchange/CEX or terminus wallet the dev's funding chain traces back to). Applied across all resolved tokens (~312).
+# Alpha Dev Auto-Detect + Paper Buy + SMS
 
-## Data sources (already in DB, no new tables)
-For each dev wallet already resolved on the page, look up:
-1. `developer_profiles` → `kyc_root_wallet`, `kyc_root_label`, `kyc_source_type`, `kyc_trail_status` (keyed by `master_wallet_address`)
-2. Fallback: `dev_wallet_reputation` → `trail_end_kyc_root`, `trail_end_reason` (keyed by `wallet_address`)
-3. Label enrichment: `known_cex_wallets` → `cex_name`, `cex_label`, `entity_type` for any KYC root not already labeled
+Turn the Insiders Recaps KYC/Dev groupings into a live alpha-detection engine. Every new token discovered in the Insiders channel gets checked against known-good dev wallets and KYC roots. Matches trigger a paper buy and an instant SMS to +1-226-583-5975.
 
-No Helius / on-chain tracing is triggered from this tab — it only surfaces KYC that's already been resolved by the existing genealogy pipeline. Devs with no KYC trail show under a **"Unresolved KYC"** group with a per-row status (e.g. `no_trail`, `dead_end`, `pending`).
+## Flow
 
-## UI
-- New tab button: `Tokens | Dev Groupings | KYC Groupings`
-- Each KYC card:
-  - Header: CEX/label badge (e.g. "Binance Hot Wallet"), KYC root wallet (copy + solscan), token count, best X, distinct dev count
-  - Table of every token that rolls up to this KYC: `$Ticker | Dev (short + scan) | Best X | Entry MC | Peak MC | Recap | Date | Pump/Dex/Holders`
-- Same search box (matches ticker, CA, dev, KYC label, KYC wallet)
-- Toggle: **"Repeat KYC only"** (default ON) — groups with 2+ tokens
-- Progress indicator: `kyc: N/312 resolved`
+```text
+Insiders TG channel
+   → insiders-row-ingest (already runs)
+        → NEW: alpha-dev-detector (hook)
+             ├─ resolve dev wallet (Pump.fun / Helius / cache)
+             ├─ resolve KYC root (developer_profiles / dev_wallet_reputation / known_cex_wallets)
+             ├─ match against:
+             │     (a) alpha_dev_wallets     ← direct dev wallet hit
+             │     (b) alpha_kyc_groups      ← same KYC funding root
+             └─ if match + quality gate passes:
+                   → insert paper buy row (fantasy_positions / new alpha_paper_trades)
+                   → SMS via _shared/sms-notify.ts
+        → existing blackbox-tick / no-lube pipeline continues untouched
+```
 
-## Implementation
-1. New client effect in `src/pages/InsidersRecaps.tsx` that runs after `devs` populates:
-   - Collect unique dev wallets
-   - Batch-select from `developer_profiles` where `master_wallet_address IN (...)`
-   - For misses, batch-select from `dev_wallet_reputation`
-   - Batch-select `known_cex_wallets` for any KYC roots missing a label
-   - Store as `kyc: Record<devWallet, { root, label, source, status } | null>`
-2. New `useMemo` `kycGroups` — mirrors the existing `devGroups` structure but keys by `root`
-3. New tab render block — reuses the badge/table styling from Dev Groupings
+## 1. Data model (one migration)
 
-## Out of scope
-- Triggering fresh Helius traces (would blow the credit budget); tab shows only what's already known. If the user wants a "Resolve missing KYC" button that fires `wallet-genealogy-scanner`/`mesh-kyc-deep-search` for unresolved devs, that's a follow-up.
-- No DB migrations, no new edge functions.
+Two new tables that materialize the "known alpha" set from the Insiders Recaps analysis:
+
+- `alpha_dev_wallets` — every dev wallet that has ever minted an insiders-recap token, with best multiplier, best ticker, token count, last seen.
+- `alpha_kyc_groups` — every KYC root (or CEX label) with aggregated stats: distinct devs, total tokens, best multiplier, best ticker, last seen.
+- `alpha_paper_trades` — paper buy log: mint, ticker, entry mcap, size_usd (100), matched_dev / matched_kyc, sms_status, created_at.
+
+All three get proper GRANTs (authenticated read, service_role all) and RLS.
+
+A one-time backfill populates the first two from current `/insiders-recaps` results (the dev groupings + KYC groupings you already see on screen).
+
+## 2. Quality gate (what counts as "alpha")
+
+A dev wallet or KYC group qualifies for auto paper-buy only if it meets **any** of:
+
+- Best token multiplier ≥ 10x, OR
+- ≥ 2 tokens in the insiders recaps top-N with avg multiplier ≥ 3x, OR
+- KYC group has ≥ 3 distinct devs that all produced ≥ 2x tokens.
+
+Thresholds live in a small `alpha_config` row so you can tune without a redeploy.
+
+## 3. New edge function: `alpha-dev-detector`
+
+Input: `{ mint, source: 'insiders' }`.
+Steps:
+1. Resolve dev wallet (reuse `creator-wallet-resolver` + local cache tables).
+2. Resolve KYC root (reuse `developer_profiles` / `dev_wallet_reputation` / `known_cex_wallets`).
+3. Check `alpha_dev_wallets` (direct hit) then `alpha_kyc_groups` (funding-source hit).
+4. If quality gate passes:
+   - Fetch entry market cap from DexScreener/Pump.fun (live, per Live Data Mandate).
+   - Insert `alpha_paper_trades` row with size_usd = 100, hold strategy.
+   - Call `_shared/sms-notify.ts` with a message like:
+
+```text
+🚨 ALPHA DEV DETECTED
+Ticker: $TICKER
+Entry MC: $XXk
+Match: dev 3fKF…9xy2  (KYC: Binance)
+Dev best: 47x on $PEDRO
+Group: 6 tokens, avg 8.2x
+Paper buy: $100 → HOLD
+```
+
+5. Return `{ matched: bool, reason, paper_trade_id }` to the caller.
+
+## 4. Hook into the ingest pipeline
+
+In `supabase/functions/insiders-row-ingest/index.ts`, right after the existing Helix webhook POST and before/parallel to `blackbox-tick`:
+
+```ts
+supabase.functions.invoke('alpha-dev-detector', {
+  body: { mint, source: 'insiders' },
+}).catch(e => console.warn('[alpha] detector failed', e?.message));
+```
+
+Fire-and-forget so it never blocks the no-lube / blackbox flow.
+
+## 5. UI additions on `/insiders-recaps`
+
+- New "Alpha Watch" tab: live view of `alpha_paper_trades` (mint, ticker, entry mcap, current mcap from live source, X-so-far, SMS status, matched dev/KYC link).
+- Add a small "Alpha" badge on the Dev Groupings and KYC Groupings rows that pass the quality gate.
+- Manual "Rebuild alpha lists from recaps" button (admin) — rebuilds `alpha_dev_wallets` / `alpha_kyc_groups` from current recap analysis.
+
+## 6. SMS
+
+Uses the existing `_shared/sms-notify.ts` (Twilio via connector gateway, +1-226-583-5975). Message capped at 1600 chars, logged to `alpha_paper_trades.sms_status`. Respects `SMS_GLOBAL_KILL` env var already in place.
+
+## 7. Out of scope (on purpose)
+
+- Real (non-paper) buys. This is paper only. Wiring to real trading is a separate approval.
+- Sell logic. "Hold" for now; can add trailing rules once we see a few real detections.
+
+## Technical notes
+
+- Live entry MC pulled at detection time from DexScreener → Pump.fun bonding curve fallback (never DB).
+- Detector is idempotent per `(mint)` — unique index on `alpha_paper_trades.mint` prevents double-buys if ingest retries.
+- All new tables include `service_role` GRANTs in the same migration, per project rules.
+- No new cron. Detection is event-driven off insiders ingest. Optional 5-min sweep can be added later if we want to catch tokens that missed the ingest hook.
+
+Approve and I'll build it in this order: migration → detector function → ingest hook → UI tab → backfill run.
