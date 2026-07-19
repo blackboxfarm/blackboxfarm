@@ -78,6 +78,26 @@ serve(async (req) => {
 
   let body: any = {};
   try { body = await req.json(); } catch {}
+  // Test SMS mode — sends a sample alpha alert to admin
+  if (body?.test_sms) {
+    const testMint = body.mint || '33eum82LaAhtv5YkUq1BdwEviSErH5CnFxqVNLT5pump';
+    const testTicker = body.ticker || 'WORLDCUP';
+    const testMc = body.entry_mcap || 255000;
+    const msg =
+      `🚨 ALPHA DEV DETECTED (TEST)\n` +
+      `$${testTicker}\n` +
+      `Entry MC: ${fmtMoney(testMc)}\n` +
+      `Match: dev 3fKF…9xy2\n` +
+      `Dev best: 12x on $SAMPLE\n` +
+      `Paper buy: $100 → HOLD\n\n` +
+      `CA (tap to copy):\n${testMint}\n\n` +
+      `Pump: https://pump.fun/coin/${testMint}\n` +
+      `Dex:  https://dexscreener.com/solana/${testMint}`;
+    const r = await sendSms(msg);
+    return new Response(JSON.stringify({ ok: r.ok, error: r.error, sent_to: ADMIN_PHONE }), {
+      status: r.ok ? 200 : 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
   const mint: string | undefined = body?.mint;
   const source: string = body?.source || 'insiders';
   if (!mint || mint.length < 32) {
