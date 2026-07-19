@@ -141,40 +141,56 @@ export default function InsidersRecaps() {
       setDevLoading(true);
       const mints = entries.map((e) => e.mint);
       const acc: Record<string, string | null> = {};
-      // Fast path: known creator_wallets, no resolve
-      try {
-        const { data } = await supabase.functions.invoke("insiders-recaps-devs", {
-          body: { mints, resolve: false },
-        });
-        if (data?.devs) Object.assign(acc, data.devs);
-        setDevs({ ...acc });
-        setDevProgress(`${Object.values(acc).filter(Boolean).length}/${mints.length} known`);
-      } catch (e) { /* ignore */ }
-      // Resolver pass — chunks of 10, best-X first, 3 chunks in-flight in parallel
+      // Fast path: query all 4 known-creator tables directly from client.
+      const sources: Array<[string, string]> = [
+        ["pumpfun_watchlist", "creator_wallet"],
+        ["scraped_tokens", "creator_wallet"],
+        ["token_lifecycle", "creator_wallet"],
+        ["developer_tokens", "creator_wallet"],
+      ];
+      const chunk = <T,>(a: T[], n: number) => {
+        const o: T[][] = [];
+        for (let i = 0; i < a.length; i += n) o.push(a.slice(i, i + n));
+        return o;
+      };
+      for (const [tbl, col] of sources) {
+        for (const batch of chunk(mints, 200)) {
+          const missing = batch.filter((m) => !acc[m]);
+          if (!missing.length) continue;
+          const { data } = await (supabase as any)
+            .from(tbl)
+            .select(`token_mint, ${col}`)
+            .in("token_mint", missing);
+          for (const r of (data as any[]) || []) {
+            if (r?.[col] && !acc[r.token_mint]) acc[r.token_mint] = r[col];
+          }
+        }
+      }
+      setDevs({ ...acc });
+      setDevProgress(`${Object.values(acc).filter(Boolean).length}/${mints.length} known`);
+
+      // Resolver pass — best-X first, use existing creator-wallet-resolver
+      // (single-target mode), 6 in flight in parallel.
       const byBest = [...entries].sort((a, b) => b.multiplier - a.multiplier).map((e) => e.mint);
       const missing = byBest.filter((m) => !acc[m]);
-      const chunkSize = 10;
-      const concurrency = 3;
-      const chunks: string[][] = [];
-      for (let i = 0; i < missing.length; i += chunkSize) chunks.push(missing.slice(i, i + chunkSize));
+      const concurrency = 6;
       let cursor = 0;
       const runOne = async () => {
-        while (cursor < chunks.length) {
-          const chunk = chunks[cursor++];
+        while (cursor < missing.length) {
+          const mint = missing[cursor++];
           try {
-            const { data, error } = await supabase.functions.invoke("insiders-recaps-devs", {
-              body: { mints: chunk, resolve: true },
+            const { data, error } = await supabase.functions.invoke("creator-wallet-resolver", {
+              body: { tokenMint: mint, batchSize: 1 },
             });
             if (error) {
               setDevErrors((prev) => [...prev, error.message].slice(-6));
+              continue;
             }
-            if (data?.devs) {
-              Object.assign(acc, data.devs);
+            const r = data?.results?.[0];
+            if (r?.ok && r.creator) {
+              acc[mint] = r.creator;
               setDevs({ ...acc });
               setDevProgress(`${Object.values(acc).filter(Boolean).length}/${mints.length} resolved`);
-            }
-            if (data?.errors?.length) {
-              setDevErrors((prev) => [...prev, ...data.errors].slice(-6));
             }
           } catch (e: any) {
             setDevErrors((prev) => [...prev, e?.message || String(e)].slice(-6));
