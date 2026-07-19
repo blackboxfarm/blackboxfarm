@@ -25,8 +25,10 @@ const MINTS = new Set([
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
+  let body: any = {}; try { body = await req.json(); } catch {}
+  const targets: string[] = Array.isArray(body.wallets) && body.wallets.length ? body.wallets : WALLETS;
   const out: any[] = [];
-  for (const w of WALLETS) {
+  for (const w of targets) {
     let before: string | undefined;
     const buys: any[] = [];
     let pages = 0;
