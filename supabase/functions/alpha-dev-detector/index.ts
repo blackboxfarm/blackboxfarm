@@ -240,8 +240,10 @@ serve(async (req) => {
       `Entry MC: ${fmtMoney(entry.mcap)}\n` +
       `Match: ${matchKind === 'dev' ? `dev ${shortDev}` : `KYC ${kycLabel || kycRoot?.slice(0, 8)}`}\n` +
       `${reason}\n` +
-      `Paper buy: $${config.paper_size_usd} → HOLD\n` +
-      `CA: ${mint}`;
+      `Paper buy: $${config.paper_size_usd} → HOLD\n\n` +
+      `CA (tap to copy):\n${mint}\n\n` +
+      `Pump: https://pump.fun/coin/${mint}\n` +
+      `Dex:  https://dexscreener.com/solana/${mint}`;
     const r = await sendSms(smsBody);
     smsStatus = r.ok ? 'sent' : 'failed';
     smsError = r.error ?? null;
