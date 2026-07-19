@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
     const buys: any[] = [];
     let pages = 0;
     let err: string | null = null;
-    while (pages < 20) {
+    while (pages < 10) {
       pages++;
       const path = `/v0/addresses/${w}/transactions?limit=100${before ? `&before=${before}` : ''}`;
       let txs: any[] = [];
@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
       }
       before = txs[txs.length - 1]?.signature;
       if (txs.length < 100) break;
-      await new Promise(r => setTimeout(r, 1300));
+      await new Promise(r => setTimeout(r, 800));
     }
     buys.sort((a, b) => a.ts - b.ts);
     out.push({ wallet: w, pages, error: err, buy_count: buys.length, first: buys[0] || null, all: buys });
