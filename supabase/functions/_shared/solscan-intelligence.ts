@@ -396,126 +396,19 @@ export async function solscanCheckAccountLabel(
 }
 
 /**
- * Discover who funded a wallet by looking at SOL transfers TO the wallet.
- * Returns top funders sorted by amount.
+ * DISABLED — solscanDiscoverFunders has been retired.
+ * Kept as a no-op stub so existing callers compile; all Solscan funder
+ * discovery is now handled by Helius / funding-resolver.
  */
 export async function solscanDiscoverFunders(
-  walletAddress: string,
-  apiErrors: string[] = [],
-  maxPages: number = 2
+  _walletAddress: string,
+  _apiErrors: string[] = [],
+  _maxPages: number = 2
 ): Promise<SolscanFunder[]> {
-  const fallbackFromScrape = async (): Promise<SolscanFunder[]> => {
-    const scraped = await solscanScrapeFundingInfo(walletAddress, apiErrors);
-
-    if (scraped.fundedByWallet) {
-      return [{
-        wallet: scraped.fundedByWallet,
-        amountSol: 0,
-        timestamp: 0,
-      }];
-    }
-
-    if (scraped.fundedByLabel) {
-      console.log(`[Solscan Intel] Scrape fallback found funded_by label only for ${walletAddress.slice(0, 8)}...: ${scraped.fundedByLabel}`);
-    }
-
-    return [];
-  };
-
-  const apiKey = getSolscanApiKey();
-  if (!apiKey) {
-    apiErrors.push('SOLSCAN_API_KEY not configured');
-    return await fallbackFromScrape();
-  }
-
-  const funders = new Map<string, SolscanFunder>();
-  let shouldUseScrapeFallback = false;
-
-  try {
-    // Fetch SOL transfers TO this wallet (incoming SOL = funding)
-    let page = 1;
-    let hasMore = true;
-
-    while (hasMore && page <= maxPages) {
-      const logger = createApiLogger({
-        serviceName: 'solscan',
-        endpoint: '/v2.0/account/transfer',
-        tokenMint: walletAddress,
-        functionName: 'solscanDiscoverFunders',
-        requestType: 'oracle_spider',
-        credits: 1,
-      });
-
-      const url = `https://pro-api.solscan.io/v2.0/account/transfer?address=${walletAddress}&activity_type[]=ACTIVITY_SPL_TRANSFER&token=${SOL_NATIVE_MINT}&page=${page}&page_size=40&sort_by=block_time&sort_order=desc`;
-
-      const { solscanFetch } = await import('./solscan-rate-limiter.ts');
-      const resp = await solscanFetch(url, {
-        headers: solscanHeaders(apiKey), timeoutMs: 8000, callerName: 'solscanDiscoverFunders',
-      });
-      if (!resp.ok) {
-        await logger.complete(resp.status, `Solscan ${resp.status}`);
-        apiErrors.push(formatSolscanApiError('Solscan account/transfer', resp.status, ''));
-        shouldUseScrapeFallback = resp.status === 401 || resp.status === 403 || resp.status === 429;
-        break;
-      }
-      await logger.complete(resp.status);
-      const data = resp.body as any;
-      const transfers = data?.data || [];
-
-      if (!Array.isArray(transfers) || transfers.length === 0) {
-        hasMore = false;
-        break;
-      }
-
-      for (const tx of transfers) {
-        // We want transfers WHERE this wallet is the RECEIVER (incoming SOL)
-        const from = tx.from_address || tx.source || tx.from || null;
-        const to = tx.to_address || tx.dest || tx.to || null;
-        const amount = tx.amount ? Number(tx.amount) / 1e9 : 0; // lamports to SOL
-
-        if (to === walletAddress && from && from !== walletAddress && amount > 0.01) {
-          const existing = funders.get(from);
-          if (existing) {
-            existing.amountSol += amount;
-          } else {
-            funders.set(from, {
-              wallet: from,
-              amountSol: amount,
-              timestamp: tx.block_time || tx.blockTime || 0,
-              txSignature: tx.trans_id || tx.signature || undefined,
-            });
-          }
-        }
-      }
-
-      if (transfers.length < 40) {
-        hasMore = false;
-      }
-      page++;
-
-      // Small delay between pages
-      if (hasMore) await new Promise(r => setTimeout(r, 200));
-    }
-
-    const sorted = Array.from(funders.values()).sort((a, b) => b.amountSol - a.amountSol);
-    if (sorted.length > 0) {
-      console.log(`[Solscan Intel] Wallet ${walletAddress.slice(0, 8)}... has ${sorted.length} funders. Top: ${sorted[0].wallet.slice(0, 8)}... (${sorted[0].amountSol.toFixed(2)} SOL)`);
-      return sorted;
-    }
-
-    if (shouldUseScrapeFallback) {
-      return await fallbackFromScrape();
-    }
-
-    return [];
-  } catch (e) {
-    const msg = `Solscan account/transfer error: ${e instanceof Error ? e.message : 'timeout'}`;
-    apiErrors.push(msg);
-    console.error(`[Solscan Intel] ${msg}`);
-
-    return await fallbackFromScrape();
-  }
+  return [];
 }
+
+// Legacy body deleted intentionally — do not restore.
 
 /**
  * Discover tokens created/minted by a wallet via Solscan account transfer
