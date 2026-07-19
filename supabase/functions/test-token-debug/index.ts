@@ -1,82 +1,73 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { heliusRestFetch } from '../_shared/helius-client.ts';
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+const cors = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+const WALLETS = [
+  'CpZR7V5cgRA3cvCSg2Uy13YkVYqPqHKrMNmPVYBvyK7D',
+  'Dng4Gig7PBeSriFivdtBuf4rsJkF8NspJbPK8RfggDk9',
+  '2uLzYEq4ofhAcm3PCpS8548RBt5oHKzvF9H7naZ3feMk',
+  '7318iWvbUQvLZdmZvoYHhyRaGtu7yYbP9qQFZBFwqDFb',
+  '4oCMYAjVcteGfTRh8RT37QjZ11db34toGQn6dbhTJKfJ',
+  '3DWZMm4U7ewYb5ofH3zYWLsQLRuf3Jij1f8mL1TheD5Y',
+  'BcJLUUugZbJKdV9mJaaFAFdRwzqpNJqodofXEGr8Dprt',
+  'EzBQmwdwgVJoH4nRXVFqGvE6gM5CvjgLVpXm2DrcxSe1',
+  'EBXbPuShc2e7X9ReoWpqSvVADqTP2jAGYynjJBuR9JQS',
+];
 
-  try {
-    const tokenMint = "44qC6Zv9FEFE9g3eV4tSDaQk56YQHeAcWEhYQ9Lkpump";
-    
-    console.log("Testing token:", tokenMint);
-    
-    // Test Raydium compute endpoint
-    const SWAP_HOST = "https://transaction-v1.raydium.io";
-    const computeUrl = `${SWAP_HOST}/compute/swap-base-in?inputMint=So11111111111111111111111111111111111111112&outputMint=${tokenMint}&amount=1000000&slippageBps=100&txVersion=V0`;
-    
-    console.log("Testing Raydium compute with URL:", computeUrl);
-    
-    const computeRes = await fetch(computeUrl);
-    const computeText = await computeRes.text();
-    
-    console.log("Raydium response status:", computeRes.status);
-    console.log("Raydium response:", computeText);
-    
-    let computeResult;
-    try {
-      computeResult = JSON.parse(computeText);
-    } catch (e) {
-      computeResult = { error: "Failed to parse JSON", raw: computeText };
-    }
-    
-    // Test Jupiter quote with auth
-    const jupiterApiKey = Deno.env.get("JUPITER_API_KEY") || "";
-    const jupiterUrl = `https://api.jup.ag/swap/v1/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=${tokenMint}&amount=1000000&slippageBps=100`;
-    
-    console.log("Testing Jupiter quote with URL:", jupiterUrl);
-    
-    const jupiterRes = await fetch(jupiterUrl, {
-      headers: jupiterApiKey ? { "x-api-key": jupiterApiKey } : {}
-    });
-    const jupiterText = await jupiterRes.text();
-    
-    console.log("Jupiter response status:", jupiterRes.status);
-    console.log("Jupiter response:", jupiterText);
-    
-    let jupiterResult;
-    try {
-      jupiterResult = JSON.parse(jupiterText);
-    } catch (e) {
-      jupiterResult = { error: "Failed to parse JSON", raw: jupiterText };
-    }
-    
-    return new Response(JSON.stringify({
-      tokenMint,
-      raydium: {
-        status: computeRes.status,
-        result: computeResult
-      },
-      jupiter: {
-        status: jupiterRes.status,
-        result: jupiterResult
+const MINTS = new Set([
+  '6oGuFDbEeaSzTcvrmmd2MqfNYwHKXFoN7regcR22pump',
+  '6bgMByoiBvNmmZ13YwPoHJSwB5DWTMQZTQRNuR91pump',
+  'ByJykJQJVLZXuYViV8BWcj9m9ZwtMmxX1WuGvUpGpump',
+]);
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
+  let body: any = {}; try { body = await req.json(); } catch {}
+  const targets: string[] = Array.isArray(body.wallets) && body.wallets.length ? body.wallets : WALLETS;
+  const out: any[] = [];
+  for (const w of targets) {
+    let before: string | undefined;
+    const buys: any[] = [];
+    let pages = 0;
+    let err: string | null = null;
+    while (pages < 10) {
+      pages++;
+      const path = `/v0/addresses/${w}/transactions?limit=100${before ? `&before=${before}` : ''}`;
+      let txs: any[] = [];
+      try {
+        const res = await heliusRestFetch(path);
+        if (!res.ok) { err = `helius ${res.status}`; break; }
+        txs = await res.json();
+      } catch (e) { err = String(e); break; }
+      if (!Array.isArray(txs) || txs.length === 0) break;
+      for (const tx of txs) {
+        const transfers = tx.tokenTransfers || [];
+        for (const t of transfers) {
+          if (MINTS.has(t.mint) && t.toUserAccount === w) {
+            let solIn = 0;
+            for (const nt of (tx.nativeTransfers || [])) {
+              if (nt.fromUserAccount === w) solIn += (nt.amount || 0) / 1e9;
+            }
+            buys.push({
+              ts: tx.timestamp,
+              date: new Date(tx.timestamp * 1000).toISOString(),
+              mint: t.mint,
+              amount: t.tokenAmount,
+              sol_spent: solIn,
+              sig: tx.signature,
+            });
+          }
+        }
       }
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" }
-    });
-    
-  } catch (e) {
-    console.error("Debug function error:", e);
-    return new Response(JSON.stringify({
-      error: e instanceof Error ? e.message : String(e),
-      stack: e instanceof Error ? e.stack : String(e)
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" }
-    });
+      before = txs[txs.length - 1]?.signature;
+      if (txs.length < 100) break;
+      await new Promise(r => setTimeout(r, 800));
+    }
+    buys.sort((a, b) => a.ts - b.ts);
+    out.push({ wallet: w, pages, error: err, buy_count: buys.length, first: buys[0] || null, all: buys });
   }
+  return new Response(JSON.stringify(out, null, 2), { headers: { ...cors, 'Content-Type': 'application/json' } });
 });
