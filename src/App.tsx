@@ -53,6 +53,7 @@ const BannerPreview = lazy(() => import("./pages/BannerPreview"));
 const MyBanners = lazy(() => import("./pages/MyBanners"));
 const TokenAnalysisDownload = lazy(() => import("./pages/TokenAnalysisDownload"));
 const Wtf = lazy(() => import("./pages/Wtf"));
+const InsidersRecaps = lazy(() => import("./pages/InsidersRecaps"));
 
 const IntelReport = lazy(() => import("./pages/IntelReport"));
 const HoldersLanding = lazy(() => import("./pages/HoldersLanding"));
