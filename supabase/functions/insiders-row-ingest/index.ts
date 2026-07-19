@@ -254,6 +254,10 @@ serve(async (req) => {
     await invokeFn(supabaseUrl, serviceKey, 'blackbox-tick', { trigger: 'insiders-row-ingest-harvest', mint });
   })();
 
+  // Alpha-dev-detector: check known-alpha dev/KYC lists, paper-buy + SMS on match.
+  // Fire-and-forget so it never blocks the poster pipeline.
+  invokeFn(supabaseUrl, serviceKey, 'alpha-dev-detector', { mint, source: 'insiders' });
+
   // If dev_wallet is still in_process, fire background KYC genealogy walk
   // so the next compose (2x/3x repost) can include the missing pieces.
   if (devWalletSource === 'in_process' || !cache.kyc_root) {
