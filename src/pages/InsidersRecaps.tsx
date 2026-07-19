@@ -81,6 +81,10 @@ export default function InsidersRecaps() {
   const [sortKey, setSortKey] = useState<SortKey>("multiplier");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [copied, setCopied] = useState<string | null>(null);
+  const [devs, setDevs] = useState<Record<string, string | null>>({});
+  const [devLoading, setDevLoading] = useState(false);
+  const [devProgress, setDevProgress] = useState<string>("");
+  const [onlyDupes, setOnlyDupes] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -129,12 +133,74 @@ export default function InsidersRecaps() {
     })();
   }, []);
 
+  // Load dev wallets once entries are known
+  useEffect(() => {
+    if (entries.length === 0) return;
+    (async () => {
+      setDevLoading(true);
+      const mints = entries.map((e) => e.mint);
+      const acc: Record<string, string | null> = {};
+      // Fast path: known creator_wallets, no resolve
+      try {
+        const { data } = await supabase.functions.invoke("insiders-recaps-devs", {
+          body: { mints, resolve: false },
+        });
+        if (data?.devs) Object.assign(acc, data.devs);
+        setDevs({ ...acc });
+        setDevProgress(`${Object.values(acc).filter(Boolean).length}/${mints.length} known`);
+      } catch (e) { /* ignore */ }
+      // Resolver pass in chunks of 40 for anything missing
+      const missing = mints.filter((m) => !acc[m]);
+      const chunkSize = 40;
+      for (let i = 0; i < missing.length; i += chunkSize) {
+        const chunk = missing.slice(i, i + chunkSize);
+        try {
+          const { data } = await supabase.functions.invoke("insiders-recaps-devs", {
+            body: { mints: chunk, resolve: true },
+          });
+          if (data?.devs) {
+            Object.assign(acc, data.devs);
+            setDevs({ ...acc });
+            setDevProgress(`${Object.values(acc).filter(Boolean).length}/${mints.length} resolved`);
+          }
+        } catch (e) { /* keep going */ }
+      }
+      setDevLoading(false);
+    })();
+  }, [entries]);
+
+  // Count how many tokens each dev wallet minted (within this list)
+  const devCounts = useMemo(() => {
+    const c = new Map<string, number>();
+    for (const e of entries) {
+      const d = devs[e.mint];
+      if (!d) continue;
+      c.set(d, (c.get(d) || 0) + 1);
+    }
+    return c;
+  }, [entries, devs]);
+
+  const dupeCount = useMemo(() => {
+    let n = 0;
+    for (const v of devCounts.values()) if (v > 1) n++;
+    return n;
+  }, [devCounts]);
+
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
     const rows = entries.filter((e) => {
       if (filter !== "all" && e.recap_type !== filter) return false;
+      if (onlyDupes) {
+        const d = devs[e.mint];
+        if (!d || (devCounts.get(d) || 0) < 2) return false;
+      }
       if (!term) return true;
-      return e.ticker.toLowerCase().includes(term) || e.mint.toLowerCase().includes(term);
+      const dev = devs[e.mint] || "";
+      return (
+        e.ticker.toLowerCase().includes(term) ||
+        e.mint.toLowerCase().includes(term) ||
+        dev.toLowerCase().includes(term)
+      );
     });
     rows.sort((a, b) => {
       let cmp = 0;
@@ -145,7 +211,7 @@ export default function InsidersRecaps() {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return rows;
-  }, [entries, filter, q, sortKey, sortDir]);
+  }, [entries, filter, q, sortKey, sortDir, devs, devCounts, onlyDupes]);
 
   function toggleSort(k: SortKey) {
     if (sortKey === k) setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -199,6 +265,18 @@ export default function InsidersRecaps() {
         />
         <div className="text-xs text-muted-foreground ml-auto">
           {loading ? "Loading…" : `${filtered.length} tokens · ${recapCount} recaps parsed`}
+          {!loading && devProgress && (
+            <span className="ml-2">· devs: {devProgress}{devLoading ? "…" : ""}</span>
+          )}
+          {!loading && dupeCount > 0 && (
+            <button
+              onClick={() => setOnlyDupes((v) => !v)}
+              className={`ml-2 px-2 py-0.5 rounded border ${onlyDupes ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted/60"}`}
+              title="Show only devs that minted multiple tokens on this list"
+            >
+              {onlyDupes ? "Showing" : "Show"} repeat devs ({dupeCount})
+            </button>
+          )}
         </div>
       </div>
 
@@ -213,6 +291,7 @@ export default function InsidersRecaps() {
                   Ticker
                 </th>
                 <th className="p-2 text-left">Contract Address</th>
+                <th className="p-2 text-left">Dev Wallet</th>
                 <th className="p-2 text-left cursor-pointer" onClick={() => toggleSort("multiplier")}>
                   Best X {sortKey === "multiplier" ? (sortDir === "desc" ? "↓" : "↑") : ""}
                 </th>
@@ -240,6 +319,35 @@ export default function InsidersRecaps() {
                       {e.mint}
                     </button>
                     {copied === e.mint && <span className="ml-2 text-primary">copied</span>}
+                  </td>
+                  <td className="p-2 font-mono">
+                    {devs[e.mint] ? (
+                      <span className="flex items-center gap-2">
+                        <button
+                          onClick={() => copy(devs[e.mint]!)}
+                          title={devs[e.mint]!}
+                          className="hover:text-primary"
+                        >
+                          {devs[e.mint]!.slice(0, 6)}…{devs[e.mint]!.slice(-4)}
+                        </button>
+                        {(devCounts.get(devs[e.mint]!) || 0) > 1 && (
+                          <span className="px-1.5 py-0.5 rounded bg-primary/20 text-primary text-[10px]">
+                            ×{devCounts.get(devs[e.mint]!)}
+                          </span>
+                        )}
+                        <a
+                          className="text-primary/70 hover:text-primary underline text-[10px]"
+                          href={`https://solscan.io/account/${devs[e.mint]}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          scan
+                        </a>
+                        {copied === devs[e.mint] && <span className="text-primary text-[10px]">copied</span>}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">{devLoading ? "…" : "—"}</span>
+                    )}
                   </td>
                   <td className="p-2 font-bold text-primary">{e.multiplier}×</td>
                   <td className="p-2">{e.entry_mc ? `$${e.entry_mc}` : "—"}</td>
@@ -280,7 +388,7 @@ export default function InsidersRecaps() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="p-6 text-center text-muted-foreground">
+                  <td colSpan={9} className="p-6 text-center text-muted-foreground">
                     No tokens match your filter.
                   </td>
                 </tr>
