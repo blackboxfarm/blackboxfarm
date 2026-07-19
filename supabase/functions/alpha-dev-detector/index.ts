@@ -17,6 +17,44 @@ const TWILIO_GATEWAY_URL = 'https://connector-gateway.lovable.dev/twilio';
 const TWILIO_FROM = '+16624814161';
 const ADMIN_PHONE = '+12265835975';
 
+// ---------- Live-buy helpers (FlipIt wallet) ----------
+async function fetchSolBalance(pubkey: string): Promise<number | null> {
+  const heliusKey = Deno.env.get('HELIUS_API_KEY');
+  const rpcs = [
+    heliusKey ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}` : null,
+    'https://api.mainnet-beta.solana.com',
+  ].filter(Boolean) as string[];
+  for (const url of rpcs) {
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getBalance', params: [pubkey] }),
+      });
+      const j = await r.json();
+      const lamports = j?.result?.value;
+      if (typeof lamports === 'number') return lamports / 1e9;
+    } catch {}
+  }
+  return null;
+}
+
+async function fetchSolPriceUsd(): Promise<number | null> {
+  try {
+    const r = await fetch('https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112');
+    const j = await r.json();
+    const p = (j?.pairs || []).find((x: any) => Number(x?.priceUsd) > 0);
+    if (p) return Number(p.priceUsd);
+  } catch {}
+  try {
+    const r = await fetch('https://price.jup.ag/v6/price?ids=SOL');
+    const j = await r.json();
+    const p = Number(j?.data?.SOL?.price);
+    if (p > 0) return p;
+  } catch {}
+  return null;
+}
+
 async function fetchDexEntry(mint: string): Promise<{ mcap: number | null; price: number | null; ticker: string | null }> {
   try {
     const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
