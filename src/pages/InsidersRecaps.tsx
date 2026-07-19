@@ -149,9 +149,10 @@ export default function InsidersRecaps() {
         setDevs({ ...acc });
         setDevProgress(`${Object.values(acc).filter(Boolean).length}/${mints.length} known`);
       } catch (e) { /* ignore */ }
-      // Resolver pass in chunks of 40 for anything missing
-      const missing = mints.filter((m) => !acc[m]);
-      const chunkSize = 40;
+      // Resolver pass in chunks of 10, ordered by best multiplier first
+      const byBest = [...entries].sort((a, b) => b.multiplier - a.multiplier).map((e) => e.mint);
+      const missing = byBest.filter((m) => !acc[m]);
+      const chunkSize = 10;
       for (let i = 0; i < missing.length; i += chunkSize) {
         const chunk = missing.slice(i, i + chunkSize);
         try {
