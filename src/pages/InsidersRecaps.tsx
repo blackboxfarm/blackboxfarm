@@ -119,6 +119,9 @@ export default function InsidersRecaps() {
   const [alphaLoading, setAlphaLoading] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
   const [rebuildMsg, setRebuildMsg] = useState<string | null>(null);
+  const [ingesting, setIngesting] = useState(false);
+  const [ingestMsg, setIngestMsg] = useState<string | null>(null);
+  const [usingPersisted, setUsingPersisted] = useState(false);
 
   // Resolve KYC for every known dev wallet
   useEffect(() => {
