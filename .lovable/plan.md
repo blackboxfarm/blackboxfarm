@@ -1,102 +1,72 @@
-# Alpha Dev Auto-Detect + Paper Buy + SMS
+## Goal
 
-Turn the Insiders Recaps KYC/Dev groupings into a live alpha-detection engine. Every new token discovered in the Insiders channel gets checked against known-good dev wallets and KYC roots. Matches trigger a paper buy and an instant SMS to +1-226-583-5975.
+Turn `/insiders-recaps` from a live regex-parse of the raw Telegram log into a **persistent accumulative list**: every daily / weekly / monthly recap that PREMIUM INSIDERS pins gets scraped, parsed, dev-wallet + KYC resolved, grouped, and stored — so the page loads instantly and the list only grows over time.
 
-## Flow
+## What exists today
 
-```text
-Insiders TG channel
-   → insiders-row-ingest (already runs)
-        → NEW: alpha-dev-detector (hook)
-             ├─ resolve dev wallet (Pump.fun / Helius / cache)
-             ├─ resolve KYC root (developer_profiles / dev_wallet_reputation / known_cex_wallets)
-             ├─ match against:
-             │     (a) alpha_dev_wallets     ← direct dev wallet hit
-             │     (b) alpha_kyc_groups      ← same KYC funding root
-             └─ if match + quality gate passes:
-                   → insert paper buy row (fantasy_positions / new alpha_paper_trades)
-                   → SMS via _shared/sms-notify.ts
-        → existing blackbox-tick / no-lube pipeline continues untouched
-```
+- Recap messages already land in `telegram_channel_calls` (channel_name `insiders`) via the live MTProto listener — no extra scraping needed.
+- The page parses those rows in the browser every visit, and resolves dev wallets / KYC on the fly with no persistence.
+- `alpha-lists-rebuild` already does the parse + dev/KYC resolution server-side, but only runs when a human clicks "Rebuild" and writes into the alpha tables, not a general recap table.
 
-## 1. Data model (one migration)
+## Plan
 
-Two new tables that materialize the "known alpha" set from the Insiders Recaps analysis:
+### 1. New table: `insiders_recap_entries` (accumulative store)
 
-- `alpha_dev_wallets` — every dev wallet that has ever minted an insiders-recap token, with best multiplier, best ticker, token count, last seen.
-- `alpha_kyc_groups` — every KYC root (or CEX label) with aggregated stats: distinct devs, total tokens, best multiplier, best ticker, last seen.
-- `alpha_paper_trades` — paper buy log: mint, ticker, entry mcap, size_usd (100), matched_dev / matched_kyc, sms_status, created_at.
+One row per unique `(recap_type, token_mint, recap_date)`:
+- `recap_type` — `daily` | `weekly` | `monthly`
+- `recap_date` — the date the pin covers (parsed from message header, e.g. "April 17")
+- `rank` — position in the top 10 / 20 / whatever
+- `ticker`, `token_mint`
+- `entry_mcap`, `peak_mcap`, `multiplier`
+- `dev_wallet`, `dev_resolution_source`
+- `kyc_root_wallet`, `kyc_root_label`, `kyc_source_type`
+- `source_message_id`, `source_message_ts`
+- `first_seen_at`, `last_refreshed_at`
 
-All three get proper GRANTs (authenticated read, service_role all) and RLS.
+Unique index on `(recap_type, token_mint, recap_date)` so re-runs are idempotent.
 
-A one-time backfill populates the first two from current `/insiders-recaps` results (the dev groupings + KYC groupings you already see on screen).
+### 2. New edge function: `insiders-recaps-ingest`
 
-## 2. Quality gate (what counts as "alpha")
+Steps each run:
+1. Read `telegram_channel_calls` rows for channel `insiders` where `raw_message ILIKE '%INSIDERS%RECAP%'` in the last N days (default 3 for daily catch-up, 45 for weekly/monthly).
+2. Classify daily / weekly / monthly and extract `recap_date` from the header (`- April 17`, `- Week of ...`, `- April`).
+3. Parse the top-N block (existing 3-line regex from the page: `Nx $TICKER`, `$entry => $peak`, base58 CA).
+4. For each entry: resolve dev wallet using the same waterfall the page uses (pumpfun_watchlist → scraped_tokens → token_lifecycle → developer_tokens → `creator-wallet-resolver`).
+5. Resolve KYC: `developer_profiles` → `dev_wallet_reputation` → label from `known_cex_wallets`.
+6. Upsert into `insiders_recap_entries` on `(recap_type, token_mint, recap_date)` — accumulative, never deletes.
+7. Return counts (new / updated / unresolved).
 
-A dev wallet or KYC group qualifies for auto paper-buy only if it meets **any** of:
+Also accepts `?mode=backfill&days=60` for one-time historical rebuild.
 
-- Best token multiplier ≥ 10x, OR
-- ≥ 2 tokens in the insiders recaps top-N with avg multiplier ≥ 3x, OR
-- KYC group has ≥ 3 distinct devs that all produced ≥ 2x tokens.
+### 3. Cron schedule (times sorted out)
 
-Thresholds live in a small `alpha_config` row so you can tune without a redeploy.
+PREMIUM INSIDERS posts pins right after each period closes; exact minute drifts, so we poll around the boundary rather than guess:
 
-## 3. New edge function: `alpha-dev-detector`
+- **Daily**: every 15 min from **23:45 → 01:30 UTC** (covers late-night pin), plus a safety sweep at **12:00 UTC**.
+- **Weekly**: every 30 min **Mon 00:00 → 04:00 UTC**.
+- **Monthly**: hourly on **day 1, 00:00 → 06:00 UTC**.
+- **Global safety net**: full function once every 3 h so any missed pin still gets picked up within hours.
 
-Input: `{ mint, source: 'insiders' }`.
-Steps:
-1. Resolve dev wallet (reuse `creator-wallet-resolver` + local cache tables).
-2. Resolve KYC root (reuse `developer_profiles` / `dev_wallet_reputation` / `known_cex_wallets`).
-3. Check `alpha_dev_wallets` (direct hit) then `alpha_kyc_groups` (funding-source hit).
-4. If quality gate passes:
-   - Fetch entry market cap from DexScreener/Pump.fun (live, per Live Data Mandate).
-   - Insert `alpha_paper_trades` row with size_usd = 100, hold strategy.
-   - Call `_shared/sms-notify.ts` with a message like:
+All schedules point at the same `insiders-recaps-ingest` function — it's idempotent, so extra runs are cheap.
 
-```text
-🚨 ALPHA DEV DETECTED
-Ticker: $TICKER
-Entry MC: $XXk
-Match: dev 3fKF…9xy2  (KYC: Binance)
-Dev best: 47x on $PEDRO
-Group: 6 tokens, avg 8.2x
-Paper buy: $100 → HOLD
-```
+### 4. Page rewrite (`src/pages/InsidersRecaps.tsx`)
 
-5. Return `{ matched: bool, reason, paper_trade_id }` to the caller.
+- **Tokens / Dev Groupings / KYC Groupings** tabs now read directly from `insiders_recap_entries` (single query, indexed, fast).
+- Filters `all / daily / weekly / monthly` map straight to `recap_type`.
+- "Rebuild" button becomes "Refresh now" → invokes `insiders-recaps-ingest` with `mode=incremental`.
+- New "Backfill 60d" admin button → invokes with `mode=backfill&days=60`.
+- **Alpha Watch** tab untouched (still reads `alpha_paper_trades`).
 
-## 4. Hook into the ingest pipeline
+### 5. One-time backfill
 
-In `supabase/functions/insiders-row-ingest/index.ts`, right after the existing Helix webhook POST and before/parallel to `blackbox-tick`:
-
-```ts
-supabase.functions.invoke('alpha-dev-detector', {
-  body: { mint, source: 'insiders' },
-}).catch(e => console.warn('[alpha] detector failed', e?.message));
-```
-
-Fire-and-forget so it never blocks the no-lube / blackbox flow.
-
-## 5. UI additions on `/insiders-recaps`
-
-- New "Alpha Watch" tab: live view of `alpha_paper_trades` (mint, ticker, entry mcap, current mcap from live source, X-so-far, SMS status, matched dev/KYC link).
-- Add a small "Alpha" badge on the Dev Groupings and KYC Groupings rows that pass the quality gate.
-- Manual "Rebuild alpha lists from recaps" button (admin) — rebuilds `alpha_dev_wallets` / `alpha_kyc_groups` from current recap analysis.
-
-## 6. SMS
-
-Uses the existing `_shared/sms-notify.ts` (Twilio via connector gateway, +1-226-583-5975). Message capped at 1600 chars, logged to `alpha_paper_trades.sms_status`. Respects `SMS_GLOBAL_KILL` env var already in place.
-
-## 7. Out of scope (on purpose)
-
-- Real (non-paper) buys. This is paper only. Wiring to real trading is a separate approval.
-- Sell logic. "Hold" for now; can add trailing rules once we see a few real detections.
+Right after deploy: run `insiders-recaps-ingest?mode=backfill&days=60` once to populate the table with everything already in `telegram_channel_calls`.
 
 ## Technical notes
 
-- Live entry MC pulled at detection time from DexScreener → Pump.fun bonding curve fallback (never DB).
-- Detector is idempotent per `(mint)` — unique index on `alpha_paper_trades.mint` prevents double-buys if ingest retries.
-- All new tables include `service_role` GRANTs in the same migration, per project rules.
-- No new cron. Detection is event-driven off insiders ingest. Optional 5-min sweep can be added later if we want to catch tokens that missed the ingest hook.
+- Idempotency: unique constraint `(recap_type, token_mint, recap_date)` + `ON CONFLICT DO UPDATE` refreshes `dev_wallet` / `kyc_root_wallet` when previously null but never overwrites a good value with null.
+- Unresolved devs get retried on every cron pass (cheap: only rows where `dev_wallet IS NULL`).
+- RLS: readable by `authenticated`, write-only via service role from the edge function.
+- Grants included in the `CREATE TABLE` migration.
+- No changes to `alpha-lists-rebuild` or the alpha pipeline — Alpha Watch keeps working as-is.
 
-Approve and I'll build it in this order: migration → detector function → ingest hook → UI tab → backfill run.
+Reply "Plan Approved" and I'll ship it.
