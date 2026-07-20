@@ -212,33 +212,67 @@ serve(async (req) => {
   let reason = '';
 
   if (devWallet) {
-    const { data } = await supabase.from('alpha_dev_wallets').select('*').eq('dev_wallet', devWallet).maybeSingle();
-    if (data) {
-      const qBest = Number(data.best_multiplier || 0) >= config.min_best_multiplier;
-      const qRepeat = Number(data.token_count || 0) >= config.min_repeat_token_count
-        && Number(data.avg_multiplier || 0) >= config.min_repeat_avg_multiplier;
+    const { data: rows } = await supabase.from('insiders_recap_entries')
+      .select('ticker, token_mint, multiplier')
+      .eq('dev_wallet', devWallet);
+    if (rows && rows.length > 0) {
+      const mults = rows.map((r: any) => Number(r.multiplier || 0));
+      const best = Math.max(...mults, 0);
+      const avg = mults.reduce((a: number, b: number) => a + b, 0) / mults.length;
+      const bestRow = rows.reduce((a: any, b: any) =>
+        Number(a.multiplier || 0) >= Number(b.multiplier || 0) ? a : b);
+      const agg = {
+        token_count: rows.length,
+        avg_multiplier: avg,
+        best_multiplier: best,
+        best_ticker: bestRow.ticker,
+        best_mint: bestRow.token_mint,
+      };
+      const qBest = best >= Number(config.min_best_multiplier);
+      const qRepeat = rows.length >= Number(config.min_repeat_token_count)
+        && avg >= Number(config.min_repeat_avg_multiplier);
       if (qBest || qRepeat) {
         matchKind = 'dev';
-        devHit = data;
+        devHit = agg;
         reason = qBest
-          ? `dev best ${data.best_multiplier}x on $${data.best_ticker}`
-          : `dev repeat ${data.token_count} tokens, avg ${Number(data.avg_multiplier).toFixed(1)}x`;
+          ? `dev best ${best}x on $${bestRow.ticker}`
+          : `dev repeat ${rows.length} tokens, avg ${avg.toFixed(1)}x`;
       }
     }
   }
 
   if (!matchKind && kycRoot) {
-    const { data } = await supabase.from('alpha_kyc_groups').select('*').eq('kyc_root', kycRoot).maybeSingle();
-    if (data) {
-      const qBest = Number(data.best_multiplier || 0) >= config.min_best_multiplier;
-      const qGroup = Number(data.distinct_dev_count || 0) >= config.kyc_min_distinct_devs
-        && Number(data.avg_multiplier || 0) >= config.kyc_min_avg_multiplier;
+    const { data: rows } = await supabase.from('insiders_recap_entries')
+      .select('ticker, token_mint, multiplier, dev_wallet, kyc_root_label')
+      .eq('kyc_root_wallet', kycRoot);
+    if (rows && rows.length > 0) {
+      const mults = rows.map((r: any) => Number(r.multiplier || 0));
+      const best = Math.max(...mults, 0);
+      const avg = mults.reduce((a: number, b: number) => a + b, 0) / mults.length;
+      const distinctDevs = new Set(rows.map((r: any) => r.dev_wallet).filter(Boolean)).size;
+      const bestRow = rows.reduce((a: any, b: any) =>
+        Number(a.multiplier || 0) >= Number(b.multiplier || 0) ? a : b);
+      if (!kycLabel) {
+        const lbl = rows.find((r: any) => r.kyc_root_label)?.kyc_root_label;
+        if (lbl) kycLabel = lbl;
+      }
+      const agg = {
+        token_count: rows.length,
+        distinct_dev_count: distinctDevs,
+        avg_multiplier: avg,
+        best_multiplier: best,
+        best_ticker: bestRow.ticker,
+        best_mint: bestRow.token_mint,
+      };
+      const qBest = best >= Number(config.min_best_multiplier);
+      const qGroup = distinctDevs >= Number(config.kyc_min_distinct_devs)
+        && avg >= Number(config.kyc_min_avg_multiplier);
       if (qBest || qGroup) {
         matchKind = 'kyc';
-        kycHit = data;
+        kycHit = agg;
         reason = qBest
-          ? `KYC group best ${data.best_multiplier}x on $${data.best_ticker}`
-          : `KYC group ${data.distinct_dev_count} devs, ${data.token_count} tokens, avg ${Number(data.avg_multiplier).toFixed(1)}x`;
+          ? `KYC group best ${best}x on $${bestRow.ticker}`
+          : `KYC group ${distinctDevs} devs, ${rows.length} tokens, avg ${avg.toFixed(1)}x`;
       }
     }
   }
