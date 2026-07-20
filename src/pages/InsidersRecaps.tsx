@@ -119,6 +119,9 @@ export default function InsidersRecaps() {
   const [alphaLoading, setAlphaLoading] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
   const [rebuildMsg, setRebuildMsg] = useState<string | null>(null);
+  const [ingesting, setIngesting] = useState(false);
+  const [ingestMsg, setIngestMsg] = useState<string | null>(null);
+  const [usingPersisted, setUsingPersisted] = useState(false);
 
   // Resolve KYC for every known dev wallet
   useEffect(() => {
@@ -244,6 +247,63 @@ export default function InsidersRecaps() {
     }
   }
 
+  async function refreshRecaps(mode: "incremental" | "backfill" = "incremental") {
+    setIngesting(true);
+    setIngestMsg(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("insiders-recaps-ingest", {
+        body: { mode, days: mode === "backfill" ? 60 : 3 },
+      });
+      if (error) throw error;
+      setIngestMsg(
+        `${mode}: ${data?.unique_entries ?? 0} entries · ${data?.devs_resolved ?? 0} devs · ${data?.kyc_resolved ?? 0} kyc`,
+      );
+      const { data: persisted } = await (supabase as any)
+        .from("insiders_recap_entries")
+        .select(
+          "token_mint, ticker, multiplier, entry_mcap, peak_mcap, recap_type, recap_date, source_message_id, dev_wallet, kyc_root_wallet, kyc_root_label, kyc_source_type",
+        )
+        .order("recap_date", { ascending: false })
+        .limit(5000);
+      if (persisted) {
+        const bestByMint = new Map<string, Entry>();
+        const devSeed: Record<string, string | null> = {};
+        const kycSeed: Record<string, KycInfo | null> = {};
+        for (const r of persisted as any[]) {
+          const e: Entry = {
+            mint: r.token_mint,
+            ticker: r.ticker || "",
+            multiplier: Number(r.multiplier) || 0,
+            entry_mc: r.entry_mcap != null ? String(r.entry_mcap) : null,
+            peak_mc: r.peak_mcap != null ? String(r.peak_mcap) : null,
+            recap_type: r.recap_type as RecapType,
+            recap_date: r.recap_date,
+            message_id: r.source_message_id ?? null,
+          };
+          const prev = bestByMint.get(e.mint);
+          if (!prev || e.multiplier > prev.multiplier) bestByMint.set(e.mint, e);
+          if (r.dev_wallet) devSeed[r.token_mint] = r.dev_wallet;
+          if (r.dev_wallet && r.kyc_root_wallet) {
+            kycSeed[r.dev_wallet] = {
+              root: r.kyc_root_wallet,
+              label: r.kyc_root_label || null,
+              source: r.kyc_source_type || null,
+              status: "resolved",
+            };
+          }
+        }
+        setEntries(Array.from(bestByMint.values()));
+        setDevs(devSeed);
+        setKyc(kycSeed);
+        setUsingPersisted(true);
+      }
+    } catch (e: any) {
+      setIngestMsg(`Failed: ${e?.message || String(e)}`);
+    } finally {
+      setIngesting(false);
+    }
+  }
+
   // Group entries by KYC root
   const kycGroups = useMemo(() => {
     const g = new Map<string, { root: string; label: string | null; source: string | null; tokens: (Entry & { dev: string | null })[]; devs: Set<string> }>();
@@ -280,6 +340,51 @@ export default function InsidersRecaps() {
 
   useEffect(() => {
     (async () => {
+      // 1) Prefer the persisted accumulative table
+      const { data: persisted, error: pErr } = await (supabase as any)
+        .from("insiders_recap_entries")
+        .select(
+          "token_mint, ticker, multiplier, entry_mcap, peak_mcap, recap_type, recap_date, source_message_id, dev_wallet, dev_resolution_source, kyc_root_wallet, kyc_root_label, kyc_source_type",
+        )
+        .order("recap_date", { ascending: false })
+        .limit(5000);
+      if (!pErr && persisted && persisted.length > 0) {
+        const bestByMint = new Map<string, Entry>();
+        const devSeed: Record<string, string | null> = {};
+        const kycSeed: Record<string, KycInfo | null> = {};
+        for (const r of persisted as any[]) {
+          const e: Entry = {
+            mint: r.token_mint,
+            ticker: r.ticker || "",
+            multiplier: Number(r.multiplier) || 0,
+            entry_mc: r.entry_mcap != null ? String(r.entry_mcap) : null,
+            peak_mc: r.peak_mcap != null ? String(r.peak_mcap) : null,
+            recap_type: r.recap_type as RecapType,
+            recap_date: r.recap_date,
+            message_id: r.source_message_id ?? null,
+          };
+          const prev = bestByMint.get(e.mint);
+          if (!prev || e.multiplier > prev.multiplier) bestByMint.set(e.mint, e);
+          if (r.dev_wallet) devSeed[r.token_mint] = r.dev_wallet;
+          if (r.dev_wallet && r.kyc_root_wallet) {
+            kycSeed[r.dev_wallet] = {
+              root: r.kyc_root_wallet,
+              label: r.kyc_root_label || null,
+              source: r.kyc_source_type || null,
+              status: "resolved",
+            };
+          }
+        }
+        setEntries(Array.from(bestByMint.values()));
+        setDevs(devSeed);
+        setKyc(kycSeed);
+        setRecapCount(new Set((persisted as any[]).map((r) => `${r.recap_type}:${r.recap_date}`)).size);
+        setUsingPersisted(true);
+        setLoading(false);
+        return;
+      }
+
+      // 2) Fallback: parse raw telegram_channel_calls (first-run before ingest has populated)
       const since = new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString();
       const { data, error } = await supabase
         .from("telegram_channel_calls")
@@ -483,7 +588,27 @@ export default function InsidersRecaps() {
       <h1 className="text-2xl font-bold mb-1">Insiders Recaps — Last 60 Days</h1>
       <p className="text-sm text-muted-foreground mb-4">
         Unique tokens from Daily / Weekly / Monthly PREMIUM INSIDERS recap pins. Best multiplier per token.
+        {usingPersisted && <span className="ml-2 text-primary/80">· persistent store</span>}
       </p>
+
+      <div className="flex flex-wrap gap-2 items-center mb-3 text-xs">
+        <button
+          onClick={() => refreshRecaps("incremental")}
+          disabled={ingesting}
+          className="px-3 py-1 rounded border border-primary/60 text-primary hover:bg-primary/10 disabled:opacity-50"
+        >
+          {ingesting ? "Refreshing…" : "Refresh now"}
+        </button>
+        <button
+          onClick={() => refreshRecaps("backfill")}
+          disabled={ingesting}
+          className="px-3 py-1 rounded border border-border text-muted-foreground hover:bg-muted/60 disabled:opacity-50"
+          title="Rescan last 60 days"
+        >
+          Backfill 60d
+        </button>
+        {ingestMsg && <span className="text-muted-foreground">{ingestMsg}</span>}
+      </div>
 
       <div className="flex flex-wrap gap-3 items-center mb-4">
         <div className="flex gap-1 mr-2">

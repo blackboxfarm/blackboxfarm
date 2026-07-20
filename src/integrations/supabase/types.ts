@@ -9417,6 +9417,69 @@ export type Database = {
         }
         Relationships: []
       }
+      insiders_recap_entries: {
+        Row: {
+          dev_resolution_source: string | null
+          dev_wallet: string | null
+          entry_mcap: number | null
+          first_seen_at: string
+          id: string
+          kyc_root_label: string | null
+          kyc_root_wallet: string | null
+          kyc_source_type: string | null
+          last_refreshed_at: string
+          multiplier: number | null
+          peak_mcap: number | null
+          rank: number | null
+          recap_date: string
+          recap_type: string
+          source_message_id: number | null
+          source_message_ts: string | null
+          ticker: string | null
+          token_mint: string
+        }
+        Insert: {
+          dev_resolution_source?: string | null
+          dev_wallet?: string | null
+          entry_mcap?: number | null
+          first_seen_at?: string
+          id?: string
+          kyc_root_label?: string | null
+          kyc_root_wallet?: string | null
+          kyc_source_type?: string | null
+          last_refreshed_at?: string
+          multiplier?: number | null
+          peak_mcap?: number | null
+          rank?: number | null
+          recap_date: string
+          recap_type: string
+          source_message_id?: number | null
+          source_message_ts?: string | null
+          ticker?: string | null
+          token_mint: string
+        }
+        Update: {
+          dev_resolution_source?: string | null
+          dev_wallet?: string | null
+          entry_mcap?: number | null
+          first_seen_at?: string
+          id?: string
+          kyc_root_label?: string | null
+          kyc_root_wallet?: string | null
+          kyc_source_type?: string | null
+          last_refreshed_at?: string
+          multiplier?: number | null
+          peak_mcap?: number | null
+          rank?: number | null
+          recap_date?: string
+          recap_type?: string
+          source_message_id?: number | null
+          source_message_ts?: string | null
+          ticker?: string | null
+          token_mint?: string
+        }
+        Relationships: []
+      }
       installer_x_profiles: {
         Row: {
           created_at: string
