@@ -414,6 +414,14 @@ serve(async (req) => {
 
   if (config.sms_enabled) {
     const shortDev = devWallet ? `${devWallet.slice(0, 4)}…${devWallet.slice(-4)}` : '—';
+    const shortMint = `${mint.slice(0, 4)}…${mint.slice(-4)}`;
+    const newTicker = ticker ? `$${ticker}` : `(${shortMint})`;
+    // Historical best prior — separate from the newly-triggering token
+    const priorTicker = devHit?.best_ticker ?? kycHit?.best_ticker ?? null;
+    const priorMult = devHit?.best_multiplier ?? kycHit?.best_multiplier ?? null;
+    const priorLine = priorTicker && priorMult
+      ? `Prior best: $${priorTicker} @ ${priorMult}x`
+      : reason;
     const liveLine =
       liveStatus === 'executed'
         ? `Live buy: $${liveUsd?.toFixed(0)} (${liveSol?.toFixed(4)} SOL) ✅`
@@ -426,15 +434,15 @@ serve(async (req) => {
               : `Live buy: ${liveStatus}${liveError ? ` (${liveError.slice(0, 60)})` : ''}`;
     const smsBody =
       `🚨 ALPHA DEV DETECTED\n` +
-      `$${ticker || mint.slice(0, 6)}\n` +
+      `NEW: ${newTicker} (${shortMint})\n` +
       `Entry MC: ${fmtMoney(entry.mcap)}\n` +
       `Match: ${matchKind === 'dev' ? `dev ${shortDev}` : `KYC ${kycLabel || kycRoot?.slice(0, 8)}`}\n` +
-      `${reason}\n` +
+      `${priorLine}\n` +
       `Paper buy: $${config.paper_size_usd} → HOLD\n` +
       `${liveLine}\n\n` +
-      `CA (tap to copy):\n${mint}\n\n` +
-      `Pump: https://pump.fun/coin/${mint}\n` +
-      `Dex:  https://dexscreener.com/solana/${mint}`;
+      `NEW CA (tap to copy):\n${mint}\n\n` +
+      `Pump (NEW): https://pump.fun/coin/${mint}\n` +
+      `Dex (NEW):  https://dexscreener.com/solana/${mint}`;
     const r = await sendSms(smsBody);
     smsStatus = r.ok ? 'sent' : 'failed';
     smsError = r.error ?? null;
