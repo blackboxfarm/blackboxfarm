@@ -247,6 +247,63 @@ export default function InsidersRecaps() {
     }
   }
 
+  async function refreshRecaps(mode: "incremental" | "backfill" = "incremental") {
+    setIngesting(true);
+    setIngestMsg(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("insiders-recaps-ingest", {
+        body: { mode, days: mode === "backfill" ? 60 : 3 },
+      });
+      if (error) throw error;
+      setIngestMsg(
+        `${mode}: ${data?.unique_entries ?? 0} entries · ${data?.devs_resolved ?? 0} devs · ${data?.kyc_resolved ?? 0} kyc`,
+      );
+      const { data: persisted } = await (supabase as any)
+        .from("insiders_recap_entries")
+        .select(
+          "token_mint, ticker, multiplier, entry_mcap, peak_mcap, recap_type, recap_date, source_message_id, dev_wallet, kyc_root_wallet, kyc_root_label, kyc_source_type",
+        )
+        .order("recap_date", { ascending: false })
+        .limit(5000);
+      if (persisted) {
+        const bestByMint = new Map<string, Entry>();
+        const devSeed: Record<string, string | null> = {};
+        const kycSeed: Record<string, KycInfo | null> = {};
+        for (const r of persisted as any[]) {
+          const e: Entry = {
+            mint: r.token_mint,
+            ticker: r.ticker || "",
+            multiplier: Number(r.multiplier) || 0,
+            entry_mc: r.entry_mcap != null ? String(r.entry_mcap) : null,
+            peak_mc: r.peak_mcap != null ? String(r.peak_mcap) : null,
+            recap_type: r.recap_type as RecapType,
+            recap_date: r.recap_date,
+            message_id: r.source_message_id ?? null,
+          };
+          const prev = bestByMint.get(e.mint);
+          if (!prev || e.multiplier > prev.multiplier) bestByMint.set(e.mint, e);
+          if (r.dev_wallet) devSeed[r.token_mint] = r.dev_wallet;
+          if (r.dev_wallet && r.kyc_root_wallet) {
+            kycSeed[r.dev_wallet] = {
+              root: r.kyc_root_wallet,
+              label: r.kyc_root_label || null,
+              source: r.kyc_source_type || null,
+              status: "resolved",
+            };
+          }
+        }
+        setEntries(Array.from(bestByMint.values()));
+        setDevs(devSeed);
+        setKyc(kycSeed);
+        setUsingPersisted(true);
+      }
+    } catch (e: any) {
+      setIngestMsg(`Failed: ${e?.message || String(e)}`);
+    } finally {
+      setIngesting(false);
+    }
+  }
+
   // Group entries by KYC root
   const kycGroups = useMemo(() => {
     const g = new Map<string, { root: string; label: string | null; source: string | null; tokens: (Entry & { dev: string | null })[]; devs: Set<string> }>();
