@@ -283,6 +283,51 @@ export default function InsidersRecaps() {
 
   useEffect(() => {
     (async () => {
+      // 1) Prefer the persisted accumulative table
+      const { data: persisted, error: pErr } = await (supabase as any)
+        .from("insiders_recap_entries")
+        .select(
+          "token_mint, ticker, multiplier, entry_mcap, peak_mcap, recap_type, recap_date, source_message_id, dev_wallet, dev_resolution_source, kyc_root_wallet, kyc_root_label, kyc_source_type",
+        )
+        .order("recap_date", { ascending: false })
+        .limit(5000);
+      if (!pErr && persisted && persisted.length > 0) {
+        const bestByMint = new Map<string, Entry>();
+        const devSeed: Record<string, string | null> = {};
+        const kycSeed: Record<string, KycInfo | null> = {};
+        for (const r of persisted as any[]) {
+          const e: Entry = {
+            mint: r.token_mint,
+            ticker: r.ticker || "",
+            multiplier: Number(r.multiplier) || 0,
+            entry_mc: r.entry_mcap != null ? String(r.entry_mcap) : null,
+            peak_mc: r.peak_mcap != null ? String(r.peak_mcap) : null,
+            recap_type: r.recap_type as RecapType,
+            recap_date: r.recap_date,
+            message_id: r.source_message_id ?? null,
+          };
+          const prev = bestByMint.get(e.mint);
+          if (!prev || e.multiplier > prev.multiplier) bestByMint.set(e.mint, e);
+          if (r.dev_wallet) devSeed[r.token_mint] = r.dev_wallet;
+          if (r.dev_wallet && r.kyc_root_wallet) {
+            kycSeed[r.dev_wallet] = {
+              root: r.kyc_root_wallet,
+              label: r.kyc_root_label || null,
+              source: r.kyc_source_type || null,
+              status: "resolved",
+            };
+          }
+        }
+        setEntries(Array.from(bestByMint.values()));
+        setDevs(devSeed);
+        setKyc(kycSeed);
+        setRecapCount(new Set((persisted as any[]).map((r) => `${r.recap_type}:${r.recap_date}`)).size);
+        setUsingPersisted(true);
+        setLoading(false);
+        return;
+      }
+
+      // 2) Fallback: parse raw telegram_channel_calls (first-run before ingest has populated)
       const since = new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString();
       const { data, error } = await supabase
         .from("telegram_channel_calls")
