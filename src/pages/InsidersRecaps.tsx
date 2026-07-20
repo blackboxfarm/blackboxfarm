@@ -588,7 +588,27 @@ export default function InsidersRecaps() {
       <h1 className="text-2xl font-bold mb-1">Insiders Recaps — Last 60 Days</h1>
       <p className="text-sm text-muted-foreground mb-4">
         Unique tokens from Daily / Weekly / Monthly PREMIUM INSIDERS recap pins. Best multiplier per token.
+        {usingPersisted && <span className="ml-2 text-primary/80">· persistent store</span>}
       </p>
+
+      <div className="flex flex-wrap gap-2 items-center mb-3 text-xs">
+        <button
+          onClick={() => refreshRecaps("incremental")}
+          disabled={ingesting}
+          className="px-3 py-1 rounded border border-primary/60 text-primary hover:bg-primary/10 disabled:opacity-50"
+        >
+          {ingesting ? "Refreshing…" : "Refresh now"}
+        </button>
+        <button
+          onClick={() => refreshRecaps("backfill")}
+          disabled={ingesting}
+          className="px-3 py-1 rounded border border-border text-muted-foreground hover:bg-muted/60 disabled:opacity-50"
+          title="Rescan last 60 days"
+        >
+          Backfill 60d
+        </button>
+        {ingestMsg && <span className="text-muted-foreground">{ingestMsg}</span>}
+      </div>
 
       <div className="flex flex-wrap gap-3 items-center mb-4">
         <div className="flex gap-1 mr-2">
