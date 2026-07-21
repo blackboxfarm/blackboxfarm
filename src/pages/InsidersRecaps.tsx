@@ -1050,6 +1050,17 @@ export default function InsidersRecaps() {
                     {g.source && !isUnresolved && (
                       <span className="text-[10px] text-muted-foreground uppercase">{g.source}</span>
                     )}
+                    {g.kind === 'person' && (
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold uppercase">
+                        Person
+                      </span>
+                    )}
+                    {g.kind === 'person' && g.via_cex && (
+                      <span className="text-[10px] text-muted-foreground">via {g.via_cex}</span>
+                    )}
+                    {g.kind === 'person' && !g.via_cex && (
+                      <span className="text-[10px] text-muted-foreground">via privacy hop</span>
+                    )}
                     {!isUnresolved && (
                       <>
                         <button
