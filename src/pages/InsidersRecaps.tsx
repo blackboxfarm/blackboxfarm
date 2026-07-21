@@ -746,6 +746,46 @@ export default function InsidersRecaps() {
               {kycHideCex ? "Hiding CEX/bridge infra" : "Showing CEX/bridge infra"}
             </button>
           )}
+          {!loading && tab === "kyc" && (
+            <button
+              onClick={async () => {
+                setResolvingPersons(true);
+                setPersonMsg("Resolving person roots (backtracing to withdrawal wallets)…");
+                try {
+                  const { data, error } = await supabase.functions.invoke("insiders-person-root-resolver", {
+                    body: { mode: "backfill", limit: 60 },
+                  });
+                  if (error) throw error;
+                  const n = (data as any)?.processed ?? 0;
+                  setPersonMsg(`Resolved ${n} dev wallets. Refresh in a sec.`);
+                  // Refresh person map from DB
+                  const { data: rows } = await (supabase as any)
+                    .from("insiders_recap_entries")
+                    .select("dev_wallet, person_root_wallet, person_root_via_cex, person_root_source")
+                    .not("person_root_wallet", "is", null);
+                  const seed: Record<string, { root: string; via_cex: string | null; source: string | null }> = {};
+                  for (const r of (rows || []) as any[]) {
+                    if (r.dev_wallet && r.person_root_wallet) {
+                      seed[r.dev_wallet] = { root: r.person_root_wallet, via_cex: r.person_root_via_cex, source: r.person_root_source };
+                    }
+                  }
+                  setPersonByDev(seed);
+                } catch (e: any) {
+                  setPersonMsg(`Failed: ${e?.message || String(e)}`);
+                } finally {
+                  setResolvingPersons(false);
+                }
+              }}
+              disabled={resolvingPersons}
+              className="ml-2 px-2 py-0.5 rounded border border-border hover:bg-muted/60 disabled:opacity-50"
+              title="Walk each dev's funding chain to find the actual person's withdrawal wallet"
+            >
+              {resolvingPersons ? "Resolving…" : "Resolve person roots"}
+            </button>
+          )}
+          {!loading && tab === "kyc" && personMsg && (
+            <span className="ml-2 text-[10px] text-muted-foreground">{personMsg}</span>
+          )}
         </div>
       </div>
 
