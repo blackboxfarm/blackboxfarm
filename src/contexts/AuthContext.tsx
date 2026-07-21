@@ -2,6 +2,8 @@
 // elsewhere in the app. Duplicate listeners contend for the Supabase storage
 // lock on tab focus / token refresh and freeze the browser. Other hooks must
 // consume `useAuth()` (or `useAuthContext()`) instead of subscribing again.
+// This provider also owns silent refresh so protected tools don't briefly load
+// as anon and show empty data after the preview iframe/tab has been idle.
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -28,6 +30,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let refreshInFlight = false;
+
+    const refreshSession = async () => {
+      if (refreshInFlight) return;
+      refreshInFlight = true;
+      try {
+        const { data, error } = await supabase.auth.refreshSession();
+        if (error) throw error;
+        if (data.session) {
+          setSession(data.session);
+          setUser(data.session.user ?? null);
+        }
+      } catch (err) {
+        // Do not sign out or clear UI on a transient refresh failure. A real
+        // sign-out still arrives through onAuthStateChange and clears state.
+        console.warn('[Auth] silent refresh skipped:', err);
+      } finally {
+        refreshInFlight = false;
+      }
+    };
+
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
@@ -67,6 +90,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       .then(({ data: { session } }) => {
         setSession(session);
         setUser(session?.user ?? null);
+        const expiresAtMs = (session?.expires_at ?? 0) * 1000;
+        if (session && expiresAtMs - Date.now() < 10 * 60 * 1000) {
+          void refreshSession();
+        }
       })
       .catch((err) => {
         console.error('[Auth] getSession failed:', err);
@@ -83,6 +110,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return false;
       });
     }, 5000);
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void refreshSession();
+    };
+    window.addEventListener('focus', refreshSession);
+    document.addEventListener('visibilitychange', onVisible);
+    const refreshInterval = window.setInterval(refreshSession, 30 * 60 * 1000);
 
     // Detect OAuth error params in URL (from failed provider callbacks)
     const detectOAuthErrors = () => {
@@ -116,6 +150,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     return () => {
       clearTimeout(watchdog);
+      window.clearInterval(refreshInterval);
+      window.removeEventListener('focus', refreshSession);
+      document.removeEventListener('visibilitychange', onVisible);
       subscription.unsubscribe();
     };
   }, []);

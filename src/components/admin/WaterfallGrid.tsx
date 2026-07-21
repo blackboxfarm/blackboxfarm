@@ -1236,7 +1236,11 @@ export default function WaterfallGrid() {
       .gte("row_index", 0)
       .lte("row_index", 9)
       .order("column_index").order("row_index");
-    if (error) toast({ title: "Load failed", description: error.message, variant: "destructive" });
+    if (error) {
+      setLoading(false);
+      toast({ title: "Load failed", description: error.message, variant: "destructive" });
+      return;
+    }
     const loaded = (data ?? []) as WaterfallWallet[];
     setWallets(loaded);
     setLoading(false);
@@ -1244,6 +1248,7 @@ export default function WaterfallGrid() {
 
   useEffect(() => {
     if (authLoading) return;
+    if (!user) return;
     loadWallets();
   }, [loadWallets, authLoading, user?.id]);
 
