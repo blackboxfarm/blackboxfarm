@@ -1942,6 +1942,18 @@ export default function WaterfallGrid() {
                           {refreshingCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>↻ Refresh W{c + 1} (Solscan)</>}
                         </button>
                       </div>
+                      {c === 0 && (
+                        <div className="flex gap-1 mt-1">
+                          <button
+                            onClick={dustSweepW1}
+                            disabled={dustSweeping}
+                            className="flex-1 text-[10px] px-1.5 py-0.5 rounded bg-orange-600 hover:bg-orange-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold flex items-center justify-center gap-1"
+                            title="Burn dust tokens, close ATAs (reclaim rent), cascade SOL W1·R1→R10"
+                          >
+                            {dustSweeping ? <Loader2 className="h-3 w-3 animate-spin" /> : <>🔥 DUST SWEEP W1</>}
+                          </button>
+                        </div>
+                      )}
                       {simMode && (
                         <div className="flex gap-1 mt-1">
                           <button
