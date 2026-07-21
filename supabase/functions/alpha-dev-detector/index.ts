@@ -206,10 +206,12 @@ serve(async (req) => {
   }
 
   // Match against alpha lists
-  let matchKind: 'dev' | 'kyc' | null = null;
+  let matchKind: 'dev' | 'person' | 'kyc' | null = null;
   let devHit: any = null;
+  let personHit: any = null;
   let kycHit: any = null;
   let reason = '';
+  let personRoot: string | null = null;
 
   if (devWallet) {
     const { data: rows } = await supabase.from('insiders_recap_entries')
@@ -242,6 +244,65 @@ serve(async (req) => {
   }
 
   if (!matchKind && kycRoot) {
+    // Resolve/lookup person_root for this dev (fire-and-wait, best-effort).
+    if (devWallet) {
+      const { data: existing } = await supabase
+        .from('insiders_recap_entries')
+        .select('person_root_wallet')
+        .eq('dev_wallet', devWallet)
+        .not('person_root_wallet', 'is', null)
+        .limit(1)
+        .maybeSingle();
+      if (existing?.person_root_wallet) {
+        personRoot = existing.person_root_wallet as string;
+      } else {
+        try {
+          const { data: pr } = await supabase.functions.invoke('insiders-person-root-resolver', {
+            body: { mode: 'single', dev_wallet: devWallet },
+          });
+          personRoot = pr?.results?.[0]?.person_root_wallet ?? null;
+        } catch (_e) { /* best-effort */ }
+      }
+    }
+
+    // 2a) Person-root match — same individual across dev-wallet rotations.
+    if (personRoot) {
+      const { data: rows } = await supabase
+        .from('insiders_recap_entries')
+        .select('ticker, token_mint, multiplier, dev_wallet')
+        .eq('person_root_wallet', personRoot);
+      if (rows && rows.length > 0) {
+        const mults = rows.map((r: any) => Number(r.multiplier || 0));
+        const best = Math.max(...mults, 0);
+        const avg = mults.reduce((a: number, b: number) => a + b, 0) / (mults.length || 1);
+        const distinctDevs = new Set(rows.map((r: any) => r.dev_wallet).filter(Boolean)).size;
+        const bestRow = rows.reduce((a: any, b: any) => Number(a.multiplier || 0) >= Number(b.multiplier || 0) ? a : b);
+        const agg = { token_count: rows.length, distinct_dev_count: distinctDevs, avg_multiplier: avg, best_multiplier: best, best_ticker: bestRow.ticker, best_mint: bestRow.token_mint };
+        const qBest = best >= Number(config.min_best_multiplier);
+        const qGroup = distinctDevs >= Number(config.kyc_min_distinct_devs) && avg >= Number(config.kyc_min_avg_multiplier);
+        if (qBest || qGroup) {
+          matchKind = 'person';
+          personHit = agg;
+          reason = qBest
+            ? `person best ${best}x on $${bestRow.ticker}`
+            : `person ${distinctDevs} wallets, ${rows.length} tokens, avg ${avg.toFixed(1)}x`;
+        }
+      }
+    }
+  }
+
+  // Legacy KYC-root fallback — ONLY when the root is NOT a CEX/bridge/onramp (that would false-positive on Binance).
+  if (!matchKind && kycRoot) {
+    const { data: rootRow } = await (supabase as any)
+      .from('insiders_recap_entries')
+      .select('kyc_source_type')
+      .eq('kyc_root_wallet', kycRoot)
+      .limit(1)
+      .maybeSingle();
+    const infraSrc = rootRow?.kyc_source_type && ['cex','onramp','bridge'].includes(String(rootRow.kyc_source_type));
+    if (infraSrc) {
+      // skip — CEX hot wallets don't identify a person
+    } else {
     const { data: rows } = await supabase.from('insiders_recap_entries')
       .select('ticker, token_mint, multiplier, dev_wallet, kyc_root_label')
       .eq('kyc_root_wallet', kycRoot);
@@ -274,6 +335,7 @@ serve(async (req) => {
           ? `KYC group best ${best}x on $${bestRow.ticker}`
           : `KYC group ${distinctDevs} devs, ${rows.length} tokens, avg ${avg.toFixed(1)}x`;
       }
+    }
     }
   }
 
