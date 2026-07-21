@@ -325,7 +325,7 @@ export default function InsidersRecaps() {
       if (person?.root) {
         key = person.root;
         kind = 'person';
-        label = `Person ${short(person.root)}`;
+        label = `Person ${person.root.slice(0, 4)}…${person.root.slice(-4)}`;
         source = person.source;
         via_cex = person.via_cex;
       } else if (k?.root) {
