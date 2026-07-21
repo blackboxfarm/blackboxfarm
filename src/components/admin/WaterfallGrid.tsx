@@ -1010,13 +1010,42 @@ export default function WaterfallGrid() {
       if (liveErr) throw new Error(liveErr.message);
       if ((live as any)?.error) throw new Error((live as any).error);
       const ls = (live as any).summary;
+      const perWallet: any[] = (live as any).wallets || [];
+      const failed = perWallet.filter((w) => (w.errors || []).length > 0);
+      // Detailed console logs so user can inspect exactly what failed and why
+      console.groupCollapsed(
+        `%c[DUST SWEEP W1] complete — ${ls.accounts_closed} closed · ${ls.tokens_burned} burned · ${ls.total_forwarded_sol.toFixed(6)} SOL forwarded · ${failed.length} wallet(s) with errors`,
+        "color:#f97316;font-weight:bold",
+      );
+      for (const w of perWallet) {
+        const label = `Wallet ${w.row_index + 1} (${(w.pubkey || "").slice(0, 6)}…) — closed:${w.accounts_closed} burned:${w.tokens_burned} fwd:${(w.forwarded_sol ?? 0).toFixed(6)} SOL`;
+        if ((w.errors || []).length) {
+          console.groupCollapsed(`❌ ${label}`);
+          for (const err of w.errors) {
+            const explain = explainDustError(err);
+            console.warn(err, explain ? `→ ${explain}` : "");
+          }
+          console.groupEnd();
+        } else {
+          console.log(`✅ ${label}`);
+        }
+      }
+      console.groupEnd();
       toast({
-        title: "Dust sweep complete",
-        description: `Closed ${ls.accounts_closed} accts · burned ${ls.tokens_burned} · forwarded ${ls.total_forwarded_sol.toFixed(6)} SOL`,
+        title: failed.length ? `Dust sweep finished with ${failed.length} error(s)` : "Dust sweep complete",
+        description:
+          `Closed ${ls.accounts_closed} accts · burned ${ls.tokens_burned} · forwarded ${ls.total_forwarded_sol.toFixed(6)} SOL` +
+          (failed.length ? ` · see console for per-wallet errors` : ""),
+        variant: failed.length ? "destructive" : "default",
       });
       void refreshBalancesForBuy(wallets.filter((w) => w.column_index === 0).map((w) => w.pubkey));
     } catch (e: any) {
-      toast({ title: "Dust sweep failed", description: e?.message || String(e), variant: "destructive" });
+      console.error("[DUST SWEEP W1] fatal", e);
+      toast({
+        title: "Dust sweep failed",
+        description: (e?.message || String(e)) + " — check browser console + edge function logs for details",
+        variant: "destructive",
+      });
     } finally {
       setDustSweeping(false);
     }
