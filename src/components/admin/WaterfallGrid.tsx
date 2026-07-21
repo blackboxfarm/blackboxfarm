@@ -6,6 +6,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { Loader2, RefreshCw, Download, Sparkles, Copy, ArrowDownToLine, Zap, Waves, Play, X, ShoppingCart, DollarSign } from "lucide-react";
+
+// Map raw edge-function error strings to human-readable explanations shown in the console.
+function explainDustError(raw: string): string {
+  const s = (raw || "").toLowerCase();
+  if (s.includes("decrypt")) return "Wallet private key could not be decrypted (missing/rotated WALLET_ENCRYPTION_KEY).";
+  if (s.includes("enumerate")) return "Failed to list SPL token accounts from the RPC (Helius rate limit or 5xx).";
+  if (s.includes("blockhash")) return "RPC failed to return a recent blockhash — transient RPC error, retry.";
+  if (s.includes("insufficient") || s.includes("0x1")) return "Wallet has no SOL to pay fees (~0.00001 SOL needed per tx).";
+  if (s.includes("simulation failed")) return "Transaction simulation rejected — usually a frozen/closed mint or already-closed ATA.";
+  if (s.includes("timeout") || s.includes("timed out")) return "Confirmation timeout — tx may still land; re-run to verify.";
+  if (s.includes("forward")) return "SOL cascade to next wallet failed (fee estimation or blockhash issue).";
+  if (s.includes("batch")) return "One batch of close/burn instructions failed; other batches may have succeeded.";
+  return "";
+}
 import { WaterfallWalletDrawer, type WaterfallWallet, type TokenHolding } from "./WaterfallWalletDrawer";
 
 const SHORT = (k: string) => `${k.slice(0, 4)}…${k.slice(-4)}`;
@@ -1010,13 +1024,42 @@ export default function WaterfallGrid() {
       if (liveErr) throw new Error(liveErr.message);
       if ((live as any)?.error) throw new Error((live as any).error);
       const ls = (live as any).summary;
+      const perWallet: any[] = (live as any).wallets || [];
+      const failed = perWallet.filter((w) => (w.errors || []).length > 0);
+      // Detailed console logs so user can inspect exactly what failed and why
+      console.groupCollapsed(
+        `%c[DUST SWEEP W1] complete — ${ls.accounts_closed} closed · ${ls.tokens_burned} burned · ${ls.total_forwarded_sol.toFixed(6)} SOL forwarded · ${failed.length} wallet(s) with errors`,
+        "color:#f97316;font-weight:bold",
+      );
+      for (const w of perWallet) {
+        const label = `Wallet ${w.row_index + 1} (${(w.pubkey || "").slice(0, 6)}…) — closed:${w.accounts_closed} burned:${w.tokens_burned} fwd:${(w.forwarded_sol ?? 0).toFixed(6)} SOL`;
+        if ((w.errors || []).length) {
+          console.groupCollapsed(`❌ ${label}`);
+          for (const err of w.errors) {
+            const explain = explainDustError(err);
+            console.warn(err, explain ? `→ ${explain}` : "");
+          }
+          console.groupEnd();
+        } else {
+          console.log(`✅ ${label}`);
+        }
+      }
+      console.groupEnd();
       toast({
-        title: "Dust sweep complete",
-        description: `Closed ${ls.accounts_closed} accts · burned ${ls.tokens_burned} · forwarded ${ls.total_forwarded_sol.toFixed(6)} SOL`,
+        title: failed.length ? `Dust sweep finished with ${failed.length} error(s)` : "Dust sweep complete",
+        description:
+          `Closed ${ls.accounts_closed} accts · burned ${ls.tokens_burned} · forwarded ${ls.total_forwarded_sol.toFixed(6)} SOL` +
+          (failed.length ? ` · see console for per-wallet errors` : ""),
+        variant: failed.length ? "destructive" : "default",
       });
       void refreshBalancesForBuy(wallets.filter((w) => w.column_index === 0).map((w) => w.pubkey));
     } catch (e: any) {
-      toast({ title: "Dust sweep failed", description: e?.message || String(e), variant: "destructive" });
+      console.error("[DUST SWEEP W1] fatal", e);
+      toast({
+        title: "Dust sweep failed",
+        description: (e?.message || String(e)) + " — check browser console + edge function logs for details",
+        variant: "destructive",
+      });
     } finally {
       setDustSweeping(false);
     }
@@ -1714,17 +1757,6 @@ export default function WaterfallGrid() {
             {sweepingToW1 ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowDownToLine className="h-4 w-4" />}
             <span className="ml-2">SWEEP → W1·W1</span>
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950"
-            onClick={dustSweepW1}
-            disabled={dustSweeping || isEmpty}
-            title="Burn dust tokens, close ATAs (reclaim rent), cascade SOL W1→W10"
-          >
-            {dustSweeping ? <Loader2 className="h-4 w-4 animate-spin" /> : <span>🔥</span>}
-            <span className="ml-2">DUST SWEEP W1</span>
-          </Button>
         </div>
       </div>
 
@@ -1910,6 +1942,18 @@ export default function WaterfallGrid() {
                           {refreshingCol === c ? <Loader2 className="h-3 w-3 animate-spin" /> : <>↻ Refresh W{c + 1} (Solscan)</>}
                         </button>
                       </div>
+                      {c === 0 && (
+                        <div className="flex gap-1 mt-1">
+                          <button
+                            onClick={dustSweepW1}
+                            disabled={dustSweeping}
+                            className="flex-1 text-[10px] px-1.5 py-0.5 rounded bg-orange-600 hover:bg-orange-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold flex items-center justify-center gap-1"
+                            title="Burn dust tokens, close ATAs (reclaim rent), cascade SOL W1·R1→R10"
+                          >
+                            {dustSweeping ? <Loader2 className="h-3 w-3 animate-spin" /> : <>🔥 DUST SWEEP W1</>}
+                          </button>
+                        </div>
+                      )}
                       {simMode && (
                         <div className="flex gap-1 mt-1">
                           <button
