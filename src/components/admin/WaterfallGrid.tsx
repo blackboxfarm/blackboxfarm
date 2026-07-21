@@ -6,6 +6,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { Loader2, RefreshCw, Download, Sparkles, Copy, ArrowDownToLine, Zap, Waves, Play, X, ShoppingCart, DollarSign } from "lucide-react";
+
+// Map raw edge-function error strings to human-readable explanations shown in the console.
+function explainDustError(raw: string): string {
+  const s = (raw || "").toLowerCase();
+  if (s.includes("decrypt")) return "Wallet private key could not be decrypted (missing/rotated WALLET_ENCRYPTION_KEY).";
+  if (s.includes("enumerate")) return "Failed to list SPL token accounts from the RPC (Helius rate limit or 5xx).";
+  if (s.includes("blockhash")) return "RPC failed to return a recent blockhash — transient RPC error, retry.";
+  if (s.includes("insufficient") || s.includes("0x1")) return "Wallet has no SOL to pay fees (~0.00001 SOL needed per tx).";
+  if (s.includes("simulation failed")) return "Transaction simulation rejected — usually a frozen/closed mint or already-closed ATA.";
+  if (s.includes("timeout") || s.includes("timed out")) return "Confirmation timeout — tx may still land; re-run to verify.";
+  if (s.includes("forward")) return "SOL cascade to next wallet failed (fee estimation or blockhash issue).";
+  if (s.includes("batch")) return "One batch of close/burn instructions failed; other batches may have succeeded.";
+  return "";
+}
 import { WaterfallWalletDrawer, type WaterfallWallet, type TokenHolding } from "./WaterfallWalletDrawer";
 
 const SHORT = (k: string) => `${k.slice(0, 4)}…${k.slice(-4)}`;
