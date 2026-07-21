@@ -189,6 +189,7 @@ export default function WaterfallGrid() {
   const [sellingCol, setSellingCol] = useState<number | null>(null);
   const [sellingGrid, setSellingGrid] = useState<boolean>(false);
   const [buyingCol, setBuyingCol] = useState<number | null>(null);
+  const [dustSweeping, setDustSweeping] = useState<boolean>(false);
 
   // Skip TROLL buy/sell during cascade — just spread SOL across the wallets.
   const [skipTroll, setSkipTroll] = useState<boolean>(() => {
