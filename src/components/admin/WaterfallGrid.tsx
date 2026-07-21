@@ -1757,17 +1757,6 @@ export default function WaterfallGrid() {
             {sweepingToW1 ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowDownToLine className="h-4 w-4" />}
             <span className="ml-2">SWEEP → W1·W1</span>
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950"
-            onClick={dustSweepW1}
-            disabled={dustSweeping || isEmpty}
-            title="Burn dust tokens, close ATAs (reclaim rent), cascade SOL W1→W10"
-          >
-            {dustSweeping ? <Loader2 className="h-4 w-4 animate-spin" /> : <span>🔥</span>}
-            <span className="ml-2">DUST SWEEP W1</span>
-          </Button>
         </div>
       </div>
 
