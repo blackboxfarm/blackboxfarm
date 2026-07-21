@@ -699,6 +699,15 @@ export default function InsidersRecaps() {
               {kycOnlyRepeat ? "Repeat KYC only" : "All KYC (incl. unresolved)"}
             </button>
           )}
+          {!loading && tab === "kyc" && (
+            <button
+              onClick={() => setKycHideCex((v) => !v)}
+              title="Hide Binance/Coinbase/etc. hot-wallet groupings — those are shared CEX infra, not a single person"
+              className={`ml-2 px-2 py-0.5 rounded border ${kycHideCex ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted/60"}`}
+            >
+              {kycHideCex ? "Hiding CEX/bridge infra" : "Showing CEX/bridge infra"}
+            </button>
+          )}
         </div>
       </div>
 
