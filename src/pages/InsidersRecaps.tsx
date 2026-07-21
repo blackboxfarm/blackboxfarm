@@ -115,6 +115,7 @@ export default function InsidersRecaps() {
   const [kycLoading, setKycLoading] = useState(false);
   const [kycProgress, setKycProgress] = useState<string>("");
   const [kycOnlyRepeat, setKycOnlyRepeat] = useState(true);
+  const [kycHideCex, setKycHideCex] = useState(true);
   const [alphaTrades, setAlphaTrades] = useState<AlphaTrade[]>([]);
   const [alphaLoading, setAlphaLoading] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
@@ -329,6 +330,16 @@ export default function InsidersRecaps() {
       bestX: Math.max(...r.tokens.map((t) => t.multiplier)),
     }));
     if (kycOnlyRepeat) list = list.filter((r) => r.root !== UNRESOLVED && r.tokens.length > 1);
+    if (kycHideCex) {
+      const INFRA_SOURCES = new Set(["cex", "onramp", "bridge"]);
+      const INFRA_LABEL_RE = /(binance|coinbase|bybit|kucoin|gate\.io|htx|mexc|whitebit|bitget|okx|crypto\.com|gemini|kraken|ftx|moonpay|debridge|mayan|hot wallet)/i;
+      list = list.filter((r) => {
+        if (r.root === UNRESOLVED) return true; // keep unresolved bucket visible
+        if (r.source && INFRA_SOURCES.has(r.source)) return false;
+        if (r.label && INFRA_LABEL_RE.test(r.label)) return false;
+        return true;
+      });
+    }
     list.sort((a, b) => {
       // Unresolved always last
       if (a.root === UNRESOLVED) return 1;
@@ -336,7 +347,7 @@ export default function InsidersRecaps() {
       return b.tokens.length - a.tokens.length || b.bestX - a.bestX;
     });
     return list;
-  }, [entries, devs, kyc, kycOnlyRepeat]);
+  }, [entries, devs, kyc, kycOnlyRepeat, kycHideCex]);
 
   useEffect(() => {
     (async () => {
@@ -686,6 +697,15 @@ export default function InsidersRecaps() {
               className={`ml-2 px-2 py-0.5 rounded border ${kycOnlyRepeat ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted/60"}`}
             >
               {kycOnlyRepeat ? "Repeat KYC only" : "All KYC (incl. unresolved)"}
+            </button>
+          )}
+          {!loading && tab === "kyc" && (
+            <button
+              onClick={() => setKycHideCex((v) => !v)}
+              title="Hide Binance/Coinbase/etc. hot-wallet groupings — those are shared CEX infra, not a single person"
+              className={`ml-2 px-2 py-0.5 rounded border ${kycHideCex ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted/60"}`}
+            >
+              {kycHideCex ? "Hiding CEX/bridge infra" : "Showing CEX/bridge infra"}
             </button>
           )}
         </div>
