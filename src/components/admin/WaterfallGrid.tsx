@@ -981,6 +981,47 @@ export default function WaterfallGrid() {
     } finally { setSweepingToW1(false); }
   }, [wallets]);
 
+  // ─── DUST SWEEP W1 (burn junk tokens, close accounts, cascade SOL) ─────
+  const dustSweepW1 = useCallback(async () => {
+    if (!confirm("DUST SWEEP Waterfall 1 (wallets 1→10)?\n\nDRY RUN first. It will scan token accounts, then ask you to confirm the burn + cascade.")) return;
+    setDustSweeping(true);
+    try {
+      const { data: dry, error: dryErr } = await supabase.functions.invoke("waterfall-dust-sweep", {
+        body: { waterfall_column: 0, start_row: 0, end_row: 9, dry_run: true },
+      });
+      if (dryErr) throw new Error(dryErr.message);
+      if ((dry as any)?.error) throw new Error((dry as any).error);
+      const s = (dry as any).summary;
+      const proceed = confirm(
+        `DRY RUN result:\n\n` +
+        `Wallets scanned: ${s.wallets}\n` +
+        `Token accounts to close: ${s.accounts_closed}\n` +
+        `Non-empty tokens to burn: ${s.tokens_burned}\n` +
+        `Est. SOL cascaded: ${s.total_forwarded_sol.toFixed(6)}\n\n` +
+        `EXECUTE FOR REAL now?`,
+      );
+      if (!proceed) {
+        toast({ title: "Cancelled", description: "Dry run only. No burns executed." });
+        return;
+      }
+      const { data: live, error: liveErr } = await supabase.functions.invoke("waterfall-dust-sweep", {
+        body: { waterfall_column: 0, start_row: 0, end_row: 9, dry_run: false },
+      });
+      if (liveErr) throw new Error(liveErr.message);
+      if ((live as any)?.error) throw new Error((live as any).error);
+      const ls = (live as any).summary;
+      toast({
+        title: "Dust sweep complete",
+        description: `Closed ${ls.accounts_closed} accts · burned ${ls.tokens_burned} · forwarded ${ls.total_forwarded_sol.toFixed(6)} SOL`,
+      });
+      void refreshBalancesForBuy(wallets.filter((w) => w.column_index === 0).map((w) => w.pubkey));
+    } catch (e: any) {
+      toast({ title: "Dust sweep failed", description: e?.message || String(e), variant: "destructive" });
+    } finally {
+      setDustSweeping(false);
+    }
+  }, [wallets]);
+
   // ─── BULK BUY (per column) ─────────────────────────────────────────────
   const buyColumn = async (col: number) => {
     const mint = mintForCol(col);
