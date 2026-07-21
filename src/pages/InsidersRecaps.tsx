@@ -310,16 +310,41 @@ export default function InsidersRecaps() {
 
   // Group entries by KYC root
   const kycGroups = useMemo(() => {
-    const g = new Map<string, { root: string; label: string | null; source: string | null; tokens: (Entry & { dev: string | null })[]; devs: Set<string> }>();
+    const g = new Map<string, { root: string; label: string | null; source: string | null; kind: 'person' | 'kyc' | 'unresolved'; via_cex: string | null; tokens: (Entry & { dev: string | null })[]; devs: Set<string> }>();
     const UNRESOLVED = "__unresolved__";
     for (const e of entries) {
       const dev = devs[e.mint] || null;
+      const person = dev ? personByDev[dev] : null;
       const k = dev ? kyc[dev] : null;
-      const key = k?.root || UNRESOLVED;
+      // Prefer person root; fall back to CEX/kyc root; then unresolved.
+      let key: string;
+      let kind: 'person' | 'kyc' | 'unresolved';
+      let label: string | null;
+      let source: string | null;
+      let via_cex: string | null = null;
+      if (person?.root) {
+        key = person.root;
+        kind = 'person';
+        label = `Person ${short(person.root)}`;
+        source = person.source;
+        via_cex = person.via_cex;
+      } else if (k?.root) {
+        key = k.root;
+        kind = 'kyc';
+        label = k.label || null;
+        source = k.source;
+      } else {
+        key = UNRESOLVED;
+        kind = 'unresolved';
+        label = "Unresolved";
+        source = null;
+      }
       const cur = g.get(key) || {
         root: key,
-        label: k?.label || (key === UNRESOLVED ? "Unresolved KYC" : null),
-        source: k?.source || null,
+        label,
+        source,
+        kind,
+        via_cex,
         tokens: [] as (Entry & { dev: string | null })[],
         devs: new Set<string>(),
       };
@@ -338,6 +363,7 @@ export default function InsidersRecaps() {
       const INFRA_LABEL_RE = /(binance|coinbase|bybit|kucoin|gate\.io|htx|mexc|whitebit|bitget|okx|crypto\.com|gemini|kraken|ftx|moonpay|debridge|mayan|hot wallet)/i;
       list = list.filter((r) => {
         if (r.root === UNRESOLVED) return true; // keep unresolved bucket visible
+        if (r.kind === 'person') return true;   // person groups are individuals, never infra
         if (r.source && INFRA_SOURCES.has(r.source)) return false;
         if (r.label && INFRA_LABEL_RE.test(r.label)) return false;
         return true;
@@ -350,7 +376,7 @@ export default function InsidersRecaps() {
       return b.tokens.length - a.tokens.length || b.bestX - a.bestX;
     });
     return list;
-  }, [entries, devs, kyc, kycOnlyRepeat, kycHideCex]);
+  }, [entries, devs, kyc, personByDev, kycOnlyRepeat, kycHideCex]);
 
   useEffect(() => {
     (async () => {
