@@ -358,7 +358,7 @@ export default function InsidersRecaps() {
       const { data: persisted, error: pErr } = await (supabase as any)
         .from("insiders_recap_entries")
         .select(
-          "token_mint, ticker, multiplier, entry_mcap, peak_mcap, recap_type, recap_date, source_message_id, dev_wallet, dev_resolution_source, kyc_root_wallet, kyc_root_label, kyc_source_type",
+          "token_mint, ticker, multiplier, entry_mcap, peak_mcap, recap_type, recap_date, source_message_id, dev_wallet, dev_resolution_source, kyc_root_wallet, kyc_root_label, kyc_source_type, person_root_wallet, person_root_via_cex, person_root_source",
         )
         .order("recap_date", { ascending: false })
         .limit(5000);
@@ -366,6 +366,7 @@ export default function InsidersRecaps() {
         const bestByMint = new Map<string, Entry>();
         const devSeed: Record<string, string | null> = {};
         const kycSeed: Record<string, KycInfo | null> = {};
+        const personSeed: Record<string, { root: string; via_cex: string | null; source: string | null }> = {};
         for (const r of persisted as any[]) {
           const e: Entry = {
             mint: r.token_mint,
@@ -388,10 +389,18 @@ export default function InsidersRecaps() {
               status: "resolved",
             };
           }
+          if (r.dev_wallet && r.person_root_wallet) {
+            personSeed[r.dev_wallet] = {
+              root: r.person_root_wallet,
+              via_cex: r.person_root_via_cex || null,
+              source: r.person_root_source || null,
+            };
+          }
         }
         setEntries(Array.from(bestByMint.values()));
         setDevs(devSeed);
         setKyc(kycSeed);
+        setPersonByDev(personSeed);
         setRecapCount(new Set((persisted as any[]).map((r) => `${r.recap_type}:${r.recap_date}`)).size);
         setUsingPersisted(true);
         setLoading(false);
