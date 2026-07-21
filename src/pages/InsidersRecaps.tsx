@@ -116,6 +116,9 @@ export default function InsidersRecaps() {
   const [kycProgress, setKycProgress] = useState<string>("");
   const [kycOnlyRepeat, setKycOnlyRepeat] = useState(true);
   const [kycHideCex, setKycHideCex] = useState(true);
+  const [personByDev, setPersonByDev] = useState<Record<string, { root: string; via_cex: string | null; source: string | null }>>({});
+  const [resolvingPersons, setResolvingPersons] = useState(false);
+  const [personMsg, setPersonMsg] = useState<string | null>(null);
   const [alphaTrades, setAlphaTrades] = useState<AlphaTrade[]>([]);
   const [alphaLoading, setAlphaLoading] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
@@ -307,16 +310,41 @@ export default function InsidersRecaps() {
 
   // Group entries by KYC root
   const kycGroups = useMemo(() => {
-    const g = new Map<string, { root: string; label: string | null; source: string | null; tokens: (Entry & { dev: string | null })[]; devs: Set<string> }>();
+    const g = new Map<string, { root: string; label: string | null; source: string | null; kind: 'person' | 'kyc' | 'unresolved'; via_cex: string | null; tokens: (Entry & { dev: string | null })[]; devs: Set<string> }>();
     const UNRESOLVED = "__unresolved__";
     for (const e of entries) {
       const dev = devs[e.mint] || null;
+      const person = dev ? personByDev[dev] : null;
       const k = dev ? kyc[dev] : null;
-      const key = k?.root || UNRESOLVED;
+      // Prefer person root; fall back to CEX/kyc root; then unresolved.
+      let key: string;
+      let kind: 'person' | 'kyc' | 'unresolved';
+      let label: string | null;
+      let source: string | null;
+      let via_cex: string | null = null;
+      if (person?.root) {
+        key = person.root;
+        kind = 'person';
+        label = `Person ${person.root.slice(0, 4)}…${person.root.slice(-4)}`;
+        source = person.source;
+        via_cex = person.via_cex;
+      } else if (k?.root) {
+        key = k.root;
+        kind = 'kyc';
+        label = k.label || null;
+        source = k.source;
+      } else {
+        key = UNRESOLVED;
+        kind = 'unresolved';
+        label = "Unresolved";
+        source = null;
+      }
       const cur = g.get(key) || {
         root: key,
-        label: k?.label || (key === UNRESOLVED ? "Unresolved KYC" : null),
-        source: k?.source || null,
+        label,
+        source,
+        kind,
+        via_cex,
         tokens: [] as (Entry & { dev: string | null })[],
         devs: new Set<string>(),
       };
@@ -335,6 +363,7 @@ export default function InsidersRecaps() {
       const INFRA_LABEL_RE = /(binance|coinbase|bybit|kucoin|gate\.io|htx|mexc|whitebit|bitget|okx|crypto\.com|gemini|kraken|ftx|moonpay|debridge|mayan|hot wallet)/i;
       list = list.filter((r) => {
         if (r.root === UNRESOLVED) return true; // keep unresolved bucket visible
+        if (r.kind === 'person') return true;   // person groups are individuals, never infra
         if (r.source && INFRA_SOURCES.has(r.source)) return false;
         if (r.label && INFRA_LABEL_RE.test(r.label)) return false;
         return true;
@@ -347,7 +376,7 @@ export default function InsidersRecaps() {
       return b.tokens.length - a.tokens.length || b.bestX - a.bestX;
     });
     return list;
-  }, [entries, devs, kyc, kycOnlyRepeat, kycHideCex]);
+  }, [entries, devs, kyc, personByDev, kycOnlyRepeat, kycHideCex]);
 
   useEffect(() => {
     (async () => {
@@ -355,7 +384,7 @@ export default function InsidersRecaps() {
       const { data: persisted, error: pErr } = await (supabase as any)
         .from("insiders_recap_entries")
         .select(
-          "token_mint, ticker, multiplier, entry_mcap, peak_mcap, recap_type, recap_date, source_message_id, dev_wallet, dev_resolution_source, kyc_root_wallet, kyc_root_label, kyc_source_type",
+          "token_mint, ticker, multiplier, entry_mcap, peak_mcap, recap_type, recap_date, source_message_id, dev_wallet, dev_resolution_source, kyc_root_wallet, kyc_root_label, kyc_source_type, person_root_wallet, person_root_via_cex, person_root_source",
         )
         .order("recap_date", { ascending: false })
         .limit(5000);
@@ -363,6 +392,7 @@ export default function InsidersRecaps() {
         const bestByMint = new Map<string, Entry>();
         const devSeed: Record<string, string | null> = {};
         const kycSeed: Record<string, KycInfo | null> = {};
+        const personSeed: Record<string, { root: string; via_cex: string | null; source: string | null }> = {};
         for (const r of persisted as any[]) {
           const e: Entry = {
             mint: r.token_mint,
@@ -385,10 +415,18 @@ export default function InsidersRecaps() {
               status: "resolved",
             };
           }
+          if (r.dev_wallet && r.person_root_wallet) {
+            personSeed[r.dev_wallet] = {
+              root: r.person_root_wallet,
+              via_cex: r.person_root_via_cex || null,
+              source: r.person_root_source || null,
+            };
+          }
         }
         setEntries(Array.from(bestByMint.values()));
         setDevs(devSeed);
         setKyc(kycSeed);
+        setPersonByDev(personSeed);
         setRecapCount(new Set((persisted as any[]).map((r) => `${r.recap_type}:${r.recap_date}`)).size);
         setUsingPersisted(true);
         setLoading(false);
@@ -708,6 +746,46 @@ export default function InsidersRecaps() {
               {kycHideCex ? "Hiding CEX/bridge infra" : "Showing CEX/bridge infra"}
             </button>
           )}
+          {!loading && tab === "kyc" && (
+            <button
+              onClick={async () => {
+                setResolvingPersons(true);
+                setPersonMsg("Resolving person roots (backtracing to withdrawal wallets)…");
+                try {
+                  const { data, error } = await supabase.functions.invoke("insiders-person-root-resolver", {
+                    body: { mode: "backfill", limit: 60 },
+                  });
+                  if (error) throw error;
+                  const n = (data as any)?.processed ?? 0;
+                  setPersonMsg(`Resolved ${n} dev wallets. Refresh in a sec.`);
+                  // Refresh person map from DB
+                  const { data: rows } = await (supabase as any)
+                    .from("insiders_recap_entries")
+                    .select("dev_wallet, person_root_wallet, person_root_via_cex, person_root_source")
+                    .not("person_root_wallet", "is", null);
+                  const seed: Record<string, { root: string; via_cex: string | null; source: string | null }> = {};
+                  for (const r of (rows || []) as any[]) {
+                    if (r.dev_wallet && r.person_root_wallet) {
+                      seed[r.dev_wallet] = { root: r.person_root_wallet, via_cex: r.person_root_via_cex, source: r.person_root_source };
+                    }
+                  }
+                  setPersonByDev(seed);
+                } catch (e: any) {
+                  setPersonMsg(`Failed: ${e?.message || String(e)}`);
+                } finally {
+                  setResolvingPersons(false);
+                }
+              }}
+              disabled={resolvingPersons}
+              className="ml-2 px-2 py-0.5 rounded border border-border hover:bg-muted/60 disabled:opacity-50"
+              title="Walk each dev's funding chain to find the actual person's withdrawal wallet"
+            >
+              {resolvingPersons ? "Resolving…" : "Resolve person roots"}
+            </button>
+          )}
+          {!loading && tab === "kyc" && personMsg && (
+            <span className="ml-2 text-[10px] text-muted-foreground">{personMsg}</span>
+          )}
         </div>
       </div>
 
@@ -971,6 +1049,17 @@ export default function InsidersRecaps() {
                     )}
                     {g.source && !isUnresolved && (
                       <span className="text-[10px] text-muted-foreground uppercase">{g.source}</span>
+                    )}
+                    {g.kind === 'person' && (
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold uppercase">
+                        Person
+                      </span>
+                    )}
+                    {g.kind === 'person' && g.via_cex && (
+                      <span className="text-[10px] text-muted-foreground">via {g.via_cex}</span>
+                    )}
+                    {g.kind === 'person' && !g.via_cex && (
+                      <span className="text-[10px] text-muted-foreground">via privacy hop</span>
                     )}
                     {!isUnresolved && (
                       <>
