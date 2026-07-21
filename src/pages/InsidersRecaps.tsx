@@ -115,6 +115,7 @@ export default function InsidersRecaps() {
   const [kycLoading, setKycLoading] = useState(false);
   const [kycProgress, setKycProgress] = useState<string>("");
   const [kycOnlyRepeat, setKycOnlyRepeat] = useState(true);
+  const [kycHideCex, setKycHideCex] = useState(true);
   const [alphaTrades, setAlphaTrades] = useState<AlphaTrade[]>([]);
   const [alphaLoading, setAlphaLoading] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
