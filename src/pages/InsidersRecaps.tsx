@@ -116,6 +116,9 @@ export default function InsidersRecaps() {
   const [kycProgress, setKycProgress] = useState<string>("");
   const [kycOnlyRepeat, setKycOnlyRepeat] = useState(true);
   const [kycHideCex, setKycHideCex] = useState(true);
+  const [personByDev, setPersonByDev] = useState<Record<string, { root: string; via_cex: string | null; source: string | null }>>({});
+  const [resolvingPersons, setResolvingPersons] = useState(false);
+  const [personMsg, setPersonMsg] = useState<string | null>(null);
   const [alphaTrades, setAlphaTrades] = useState<AlphaTrade[]>([]);
   const [alphaLoading, setAlphaLoading] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
