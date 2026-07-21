@@ -9334,6 +9334,11 @@ export type Database = {
           last_refreshed_at: string
           multiplier: number | null
           peak_mcap: number | null
+          person_root_depth: number | null
+          person_root_resolved_at: string | null
+          person_root_source: string | null
+          person_root_via_cex: string | null
+          person_root_wallet: string | null
           rank: number | null
           recap_date: string
           recap_type: string
@@ -9354,6 +9359,11 @@ export type Database = {
           last_refreshed_at?: string
           multiplier?: number | null
           peak_mcap?: number | null
+          person_root_depth?: number | null
+          person_root_resolved_at?: string | null
+          person_root_source?: string | null
+          person_root_via_cex?: string | null
+          person_root_wallet?: string | null
           rank?: number | null
           recap_date: string
           recap_type: string
@@ -9374,6 +9384,11 @@ export type Database = {
           last_refreshed_at?: string
           multiplier?: number | null
           peak_mcap?: number | null
+          person_root_depth?: number | null
+          person_root_resolved_at?: string | null
+          person_root_source?: string | null
+          person_root_via_cex?: string | null
+          person_root_wallet?: string | null
           rank?: number | null
           recap_date?: string
           recap_type?: string

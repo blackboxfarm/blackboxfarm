@@ -1,37 +1,53 @@
-## What you're saying (and you're right)
+## Goal
 
-There is no reason for two extra roster tables. `insiders_recap_entries` already IS the list. 450 entries, 304 unique devs, 194 unique KYC roots, best 756x. The detector should just look at that table directly and apply the thresholds from `alpha_config` at read time.
+Today we stop the KYC trace at the CEX hot wallet (Binance, Coinbase…), so 130 unrelated devs all get bucketed under "Binance." That's useless.
 
-The "seed the alpha list" step was overengineering. Drop it.
+You want the same behavior as Bubblemap: walk the funding chain all the way back and capture **the wallet that actually withdrew from the CEX** — the individual's personal wallet. If two dev wallets share that same pre-CEX withdrawal wallet, that's one person, and both their tokens should collapse into one row.
 
-## Fix to implement
+## What we already have
 
-1. Rewrite `alpha-dev-detector` to query `insiders_recap_entries` directly.
+`wallet-genealogy-scanner` (used by Bubblemap) already walks the full ancestor chain via Helius and marks the shallowest CEX hit. We just don't persist the *step before* the CEX for the Insiders Recaps pipeline.
 
-   For an incoming mint's resolved dev wallet:
-   - `select * from insiders_recap_entries where dev_wallet = <dev>`
-   - Compute on the fly: `token_count`, `avg_multiplier`, `best_multiplier`, `best_ticker`, `best_mint`.
-   - Match if `best_multiplier >= min_best_multiplier` OR (`token_count >= min_repeat_token_count` AND `avg_multiplier >= min_repeat_avg_multiplier`).
+## Plan
 
-   For the resolved KYC root:
-   - `select * from insiders_recap_entries where kyc_root_wallet = <root>`
-   - Compute: `distinct_dev_count`, `token_count`, `avg_multiplier`, `best_multiplier`, best ticker/mint, label.
-   - Match if `best_multiplier >= min_best_multiplier` OR (`distinct_dev_count >= kyc_min_distinct_devs` AND `avg_multiplier >= kyc_min_avg_multiplier`).
+### 1. DB — add person-root columns to `insiders_recap_entries`
 
-   Everything downstream (paper trade insert, SMS, live FlipIt buy, daily cap) stays exactly as it is.
+- `person_root_wallet TEXT` — the wallet directly funded by the CEX (the withdrawal recipient)
+- `person_root_via_cex TEXT` — which CEX it came from ("Binance", "Coinbase"…), audit only
+- `person_root_depth INT` — hop distance dev → person root (usually 1–4)
+- `person_root_resolved_at TIMESTAMPTZ`
+- Index on `person_root_wallet`
 
-2. Delete the two dead roster tables.
-   - Drop `alpha_dev_wallets` and `alpha_kyc_groups` (both empty).
-   - Keep `alpha_config` (thresholds/toggles) and `alpha_paper_trades` (trade log). Those are still needed.
+### 2. New edge function `insiders-person-root-resolver`
 
-3. No new edge function. No seeder. No refresher cron. The recap ingestion already keeps `insiders_recap_entries` current — the detector just reads it.
+- Input: dev_wallet (or batch)
+- Reuses the Bubblemap tracer (`wallet-genealogy-scanner` logic) to walk ancestors up to depth 20, largest-inflow-first
+- Finds the **deepest non-CEX wallet whose parent is a CEX hot wallet** — that's the person's withdrawal wallet
+- If chain terminates at Axiom/deBridge/MoonPay/other privacy hop instead of a CEX, returns that hop wallet + flags `person_root_source='privacy_hop'` (so we don't fake CEX attribution)
+- Writes back to `insiders_recap_entries` for every entry with that dev_wallet
+- Rate-limited, resumable, backfill-safe (skips rows already resolved <7d ago)
 
-4. Verify end-to-end.
-   - After deploy, run detector in a dry-run with a known dev wallet from the recap list (e.g. `9uw6…mZv1` — WORLDCUP dev, 217x) and confirm it reports a match.
-   - Watch the next real insider mint hit the detector and match live.
+### 3. Wire into ingest
 
-## Result
+- After `insiders-recaps-ingest` resolves dev + CEX root, enqueue that dev into `insiders-person-root-resolver`
+- Same call inside `alpha-dev-detector` so a *new* incoming mint gets its person root resolved within seconds — that's the "backtrace it in a second" you asked for
 
-New insider token → `insiders-row-ingest` invokes `alpha-dev-detector` → detector resolves dev/KYC → matches against `insiders_recap_entries` directly using `alpha_config` thresholds → paper trade + SMS + live $100 FlipIt buy (if wallet ≥ $100 and daily cap not hit).
+### 4. UI — `/insiders-recaps` KYC Groupings tab
 
-One list. The one you already have.
+- Group by `person_root_wallet` instead of `kyc_root_wallet` when available; fall back to CEX root only when the person root is unresolved
+- Row label: `Person <short>…<short>` (or a saved nickname if we've seen this person before)
+- Sub-line: "funded via Binance / Coinbase / privacy-hop"
+- The existing "Hiding CEX/bridge infra" toggle stays, but with person-rooting the CEX-only rows will naturally disappear
+- Add a "Resolve person roots" button next to "Rebuild recaps" to trigger a bulk pass
+
+### 5. Backfill
+
+Kick a one-time pass over the ~60 existing devs. Expected Helius cost: ~60 devs × ~10 hops × 1 call = ~600 calls, well inside budget.
+
+## Technical notes
+
+- Reuses `known_cex_wallets` (already the source of truth) plus the same `INFRA_WALLETS` terminus list used by Bubblemap so we don't chase Jupiter/Raydium into oblivion.
+- Person root is stored per-entry (not per-dev) so a dev who rotates funding sources gets independently attributed rows — matches how Bubblemap displays multi-source funding.
+- Alpha-detector match rule becomes: match on dev_wallet OR person_root_wallet OR (fallback) kyc_root_wallet-but-only-if-non-CEX — no more Binance false positives on the SMS trigger.
+
+Approve and I'll build it.
