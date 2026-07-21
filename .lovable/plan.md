@@ -1,53 +1,48 @@
-## Goal
+# Waterfall Dust Burn + SOL Cascade Plan
 
-Today we stop the KYC trace at the CEX hot wallet (Binance, Coinbase…), so 130 unrelated devs all get bucketed under "Binance." That's useless.
+Yes — I can do exactly what sol-incinerator.com does (close empty/dust SPL token accounts to reclaim the ~0.002 SOL rent each), then sweep the remaining SOL down the waterfall. We already have `burn-token` deployed which burns a token balance AND closes the account. I just need to wrap it in a batch sweeper and a SOL-transfer step.
 
-You want the same behavior as Bubblemap: walk the funding chain all the way back and capture **the wallet that actually withdrew from the CEX** — the individual's personal wallet. If two dev wallets share that same pre-CEX withdrawal wallet, that's one person, and both their tokens should collapse into one row.
+## What the sweep does per wallet
 
-## What we already have
+For each waterfall wallet N (starting at #1):
+1. **Scan** all SPL token accounts owned by the wallet (`getParsedTokenAccountsByOwner`, both TOKEN_PROGRAM_ID and TOKEN_2022_PROGRAM_ID).
+2. **For each token account**:
+   - If balance == 0 → just close it (reclaims rent, no burn ix needed).
+   - If balance > 0 → burn + close in a single tx (already what `burn-token` does).
+3. **Batch** up to ~10 close/burn instructions per transaction to minimize fees (one signature fee per tx instead of per account).
+4. **Transfer** all remaining SOL (minus a small buffer for the next hop's fees, ~5000 lamports) to wallet N+1.
+5. Move to N+1, repeat. Stop after wallet #10.
 
-`wallet-genealogy-scanner` (used by Bubblemap) already walks the full ancestor chain via Helius and marks the shallowest CEX hit. We just don't persist the *step before* the CEX for the Insiders Recaps pipeline.
+## Gas / fee optimization
 
-## Plan
+- Batching 10 close ix per tx = ~10x cheaper than one-per-tx.
+- Priority fee set to `0` (or minimum) since this is not time-sensitive.
+- Skip burn ix entirely when balance is already 0 — just close.
+- Each closed account returns ~0.00204 SOL rent → sweep usually earns SOL, doesn't cost it.
 
-### 1. DB — add person-root columns to `insiders_recap_entries`
+## Implementation
 
-- `person_root_wallet TEXT` — the wallet directly funded by the CEX (the withdrawal recipient)
-- `person_root_via_cex TEXT` — which CEX it came from ("Binance", "Coinbase"…), audit only
-- `person_root_depth INT` — hop distance dev → person root (usually 1–4)
-- `person_root_resolved_at TIMESTAMPTZ`
-- Index on `person_root_wallet`
+### New edge function: `waterfall-dust-sweep`
+- Input: `{ start_wallet_index: 1, end_wallet_index: 10, dry_run?: boolean }`
+- Super-admin auth required.
+- For each wallet in range:
+  - Decrypt secret via existing `decryptWalletSecretAuto`.
+  - Enumerate token accounts (both token programs).
+  - Build batched close/burn transactions (10 ix per tx).
+  - Sign + send + confirm.
+  - After all accounts processed, read final SOL balance and transfer `(balance - 5000 lamports)` to next wallet's pubkey.
+- Return a JSON report: per-wallet accounts scanned, tokens burned, accounts closed, rent reclaimed, SOL forwarded, tx signatures.
 
-### 2. New edge function `insiders-person-root-resolver`
+### UI trigger
+Small "Dust Sweep 1 → 10" button on the Waterfall super-admin page (or I can just run it once via a manual invoke if you'd rather not have a button).
 
-- Input: dev_wallet (or batch)
-- Reuses the Bubblemap tracer (`wallet-genealogy-scanner` logic) to walk ancestors up to depth 20, largest-inflow-first
-- Finds the **deepest non-CEX wallet whose parent is a CEX hot wallet** — that's the person's withdrawal wallet
-- If chain terminates at Axiom/deBridge/MoonPay/other privacy hop instead of a CEX, returns that hop wallet + flags `person_root_source='privacy_hop'` (so we don't fake CEX attribution)
-- Writes back to `insiders_recap_entries` for every entry with that dev_wallet
-- Rate-limited, resumable, backfill-safe (skips rows already resolved <7d ago)
+## Safety
 
-### 3. Wire into ingest
+- Dry-run mode first — reports what it *would* do without sending any tx.
+- Skips wallet if secret can't be decrypted.
+- Skips any token account whose balance can't be read.
+- Logs every signature to `activity_logs` (same pattern as `burn-token`).
 
-- After `insiders-recaps-ingest` resolves dev + CEX root, enqueue that dev into `insiders-person-root-resolver`
-- Same call inside `alpha-dev-detector` so a *new* incoming mint gets its person root resolved within seconds — that's the "backtrace it in a second" you asked for
+## What I need from you
 
-### 4. UI — `/insiders-recaps` KYC Groupings tab
-
-- Group by `person_root_wallet` instead of `kyc_root_wallet` when available; fall back to CEX root only when the person root is unresolved
-- Row label: `Person <short>…<short>` (or a saved nickname if we've seen this person before)
-- Sub-line: "funded via Binance / Coinbase / privacy-hop"
-- The existing "Hiding CEX/bridge infra" toggle stays, but with person-rooting the CEX-only rows will naturally disappear
-- Add a "Resolve person roots" button next to "Rebuild recaps" to trigger a bulk pass
-
-### 5. Backfill
-
-Kick a one-time pass over the ~60 existing devs. Expected Helius cost: ~60 devs × ~10 hops × 1 call = ~600 calls, well inside budget.
-
-## Technical notes
-
-- Reuses `known_cex_wallets` (already the source of truth) plus the same `INFRA_WALLETS` terminus list used by Bubblemap so we don't chase Jupiter/Raydium into oblivion.
-- Person root is stored per-entry (not per-dev) so a dev who rotates funding sources gets independently attributed rows — matches how Bubblemap displays multi-source funding.
-- Alpha-detector match rule becomes: match on dev_wallet OR person_root_wallet OR (fallback) kyc_root_wallet-but-only-if-non-CEX — no more Binance false positives on the SMS trigger.
-
-Approve and I'll build it.
+Just say **Plan Approved** and I'll build + deploy the function and run a dry-run against Waterfall #1 first so you can eyeball the report before it moves real SOL.
