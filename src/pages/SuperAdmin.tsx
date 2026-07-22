@@ -110,6 +110,18 @@ export default function SuperAdmin() {
   const [oracleSubTab, setOracleSubTab] = useState<string | undefined>();
   const [oracleWallet, setOracleWallet] = useState<string | undefined>();
 
+  const nukeSessionAndReload = () => {
+    try {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith('sb-') || k.includes('supabase'))
+        .forEach((k) => localStorage.removeItem(k));
+      Object.keys(sessionStorage)
+        .filter((k) => k.startsWith('sb-') || k.includes('supabase'))
+        .forEach((k) => sessionStorage.removeItem(k));
+    } catch (_) { /* noop */ }
+    window.location.reload();
+  };
+
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const tabParam = urlParams.get('tab');
