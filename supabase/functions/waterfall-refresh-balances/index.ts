@@ -26,6 +26,12 @@ function parseAssetTokens(result: any) {
     const info = asset?.token_info;
     const mint = asset?.id;
     if (!mint || !info) continue;
+    // Hide frozen SPL token accounts — they can't be burned or closed and
+    // just sit as visual dust in the wallet grid.
+    const frozen = info?.frozen === true
+      || info?.state === "frozen"
+      || asset?.ownership?.frozen === true;
+    if (frozen) continue;
     const decimals = Number(info.decimals ?? 0);
     const amount = typeof info.balance === "number"
       ? rawToUi(info.balance, decimals)
@@ -137,6 +143,7 @@ serve(async (req) => {
               const info = acc?.account?.data?.parsed?.info;
               const tokenAmount = info?.tokenAmount;
               if (!info?.mint || !tokenAmount) continue;
+              if (info?.state === "frozen") continue;
               const decimals = Number(tokenAmount.decimals ?? 0);
               const amount = Number(tokenAmount.uiAmountString ?? tokenAmount.uiAmount ?? 0);
               if (!(amount > 0)) continue;
