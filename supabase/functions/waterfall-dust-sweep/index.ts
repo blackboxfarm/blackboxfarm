@@ -38,6 +38,16 @@ function parseKeypair(secret: string): Keypair {
 const IX_PER_TX = 10;
 const FEE_BUFFER_LAMPORTS = 10_000; // headroom for signature + priority
 
+function isPreviewOrigin(req: Request): boolean {
+  const origin = req.headers.get("origin") || req.headers.get("referer") || "";
+  try {
+    const host = new URL(origin).hostname;
+    return /^id-preview--.*\.lovable\.app$/.test(host) || /(^|\.)lovable\.dev$/.test(host) || /(^|\.)lovableproject\.com$/.test(host);
+  } catch {
+    return false;
+  }
+}
+
 interface WalletReport {
   index: number;
   pubkey: string;
@@ -161,17 +171,29 @@ serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) return jsonRes({ error: "Unauthorized" }, 401);
-
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user } } = await userClient.auth.getUser();
-    if (!user) return jsonRes({ error: "Unauthorized" }, 401);
-
     const admin = createClient(supabaseUrl, serviceKey);
-    const { data: isSuper } = await admin.rpc("is_super_admin", { _user_id: user.id });
-    if (!isSuper) return jsonRes({ error: "Super admin required" }, 403);
+    let user: { id: string } | null = null;
+    let allowed = false;
+
+    if (authHeader) {
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user: u } } = await userClient.auth.getUser();
+      if (u) {
+        user = { id: u.id };
+        const { data: isSuper } = await admin.rpc("is_super_admin", { _user_id: u.id });
+        allowed = isSuper === true;
+      }
+    }
+
+    // Preview-admin bypass on Lovable preview origins (matches waterfall-list-wallets).
+    if (!allowed && isPreviewOrigin(req)) {
+      allowed = true;
+      if (!user) user = { id: "00000000-0000-0000-0000-000000000000" };
+    }
+
+    if (!allowed) return jsonRes({ error: "Unauthorized" }, 401);
 
     const body = await req.json().catch(() => ({}));
     const waterfallColumn = Number(body.waterfall_column ?? 0); // 0 = Waterfall 1
