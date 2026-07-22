@@ -82,7 +82,7 @@ export default function AuthPage() {
         .filter((k) => k.startsWith('sb-') || k.includes('supabase'))
         .forEach((k) => sessionStorage.removeItem(k));
     } catch (_) { /* noop */ }
-    location.reload();
+    window.location.reload();
   };
 
   if (user) {
