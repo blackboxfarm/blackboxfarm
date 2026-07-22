@@ -186,28 +186,32 @@ async function transferAllSol(
   from: Keypair,
   to: PublicKey,
 ): Promise<{ forwarded_sol: number; signature?: string; skipped?: string }> {
-  const bal = await connection.getBalance(from.publicKey);
-  if (bal <= 0) return { forwarded_sol: 0, skipped: "empty balance" };
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const bal = await connection.getBalance(from.publicKey);
+    if (bal <= 0) return { forwarded_sol: 0, skipped: "empty balance" };
+    const fee = 5_000;
+    const lamports = bal - fee;
+    if (lamports <= 0) return { forwarded_sol: 0, skipped: "balance below transfer fee" };
 
-  const bh = await connection.getLatestBlockhash("confirmed");
-  const feeProbe = new Transaction({ recentBlockhash: bh.blockhash, feePayer: from.publicKey }).add(
-    SystemProgram.transfer({ fromPubkey: from.publicKey, toPubkey: to, lamports: 0 }),
-  );
-  const feeResult = await connection.getFeeForMessage(feeProbe.compileMessage(), "confirmed");
-  const fee = feeResult.value ?? 5_000;
-  const lamports = bal - fee;
-  if (lamports <= 0) return { forwarded_sol: 0, skipped: "balance below transfer fee" };
-
-  const tx = new Transaction({ recentBlockhash: bh.blockhash, feePayer: from.publicKey }).add(
-    SystemProgram.transfer({ fromPubkey: from.publicKey, toPubkey: to, lamports }),
-  );
-  tx.sign(from);
-  const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: false, maxRetries: 3 });
-  await connection.confirmTransaction(
-    { signature: sig, blockhash: bh.blockhash, lastValidBlockHeight: bh.lastValidBlockHeight },
-    "confirmed",
-  );
-  return { forwarded_sol: lamports / LAMPORTS_PER_SOL, signature: sig };
+    const bh = await connection.getLatestBlockhash("confirmed");
+    const tx = new Transaction({ recentBlockhash: bh.blockhash, feePayer: from.publicKey }).add(
+      SystemProgram.transfer({ fromPubkey: from.publicKey, toPubkey: to, lamports }),
+    );
+    tx.sign(from);
+    try {
+      const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 5 });
+      await connection.confirmTransaction(
+        { signature: sig, blockhash: bh.blockhash, lastValidBlockHeight: bh.lastValidBlockHeight },
+        "confirmed",
+      );
+      return { forwarded_sol: lamports / LAMPORTS_PER_SOL, signature: sig };
+    } catch (e) {
+      lastErr = e;
+      // retry with fresh blockhash
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("transfer failed");
 }
 
 serve(async (req) => {
@@ -262,63 +266,66 @@ serve(async (req) => {
     const connection = new Connection(getHeliusRpcUrl(), "confirmed");
     const reports: WalletReport[] = [];
     const keypairs = new Map<string, Keypair>();
-    let sponsor: Keypair | null = null;
 
-    for (let i = 0; i < wallets.length; i++) {
-      const w = wallets[i];
-      const walletReport: WalletReport = {
-        index: w.row_index,
-        pubkey: w.pubkey,
-        starting_sol: 0,
-        accounts_scanned: 0,
-        accounts_closed: 0,
-        tokens_burned: 0,
-        accounts_skipped: 0,
-        burn_close_tx: [],
-        ending_sol: 0,
-        forwarded_sol: 0,
-        errors: [],
-      };
-
-      let kp: Keypair;
+    // Decrypt all keypairs up front so we can sponsor fees + cycle W10 -> W1.
+    for (const w of wallets) {
       try {
         const secret = await decryptWalletSecretAuto(w.secret_key_encrypted as string);
-        kp = parseKeypair(secret);
+        const kp = parseKeypair(secret);
         if (kp.publicKey.toBase58() !== w.pubkey) throw new Error("key mismatch");
         keypairs.set(w.id, kp);
-        if (i === 0) sponsor = kp;
       } catch (e) {
-        walletReport.errors.push(`decrypt: ${(e as Error).message}`);
-        reports.push(walletReport);
-        continue;
+        reports.push({
+          index: w.row_index, pubkey: w.pubkey, starting_sol: 0,
+          accounts_scanned: 0, accounts_closed: 0, tokens_burned: 0, accounts_skipped: 0,
+          burn_close_tx: [], ending_sol: 0, forwarded_sol: 0,
+          errors: [`decrypt: ${(e as Error).message}`],
+        });
       }
-
-      const sub = await sweepWallet(connection, kp, sponsor ?? kp, dryRun);
-      Object.assign(walletReport, sub);
-      reports.push(walletReport);
     }
 
-    // Forward SOL to next wallet after all token accounts are processed.
-    // Drains to zero correctly instead of leaving a non-rent-exempt dust balance.
-    for (let i = 0; i < wallets.length - 1; i++) {
-      const w = wallets[i];
-      const next = wallets[i + 1];
-      const report = reports.find((r) => r.pubkey === w.pubkey);
-      const kp = keypairs.get(w.id);
-      if (!report || !kp) continue;
+    const sponsor = keypairs.get(wallets[0]?.id) ?? null;
+    const cycle = Boolean(body.cycle ?? true); // W10 -> W1 closes the loop
 
-      if (!dryRun) {
-        try {
-          const forwarded = await transferAllSol(connection, kp, new PublicKey(next.pubkey));
-          report.forwarded_sol = forwarded.forwarded_sol;
-          report.forward_tx = forwarded.signature;
-          if (forwarded.skipped && forwarded.forwarded_sol === 0) report.errors.push(`forward skipped: ${forwarded.skipped}`);
-        } catch (e) {
-          report.errors.push(`forward: ${(e as Error).message}`);
+    // Sequential cascade: sweep W_i, then forward its SOL to W_(i+1). W_last -> W_0 if cycle.
+    for (let i = 0; i < wallets.length; i++) {
+      const w = wallets[i];
+      const kp = keypairs.get(w.id);
+      if (!kp) continue; // decrypt failure already reported
+
+      const walletReport: WalletReport = {
+        index: w.row_index, pubkey: w.pubkey, starting_sol: 0,
+        accounts_scanned: 0, accounts_closed: 0, tokens_burned: 0, accounts_skipped: 0,
+        burn_close_tx: [], ending_sol: 0, forwarded_sol: 0, errors: [],
+      };
+
+      // Sweep: use self as fee payer if it has SOL, else sponsor (W1).
+      const preBal = await connection.getBalance(kp.publicKey);
+      const feePayer = preBal > FEE_BUFFER_LAMPORTS ? kp : (sponsor ?? kp);
+      const sub = await sweepWallet(connection, kp, feePayer, dryRun);
+      Object.assign(walletReport, sub);
+
+      // Forward all SOL to the next wallet (wrap to W1 on the last hop when cycle=true).
+      const nextIdx = i + 1 < wallets.length ? i + 1 : (cycle ? 0 : -1);
+      if (nextIdx >= 0) {
+        const next = wallets[nextIdx];
+        if (!dryRun) {
+          try {
+            const forwarded = await transferAllSol(connection, kp, new PublicKey(next.pubkey));
+            walletReport.forwarded_sol = forwarded.forwarded_sol;
+            walletReport.forward_tx = forwarded.signature;
+            if (forwarded.skipped && forwarded.forwarded_sol === 0) {
+              walletReport.errors.push(`forward skipped: ${forwarded.skipped}`);
+            }
+          } catch (e) {
+            walletReport.errors.push(`forward: ${(e as Error).message}`);
+          }
+        } else {
+          walletReport.forwarded_sol = Math.max(0, walletReport.ending_sol - 0.000005);
         }
-      } else {
-        report.forwarded_sol = Math.max(0, report.ending_sol - 0.000005);
       }
+
+      reports.push(walletReport);
     }
 
     // Log
