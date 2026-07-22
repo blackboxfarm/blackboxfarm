@@ -1328,10 +1328,19 @@ export default function WaterfallGrid() {
       toast({ title: "Load failed", description: error.message, variant: "destructive" });
       return;
     }
-    const loaded = (data ?? []) as WaterfallWallet[];
+    let loaded = (data ?? []) as WaterfallWallet[];
+    if (loaded.length === 0 && isPreviewAdmin) {
+      const { data: fallback, error: fallbackError } = await supabase.functions.invoke("waterfall-list-wallets");
+      if (fallbackError) {
+        console.error("[Waterfall] preview wallet fallback failed:", fallbackError);
+        toast({ title: "Preview wallet load failed", description: fallbackError.message, variant: "destructive" });
+      } else {
+        loaded = ((fallback as any)?.wallets ?? []) as WaterfallWallet[];
+      }
+    }
     setWallets(loaded);
     setLoading(false);
-  }, []);
+  }, [isPreviewAdmin]);
 
   useEffect(() => {
     if (authLoading) return;
