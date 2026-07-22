@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUserRoles } from "@/hooks/useUserRoles";
 import { useAuth } from "@/hooks/useAuth";
 import { usePreviewSuperAdmin } from "@/hooks/usePreviewSuperAdmin";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Trash2 } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminNotificationsBadge } from "@/components/admin/AdminNotificationsBadge";
@@ -110,6 +110,18 @@ export default function SuperAdmin() {
   const [oracleSubTab, setOracleSubTab] = useState<string | undefined>();
   const [oracleWallet, setOracleWallet] = useState<string | undefined>();
 
+  const nukeSessionAndReload = () => {
+    try {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith('sb-') || k.includes('supabase'))
+        .forEach((k) => localStorage.removeItem(k));
+      Object.keys(sessionStorage)
+        .filter((k) => k.startsWith('sb-') || k.includes('supabase'))
+        .forEach((k) => sessionStorage.removeItem(k));
+    } catch (_) { /* noop */ }
+    window.location.reload();
+  };
+
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const tabParam = urlParams.get('tab');
@@ -186,6 +198,15 @@ export default function SuperAdmin() {
             </p>
           </div>
           <div className="flex items-start gap-4">
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={nukeSessionAndReload}
+              title="Clears corrupted Supabase session tokens and reloads."
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Nuke Session
+            </Button>
             <AccountSnapshotWidget />
             <AdminNotificationsBadge />
           </div>
