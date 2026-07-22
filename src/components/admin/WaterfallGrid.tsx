@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { usePreviewSuperAdmin } from "@/hooks/usePreviewSuperAdmin";
 import { supabase } from "@/integrations/supabase/client";
 import { useSolPrice } from "@/hooks/useSolPrice";
 import { Button } from "@/components/ui/button";
@@ -136,6 +137,7 @@ type CascadeRun = {
 export default function WaterfallGrid() {
   const [wallets, setWallets] = useState<WaterfallWallet[]>([]);
   const { user, loading: authLoading } = useAuth();
+  const isPreviewAdmin = usePreviewSuperAdmin();
   const [balances, setBalances] = useState<Record<string, { sol: number; tokens: TokenHolding[] }>>({});
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -1333,9 +1335,9 @@ export default function WaterfallGrid() {
 
   useEffect(() => {
     if (authLoading) return;
-    if (!user) return;
+    if (!user && !isPreviewAdmin) return;
     loadWallets();
-  }, [loadWallets, authLoading, user?.id]);
+  }, [loadWallets, authLoading, user?.id, isPreviewAdmin]);
 
   // Load any currently-running cascades + subscribe to updates
   useEffect(() => {
