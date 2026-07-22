@@ -186,28 +186,32 @@ async function transferAllSol(
   from: Keypair,
   to: PublicKey,
 ): Promise<{ forwarded_sol: number; signature?: string; skipped?: string }> {
-  const bal = await connection.getBalance(from.publicKey);
-  if (bal <= 0) return { forwarded_sol: 0, skipped: "empty balance" };
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const bal = await connection.getBalance(from.publicKey);
+    if (bal <= 0) return { forwarded_sol: 0, skipped: "empty balance" };
+    const fee = 5_000;
+    const lamports = bal - fee;
+    if (lamports <= 0) return { forwarded_sol: 0, skipped: "balance below transfer fee" };
 
-  const bh = await connection.getLatestBlockhash("confirmed");
-  const feeProbe = new Transaction({ recentBlockhash: bh.blockhash, feePayer: from.publicKey }).add(
-    SystemProgram.transfer({ fromPubkey: from.publicKey, toPubkey: to, lamports: 0 }),
-  );
-  const feeResult = await connection.getFeeForMessage(feeProbe.compileMessage(), "confirmed");
-  const fee = feeResult.value ?? 5_000;
-  const lamports = bal - fee;
-  if (lamports <= 0) return { forwarded_sol: 0, skipped: "balance below transfer fee" };
-
-  const tx = new Transaction({ recentBlockhash: bh.blockhash, feePayer: from.publicKey }).add(
-    SystemProgram.transfer({ fromPubkey: from.publicKey, toPubkey: to, lamports }),
-  );
-  tx.sign(from);
-  const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: false, maxRetries: 3 });
-  await connection.confirmTransaction(
-    { signature: sig, blockhash: bh.blockhash, lastValidBlockHeight: bh.lastValidBlockHeight },
-    "confirmed",
-  );
-  return { forwarded_sol: lamports / LAMPORTS_PER_SOL, signature: sig };
+    const bh = await connection.getLatestBlockhash("confirmed");
+    const tx = new Transaction({ recentBlockhash: bh.blockhash, feePayer: from.publicKey }).add(
+      SystemProgram.transfer({ fromPubkey: from.publicKey, toPubkey: to, lamports }),
+    );
+    tx.sign(from);
+    try {
+      const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 5 });
+      await connection.confirmTransaction(
+        { signature: sig, blockhash: bh.blockhash, lastValidBlockHeight: bh.lastValidBlockHeight },
+        "confirmed",
+      );
+      return { forwarded_sol: lamports / LAMPORTS_PER_SOL, signature: sig };
+    } catch (e) {
+      lastErr = e;
+      // retry with fresh blockhash
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("transfer failed");
 }
 
 serve(async (req) => {
