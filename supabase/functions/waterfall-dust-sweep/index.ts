@@ -55,6 +55,7 @@ interface WalletReport {
   accounts_scanned: number;
   accounts_closed: number;
   tokens_burned: number;
+  accounts_skipped: number;
   burn_close_tx: string[];
   ending_sol: number;
   forwarded_sol: number;
@@ -65,6 +66,7 @@ interface WalletReport {
 async function sweepWallet(
   connection: Connection,
   kp: Keypair,
+  feePayer: Keypair,
   dryRun: boolean,
 ): Promise<Omit<WalletReport, "index" | "forwarded_sol" | "forward_tx">> {
   const report = {
@@ -73,6 +75,7 @@ async function sweepWallet(
     accounts_scanned: 0,
     accounts_closed: 0,
     tokens_burned: 0,
+    accounts_skipped: 0,
     burn_close_tx: [] as string[],
     ending_sol: 0,
     errors: [] as string[],
@@ -90,6 +93,7 @@ async function sweepWallet(
     mint: PublicKey;
     amount: bigint;
     programId: PublicKey;
+    state: string;
   };
   const accounts: Acc[] = [];
 
@@ -105,6 +109,7 @@ async function sweepWallet(
           mint: new PublicKey(info.mint),
           amount: amt,
           programId: p.id,
+          state: String(info.state || "").toLowerCase(),
         });
       }
     } catch (e) {
@@ -119,31 +124,42 @@ async function sweepWallet(
   }
 
   if (dryRun) {
-    report.accounts_closed = accounts.length;
-    report.tokens_burned = accounts.filter((a) => a.amount > 0n).length;
-    report.ending_sol = report.starting_sol + accounts.length * 0.00203928;
+    const frozenWithBalance = accounts.filter((a) => a.amount > 0n && a.state === "frozen");
+    report.accounts_skipped = frozenWithBalance.length;
+    report.accounts_closed = accounts.length - frozenWithBalance.length;
+    report.tokens_burned = accounts.filter((a) => a.amount > 0n && a.state !== "frozen").length;
+    report.ending_sol = report.starting_sol + report.accounts_closed * 0.00203928;
+    for (const a of frozenWithBalance) {
+      report.errors.push(`skip frozen token account ${a.ata.toBase58()} mint ${a.mint.toBase58()} amount ${a.amount.toString()}`);
+    }
     return report;
   }
 
-  // Batch build & send transactions
-  for (let i = 0; i < accounts.length; i += IX_PER_TX) {
-    const chunk = accounts.slice(i, i + IX_PER_TX);
+  // Send one account per transaction. One frozen/bad token must not kill the whole wallet.
+  for (let i = 0; i < accounts.length; i++) {
+    const a = accounts[i];
+    if (a.amount > 0n && a.state === "frozen") {
+      report.accounts_skipped += 1;
+      report.errors.push(`skip frozen token account ${a.ata.toBase58()} mint ${a.mint.toBase58()} amount ${a.amount.toString()}`);
+      continue;
+    }
+
     const tx = new Transaction();
-    for (const a of chunk) {
-      if (a.amount > 0n) {
-        tx.add(
-          createBurnInstruction(a.ata, a.mint, kp.publicKey, a.amount, [], a.programId),
-        );
-      }
+    if (a.amount > 0n) {
       tx.add(
-        createCloseAccountInstruction(a.ata, kp.publicKey, kp.publicKey, [], a.programId),
+        createBurnInstruction(a.ata, a.mint, kp.publicKey, a.amount, [], a.programId),
       );
     }
+    tx.add(
+      createCloseAccountInstruction(a.ata, kp.publicKey, kp.publicKey, [], a.programId),
+    );
+
     try {
       const bh = await connection.getLatestBlockhash("confirmed");
       tx.recentBlockhash = bh.blockhash;
-      tx.feePayer = kp.publicKey;
-      tx.sign(kp);
+      tx.feePayer = feePayer.publicKey;
+      const signers = feePayer.publicKey.equals(kp.publicKey) ? [kp] : [feePayer, kp];
+      tx.sign(...signers);
       const sig = await connection.sendRawTransaction(tx.serialize(), {
         skipPreflight: false,
         maxRetries: 3,
@@ -153,15 +169,45 @@ async function sweepWallet(
         "confirmed",
       );
       report.burn_close_tx.push(sig);
-      report.accounts_closed += chunk.length;
-      report.tokens_burned += chunk.filter((a) => a.amount > 0n).length;
+      report.accounts_closed += 1;
+      if (a.amount > 0n) report.tokens_burned += 1;
     } catch (e) {
-      report.errors.push(`batch ${i / IX_PER_TX}: ${(e as Error).message}`);
+      report.accounts_skipped += 1;
+      report.errors.push(`account ${i}: ${(e as Error).message}`);
     }
   }
 
   report.ending_sol = (await connection.getBalance(kp.publicKey)) / LAMPORTS_PER_SOL;
   return report;
+}
+
+async function transferAllSol(
+  connection: Connection,
+  from: Keypair,
+  to: PublicKey,
+): Promise<{ forwarded_sol: number; signature?: string; skipped?: string }> {
+  const bal = await connection.getBalance(from.publicKey);
+  if (bal <= 0) return { forwarded_sol: 0, skipped: "empty balance" };
+
+  const bh = await connection.getLatestBlockhash("confirmed");
+  const feeProbe = new Transaction({ recentBlockhash: bh.blockhash, feePayer: from.publicKey }).add(
+    SystemProgram.transfer({ fromPubkey: from.publicKey, toPubkey: to, lamports: 0 }),
+  );
+  const feeResult = await connection.getFeeForMessage(feeProbe.compileMessage(), "confirmed");
+  const fee = feeResult.value ?? 5_000;
+  const lamports = bal - fee;
+  if (lamports <= 0) return { forwarded_sol: 0, skipped: "balance below transfer fee" };
+
+  const tx = new Transaction({ recentBlockhash: bh.blockhash, feePayer: from.publicKey }).add(
+    SystemProgram.transfer({ fromPubkey: from.publicKey, toPubkey: to, lamports }),
+  );
+  tx.sign(from);
+  const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: false, maxRetries: 3 });
+  await connection.confirmTransaction(
+    { signature: sig, blockhash: bh.blockhash, lastValidBlockHeight: bh.lastValidBlockHeight },
+    "confirmed",
+  );
+  return { forwarded_sol: lamports / LAMPORTS_PER_SOL, signature: sig };
 }
 
 serve(async (req) => {
@@ -215,10 +261,11 @@ serve(async (req) => {
 
     const connection = new Connection(getHeliusRpcUrl(), "confirmed");
     const reports: WalletReport[] = [];
+    const keypairs = new Map<string, Keypair>();
+    let sponsor: Keypair | null = null;
 
     for (let i = 0; i < wallets.length; i++) {
       const w = wallets[i];
-      const next = wallets[i + 1];
       const walletReport: WalletReport = {
         index: w.row_index,
         pubkey: w.pubkey,
@@ -226,6 +273,7 @@ serve(async (req) => {
         accounts_scanned: 0,
         accounts_closed: 0,
         tokens_burned: 0,
+        accounts_skipped: 0,
         burn_close_tx: [],
         ending_sol: 0,
         forwarded_sol: 0,
@@ -237,59 +285,40 @@ serve(async (req) => {
         const secret = await decryptWalletSecretAuto(w.secret_key_encrypted as string);
         kp = parseKeypair(secret);
         if (kp.publicKey.toBase58() !== w.pubkey) throw new Error("key mismatch");
+        keypairs.set(w.id, kp);
+        if (i === 0) sponsor = kp;
       } catch (e) {
         walletReport.errors.push(`decrypt: ${(e as Error).message}`);
         reports.push(walletReport);
         continue;
       }
 
-      const sub = await sweepWallet(connection, kp, dryRun);
+      const sub = await sweepWallet(connection, kp, sponsor ?? kp, dryRun);
       Object.assign(walletReport, sub);
-
-      // Forward SOL to next wallet (skip if last or dry run)
-      if (next && !dryRun) {
-        try {
-          const bal = await connection.getBalance(kp.publicKey);
-          const lamports = bal - FEE_BUFFER_LAMPORTS;
-          if (lamports > 0) {
-            const bh = await connection.getLatestBlockhash("confirmed");
-            const tx = new Transaction({
-              recentBlockhash: bh.blockhash,
-              feePayer: kp.publicKey,
-            }).add(
-              SystemProgram.transfer({
-                fromPubkey: kp.publicKey,
-                toPubkey: new PublicKey(next.pubkey),
-                lamports,
-              }),
-            );
-            tx.sign(kp);
-            const sig = await connection.sendRawTransaction(tx.serialize(), {
-              skipPreflight: false,
-              maxRetries: 3,
-            });
-            await connection.confirmTransaction(
-              {
-                signature: sig,
-                blockhash: bh.blockhash,
-                lastValidBlockHeight: bh.lastValidBlockHeight,
-              },
-              "confirmed",
-            );
-            walletReport.forwarded_sol = lamports / LAMPORTS_PER_SOL;
-            walletReport.forward_tx = sig;
-          }
-        } catch (e) {
-          walletReport.errors.push(`forward: ${(e as Error).message}`);
-        }
-      } else if (next && dryRun) {
-        walletReport.forwarded_sol = Math.max(
-          0,
-          walletReport.ending_sol - FEE_BUFFER_LAMPORTS / LAMPORTS_PER_SOL,
-        );
-      }
-
       reports.push(walletReport);
+    }
+
+    // Forward SOL to next wallet after all token accounts are processed.
+    // Drains to zero correctly instead of leaving a non-rent-exempt dust balance.
+    for (let i = 0; i < wallets.length - 1; i++) {
+      const w = wallets[i];
+      const next = wallets[i + 1];
+      const report = reports.find((r) => r.pubkey === w.pubkey);
+      const kp = keypairs.get(w.id);
+      if (!report || !kp) continue;
+
+      if (!dryRun) {
+        try {
+          const forwarded = await transferAllSol(connection, kp, new PublicKey(next.pubkey));
+          report.forwarded_sol = forwarded.forwarded_sol;
+          report.forward_tx = forwarded.signature;
+          if (forwarded.skipped && forwarded.forwarded_sol === 0) report.errors.push(`forward skipped: ${forwarded.skipped}`);
+        } catch (e) {
+          report.errors.push(`forward: ${(e as Error).message}`);
+        }
+      } else {
+        report.forwarded_sol = Math.max(0, report.ending_sol - 0.000005);
+      }
     }
 
     // Log
@@ -313,6 +342,7 @@ serve(async (req) => {
         wallets: reports.length,
         accounts_closed: reports.reduce((a, r) => a + r.accounts_closed, 0),
         tokens_burned: reports.reduce((a, r) => a + r.tokens_burned, 0),
+        accounts_skipped: reports.reduce((a, r) => a + r.accounts_skipped, 0),
         total_forwarded_sol: reports.reduce((a, r) => a + r.forwarded_sol, 0),
       },
     });

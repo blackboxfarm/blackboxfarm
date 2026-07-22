@@ -13,6 +13,8 @@ function explainDustError(raw: string): string {
   const s = (raw || "").toLowerCase();
   if (s.includes("decrypt")) return "Wallet private key could not be decrypted (missing/rotated WALLET_ENCRYPTION_KEY).";
   if (s.includes("enumerate")) return "Failed to list SPL token accounts from the RPC (Helius rate limit or 5xx).";
+  if (s.includes("frozen")) return "Frozen token account: cannot burn it, so it was skipped and the sweep continued.";
+  if (s.includes("no record of a prior credit")) return "Wallet has token accounts but 0 SOL; W1 now sponsors close/burn fees for token-account cleanup.";
   if (s.includes("blockhash")) return "RPC failed to return a recent blockhash — transient RPC error, retry.";
   if (s.includes("insufficient") || s.includes("0x1")) return "Wallet has no SOL to pay fees (~0.00001 SOL needed per tx).";
   if (s.includes("simulation failed")) return "Transaction simulation rejected — usually a frozen/closed mint or already-closed ATA.";
@@ -1013,6 +1015,7 @@ export default function WaterfallGrid() {
         `Wallets scanned: ${s.wallets}\n` +
         `Token accounts to close: ${s.accounts_closed}\n` +
         `Non-empty tokens to burn: ${s.tokens_burned}\n` +
+        `Accounts to skip: ${s.accounts_skipped || 0}\n` +
         `Est. SOL cascaded: ${s.total_forwarded_sol.toFixed(6)}\n\n` +
         `EXECUTE FOR REAL now?`,
       );
@@ -1030,13 +1033,13 @@ export default function WaterfallGrid() {
       const failed = perWallet.filter((w) => (w.errors || []).length > 0);
       // Detailed console logs so user can inspect exactly what failed and why
       console.groupCollapsed(
-        `%c[DUST SWEEP W1] complete — ${ls.accounts_closed} closed · ${ls.tokens_burned} burned · ${ls.total_forwarded_sol.toFixed(6)} SOL forwarded · ${failed.length} wallet(s) with errors`,
+        `%c[DUST SWEEP W1] complete — ${ls.accounts_closed} closed · ${ls.tokens_burned} burned · ${ls.accounts_skipped || 0} skipped · ${ls.total_forwarded_sol.toFixed(6)} SOL forwarded · ${failed.length} wallet(s) with notes`,
         "color:#f97316;font-weight:bold",
       );
       for (const w of perWallet) {
-        const label = `Wallet ${w.row_index + 1} (${(w.pubkey || "").slice(0, 6)}…) — closed:${w.accounts_closed} burned:${w.tokens_burned} fwd:${(w.forwarded_sol ?? 0).toFixed(6)} SOL`;
+        const label = `Wallet ${(w.index ?? w.row_index) + 1} (${(w.pubkey || "").slice(0, 6)}…) — closed:${w.accounts_closed} burned:${w.tokens_burned} skipped:${w.accounts_skipped || 0} fwd:${(w.forwarded_sol ?? 0).toFixed(6)} SOL`;
         if ((w.errors || []).length) {
-          console.groupCollapsed(`❌ ${label}`);
+          console.groupCollapsed(`${(w.accounts_closed || w.tokens_burned) ? "⚠️" : "❌"} ${label}`);
           for (const err of w.errors) {
             const explain = explainDustError(err);
             console.warn(err, explain ? `→ ${explain}` : "");
@@ -1048,11 +1051,11 @@ export default function WaterfallGrid() {
       }
       console.groupEnd();
       toast({
-        title: failed.length ? `Dust sweep finished with ${failed.length} error(s)` : "Dust sweep complete",
+        title: failed.length ? `Dust sweep finished with ${failed.length} note(s)` : "Dust sweep complete",
         description:
-          `Closed ${ls.accounts_closed} accts · burned ${ls.tokens_burned} · forwarded ${ls.total_forwarded_sol.toFixed(6)} SOL` +
-          (failed.length ? ` · see console for per-wallet errors` : ""),
-        variant: failed.length ? "destructive" : "default",
+          `Closed ${ls.accounts_closed} accts · burned ${ls.tokens_burned} · skipped ${ls.accounts_skipped || 0} · forwarded ${ls.total_forwarded_sol.toFixed(6)} SOL` +
+          (failed.length ? ` · see console for skipped/failure details` : ""),
+        variant: "default",
       });
       void refreshBalancesForBuy(wallets.filter((w) => w.column_index === 0).map((w) => w.pubkey));
     } catch (e: any) {
