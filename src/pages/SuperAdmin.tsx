@@ -198,6 +198,15 @@ export default function SuperAdmin() {
             </p>
           </div>
           <div className="flex items-start gap-4">
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={nukeSessionAndReload}
+              title="Clears corrupted Supabase session tokens and reloads."
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Nuke Session
+            </Button>
             <AccountSnapshotWidget />
             <AdminNotificationsBadge />
           </div>
