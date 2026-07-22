@@ -6,7 +6,7 @@ import { TwoFactorSetup } from '@/components/auth/TwoFactorSetup';
 import { useAuth } from '@/hooks/useAuth';
 import { WalletBalanceMonitor } from '@/components/WalletBalanceMonitor';
 import { Badge } from '@/components/ui/badge';
-import { Shield, UserPlus, Mail, Smartphone, Key, CheckCircle, ArrowLeft } from 'lucide-react';
+import { Shield, UserPlus, Mail, Smartphone, Key, CheckCircle, ArrowLeft, Trash2 } from 'lucide-react';
 import { FarmBanner } from '@/components/FarmBanner';
 import { AuthButton } from '@/components/auth/AuthButton';
 import { NotificationCenter } from '@/components/NotificationCenter';
@@ -71,6 +71,18 @@ export default function AuthPage() {
   const handleSignOut = async () => {
     await signOut();
     navigate('/auth', { replace: true });
+  };
+
+  const nukeSessionAndReload = () => {
+    try {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith('sb-') || k.includes('supabase'))
+        .forEach((k) => localStorage.removeItem(k));
+      Object.keys(sessionStorage)
+        .filter((k) => k.startsWith('sb-') || k.includes('supabase'))
+        .forEach((k) => sessionStorage.removeItem(k));
+    } catch (_) { /* noop */ }
+    location.reload();
   };
 
   if (user) {
@@ -214,6 +226,16 @@ export default function AuthPage() {
               className="w-full border-white/30 text-white hover:bg-white/10"
             >
               Sign In
+            </Button>
+
+            <Button
+              onClick={nukeSessionAndReload}
+              variant="destructive"
+              className="w-full"
+              title="Clears corrupted Supabase session tokens from local storage and reloads."
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Nuke Session & Reload
             </Button>
           </CardContent>
         </Card>
