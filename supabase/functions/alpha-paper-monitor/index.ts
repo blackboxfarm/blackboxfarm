@@ -70,6 +70,11 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
+  // Config knobs (stop loss)
+  const { data: cfg } = await supabase.from('alpha_config').select('stop_loss_pct').eq('id', 1).maybeSingle();
+  const stopLossPct = Number(cfg?.stop_loss_pct ?? 0.70); // 70% drop
+  const stopMult = 1 - stopLossPct; // e.g. 0.30
+
   const { data: trades, error } = await supabase
     .from('alpha_paper_trades')
     .select('id, mint, ticker, entry_market_cap, entry_price_usd, size_usd, target_multiplier, peak_multiplier, created_at, check_count')
@@ -143,6 +148,31 @@ serve(async (req) => {
             `Dex: https://dexscreener.com/solana/${t.mint}`
           );
           results.push({ id: t.id, mint: t.mint, action: 'sold', mult: curMult });
+          continue;
+        }
+
+        // STOP LOSS — hard cut at -70% (Rule 2)
+        if (curMult <= stopMult) {
+          update.status = 'closed';
+          update.exit_reason = 'stop_loss';
+          update.exit_price_usd = live.price;
+          update.exit_market_cap = live.mcap;
+          update.exit_multiplier = curMult;
+          update.exit_at = new Date().toISOString();
+          update.pnl_usd = Number((Number(t.size_usd || 0) * (curMult - 1)).toFixed(2));
+
+          await supabase.from('alpha_paper_trades').update(update).eq('id', t.id);
+
+          const tk = t.ticker ? `$${t.ticker}` : t.mint.slice(0, 6);
+          const dropPct = ((1 - curMult) * 100).toFixed(0);
+          await sendSms(
+            `🛑 STOP LOSS ${tk} -${dropPct}%\n` +
+            `Entry MC: ${fmtMoney(entryMc)}\n` +
+            `Exit MC:  ${fmtMoney(live.mcap)}\n` +
+            `P&L: $${update.pnl_usd} on $${t.size_usd}\n` +
+            `Dex: https://dexscreener.com/solana/${t.mint}`
+          );
+          results.push({ id: t.id, mint: t.mint, action: 'stop_loss', mult: curMult });
           continue;
         }
       } else {

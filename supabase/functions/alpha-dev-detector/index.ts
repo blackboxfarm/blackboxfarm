@@ -7,6 +7,7 @@
 //   3. SMS admin (+1-226-583-5975) via Twilio gateway
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { executeAlphaBuy, fetchDexInfo, fetchPumpInfo, fetchAthUsd, sendAdminSms, fmtMoney as fmtMoneyShared } from '../_shared/alpha-buy.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -350,190 +351,85 @@ serve(async (req) => {
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 
-  // Live entry mcap
-  let entry = await fetchDexEntry(mint);
-  if (!entry.mcap) entry = await fetchPumpEntry(mint);
-  const ticker = entry.ticker || lc?.token_symbol || null;
+  // ==================== TRADING RULE GATES ====================
+  const dex = await fetchDexInfo(mint);
+  const pump = await fetchPumpInfo(mint);
+  const curMcap = dex.mcap ?? pump.mcap ?? null;
+  const curPrice = dex.price ?? null;
+  const ticker = dex.ticker ?? pump.ticker ?? lc?.token_symbol ?? null;
 
-  // Insert paper trade
-  const insertRow: any = {
+  const createdMs = dex.pairCreatedAt ?? (pump.createdAt ? pump.createdAt * 1000 : null);
+  const ageMs = createdMs ? Date.now() - createdMs : null;
+  const ageHours = ageMs ? ageMs / 3600_000 : null;
+  const ageMin = ageMs ? ageMs / 60_000 : null;
+
+  // ---- Rule 1: stale (>staleHours old AND currently below ATH) -> SKIP ----
+  const staleHours = Number(config.stale_hours ?? 72);
+  if (ageHours !== null && ageHours > staleHours && curPrice) {
+    const { athPrice } = await fetchAthUsd(mint);
+    if (athPrice && curPrice < athPrice) {
+      return new Response(JSON.stringify({
+        ok: true, skipped: 'stale_below_ath',
+        age_hours: Number(ageHours.toFixed(1)), cur_price: curPrice, ath_price: athPrice,
+        mint, dev_wallet: devWallet, match_kind: matchKind,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+  }
+
+  // ---- Rule 3: just-bonded window ($30–40k mcap, <30min old) -> DEFER to watch queue ----
+  const bondLow = Number(config.post_bond_min_mcap ?? 30000);
+  const bondHigh = Number(config.post_bond_max_mcap ?? 40000);
+  const bondAgeMax = Number(config.post_bond_age_max_minutes ?? 30);
+  const watchMinutes = Number(config.post_bond_watch_minutes ?? 20);
+  const inBondWindow = curMcap !== null && curMcap >= bondLow && curMcap <= bondHigh
+    && (ageMin === null || ageMin <= bondAgeMax);
+
+  if (inBondWindow) {
+    const expiresAt = new Date(Date.now() + watchMinutes * 60_000).toISOString();
+    const matchPayload = {
+      matchKind, devWallet, kycRoot, kycLabel, reason, source,
+      devHit, personHit, kycHit,
+    };
+    const { data: watchRow, error: wErr } = await supabase.from('alpha_watch_queue')
+      .upsert({
+        mint, ticker, dev_wallet: devWallet, kyc_root: kycRoot, kyc_label: kycLabel,
+        match_kind: matchKind, reason, source,
+        entry_mcap_seen: curMcap, min_mcap_seen: curMcap, max_mcap_seen: curMcap, last_mcap: curMcap,
+        phase: 'watching_dump', status: 'active',
+        match_payload: matchPayload,
+        expires_at: expiresAt,
+      }, { onConflict: 'mint' }).select('id').single();
+    // Notify admin so they know a signal came in but we're waiting
+    if (config.sms_enabled) {
+      const shortMint = `${mint.slice(0, 4)}…${mint.slice(-4)}`;
+      const newTicker = ticker ? `$${ticker}` : `(${shortMint})`;
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const chartThumbUrl = `${supabaseUrl}/functions/v1/chart-thumb?mint=${mint}`;
+      const smsBody =
+        `⏳ POST-BOND WATCH\n` +
+        `${newTicker} (${shortMint}) @ ${fmtMoneyShared(curMcap)}\n` +
+        `Just bonded — waiting for dip to $${(Number(config.post_bond_dip_low ?? 7000) / 1000).toFixed(0)}k–$${(Number(config.post_bond_dip_high ?? 12000) / 1000).toFixed(0)}k\n` +
+        `Kill if <$${(Number(config.post_bond_dead_below ?? 6000) / 1000).toFixed(0)}k. Watch ${watchMinutes}m.\n\n` +
+        `CA: ${mint}\nPump: https://pump.fun/coin/${mint}`;
+      await sendAdminSms(smsBody, chartThumbUrl);
+    }
+    return new Response(JSON.stringify({
+      ok: true, deferred: 'post_bond_watch',
+      watch_id: watchRow?.id ?? null, watch_err: wErr?.message ?? null,
+      cur_mcap: curMcap, age_min: ageMin ? Math.round(ageMin) : null,
+    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  // ==================== NORMAL BUY PATH ====================
+  const result = await executeAlphaBuy(
+    supabase,
+    config,
+    { matchKind, devWallet, kycRoot, kycLabel, reason, devHit, personHit, kycHit, source },
     mint,
-    ticker,
-    entry_market_cap: entry.mcap,
-    entry_price_usd: entry.price,
-    size_usd: config.paper_size_usd,
-    strategy: '2x_target',
-    target_multiplier: 2,
-    status: 'open',
-    match_kind: matchKind,
-    matched_dev_wallet: devWallet,
-    matched_kyc_root: kycRoot,
-    matched_kyc_label: kycLabel,
-    dev_best_multiplier: devHit?.best_multiplier ?? personHit?.best_multiplier ?? kycHit?.best_multiplier ?? null,
-    dev_best_ticker: devHit?.best_ticker ?? personHit?.best_ticker ?? kycHit?.best_ticker ?? null,
-    group_token_count: personHit?.token_count ?? kycHit?.token_count ?? devHit?.token_count ?? null,
-    group_avg_multiplier: personHit?.avg_multiplier ?? kycHit?.avg_multiplier ?? devHit?.avg_multiplier ?? null,
-    reason,
-    source,
-  };
-  const { data: trade, error: insErr } = await supabase.from('alpha_paper_trades')
-    .insert(insertRow).select('id').single();
-  if (insErr) {
-    // Race: another invocation already bought this mint
-    if (String(insErr.message || '').includes('duplicate')) {
-      return new Response(JSON.stringify({ ok: true, skipped: 'race_duplicate' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-    console.error('[alpha-dev-detector] insert failed', insErr.message);
-    return new Response(JSON.stringify({ ok: false, error: insErr.message }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-
-  // SMS
-  let smsStatus = 'skipped';
-  let smsError: string | null = null;
-
-  // ---------- LIVE BUY via FlipIt wallet ----------
-  let liveStatus: string = 'skipped';
-  let liveError: string | null = null;
-  let liveSol: number | null = null;
-  let liveUsd: number | null = null;
-  let liveSig: string | null = null;
-  try {
-    if (config.live_buy_enabled && config.live_buy_wallet_id) {
-      const buyUsd = Number(config.live_buy_usd || 100);
-      const capUsd = Number(config.live_buy_daily_cap_usd || 300);
-
-      // Daily cap: sum today's UTC executed live buys
-      const dayStart = new Date();
-      dayStart.setUTCHours(0, 0, 0, 0);
-      const { data: todayRows } = await supabase.from('alpha_paper_trades')
-        .select('live_buy_usd')
-        .eq('live_buy_status', 'executed')
-        .gte('live_buy_at', dayStart.toISOString());
-      const spentToday = (todayRows || []).reduce((s: number, r: any) => s + Number(r.live_buy_usd || 0), 0);
-      if (spentToday + buyUsd > capUsd) {
-        liveStatus = 'skipped_daily_cap';
-        liveError = `daily cap ${capUsd} reached (spent ${spentToday.toFixed(2)})`;
-      } else {
-        // Wallet lookup
-        const { data: w } = await supabase.from('super_admin_wallets')
-          .select('id, pubkey, is_active').eq('id', config.live_buy_wallet_id).maybeSingle();
-        if (!w || !w.is_active) {
-          liveStatus = 'skipped_no_wallet';
-          liveError = 'FlipIt wallet missing or inactive';
-        } else {
-          const [balSol, solPrice] = await Promise.all([fetchSolBalance(w.pubkey), fetchSolPriceUsd()]);
-          if (!balSol || !solPrice) {
-            liveStatus = 'skipped_chain_read';
-            liveError = `balSol=${balSol} solPrice=${solPrice}`;
-          } else {
-            const balUsd = balSol * solPrice;
-            if (balUsd < buyUsd) {
-              liveStatus = 'skipped_insufficient';
-              liveError = `wallet has $${balUsd.toFixed(2)} < $${buyUsd}`;
-            } else {
-              const buyAmountSol = Number((buyUsd / solPrice).toFixed(6));
-              try {
-                const { data: execRes, error: execErr } = await supabase.functions.invoke('flipit-execute', {
-                  body: {
-                    action: 'buy',
-                    tokenMint: mint,
-                    walletId: w.id,
-                    buyAmountSol,
-                    buyAmountUsd: buyUsd,
-                    slippageBps: Number(config.live_buy_slippage_bps || 3000),
-                    priorityFeeMicroLamports: Number(config.live_buy_priority_fee_microlamports || 300000),
-                    jitoTipLamports: Number(config.live_buy_jito_tip_lamports || 300000),
-                    priorityFeeMode: 'custom',
-                    source: 'alpha-dev-detector',
-                  },
-                });
-                if (execErr) {
-                  liveStatus = 'failed';
-                  liveError = execErr.message || 'invoke error';
-                } else if (execRes?.skipped) {
-                  liveStatus = 'skipped_execute';
-                  liveError = execRes?.reason || 'flipit-execute skipped';
-                } else if (execRes?.error) {
-                  liveStatus = 'failed';
-                  liveError = String(execRes.error).slice(0, 500);
-                } else {
-                  liveStatus = 'executed';
-                  liveSol = buyAmountSol;
-                  liveUsd = buyUsd;
-                  liveSig = execRes?.signature || execRes?.buyTxSignature || execRes?.tx || null;
-                }
-              } catch (e: any) {
-                liveStatus = 'failed';
-                liveError = (e?.message || String(e)).slice(0, 500);
-              }
-            }
-          }
-        }
-      }
-    } else {
-      liveStatus = config.live_buy_enabled ? 'skipped_no_wallet' : 'disabled';
-    }
-  } catch (e: any) {
-    liveStatus = 'failed';
-    liveError = (e?.message || String(e)).slice(0, 500);
-  }
-
-  if (config.sms_enabled) {
-    const shortDev = devWallet ? `${devWallet.slice(0, 4)}…${devWallet.slice(-4)}` : '—';
-    const shortMint = `${mint.slice(0, 4)}…${mint.slice(-4)}`;
-    const newTicker = ticker ? `$${ticker}` : `(${shortMint})`;
-    // Historical best prior — separate from the newly-triggering token
-    const priorTicker = devHit?.best_ticker ?? kycHit?.best_ticker ?? null;
-    const priorMult = devHit?.best_multiplier ?? kycHit?.best_multiplier ?? null;
-    const priorLine = priorTicker && priorMult
-      ? `Prior best: $${priorTicker} @ ${priorMult}x`
-      : reason;
-    const liveLine =
-      liveStatus === 'executed'
-        ? `Live buy: $${liveUsd?.toFixed(0)} (${liveSol?.toFixed(4)} SOL) ✅`
-        : liveStatus === 'skipped_insufficient'
-          ? `Live buy: SKIP (${liveError})`
-          : liveStatus === 'skipped_daily_cap'
-            ? `Live buy: SKIP (daily cap)`
-            : liveStatus === 'disabled'
-              ? `Live buy: off`
-              : `Live buy: ${liveStatus}${liveError ? ` (${liveError.slice(0, 60)})` : ''}`;
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const buyTs = Math.floor(Date.now() / 1000);
-    const chartThumbUrl = `${supabaseUrl}/functions/v1/chart-thumb?mint=${mint}&buy=${buyTs}`;
-    const smsBody =
-      `🚨 ALPHA DEV DETECTED\n` +
-      `NEW: ${newTicker} (${shortMint})\n` +
-      `Entry MC: ${fmtMoney(entry.mcap)}\n` +
-      `Match: ${matchKind === 'dev' ? `dev ${shortDev}` : `KYC ${kycLabel || kycRoot?.slice(0, 8)}`}\n` +
-      `${priorLine}\n` +
-      `Paper buy: $${config.paper_size_usd} → HOLD\n` +
-      `${liveLine}\n\n` +
-      `NEW CA (tap to copy):\n${mint}\n\n` +
-      `Pump (NEW): https://pump.fun/coin/${mint}\n` +
-      `Dex (NEW):  https://dexscreener.com/solana/${mint}`;
-    const r = await sendSms(smsBody, chartThumbUrl);
-    smsStatus = r.ok ? 'sent' : 'failed';
-    smsError = r.error ?? null;
-    await supabase.from('alpha_paper_trades')
-      .update({ chart_thumb_url: chartThumbUrl })
-      .eq('id', trade.id);
-  }
-  await supabase.from('alpha_paper_trades').update({
-    sms_status: smsStatus, sms_error: smsError, sms_sent_at: new Date().toISOString(),
-    live_buy_status: liveStatus,
-    live_buy_signature: liveSig,
-    live_buy_sol: liveSol,
-    live_buy_usd: liveUsd,
-    live_buy_error: liveError,
-    live_buy_at: liveStatus === 'executed' ? new Date().toISOString() : null,
-  }).eq('id', trade.id);
-
-  return new Response(JSON.stringify({
-    ok: true, matched: true, match_kind: matchKind, paper_trade_id: trade.id,
-    ticker, entry_mcap: entry.mcap, reason, sms_status: smsStatus,
-    live_buy_status: liveStatus, live_buy_signature: liveSig, live_buy_error: liveError,
-  }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    '🚨 ALPHA DEV DETECTED',
+  );
+  return new Response(JSON.stringify(result), {
+    status: result.ok ? 200 : 500,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
 });
