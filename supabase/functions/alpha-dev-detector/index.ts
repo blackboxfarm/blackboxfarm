@@ -83,12 +83,17 @@ async function fetchPumpEntry(mint: string): Promise<{ mcap: number | null; pric
   } catch { return { mcap: null, price: null, ticker: null }; }
 }
 
-async function sendSms(body: string): Promise<{ ok: boolean; error?: string }> {
+async function sendSms(
+  body: string,
+  mediaUrl?: string | null,
+): Promise<{ ok: boolean; error?: string }> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   const TWILIO_API_KEY = Deno.env.get('TWILIO_API_KEY');
   if (!LOVABLE_API_KEY || !TWILIO_API_KEY) return { ok: false, error: 'missing_twilio_creds' };
   try {
     const message = body.length > 1600 ? body.slice(0, 1597) + '...' : body;
+    const params: Record<string, string> = { To: ADMIN_PHONE, From: TWILIO_FROM, Body: message };
+    if (mediaUrl) params.MediaUrl = mediaUrl;
     const res = await fetch(`${TWILIO_GATEWAY_URL}/Messages.json`, {
       method: 'POST',
       headers: {
@@ -96,7 +101,7 @@ async function sendSms(body: string): Promise<{ ok: boolean; error?: string }> {
         'X-Connection-Api-Key': TWILIO_API_KEY,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: new URLSearchParams({ To: ADMIN_PHONE, From: TWILIO_FROM, Body: message }),
+      body: new URLSearchParams(params),
     });
     if (!res.ok) return { ok: false, error: `twilio_${res.status}: ${await res.text()}` };
     return { ok: true };
