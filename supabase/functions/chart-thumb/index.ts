@@ -103,6 +103,7 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
           borderWidth: 3,
           pointRadius: 0,
           tension: 0.25,
+          datalabels: { display: false },
         },
         {
           label: 'YOU ARE HERE',
@@ -114,6 +115,20 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
           pointBorderColor: '#ffffff',
           pointBorderWidth: 3,
           showLine: false,
+          datalabels: {
+            display: (ctx: any) => ctx.dataIndex === closes.length - 1,
+            align: 'left',
+            anchor: 'center',
+            color: '#facc15',
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            borderColor: '#facc15',
+            borderWidth: 1,
+            borderRadius: 4,
+            padding: 6,
+            font: { size: 16, weight: 'bold', family: 'monospace' },
+            formatter: () => 'YOU ARE HERE ▶',
+            offset: 14,
+          },
         },
       ],
     },
@@ -135,20 +150,7 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
           font: { size: 16, weight: 'bold', family: 'monospace' },
           padding: { bottom: 18 },
         },
-        datalabels: {
-          display: (ctx: any) => ctx.datasetIndex === 1 && ctx.dataIndex === closes.length - 1,
-          align: 'left',
-          anchor: 'center',
-          color: '#facc15',
-          backgroundColor: 'rgba(0,0,0,0.6)',
-          borderColor: '#facc15',
-          borderWidth: 1,
-          borderRadius: 4,
-          padding: 6,
-          font: { size: 16, weight: 'bold', family: 'monospace' },
-          formatter: () => 'YOU ARE HERE ▶',
-          offset: 12,
-        },
+        datalabels: { display: false },
       },
       scales: {
         x: {
@@ -163,7 +165,13 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
           ticks: {
             color: '#ffffff',
             font: { size: 14, weight: 'bold', family: 'monospace' },
-            callback: (v: number) => (v < 0.01 ? Number(v).toPrecision(3) : Number(v).toFixed(4)),
+            callback: (v: number) => {
+              const n = Number(v);
+              if (n === 0) return '0';
+              if (Math.abs(n) < 0.001) return '$' + n.toExponential(2);
+              if (Math.abs(n) < 1) return '$' + n.toPrecision(3);
+              return '$' + n.toFixed(4);
+            },
           },
           grid: { color: 'rgba(255,255,255,0.18)', lineWidth: 1 },
         },
