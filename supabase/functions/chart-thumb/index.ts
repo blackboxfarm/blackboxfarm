@@ -203,6 +203,15 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
     },
   };
 
+  // Serialize config as a JS string so we can inject a live tick callback
+  // (QuickChart preserves functions only when `chart` is a JS string).
+  const jsCallback = `function(v){var n=Number(v);if(!isFinite(n)||n===0)return '$0';var a=Math.abs(n);if(a>=1)return '$'+n.toFixed(4);if(a>=0.01)return '$'+n.toFixed(6);return '$'+n.toFixed(9).replace(/0+$/,'').replace(/\\.$/,'');}`;
+  const configJson = JSON.stringify(config);
+  const chartJs =
+    '(function(){var c=' + configJson +
+    ';c.options.scales.y.ticks.callback=' + jsCallback +
+    ';return c;})()';
+
   try {
     const r = await fetch('https://quickchart.io/chart', {
       method: 'POST',
@@ -213,7 +222,7 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
         format: 'png',
         backgroundColor: '#0a0a0a',
         version: '4',
-        chart: config,
+        chart: chartJs,
       }),
     });
     if (!r.ok) {
