@@ -90,7 +90,7 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
   const titleLine = `${tick}   ${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%   $${priceStr}`;
   const subLine = mint;
 
-  const lastLabel = labels[labels.length - 1];
+  const lastIdx = closes.length - 1;
   // Format helper: readable USD price (no scientific notation)
   const fmtPrice = (n: number): string => {
     if (!isFinite(n) || n === 0) return '$0';
@@ -155,7 +155,7 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
           annotations: {
             youAreHere: {
               type: 'point',
-              xValue: lastLabel,
+              xValue: lastIdx,
               yValue: last,
               backgroundColor: '#facc15',
               borderColor: '#ffffff',
@@ -164,9 +164,9 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
             },
             youAreHereLabel: {
               type: 'label',
-              xValue: lastLabel,
+              xValue: lastIdx,
               yValue: last,
-              xAdjust: -90,
+              xAdjust: -100,
               yAdjust: -22,
               backgroundColor: 'rgba(0,0,0,0.75)',
               borderColor: '#facc15',
