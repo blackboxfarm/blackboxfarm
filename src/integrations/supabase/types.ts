@@ -915,7 +915,16 @@ export type Database = {
           min_repeat_avg_multiplier: number
           min_repeat_token_count: number
           paper_size_usd: number
+          post_bond_age_max_minutes: number
+          post_bond_dead_below: number
+          post_bond_dip_high: number
+          post_bond_dip_low: number
+          post_bond_max_mcap: number
+          post_bond_min_mcap: number
+          post_bond_watch_minutes: number
           sms_enabled: boolean
+          stale_hours: number
+          stop_loss_pct: number
           updated_at: string
         }
         Insert: {
@@ -934,7 +943,16 @@ export type Database = {
           min_repeat_avg_multiplier?: number
           min_repeat_token_count?: number
           paper_size_usd?: number
+          post_bond_age_max_minutes?: number
+          post_bond_dead_below?: number
+          post_bond_dip_high?: number
+          post_bond_dip_low?: number
+          post_bond_max_mcap?: number
+          post_bond_min_mcap?: number
+          post_bond_watch_minutes?: number
           sms_enabled?: boolean
+          stale_hours?: number
+          stop_loss_pct?: number
           updated_at?: string
         }
         Update: {
@@ -953,7 +971,16 @@ export type Database = {
           min_repeat_avg_multiplier?: number
           min_repeat_token_count?: number
           paper_size_usd?: number
+          post_bond_age_max_minutes?: number
+          post_bond_dead_below?: number
+          post_bond_dip_high?: number
+          post_bond_dip_low?: number
+          post_bond_max_mcap?: number
+          post_bond_min_mcap?: number
+          post_bond_watch_minutes?: number
           sms_enabled?: boolean
+          stale_hours?: number
+          stop_loss_pct?: number
           updated_at?: string
         }
         Relationships: []
@@ -1096,6 +1123,84 @@ export type Database = {
           target_multiplier?: number | null
           ticker?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      alpha_watch_queue: {
+        Row: {
+          check_count: number
+          created_at: string
+          dev_wallet: string | null
+          entry_mcap_seen: number | null
+          expires_at: string
+          id: string
+          kyc_label: string | null
+          kyc_root: string | null
+          last_checked_at: string | null
+          last_mcap: number | null
+          match_kind: string
+          match_payload: Json | null
+          max_mcap_seen: number | null
+          min_mcap_seen: number | null
+          mint: string
+          phase: string
+          reason: string | null
+          resolution: string | null
+          resolved_at: string | null
+          source: string | null
+          started_at: string
+          status: string
+          ticker: string | null
+        }
+        Insert: {
+          check_count?: number
+          created_at?: string
+          dev_wallet?: string | null
+          entry_mcap_seen?: number | null
+          expires_at: string
+          id?: string
+          kyc_label?: string | null
+          kyc_root?: string | null
+          last_checked_at?: string | null
+          last_mcap?: number | null
+          match_kind: string
+          match_payload?: Json | null
+          max_mcap_seen?: number | null
+          min_mcap_seen?: number | null
+          mint: string
+          phase?: string
+          reason?: string | null
+          resolution?: string | null
+          resolved_at?: string | null
+          source?: string | null
+          started_at?: string
+          status?: string
+          ticker?: string | null
+        }
+        Update: {
+          check_count?: number
+          created_at?: string
+          dev_wallet?: string | null
+          entry_mcap_seen?: number | null
+          expires_at?: string
+          id?: string
+          kyc_label?: string | null
+          kyc_root?: string | null
+          last_checked_at?: string | null
+          last_mcap?: number | null
+          match_kind?: string
+          match_payload?: Json | null
+          max_mcap_seen?: number | null
+          min_mcap_seen?: number | null
+          mint?: string
+          phase?: string
+          reason?: string | null
+          resolution?: string | null
+          resolved_at?: string | null
+          source?: string | null
+          started_at?: string
+          status?: string
+          ticker?: string | null
         }
         Relationships: []
       }
