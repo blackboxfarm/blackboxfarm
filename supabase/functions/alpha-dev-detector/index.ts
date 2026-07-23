@@ -500,6 +500,8 @@ serve(async (req) => {
             : liveStatus === 'disabled'
               ? `Live buy: off`
               : `Live buy: ${liveStatus}${liveError ? ` (${liveError.slice(0, 60)})` : ''}`;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const chartThumbUrl = `${supabaseUrl}/functions/v1/chart-thumb?mint=${mint}`;
     const smsBody =
       `🚨 ALPHA DEV DETECTED\n` +
       `NEW: ${newTicker} (${shortMint})\n` +
@@ -511,9 +513,12 @@ serve(async (req) => {
       `NEW CA (tap to copy):\n${mint}\n\n` +
       `Pump (NEW): https://pump.fun/coin/${mint}\n` +
       `Dex (NEW):  https://dexscreener.com/solana/${mint}`;
-    const r = await sendSms(smsBody);
+    const r = await sendSms(smsBody, chartThumbUrl);
     smsStatus = r.ok ? 'sent' : 'failed';
     smsError = r.error ?? null;
+    await supabase.from('alpha_paper_trades')
+      .update({ chart_thumb_url: chartThumbUrl })
+      .eq('id', trade.id);
   }
   await supabase.from('alpha_paper_trades').update({
     sms_status: smsStatus, sms_error: smsError, sms_sent_at: new Date().toISOString(),
