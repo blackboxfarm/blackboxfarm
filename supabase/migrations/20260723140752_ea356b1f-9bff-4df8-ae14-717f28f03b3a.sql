@@ -1,0 +1,1 @@
+CREATE POLICY "Public read alpha paper trades" ON public.alpha_paper_trades FOR SELECT TO anon USING (true);
