@@ -7,6 +7,7 @@
 //   3. SMS admin (+1-226-583-5975) via Twilio gateway
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { executeAlphaBuy, fetchDexInfo, fetchPumpInfo, fetchAthUsd, sendAdminSms, fmtMoney as fmtMoneyShared } from '../_shared/alpha-buy.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
