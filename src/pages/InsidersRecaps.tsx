@@ -232,9 +232,13 @@ export default function InsidersRecaps() {
     let cancelled = false;
     const load = async () => {
       setAlphaLoading(true);
+      // Fresh start: only trades AFTER the SUNCOON $100 experiment (2026-07-23 00:33:20 UTC).
+      // Everything at or before that cutoff (including SUNCOON itself) is hidden.
+      const FRESH_START_CUTOFF = "2026-07-23T00:33:21Z";
       const { data } = await (supabase as any)
         .from("alpha_paper_trades")
         .select("*")
+        .gt("created_at", FRESH_START_CUTOFF)
         .order("created_at", { ascending: false })
         .limit(200);
       if (!cancelled) {
