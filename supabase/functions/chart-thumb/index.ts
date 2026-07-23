@@ -72,7 +72,11 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
   const rows = raw.slice().sort((a, b) => a[0] - b[0]);
   const labels = rows.map((r) => {
     const d = new Date(r[0] * 1000);
-    return `${d.getUTCHours().toString().padStart(2, '0')}:${d.getUTCMinutes().toString().padStart(2, '0')}`;
+    const mm = (d.getUTCMonth() + 1).toString().padStart(2, '0');
+    const dd = d.getUTCDate().toString().padStart(2, '0');
+    const hh = d.getUTCHours().toString().padStart(2, '0');
+    const mi = d.getUTCMinutes().toString().padStart(2, '0');
+    return `${mm}/${dd} ${hh}:${mi}`;
   });
   const closes = rows.map((r) => r[4]);
   const first = closes[0];
@@ -87,6 +91,29 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
   const subLine = mint;
 
   const lastLabel = labels[labels.length - 1];
+  // Format helper: readable USD price (no scientific notation)
+  const fmtPrice = (n: number): string => {
+    if (!isFinite(n) || n === 0) return '$0';
+    const abs = Math.abs(n);
+    if (abs >= 1) return '$' + n.toFixed(4);
+    if (abs >= 0.01) return '$' + n.toFixed(6);
+    // Sub-cent: show 8 decimals, trimmed
+    return '$' + n.toFixed(9).replace(/0+$/, '').replace(/\.$/, '');
+  };
+
+  // Pre-compute readable y-axis ticks so we don't rely on JS callbacks
+  // (QuickChart JSON strips functions).
+  const yMin = Math.min(...closes);
+  const yMax = Math.max(...closes);
+  const yPad = (yMax - yMin) * 0.08 || yMax * 0.05 || 1;
+  const yLo = yMin - yPad;
+  const yHi = yMax + yPad;
+  const tickCount = 8;
+  const tickStep = (yHi - yLo) / (tickCount - 1);
+  const yTickValues: number[] = [];
+  for (let i = 0; i < tickCount; i++) yTickValues.push(yLo + tickStep * i);
+  const yTickLabelMap: Record<string, string> = {};
+  for (const v of yTickValues) yTickLabelMap[v.toString()] = fmtPrice(v);
 
   const config = {
     type: 'line',
@@ -163,15 +190,12 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
           grid: { color: 'rgba(255,255,255,0.18)', lineWidth: 1 },
         },
         y: {
+          min: yLo,
+          max: yHi,
+          afterBuildTicks: undefined,
           ticks: {
             color: '#ffffff',
             font: { size: 14, weight: 'bold', family: 'monospace' },
-            format: {
-              style: 'currency',
-              currency: 'USD',
-              minimumFractionDigits: 8,
-              maximumFractionDigits: 8,
-            },
           },
           grid: { color: 'rgba(255,255,255,0.18)', lineWidth: 1 },
         },
