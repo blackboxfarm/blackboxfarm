@@ -83,12 +83,17 @@ async function fetchPumpEntry(mint: string): Promise<{ mcap: number | null; pric
   } catch { return { mcap: null, price: null, ticker: null }; }
 }
 
-async function sendSms(body: string): Promise<{ ok: boolean; error?: string }> {
+async function sendSms(
+  body: string,
+  mediaUrl?: string | null,
+): Promise<{ ok: boolean; error?: string }> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   const TWILIO_API_KEY = Deno.env.get('TWILIO_API_KEY');
   if (!LOVABLE_API_KEY || !TWILIO_API_KEY) return { ok: false, error: 'missing_twilio_creds' };
   try {
     const message = body.length > 1600 ? body.slice(0, 1597) + '...' : body;
+    const params: Record<string, string> = { To: ADMIN_PHONE, From: TWILIO_FROM, Body: message };
+    if (mediaUrl) params.MediaUrl = mediaUrl;
     const res = await fetch(`${TWILIO_GATEWAY_URL}/Messages.json`, {
       method: 'POST',
       headers: {
@@ -96,7 +101,7 @@ async function sendSms(body: string): Promise<{ ok: boolean; error?: string }> {
         'X-Connection-Api-Key': TWILIO_API_KEY,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: new URLSearchParams({ To: ADMIN_PHONE, From: TWILIO_FROM, Body: message }),
+      body: new URLSearchParams(params),
     });
     if (!res.ok) return { ok: false, error: `twilio_${res.status}: ${await res.text()}` };
     return { ok: true };
@@ -495,6 +500,8 @@ serve(async (req) => {
             : liveStatus === 'disabled'
               ? `Live buy: off`
               : `Live buy: ${liveStatus}${liveError ? ` (${liveError.slice(0, 60)})` : ''}`;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const chartThumbUrl = `${supabaseUrl}/functions/v1/chart-thumb?mint=${mint}`;
     const smsBody =
       `🚨 ALPHA DEV DETECTED\n` +
       `NEW: ${newTicker} (${shortMint})\n` +
@@ -506,9 +513,12 @@ serve(async (req) => {
       `NEW CA (tap to copy):\n${mint}\n\n` +
       `Pump (NEW): https://pump.fun/coin/${mint}\n` +
       `Dex (NEW):  https://dexscreener.com/solana/${mint}`;
-    const r = await sendSms(smsBody);
+    const r = await sendSms(smsBody, chartThumbUrl);
     smsStatus = r.ok ? 'sent' : 'failed';
     smsError = r.error ?? null;
+    await supabase.from('alpha_paper_trades')
+      .update({ chart_thumb_url: chartThumbUrl })
+      .eq('id', trade.id);
   }
   await supabase.from('alpha_paper_trades').update({
     sms_status: smsStatus, sms_error: smsError, sms_sent_at: new Date().toISOString(),
