@@ -96,6 +96,7 @@ type AlphaTrade = {
   peak_price_usd: number | null;
   peak_multiplier: number | null;
   peak_at: string | null;
+  chart_thumb_url?: string | null;
   exit_price_usd: number | null;
   exit_multiplier: number | null;
   exit_reason: string | null;
