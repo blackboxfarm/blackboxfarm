@@ -960,6 +960,7 @@ export type Database = {
       }
       alpha_paper_trades: {
         Row: {
+          chart_thumb_url: string | null
           check_count: number | null
           created_at: string
           dev_best_multiplier: number | null
@@ -1005,6 +1006,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          chart_thumb_url?: string | null
           check_count?: number | null
           created_at?: string
           dev_best_multiplier?: number | null
@@ -1050,6 +1052,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          chart_thumb_url?: string | null
           check_count?: number | null
           created_at?: string
           dev_best_multiplier?: number | null

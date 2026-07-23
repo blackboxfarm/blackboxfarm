@@ -1,0 +1,1 @@
+ALTER TABLE public.alpha_paper_trades ADD COLUMN IF NOT EXISTS chart_thumb_url text;
