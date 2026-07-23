@@ -38,6 +38,19 @@ async function getTopPool(mint: string): Promise<string | null> {
   } catch { return null; }
 }
 
+async function getTicker(mint: string): Promise<string | null> {
+  try {
+    const r = await fetch(
+      `https://api.geckoterminal.com/api/v2/networks/solana/tokens/${mint}`,
+      { headers: { Accept: 'application/json' } },
+    );
+    if (!r.ok) return null;
+    const j: any = await r.json();
+    const s = j?.data?.attributes?.symbol;
+    return typeof s === 'string' ? s.toUpperCase() : null;
+  } catch { return null; }
+}
+
 async function getOhlcv(pool: string): Promise<number[][]> {
   try {
     const r = await fetch(
@@ -53,13 +66,17 @@ async function getOhlcv(pool: string): Promise<number[][]> {
 async function renderChart(mint: string): Promise<Uint8Array | null> {
   const pool = await getTopPool(mint);
   if (!pool) return null;
-  const raw = await getOhlcv(pool);
+  const [raw, ticker] = await Promise.all([getOhlcv(pool), getTicker(mint)]);
   if (raw.length < 2) return null;
 
   const rows = raw.slice().sort((a, b) => a[0] - b[0]);
   const labels = rows.map((r) => {
     const d = new Date(r[0] * 1000);
-    return `${d.getUTCHours().toString().padStart(2, '0')}:${d.getUTCMinutes().toString().padStart(2, '0')}`;
+    const mm = (d.getUTCMonth() + 1).toString().padStart(2, '0');
+    const dd = d.getUTCDate().toString().padStart(2, '0');
+    const hh = d.getUTCHours().toString().padStart(2, '0');
+    const mi = d.getUTCMinutes().toString().padStart(2, '0');
+    return `${mm}/${dd} ${hh}:${mi}`;
   });
   const closes = rows.map((r) => r[4]);
   const first = closes[0];
@@ -69,39 +86,131 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
   const color = up ? '#22c55e' : '#ef4444';
   const fill = up ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)';
   const priceStr = last < 0.01 ? last.toPrecision(3) : last.toFixed(4);
-  const title = `${mint.slice(0, 4)}…${mint.slice(-4)}   ${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%   $${priceStr}`;
+  const tick = ticker ? `$${ticker}` : `$${mint.slice(0, 4).toUpperCase()}`;
+  const titleLine = `${tick}   ${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%   $${priceStr}`;
+  const subLine = mint;
+
+  const lastIdx = closes.length - 1;
+  // Format helper: readable USD price (no scientific notation)
+  const fmtPrice = (n: number): string => {
+    if (!isFinite(n) || n === 0) return '$0';
+    const abs = Math.abs(n);
+    if (abs >= 1) return '$' + n.toFixed(4);
+    if (abs >= 0.01) return '$' + n.toFixed(6);
+    // Sub-cent: show 8 decimals, trimmed
+    return '$' + n.toFixed(9).replace(/0+$/, '').replace(/\.$/, '');
+  };
+
+  // Pre-compute readable y-axis ticks so we don't rely on JS callbacks
+  // (QuickChart JSON strips functions).
+  const yMin = Math.min(...closes);
+  const yMax = Math.max(...closes);
+  const yPad = (yMax - yMin) * 0.08 || yMax * 0.05 || 1;
+  const yLo = yMin - yPad;
+  const yHi = yMax + yPad;
+  const tickCount = 8;
+  const tickStep = (yHi - yLo) / (tickCount - 1);
+  const yTickValues: number[] = [];
+  for (let i = 0; i < tickCount; i++) yTickValues.push(yLo + tickStep * i);
+  const yTickLabelMap: Record<string, string> = {};
+  for (const v of yTickValues) yTickLabelMap[v.toString()] = fmtPrice(v);
 
   const config = {
     type: 'line',
     data: {
       labels,
-      datasets: [{
-        data: closes,
-        borderColor: color,
-        backgroundColor: fill,
-        fill: true,
-        borderWidth: 2,
-        pointRadius: 0,
-        tension: 0.25,
-      }],
+      datasets: [
+        {
+          label: 'price',
+          data: closes,
+          borderColor: color,
+          backgroundColor: fill,
+          fill: true,
+          borderWidth: 3,
+          pointRadius: 0,
+          tension: 0.25,
+        },
+      ],
     },
     options: {
+      layout: { padding: { top: 10, right: 40, bottom: 10, left: 10 } },
       plugins: {
         legend: { display: false },
         title: {
           display: true,
-          text: title,
-          color: '#facc15',
-          font: { size: 22, weight: 'bold', family: 'monospace' },
-          padding: 16,
+          text: titleLine,
+          color: '#ffffff',
+          font: { size: 34, weight: 'bold', family: 'monospace' },
+          padding: { top: 14, bottom: 4 },
+        },
+        subtitle: {
+          display: true,
+          text: subLine,
+          color: '#ffffff',
+          font: { size: 16, weight: 'bold', family: 'monospace' },
+          padding: { bottom: 18 },
+        },
+        datalabels: { display: false },
+        annotation: {
+          annotations: {
+            youAreHere: {
+              type: 'point',
+              xValue: lastIdx,
+              yValue: last,
+              backgroundColor: '#facc15',
+              borderColor: '#ffffff',
+              borderWidth: 3,
+              radius: 8,
+            },
+            youAreHereLabel: {
+              type: 'label',
+              xValue: lastIdx,
+              yValue: last,
+              xAdjust: -100,
+              yAdjust: -22,
+              backgroundColor: 'rgba(0,0,0,0.75)',
+              borderColor: '#facc15',
+              borderWidth: 1,
+              borderRadius: 4,
+              color: '#facc15',
+              font: { size: 16, weight: 'bold', family: 'monospace' },
+              padding: 6,
+              content: ['YOU ARE HERE ▶'],
+            },
+          },
         },
       },
       scales: {
-        x: { ticks: { color: '#9ca3af', maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,0.05)' } },
-        y: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        x: {
+          ticks: {
+            color: '#ffffff',
+            maxTicksLimit: 10,
+            font: { size: 14, weight: 'bold', family: 'monospace' },
+          },
+          grid: { color: 'rgba(255,255,255,0.18)', lineWidth: 1 },
+        },
+        y: {
+          min: yLo,
+          max: yHi,
+          afterBuildTicks: undefined,
+          ticks: {
+            color: '#ffffff',
+            font: { size: 14, weight: 'bold', family: 'monospace' },
+          },
+          grid: { color: 'rgba(255,255,255,0.18)', lineWidth: 1 },
+        },
       },
     },
   };
+
+  // Serialize config as a JS string so we can inject a live tick callback
+  // (QuickChart preserves functions only when `chart` is a JS string).
+  const jsCallback = `function(v){var n=Number(v);if(!isFinite(n)||n===0)return '$0';var a=Math.abs(n);if(a>=1)return '$'+n.toFixed(4);if(a>=0.01)return '$'+n.toFixed(6);return '$'+n.toFixed(9).replace(/0+$/,'').replace(/\\.$/,'');}`;
+  const configJson = JSON.stringify(config);
+  const chartJs =
+    '(function(){var c=' + configJson +
+    ';c.options.scales.y.ticks.callback=' + jsCallback +
+    ';return c;})()';
 
   try {
     const r = await fetch('https://quickchart.io/chart', {
@@ -113,7 +222,7 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
         format: 'png',
         backgroundColor: '#0a0a0a',
         version: '4',
-        chart: config,
+        chart: chartJs,
       }),
     });
     if (!r.ok) {
