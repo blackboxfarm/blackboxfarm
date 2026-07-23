@@ -38,6 +38,19 @@ async function getTopPool(mint: string): Promise<string | null> {
   } catch { return null; }
 }
 
+async function getTicker(mint: string): Promise<string | null> {
+  try {
+    const r = await fetch(
+      `https://api.geckoterminal.com/api/v2/networks/solana/tokens/${mint}`,
+      { headers: { Accept: 'application/json' } },
+    );
+    if (!r.ok) return null;
+    const j: any = await r.json();
+    const s = j?.data?.attributes?.symbol;
+    return typeof s === 'string' ? s.toUpperCase() : null;
+  } catch { return null; }
+}
+
 async function getOhlcv(pool: string): Promise<number[][]> {
   try {
     const r = await fetch(
@@ -53,7 +66,7 @@ async function getOhlcv(pool: string): Promise<number[][]> {
 async function renderChart(mint: string): Promise<Uint8Array | null> {
   const pool = await getTopPool(mint);
   if (!pool) return null;
-  const raw = await getOhlcv(pool);
+  const [raw, ticker] = await Promise.all([getOhlcv(pool), getTicker(mint)]);
   if (raw.length < 2) return null;
 
   const rows = raw.slice().sort((a, b) => a[0] - b[0]);
@@ -69,36 +82,91 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
   const color = up ? '#22c55e' : '#ef4444';
   const fill = up ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)';
   const priceStr = last < 0.01 ? last.toPrecision(3) : last.toFixed(4);
-  const title = `${mint.slice(0, 4)}…${mint.slice(-4)}   ${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%   $${priceStr}`;
+  const tick = ticker ? `$${ticker}` : `$${mint.slice(0, 4).toUpperCase()}`;
+  const titleLine = `${tick}   ${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%   $${priceStr}`;
+  const subLine = mint;
+
+  // "You are here" marker on the latest point
+  const markerPoints = closes.map((_, i) => (i === closes.length - 1 ? 10 : 0));
 
   const config = {
     type: 'line',
     data: {
       labels,
-      datasets: [{
-        data: closes,
-        borderColor: color,
-        backgroundColor: fill,
-        fill: true,
-        borderWidth: 2,
-        pointRadius: 0,
-        tension: 0.25,
-      }],
+      datasets: [
+        {
+          label: 'price',
+          data: closes,
+          borderColor: color,
+          backgroundColor: fill,
+          fill: true,
+          borderWidth: 3,
+          pointRadius: 0,
+          tension: 0.25,
+        },
+        {
+          label: 'YOU ARE HERE',
+          data: closes.map((c, i) => (i === closes.length - 1 ? c : null)),
+          borderColor: '#facc15',
+          backgroundColor: '#facc15',
+          pointRadius: markerPoints,
+          pointHoverRadius: markerPoints,
+          pointBorderColor: '#ffffff',
+          pointBorderWidth: 3,
+          showLine: false,
+        },
+      ],
     },
     options: {
+      layout: { padding: { top: 10, right: 40, bottom: 10, left: 10 } },
       plugins: {
         legend: { display: false },
         title: {
           display: true,
-          text: title,
+          text: titleLine,
+          color: '#ffffff',
+          font: { size: 34, weight: 'bold', family: 'monospace' },
+          padding: { top: 14, bottom: 4 },
+        },
+        subtitle: {
+          display: true,
+          text: subLine,
+          color: '#ffffff',
+          font: { size: 16, weight: 'bold', family: 'monospace' },
+          padding: { bottom: 18 },
+        },
+        datalabels: {
+          display: (ctx: any) => ctx.datasetIndex === 1 && ctx.dataIndex === closes.length - 1,
+          align: 'left',
+          anchor: 'center',
           color: '#facc15',
-          font: { size: 22, weight: 'bold', family: 'monospace' },
-          padding: 16,
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          borderColor: '#facc15',
+          borderWidth: 1,
+          borderRadius: 4,
+          padding: 6,
+          font: { size: 16, weight: 'bold', family: 'monospace' },
+          formatter: () => 'YOU ARE HERE ▶',
+          offset: 12,
         },
       },
       scales: {
-        x: { ticks: { color: '#9ca3af', maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,0.05)' } },
-        y: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        x: {
+          ticks: {
+            color: '#ffffff',
+            maxTicksLimit: 10,
+            font: { size: 14, weight: 'bold', family: 'monospace' },
+          },
+          grid: { color: 'rgba(255,255,255,0.18)', lineWidth: 1 },
+        },
+        y: {
+          ticks: {
+            color: '#ffffff',
+            font: { size: 14, weight: 'bold', family: 'monospace' },
+            callback: (v: number) => (v < 0.01 ? Number(v).toPrecision(3) : Number(v).toFixed(4)),
+          },
+          grid: { color: 'rgba(255,255,255,0.18)', lineWidth: 1 },
+        },
       },
     },
   };
