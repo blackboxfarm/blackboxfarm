@@ -1216,6 +1216,7 @@ export default function InsidersRecaps() {
             <table className="w-full text-xs">
               <thead className="bg-muted text-muted-foreground sticky top-0">
                 <tr>
+                  <th className="p-2 text-left">Chart</th>
                   <th className="p-2 text-left">When</th>
                   <th className="p-2 text-left">Ticker</th>
                   <th className="p-2 text-left">Entry $ / MC</th>
@@ -1233,6 +1234,24 @@ export default function InsidersRecaps() {
               <tbody>
                 {alphaTrades.map((t) => (
                   <tr key={t.id} className="border-t border-border hover:bg-muted/40">
+                    <td className="p-2">
+                      {t.mint ? (
+                        <a
+                          href={`https://dexscreener.com/solana/${t.mint}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="Open chart"
+                        >
+                          <img
+                            src={t.chart_thumb_url || `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chart-thumb?mint=${t.mint}`}
+                            alt={`${t.ticker || t.mint} chart`}
+                            loading="lazy"
+                            className="w-32 h-16 object-cover rounded border border-border bg-muted"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'; }}
+                          />
+                        </a>
+                      ) : "—"}
+                    </td>
                     <td className="p-2 whitespace-nowrap">
                       {new Date(t.created_at).toLocaleString()}
                     </td>
@@ -1318,7 +1337,7 @@ export default function InsidersRecaps() {
                 ))}
                 {alphaTrades.length === 0 && (
                   <tr>
-                    <td colSpan={12} className="p-6 text-center text-muted-foreground">
+                    <td colSpan={13} className="p-6 text-center text-muted-foreground">
                       {alphaLoading
                         ? "Loading…"
                         : "No alpha paper-buys yet. Rebuild the alpha lists, then the next insiders token that matches will land here."}
