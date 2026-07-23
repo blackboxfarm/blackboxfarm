@@ -204,9 +204,11 @@ export async function executeAlphaBuy(
   let liveSol: number | null = null;
   let liveUsd: number | null = null;
   let liveSig: string | null = null;
+  let flipPositionId: string | null = null;
   try {
     if (config.live_buy_enabled && config.live_buy_wallet_id) {
-      const buyUsd = Number(config.live_buy_usd || 100);
+      const buySolFixed = Number(config.live_buy_sol_fixed || 0.1);
+      const minReserveSol = Number(config.live_buy_min_sol_reserve || 0.02);
       const capUsd = Number(config.live_buy_daily_cap_usd || 300);
       const dayStart = new Date();
       dayStart.setUTCHours(0, 0, 0, 0);
@@ -214,21 +216,23 @@ export async function executeAlphaBuy(
         .select('live_buy_usd').eq('live_buy_status', 'executed')
         .gte('live_buy_at', dayStart.toISOString());
       const spentToday = (todayRows || []).reduce((s: number, r: any) => s + Number(r.live_buy_usd || 0), 0);
-      if (spentToday + buyUsd > capUsd) {
-        liveStatus = 'skipped_daily_cap';
-        liveError = `daily cap ${capUsd} reached (spent ${spentToday.toFixed(2)})`;
-      } else {
-        const { data: w } = await supabase.from('super_admin_wallets')
+      const { data: w } = await supabase.from('super_admin_wallets')
           .select('id, pubkey, is_active').eq('id', config.live_buy_wallet_id).maybeSingle();
         if (!w || !w.is_active) { liveStatus = 'skipped_no_wallet'; liveError = 'FlipIt wallet missing/inactive'; }
         else {
           const [balSol, solPrice] = await Promise.all([fetchSolBalance(w.pubkey), fetchSolPriceUsd()]);
           if (!balSol || !solPrice) { liveStatus = 'skipped_chain_read'; liveError = `balSol=${balSol} solPrice=${solPrice}`; }
           else {
-            const balUsd = balSol * solPrice;
-            if (balUsd < buyUsd) { liveStatus = 'skipped_insufficient'; liveError = `wallet $${balUsd.toFixed(2)} < $${buyUsd}`; }
-            else {
-              const buyAmountSol = Number((buyUsd / solPrice).toFixed(6));
+            const spendableSol = balSol - minReserveSol;
+            const buyUsd = Number((buySolFixed * solPrice).toFixed(2));
+            if (spendableSol < buySolFixed) {
+              liveStatus = 'skipped_insufficient';
+              liveError = `wallet ${balSol.toFixed(4)} SOL < ${buySolFixed} + reserve ${minReserveSol}`;
+            } else if (spentToday + buyUsd > capUsd) {
+              liveStatus = 'skipped_daily_cap';
+              liveError = `daily cap $${capUsd} (spent $${spentToday.toFixed(2)})`;
+            } else {
+              const buyAmountSol = buySolFixed;
               try {
                 const { data: execRes, error: execErr } = await supabase.functions.invoke('flipit-execute', {
                   body: {
@@ -245,12 +249,12 @@ export async function executeAlphaBuy(
                 else {
                   liveStatus = 'executed'; liveSol = buyAmountSol; liveUsd = buyUsd;
                   liveSig = execRes?.signature || execRes?.buyTxSignature || execRes?.tx || null;
+                  flipPositionId = execRes?.positionId || null;
                 }
               } catch (e: any) { liveStatus = 'failed'; liveError = (e?.message || String(e)).slice(0, 500); }
             }
           }
         }
-      }
     } else {
       liveStatus = config.live_buy_enabled ? 'skipped_no_wallet' : 'disabled';
     }
@@ -267,7 +271,7 @@ export async function executeAlphaBuy(
     const priorMult = m.devHit?.best_multiplier ?? m.kycHit?.best_multiplier ?? null;
     const priorLine = priorTicker && priorMult ? `Prior best: $${priorTicker} @ ${priorMult}x` : m.reason;
     const liveLine =
-      liveStatus === 'executed' ? `Live buy: $${liveUsd?.toFixed(0)} (${liveSol?.toFixed(4)} SOL) ✅` :
+      liveStatus === 'executed' ? `Live buy: ${liveSol?.toFixed(3)} SOL ($${liveUsd?.toFixed(0)}) ✅` :
       liveStatus === 'skipped_insufficient' ? `Live buy: SKIP (${liveError})` :
       liveStatus === 'skipped_daily_cap' ? `Live buy: SKIP (daily cap)` :
       liveStatus === 'disabled' ? `Live buy: off` :
@@ -297,6 +301,7 @@ export async function executeAlphaBuy(
     live_buy_status: liveStatus, live_buy_signature: liveSig,
     live_buy_sol: liveSol, live_buy_usd: liveUsd, live_buy_error: liveError,
     live_buy_at: liveStatus === 'executed' ? new Date().toISOString() : null,
+    flip_position_id: flipPositionId,
   }).eq('id', trade.id);
 
   return {

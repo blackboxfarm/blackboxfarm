@@ -71,13 +71,48 @@ serve(async (req) => {
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
   // Config knobs (stop loss)
-  const { data: cfg } = await supabase.from('alpha_config').select('stop_loss_pct').eq('id', 1).maybeSingle();
+  const { data: cfg } = await supabase.from('alpha_config').select('stop_loss_pct, live_sell_enabled').eq('id', 1).maybeSingle();
   const stopLossPct = Number(cfg?.stop_loss_pct ?? 0.70); // 70% drop
   const stopMult = 1 - stopLossPct; // e.g. 0.30
+  const liveSellEnabled = cfg?.live_sell_enabled !== false;
+
+  async function triggerLiveSell(trade: any, reason: 'target_hit' | 'stop_loss'): Promise<void> {
+    if (!liveSellEnabled) return;
+    if (!trade.flip_position_id || trade.live_buy_status !== 'executed') return;
+    if (trade.live_sell_status && trade.live_sell_status !== 'failed') return;
+    try {
+      const { data: execRes, error: execErr } = await supabase.functions.invoke('flipit-execute', {
+        body: {
+          action: 'sell',
+          positionId: trade.flip_position_id,
+          tokenMint: trade.mint,
+          slippageBps: 3000,
+          priorityFeeMode: 'custom',
+          priorityFeeMicroLamports: 300000,
+          jitoTipLamports: 300000,
+          source: `alpha-paper-monitor:${reason}`,
+        },
+      });
+      const status = execErr ? 'failed' : execRes?.error ? 'failed' : 'executed';
+      const sig = execRes?.signature || execRes?.sellTxSignature || execRes?.tx || null;
+      const err = execErr?.message || (execRes?.error ? String(execRes.error).slice(0, 500) : null);
+      await supabase.from('alpha_paper_trades').update({
+        live_sell_status: status,
+        live_sell_signature: sig,
+        live_sell_error: err,
+        live_sell_at: status === 'executed' ? new Date().toISOString() : null,
+      }).eq('id', trade.id);
+    } catch (e: any) {
+      await supabase.from('alpha_paper_trades').update({
+        live_sell_status: 'failed',
+        live_sell_error: (e?.message || String(e)).slice(0, 500),
+      }).eq('id', trade.id);
+    }
+  }
 
   const { data: trades, error } = await supabase
     .from('alpha_paper_trades')
-    .select('id, mint, ticker, entry_market_cap, entry_price_usd, size_usd, target_multiplier, peak_multiplier, created_at, check_count')
+    .select('id, mint, ticker, entry_market_cap, entry_price_usd, size_usd, target_multiplier, peak_multiplier, created_at, check_count, flip_position_id, live_buy_status, live_sell_status')
     .eq('status', 'open')
     .order('last_checked_at', { ascending: true, nullsFirst: true })
     .limit(50);
@@ -98,7 +133,7 @@ serve(async (req) => {
     for (const t of trades || []) {
       // Skip if already closed in a prior pass this run
       const { data: cur } = await supabase.from('alpha_paper_trades')
-        .select('status').eq('id', t.id).maybeSingle();
+        .select('status, flip_position_id, live_buy_status, live_sell_status').eq('id', t.id).maybeSingle();
       if (!cur || cur.status !== 'open') continue;
 
       let live = await fetchDex(t.mint);
@@ -139,6 +174,8 @@ serve(async (req) => {
 
           await supabase.from('alpha_paper_trades').update(update).eq('id', t.id);
 
+          await triggerLiveSell({ ...t, ...cur }, 'target_hit');
+
           const tk = t.ticker ? `$${t.ticker}` : t.mint.slice(0, 6);
           await sendSms(
             `🎯 PAPER SELL ${tk} @ ${curMult.toFixed(2)}x\n` +
@@ -162,6 +199,8 @@ serve(async (req) => {
           update.pnl_usd = Number((Number(t.size_usd || 0) * (curMult - 1)).toFixed(2));
 
           await supabase.from('alpha_paper_trades').update(update).eq('id', t.id);
+
+          await triggerLiveSell({ ...t, ...cur }, 'stop_loss');
 
           const tk = t.ticker ? `$${t.ticker}` : t.mint.slice(0, 6);
           const dropPct = ((1 - curMult) * 100).toFixed(0);
