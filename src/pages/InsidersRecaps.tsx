@@ -77,7 +77,10 @@ type AlphaTrade = {
   mint: string;
   ticker: string | null;
   entry_market_cap: number | null;
+  entry_price_usd: number | null;
   size_usd: number;
+  strategy: string | null;
+  target_multiplier: number | null;
   status: string;
   match_kind: string;
   matched_dev_wallet: string | null;
@@ -90,6 +93,15 @@ type AlphaTrade = {
   reason: string | null;
   sms_status: string | null;
   created_at: string;
+  peak_price_usd: number | null;
+  peak_multiplier: number | null;
+  peak_at: string | null;
+  exit_price_usd: number | null;
+  exit_multiplier: number | null;
+  exit_reason: string | null;
+  exit_at: string | null;
+  pnl_usd: number | null;
+  last_checked_at: string | null;
 };
 
 type KycInfo = { root: string; label: string | null; source: string | null; status: string | null };
