@@ -63,7 +63,7 @@ async function getOhlcv(pool: string): Promise<number[][]> {
   } catch { return []; }
 }
 
-async function renderChart(mint: string): Promise<Uint8Array | null> {
+async function renderChart(mint: string, buyTs: number | null): Promise<Uint8Array | null> {
   const pool = await getTopPool(mint);
   if (!pool) return null;
   const [raw, ticker] = await Promise.all([getOhlcv(pool), getTicker(mint)]);
@@ -91,6 +91,22 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
   const subLine = mint;
 
   const lastIdx = closes.length - 1;
+
+  // Locate closest candle to the buy timestamp (unix seconds) if provided
+  let buyIdx: number | null = null;
+  let buyPrice: number | null = null;
+  if (buyTs && isFinite(buyTs)) {
+    let bestI = -1, bestD = Infinity;
+    for (let i = 0; i < rows.length; i++) {
+      const d = Math.abs(rows[i][0] - buyTs);
+      if (d < bestD) { bestD = d; bestI = i; }
+    }
+    if (bestI >= 0 && bestD <= 5 * 60) {
+      buyIdx = bestI;
+      buyPrice = closes[bestI];
+    }
+  }
+
   // Format helper: readable USD price (no scientific notation)
   const fmtPrice = (n: number): string => {
     if (!isFinite(n) || n === 0) return '$0';
