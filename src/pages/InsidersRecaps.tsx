@@ -1238,10 +1238,10 @@ export default function InsidersRecaps() {
                     <td className="p-2">
                       {t.mint ? (
                         <a
-                          href={`https://dexscreener.com/solana/${t.mint}`}
+                          href={t.chart_thumb_url || `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chart-thumb?mint=${t.mint}`}
                           target="_blank"
                           rel="noreferrer"
-                          title="Open chart"
+                          title="Open buy-moment chart"
                         >
                           <img
                             src={t.chart_thumb_url || `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chart-thumb?mint=${t.mint}`}
