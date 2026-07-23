@@ -86,8 +86,7 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
   const titleLine = `${tick}   ${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%   $${priceStr}`;
   const subLine = mint;
 
-  // "You are here" marker on the latest point
-  const markerPoints = closes.map((_, i) => (i === closes.length - 1 ? 10 : 0));
+  const lastLabel = labels[labels.length - 1];
 
   const config = {
     type: 'line',
@@ -103,32 +102,6 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
           borderWidth: 3,
           pointRadius: 0,
           tension: 0.25,
-          datalabels: { display: false },
-        },
-        {
-          label: 'YOU ARE HERE',
-          data: closes.map((c, i) => (i === closes.length - 1 ? c : null)),
-          borderColor: '#facc15',
-          backgroundColor: '#facc15',
-          pointRadius: markerPoints,
-          pointHoverRadius: markerPoints,
-          pointBorderColor: '#ffffff',
-          pointBorderWidth: 3,
-          showLine: false,
-          datalabels: {
-            display: (ctx: any) => ctx.dataIndex === closes.length - 1,
-            align: 'left',
-            anchor: 'center',
-            color: '#facc15',
-            backgroundColor: 'rgba(0,0,0,0.7)',
-            borderColor: '#facc15',
-            borderWidth: 1,
-            borderRadius: 4,
-            padding: 6,
-            font: { size: 16, weight: 'bold', family: 'monospace' },
-            formatter: () => 'YOU ARE HERE ▶',
-            offset: 14,
-          },
         },
       ],
     },
@@ -151,6 +124,34 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
           padding: { bottom: 18 },
         },
         datalabels: { display: false },
+        annotation: {
+          annotations: {
+            youAreHere: {
+              type: 'point',
+              xValue: lastLabel,
+              yValue: last,
+              backgroundColor: '#facc15',
+              borderColor: '#ffffff',
+              borderWidth: 3,
+              radius: 8,
+            },
+            youAreHereLabel: {
+              type: 'label',
+              xValue: lastLabel,
+              yValue: last,
+              xAdjust: -90,
+              yAdjust: -22,
+              backgroundColor: 'rgba(0,0,0,0.75)',
+              borderColor: '#facc15',
+              borderWidth: 1,
+              borderRadius: 4,
+              color: '#facc15',
+              font: { size: 16, weight: 'bold', family: 'monospace' },
+              padding: 6,
+              content: ['YOU ARE HERE ▶'],
+            },
+          },
+        },
       },
       scales: {
         x: {
@@ -165,12 +166,11 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
           ticks: {
             color: '#ffffff',
             font: { size: 14, weight: 'bold', family: 'monospace' },
-            callback: (v: number) => {
-              const n = Number(v);
-              if (n === 0) return '0';
-              if (Math.abs(n) < 0.001) return '$' + n.toExponential(2);
-              if (Math.abs(n) < 1) return '$' + n.toPrecision(3);
-              return '$' + n.toFixed(4);
+            format: {
+              style: 'currency',
+              currency: 'USD',
+              minimumFractionDigits: 8,
+              maximumFractionDigits: 8,
             },
           },
           grid: { color: 'rgba(255,255,255,0.18)', lineWidth: 1 },
