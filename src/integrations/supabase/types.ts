@@ -960,14 +960,21 @@ export type Database = {
       }
       alpha_paper_trades: {
         Row: {
+          check_count: number | null
           created_at: string
           dev_best_multiplier: number | null
           dev_best_ticker: string | null
           entry_market_cap: number | null
           entry_price_usd: number | null
+          exit_at: string | null
+          exit_market_cap: number | null
+          exit_multiplier: number | null
+          exit_price_usd: number | null
+          exit_reason: string | null
           group_avg_multiplier: number | null
           group_token_count: number | null
           id: string
+          last_checked_at: string | null
           live_buy_at: string | null
           live_buy_error: string | null
           live_buy_signature: string | null
@@ -980,6 +987,11 @@ export type Database = {
           matched_kyc_root: string | null
           metadata: Json
           mint: string
+          peak_at: string | null
+          peak_market_cap: number | null
+          peak_multiplier: number | null
+          peak_price_usd: number | null
+          pnl_usd: number | null
           reason: string | null
           size_usd: number
           sms_error: string | null
@@ -988,18 +1000,26 @@ export type Database = {
           source: string
           status: string
           strategy: string
+          target_multiplier: number | null
           ticker: string | null
           updated_at: string
         }
         Insert: {
+          check_count?: number | null
           created_at?: string
           dev_best_multiplier?: number | null
           dev_best_ticker?: string | null
           entry_market_cap?: number | null
           entry_price_usd?: number | null
+          exit_at?: string | null
+          exit_market_cap?: number | null
+          exit_multiplier?: number | null
+          exit_price_usd?: number | null
+          exit_reason?: string | null
           group_avg_multiplier?: number | null
           group_token_count?: number | null
           id?: string
+          last_checked_at?: string | null
           live_buy_at?: string | null
           live_buy_error?: string | null
           live_buy_signature?: string | null
@@ -1012,6 +1032,11 @@ export type Database = {
           matched_kyc_root?: string | null
           metadata?: Json
           mint: string
+          peak_at?: string | null
+          peak_market_cap?: number | null
+          peak_multiplier?: number | null
+          peak_price_usd?: number | null
+          pnl_usd?: number | null
           reason?: string | null
           size_usd?: number
           sms_error?: string | null
@@ -1020,18 +1045,26 @@ export type Database = {
           source?: string
           status?: string
           strategy?: string
+          target_multiplier?: number | null
           ticker?: string | null
           updated_at?: string
         }
         Update: {
+          check_count?: number | null
           created_at?: string
           dev_best_multiplier?: number | null
           dev_best_ticker?: string | null
           entry_market_cap?: number | null
           entry_price_usd?: number | null
+          exit_at?: string | null
+          exit_market_cap?: number | null
+          exit_multiplier?: number | null
+          exit_price_usd?: number | null
+          exit_reason?: string | null
           group_avg_multiplier?: number | null
           group_token_count?: number | null
           id?: string
+          last_checked_at?: string | null
           live_buy_at?: string | null
           live_buy_error?: string | null
           live_buy_signature?: string | null
@@ -1044,6 +1077,11 @@ export type Database = {
           matched_kyc_root?: string | null
           metadata?: Json
           mint?: string
+          peak_at?: string | null
+          peak_market_cap?: number | null
+          peak_multiplier?: number | null
+          peak_price_usd?: number | null
+          pnl_usd?: number | null
           reason?: string | null
           size_usd?: number
           sms_error?: string | null
@@ -1052,6 +1090,7 @@ export type Database = {
           source?: string
           status?: string
           strategy?: string
+          target_multiplier?: number | null
           ticker?: string | null
           updated_at?: string
         }
