@@ -282,13 +282,22 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   const u = new URL(req.url);
   const mint = (u.searchParams.get('mint') || '').trim();
+  const buyRaw = u.searchParams.get('buy');
+  let buyTs: number | null = null;
+  if (buyRaw) {
+    const n = Number(buyRaw);
+    if (isFinite(n) && n > 0) {
+      // Accept unix seconds or milliseconds
+      buyTs = n > 10_000_000_000 ? Math.floor(n / 1000) : Math.floor(n);
+    }
+  }
   if (!mint || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) {
     return new Response(JSON.stringify({ error: 'invalid mint' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-  const png = (await renderChart(mint)) ?? b64ToBytes(PLACEHOLDER_PNG_B64);
+  const png = (await renderChart(mint, buyTs)) ?? b64ToBytes(PLACEHOLDER_PNG_B64);
   return new Response(png, {
     headers: {
       ...corsHeaders,
