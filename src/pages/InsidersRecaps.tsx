@@ -77,7 +77,10 @@ type AlphaTrade = {
   mint: string;
   ticker: string | null;
   entry_market_cap: number | null;
+  entry_price_usd: number | null;
   size_usd: number;
+  strategy: string | null;
+  target_multiplier: number | null;
   status: string;
   match_kind: string;
   matched_dev_wallet: string | null;
@@ -90,6 +93,15 @@ type AlphaTrade = {
   reason: string | null;
   sms_status: string | null;
   created_at: string;
+  peak_price_usd: number | null;
+  peak_multiplier: number | null;
+  peak_at: string | null;
+  exit_price_usd: number | null;
+  exit_multiplier: number | null;
+  exit_reason: string | null;
+  exit_at: string | null;
+  pnl_usd: number | null;
+  last_checked_at: string | null;
 };
 
 type KycInfo = { root: string; label: string | null; source: string | null; status: string | null };
@@ -1171,7 +1183,7 @@ export default function InsidersRecaps() {
           <div className="flex flex-wrap items-center gap-3 p-3 rounded border border-border bg-muted/20">
             <span className="text-sm font-semibold">Alpha Watch</span>
             <span className="text-xs text-muted-foreground">
-              Live paper-buys triggered when a new insiders token matches a known-alpha dev or KYC group.
+              $10 paper-buys created on every alpha SMS. Monitor scans every minute — closes at 2× target and SMSes you the sell.
             </span>
             <button
               onClick={rebuildAlphaLists}
@@ -1182,16 +1194,34 @@ export default function InsidersRecaps() {
             </button>
             {rebuildMsg && <span className="text-xs text-muted-foreground">{rebuildMsg}</span>}
           </div>
+          {(() => {
+            const open = alphaTrades.filter((t) => t.status === "open").length;
+            const won = alphaTrades.filter((t) => t.exit_reason === "target_hit").length;
+            const dead = alphaTrades.filter((t) => t.status === "closed" && t.exit_reason !== "target_hit").length;
+            const totalPnl = alphaTrades.reduce((s, t) => s + (Number(t.pnl_usd) || 0), 0);
+            return (
+              <div className="flex flex-wrap gap-4 text-xs px-1">
+                <span>Open: <b className="text-primary">{open}</b></span>
+                <span>2× Wins: <b className="text-primary">{won}</b></span>
+                <span>Dead/Timeout: <b className="text-muted-foreground">{dead}</b></span>
+                <span>Realized P&amp;L: <b className={totalPnl >= 0 ? "text-primary" : "text-destructive"}>${totalPnl.toFixed(2)}</b></span>
+              </div>
+            );
+          })()}
           <div className="overflow-x-auto rounded border border-border">
             <table className="w-full text-xs">
               <thead className="bg-muted text-muted-foreground sticky top-0">
                 <tr>
                   <th className="p-2 text-left">When</th>
                   <th className="p-2 text-left">Ticker</th>
-                  <th className="p-2 text-left">Entry MC</th>
+                  <th className="p-2 text-left">Entry $ / MC</th>
                   <th className="p-2 text-left">Size</th>
+                  <th className="p-2 text-left">Target</th>
+                  <th className="p-2 text-left">Peak ×</th>
+                  <th className="p-2 text-left">Status</th>
+                  <th className="p-2 text-left">Exit ×</th>
+                  <th className="p-2 text-left">P&amp;L</th>
                   <th className="p-2 text-left">Match</th>
-                  <th className="p-2 text-left">Reason</th>
                   <th className="p-2 text-left">SMS</th>
                   <th className="p-2 text-left">Links</th>
                 </tr>
@@ -1204,15 +1234,51 @@ export default function InsidersRecaps() {
                     </td>
                     <td className="p-2 font-semibold">${t.ticker || "?"}</td>
                     <td className="p-2">
-                      {t.entry_market_cap
-                        ? t.entry_market_cap >= 1_000_000
-                          ? `$${(t.entry_market_cap / 1_000_000).toFixed(2)}M`
-                          : t.entry_market_cap >= 1_000
-                            ? `$${(t.entry_market_cap / 1_000).toFixed(1)}k`
-                            : `$${t.entry_market_cap.toFixed(0)}`
-                        : "—"}
+                      <div>
+                        {t.entry_price_usd != null
+                          ? `$${Number(t.entry_price_usd) < 0.01
+                              ? Number(t.entry_price_usd).toPrecision(3)
+                              : Number(t.entry_price_usd).toFixed(4)}`
+                          : "—"}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {t.entry_market_cap
+                          ? t.entry_market_cap >= 1_000_000
+                            ? `$${(t.entry_market_cap / 1_000_000).toFixed(2)}M`
+                            : t.entry_market_cap >= 1_000
+                              ? `$${(t.entry_market_cap / 1_000).toFixed(1)}k`
+                              : `$${t.entry_market_cap.toFixed(0)}`
+                          : "—"}
+                      </div>
                     </td>
                     <td className="p-2">${t.size_usd}</td>
+                    <td className="p-2">{t.target_multiplier ? `${Number(t.target_multiplier).toFixed(1)}×` : "—"}</td>
+                    <td className="p-2">
+                      {t.peak_multiplier != null ? (
+                        <span className={Number(t.peak_multiplier) >= 2 ? "text-primary font-semibold" : ""}>
+                          {Number(t.peak_multiplier).toFixed(2)}×
+                        </span>
+                      ) : "—"}
+                    </td>
+                    <td className="p-2">
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] uppercase ${
+                          t.status === "open"
+                            ? "bg-primary/20 text-primary"
+                            : t.exit_reason === "target_hit"
+                              ? "bg-emerald-500/20 text-emerald-500"
+                              : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {t.status === "open" ? "OPEN" : t.exit_reason || "closed"}
+                      </span>
+                    </td>
+                    <td className="p-2">
+                      {t.exit_multiplier != null ? `${Number(t.exit_multiplier).toFixed(2)}×` : "—"}
+                    </td>
+                    <td className={`p-2 ${Number(t.pnl_usd) > 0 ? "text-primary" : Number(t.pnl_usd) < 0 ? "text-destructive" : ""}`}>
+                      {t.pnl_usd != null ? `$${Number(t.pnl_usd).toFixed(2)}` : "—"}
+                    </td>
                     <td className="p-2">
                       <span className="px-2 py-0.5 rounded bg-primary/20 text-primary text-[10px] uppercase">
                         {t.match_kind}
@@ -1222,8 +1288,10 @@ export default function InsidersRecaps() {
                           {t.matched_kyc_label}
                         </span>
                       )}
+                      {t.reason && (
+                        <div className="text-[10px] text-muted-foreground mt-0.5">{t.reason}</div>
+                      )}
                     </td>
-                    <td className="p-2 text-muted-foreground">{t.reason || "—"}</td>
                     <td className="p-2">
                       <span
                         className={`px-1.5 py-0.5 rounded text-[10px] ${
@@ -1246,7 +1314,7 @@ export default function InsidersRecaps() {
                 ))}
                 {alphaTrades.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="p-6 text-center text-muted-foreground">
+                    <td colSpan={12} className="p-6 text-center text-muted-foreground">
                       {alphaLoading
                         ? "Loading…"
                         : "No alpha paper-buys yet. Rebuild the alpha lists, then the next insiders token that matches will land here."}
