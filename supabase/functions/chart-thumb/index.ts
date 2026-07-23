@@ -63,7 +63,7 @@ async function getOhlcv(pool: string): Promise<number[][]> {
   } catch { return []; }
 }
 
-async function renderChart(mint: string): Promise<Uint8Array | null> {
+async function renderChart(mint: string, buyTs: number | null): Promise<Uint8Array | null> {
   const pool = await getTopPool(mint);
   if (!pool) return null;
   const [raw, ticker] = await Promise.all([getOhlcv(pool), getTicker(mint)]);
@@ -91,6 +91,22 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
   const subLine = mint;
 
   const lastIdx = closes.length - 1;
+
+  // Locate closest candle to the buy timestamp (unix seconds) if provided
+  let buyIdx: number | null = null;
+  let buyPrice: number | null = null;
+  if (buyTs && isFinite(buyTs)) {
+    let bestI = -1, bestD = Infinity;
+    for (let i = 0; i < rows.length; i++) {
+      const d = Math.abs(rows[i][0] - buyTs);
+      if (d < bestD) { bestD = d; bestI = i; }
+    }
+    if (bestI >= 0 && bestD <= 5 * 60) {
+      buyIdx = bestI;
+      buyPrice = closes[bestI];
+    }
+  }
+
   // Format helper: readable USD price (no scientific notation)
   const fmtPrice = (n: number): string => {
     if (!isFinite(n) || n === 0) return '$0';
@@ -177,6 +193,32 @@ async function renderChart(mint: string): Promise<Uint8Array | null> {
               padding: 6,
               content: ['YOU ARE HERE ▶'],
             },
+            ...(buyIdx !== null && buyPrice !== null ? {
+              buyPoint: {
+                type: 'point',
+                xValue: buyIdx,
+                yValue: buyPrice,
+                backgroundColor: '#22c55e',
+                borderColor: '#ffffff',
+                borderWidth: 3,
+                radius: 10,
+              },
+              buyLabel: {
+                type: 'label',
+                xValue: buyIdx,
+                yValue: buyPrice,
+                xAdjust: 0,
+                yAdjust: -28,
+                backgroundColor: '#22c55e',
+                borderColor: '#ffffff',
+                borderWidth: 2,
+                borderRadius: 4,
+                color: '#ffffff',
+                font: { size: 22, weight: 'bold', family: 'monospace' },
+                padding: { top: 2, bottom: 2, left: 10, right: 10 },
+                content: ['B'],
+              },
+            } : {}),
           },
         },
       },
@@ -240,13 +282,22 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   const u = new URL(req.url);
   const mint = (u.searchParams.get('mint') || '').trim();
+  const buyRaw = u.searchParams.get('buy');
+  let buyTs: number | null = null;
+  if (buyRaw) {
+    const n = Number(buyRaw);
+    if (isFinite(n) && n > 0) {
+      // Accept unix seconds or milliseconds
+      buyTs = n > 10_000_000_000 ? Math.floor(n / 1000) : Math.floor(n);
+    }
+  }
   if (!mint || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) {
     return new Response(JSON.stringify({ error: 'invalid mint' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-  const png = (await renderChart(mint)) ?? b64ToBytes(PLACEHOLDER_PNG_B64);
+  const png = (await renderChart(mint, buyTs)) ?? b64ToBytes(PLACEHOLDER_PNG_B64);
   return new Response(png, {
     headers: {
       ...corsHeaders,

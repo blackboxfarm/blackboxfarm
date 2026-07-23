@@ -501,7 +501,8 @@ serve(async (req) => {
               ? `Live buy: off`
               : `Live buy: ${liveStatus}${liveError ? ` (${liveError.slice(0, 60)})` : ''}`;
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const chartThumbUrl = `${supabaseUrl}/functions/v1/chart-thumb?mint=${mint}`;
+    const buyTs = Math.floor(Date.now() / 1000);
+    const chartThumbUrl = `${supabaseUrl}/functions/v1/chart-thumb?mint=${mint}&buy=${buyTs}`;
     const smsBody =
       `🚨 ALPHA DEV DETECTED\n` +
       `NEW: ${newTicker} (${shortMint})\n` +
