@@ -1,48 +1,33 @@
-# Waterfall Dust Burn + SOL Cascade Plan
+# Chart Thumbnails for Alpha Watch + SMS
 
-Yes — I can do exactly what sol-incinerator.com does (close empty/dust SPL token accounts to reclaim the ~0.002 SOL rent each), then sweep the remaining SOL down the waterfall. We already have `burn-token` deployed which burns a token balance AND closes the account. I just need to wrap it in a batch sweeper and a SOL-transfer step.
+## Goal
+Generate a branded 1-minute-candle chart thumbnail (1200×628) for each alpha-detected token, display it in the Alpha Watch tab, and attach it to the SMS as an MMS MediaUrl.
 
-## What the sweep does per wallet
+## Pieces
 
-For each waterfall wallet N (starting at #1):
-1. **Scan** all SPL token accounts owned by the wallet (`getParsedTokenAccountsByOwner`, both TOKEN_PROGRAM_ID and TOKEN_2022_PROGRAM_ID).
-2. **For each token account**:
-   - If balance == 0 → just close it (reclaims rent, no burn ix needed).
-   - If balance > 0 → burn + close in a single tx (already what `burn-token` does).
-3. **Batch** up to ~10 close/burn instructions per transaction to minimize fees (one signature fee per tx instead of per account).
-4. **Transfer** all remaining SOL (minus a small buffer for the next hop's fees, ~5000 lamports) to wallet N+1.
-5. Move to N+1, repeat. Stop after wallet #10.
+### 1. New edge function: `chart-thumb`
+- Route: `GET /chart-thumb?mint={mint}&tf=1m`
+- Uses Browserless (already connected) to screenshot a headless page that embeds GeckoTerminal's 1m chart at fixed 1200×628, dark theme, no swaps/info chrome.
+  - Fallback URL: DexScreener embed if GT has no pool.
+- Uploads the PNG to Supabase Storage bucket `chart-thumbs` under `{mint}/{unix_minute}.png` (cached ~5 min).
+- Returns `{ url: publicUrl }` (or 302 redirects to it).
+- Public bucket so Twilio can fetch the MediaUrl.
 
-## Gas / fee optimization
+### 2. Storage
+- Create public bucket `chart-thumbs` (5MB limit, image/png).
 
-- Batching 10 close ix per tx = ~10x cheaper than one-per-tx.
-- Priority fee set to `0` (or minimum) since this is not time-sensitive.
-- Skip burn ix entirely when balance is already 0 — just close.
-- Each closed account returns ~0.00204 SOL rent → sweep usually earns SOL, doesn't cost it.
+### 3. Wire into `alpha-dev-detector`
+- After building the SMS body, call `chart-thumb` for the new mint, get `publicUrl`.
+- Pass it as `MediaUrl` on the Twilio `/Messages.json` POST (MMS).
+- Store the URL on the `alpha_paper_trades` row (new column `chart_thumb_url text`).
 
-## Implementation
+### 4. Alpha Watch UI (`src/pages/InsidersRecaps.tsx`)
+- Add a small thumbnail column (or hover preview) in the Alpha Watch table showing `chart_thumb_url`. Click to open full DexScreener chart.
 
-### New edge function: `waterfall-dust-sweep`
-- Input: `{ start_wallet_index: 1, end_wallet_index: 10, dry_run?: boolean }`
-- Super-admin auth required.
-- For each wallet in range:
-  - Decrypt secret via existing `decryptWalletSecretAuto`.
-  - Enumerate token accounts (both token programs).
-  - Build batched close/burn transactions (10 ix per tx).
-  - Sign + send + confirm.
-  - After all accounts processed, read final SOL balance and transfer `(balance - 5000 lamports)` to next wallet's pubkey.
-- Return a JSON report: per-wallet accounts scanned, tokens burned, accounts closed, rent reclaimed, SOL forwarded, tx signatures.
+## Migration
+- `alter table alpha_paper_trades add column chart_thumb_url text;`
+- Create storage bucket via `storage_create_bucket` (public).
 
-### UI trigger
-Small "Dust Sweep 1 → 10" button on the Waterfall super-admin page (or I can just run it once via a manual invoke if you'd rather not have a button).
-
-## Safety
-
-- Dry-run mode first — reports what it *would* do without sending any tx.
-- Skips wallet if secret can't be decrypted.
-- Skips any token account whose balance can't be read.
-- Logs every signature to `activity_logs` (same pattern as `burn-token`).
-
-## What I need from you
-
-Just say **Plan Approved** and I'll build + deploy the function and run a dry-run against Waterfall #1 first so you can eyeball the report before it moves real SOL.
+## Notes
+- MMS to Canadian numbers via Twilio works with public https MediaUrl.
+- If Browserless fails, SMS still sends without MediaUrl (fail-open).
