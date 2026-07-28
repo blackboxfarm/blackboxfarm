@@ -9,7 +9,7 @@ import {
   LAMPORTS_PER_SOL,
 } from "npm:@solana/web3.js@1.95.3";
 import {
-  createBurnInstruction,
+  // NO BURN EVER: createBurnInstruction is intentionally not imported.
   createCloseAccountInstruction,
   TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
@@ -124,13 +124,13 @@ async function sweepWallet(
   }
 
   if (dryRun) {
-    const frozenWithBalance = accounts.filter((a) => a.amount > 0n && a.state === "frozen");
-    report.accounts_skipped = frozenWithBalance.length;
-    report.accounts_closed = accounts.length - frozenWithBalance.length;
-    report.tokens_burned = accounts.filter((a) => a.amount > 0n && a.state !== "frozen").length;
+    const withBalance = accounts.filter((a) => a.amount > 0n);
+    report.accounts_skipped = withBalance.length;
+    report.accounts_closed = accounts.length - withBalance.length;
+    report.tokens_burned = 0;
     report.ending_sol = report.starting_sol + report.accounts_closed * 0.00203928;
-    for (const a of frozenWithBalance) {
-      report.errors.push(`skip frozen token account ${a.ata.toBase58()} mint ${a.mint.toBase58()} amount ${a.amount.toString()}`);
+    for (const a of withBalance) {
+      report.errors.push(`skip non-empty token account ${a.ata.toBase58()} mint ${a.mint.toBase58()} amount ${a.amount.toString()} (never burned)`);
     }
     return report;
   }
@@ -138,18 +138,14 @@ async function sweepWallet(
   // Send one account per transaction. One frozen/bad token must not kill the whole wallet.
   for (let i = 0; i < accounts.length; i++) {
     const a = accounts[i];
-    if (a.amount > 0n && a.state === "frozen") {
+    // HARD RULE: never burn. Only fully empty token accounts may be closed.
+    if (a.amount > 0n) {
       report.accounts_skipped += 1;
-      report.errors.push(`skip frozen token account ${a.ata.toBase58()} mint ${a.mint.toBase58()} amount ${a.amount.toString()}`);
+      report.errors.push(`skip non-empty token account ${a.ata.toBase58()} mint ${a.mint.toBase58()} amount ${a.amount.toString()} (never burned)`);
       continue;
     }
 
     const tx = new Transaction();
-    if (a.amount > 0n) {
-      tx.add(
-        createBurnInstruction(a.ata, a.mint, kp.publicKey, a.amount, [], a.programId),
-      );
-    }
     tx.add(
       createCloseAccountInstruction(a.ata, kp.publicKey, kp.publicKey, [], a.programId),
     );
@@ -170,7 +166,6 @@ async function sweepWallet(
       );
       report.burn_close_tx.push(sig);
       report.accounts_closed += 1;
-      if (a.amount > 0n) report.tokens_burned += 1;
     } catch (e) {
       report.accounts_skipped += 1;
       report.errors.push(`account ${i}: ${(e as Error).message}`);
