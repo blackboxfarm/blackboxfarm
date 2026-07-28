@@ -1081,10 +1081,25 @@ export default function WaterfallGrid() {
 
     setConsolidatingAll(true);
     try {
-      // 1) Live balances for every wallet (SOL + all SPL holdings)
-      try { await refreshBalancesForBuy(); } catch (e: any) {
-        toast({ title: "Balance refresh failed", description: e?.message || String(e), variant: "destructive" });
-        return;
+      // 1) Live balances for every wallet (SOL + all SPL holdings).
+      //    Chunked — a single 100-wallet scan can exceed the edge function wall clock.
+      const CHUNK = 20;
+      const allPubkeys = wallets.map((w) => w.pubkey);
+      let refreshFailures = 0;
+      for (let i = 0; i < allPubkeys.length; i += CHUNK) {
+        const chunk = allPubkeys.slice(i, i + CHUNK);
+        try {
+          await refreshBalancesForBuy(chunk);
+        } catch (e: any) {
+          refreshFailures++;
+          console.warn(`[CONSOLIDATE ALL] balance refresh chunk ${i / CHUNK + 1} failed:`, e?.message || String(e));
+        }
+      }
+      if (refreshFailures > 0) {
+        const go = confirm(
+          `${refreshFailures} balance-refresh batch(es) failed — some wallets may show stale balances.\n\nContinue anyway?`,
+        );
+        if (!go) return;
       }
 
       const others = wallets
@@ -1107,10 +1122,24 @@ export default function WaterfallGrid() {
         return toast({ title: "Nothing to consolidate", description: "No tokens and no sweepable SOL in the other 99 wallets." });
       }
 
+      // W1 must be able to cover every pre-fund, otherwise the token phase fails wallet by wallet.
+      const w1Live = balancesRef.current[w1.pubkey]?.sol;
+      const w1Sol = typeof w1Live === "number" ? w1Live : Number(w1.sol_balance || 0);
+      const prefundNeed = needFunding.length * PREFUND_SOL;
+      if (prefundNeed > 0 && w1Sol < prefundNeed + 0.002) {
+        return toast({
+          title: "W1·Wallet 1 has insufficient SOL",
+          description:
+            `Needs ~${(prefundNeed + 0.002).toFixed(4)} SOL to pre-fund ${needFunding.length} wallet(s), ` +
+            `has ${w1Sol.toFixed(4)} SOL. Top up W1·Wallet 1 and retry.`,
+          variant: "destructive",
+        });
+      }
+
       if (!confirm(
         `CONSOLIDATE ALL → W1·Wallet 1 (${SHORT(w1.pubkey)})?\n\n` +
         `• Token transfers: ${totalTokenMoves} across ${tokenPlan.length} wallet(s)\n` +
-        `• Fee pre-funds from W1: ${needFunding.length} × ${PREFUND_SOL} SOL\n` +
+        `• Fee pre-funds from W1: ${needFunding.length} × ${PREFUND_SOL} SOL (${prefundNeed.toFixed(4)} SOL of ${w1Sol.toFixed(4)})\n` +
         `• SOL sweeps afterwards: up to ${plan.length} wallet(s)\n\n` +
         `Runs sequentially on-chain — this can take several minutes.`,
       )) return;
@@ -1149,7 +1178,30 @@ export default function WaterfallGrid() {
         }
       }
 
-      // 4) Sweep all remaining SOL → W1·Wallet 1
+      // 4) Optional: close now-empty token accounts so their rent (~0.002 SOL each)
+      //    is reclaimed before the SOL sweep.
+      let closedCols = 0;
+      if (movedTokens > 0 && confirm(
+        `Tokens moved.\n\nClose the now-empty token accounts first to reclaim ~0.002 SOL of rent each?\n\n` +
+        `(Runs the dust sweep across all 10 waterfalls — recommended, adds a few minutes.)`,
+      )) {
+        const cols = [...new Set(wallets.map((w) => w.column_index))].sort((a, b) => a - b);
+        for (const col of cols) {
+          try {
+            const { data, error } = await supabase.functions.invoke("waterfall-dust-sweep", {
+              body: { waterfall_column: col, start_row: 0, end_row: 9, dry_run: false },
+            });
+            if (error) throw new Error(error.message);
+            if ((data as any)?.error) throw new Error((data as any).error);
+            closedCols++;
+          } catch (e: any) {
+            errors.push(`dust sweep W${col + 1}: ${e?.message || String(e)}`);
+          }
+          await new Promise((r) => setTimeout(r, 500));
+        }
+      }
+
+      // 5) Sweep all remaining SOL → W1·Wallet 1
       await new Promise((r) => setTimeout(r, 1500));
       let sweptSol = 0;
       for (const p of plan) {
@@ -1164,7 +1216,7 @@ export default function WaterfallGrid() {
       }
 
       console.groupCollapsed(
-        `%c[CONSOLIDATE ALL] tokens ${movedTokens}/${totalTokenMoves} · prefunded ${funded} · SOL swept ${sweptSol} · ${errors.length} error(s)`,
+        `%c[CONSOLIDATE ALL] tokens ${movedTokens}/${totalTokenMoves} · prefunded ${funded} · dust-swept ${closedCols} col(s) · SOL swept ${sweptSol} · ${errors.length} error(s)`,
         "color:#22c55e;font-weight:bold",
       );
       errors.forEach((e) => console.warn(e));
