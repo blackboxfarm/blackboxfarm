@@ -2086,6 +2086,18 @@ export default function WaterfallGrid() {
                           </button>
                         </div>
                       )}
+                      {c === 0 && (
+                        <div className="flex gap-1 mt-1">
+                          <button
+                            onClick={consolidateAllToW1}
+                            disabled={consolidatingAll || dustSweeping}
+                            className="flex-1 text-[10px] px-1.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold flex items-center justify-center gap-1"
+                            title="Move every SPL token from the other 99 wallets into W1·Wallet 1, then sweep all their SOL into it"
+                          >
+                            {consolidatingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <>⬇ CONSOLIDATE ALL → W1·W1</>}
+                          </button>
+                        </div>
+                      )}
                       {simMode && (
                         <div className="flex gap-1 mt-1">
                           <button
