@@ -1070,6 +1070,122 @@ export default function WaterfallGrid() {
     }
   }, [wallets]);
 
+  // ─── CONSOLIDATE ALL 99 WALLETS → W1·Wallet 1 (tokens then SOL) ────────
+  const consolidateAllToW1 = useCallback(async () => {
+    const w1 = wallets.find((w) => w.column_index === 0 && w.row_index === 0);
+    if (!w1) return toast({ title: "W1·Wallet 1 not found", variant: "destructive" });
+    const DUST_SOL = 0.000015;
+    const MIN_FEE_SOL = 0.0035;      // needs to cover ATA create + transfer
+    const PREFUND_SOL = 0.006;       // sent from W1 when a wallet can't pay fees
+
+    setConsolidatingAll(true);
+    try {
+      // 1) Live balances for every wallet (SOL + all SPL holdings)
+      try { await refreshBalancesForBuy(); } catch (e: any) {
+        toast({ title: "Balance refresh failed", description: e?.message || String(e), variant: "destructive" });
+        return;
+      }
+
+      const others = wallets
+        .filter((w) => w.id !== w1.id)
+        .sort((a, b) => a.column_index - b.column_index || a.row_index - b.row_index);
+
+      const plan = others.map((w) => {
+        const bal = balancesRef.current[w.pubkey];
+        const sol = typeof bal?.sol === "number" ? bal.sol : Number(w.sol_balance || 0);
+        const mints = (bal?.tokens ?? []).filter((t) => t.amount > 0).map((t) => t.mint);
+        return { w, sol, mints };
+      });
+
+      const tokenPlan = plan.filter((p) => p.mints.length > 0);
+      const totalTokenMoves = tokenPlan.reduce((s, p) => s + p.mints.length, 0);
+      const needFunding = tokenPlan.filter((p) => p.sol < MIN_FEE_SOL);
+      const solSweepCount = plan.filter((p) => p.sol > DUST_SOL).length;
+
+      if (totalTokenMoves === 0 && solSweepCount === 0) {
+        return toast({ title: "Nothing to consolidate", description: "No tokens and no sweepable SOL in the other 99 wallets." });
+      }
+
+      if (!confirm(
+        `CONSOLIDATE ALL → W1·Wallet 1 (${SHORT(w1.pubkey)})?\n\n` +
+        `• Token transfers: ${totalTokenMoves} across ${tokenPlan.length} wallet(s)\n` +
+        `• Fee pre-funds from W1: ${needFunding.length} × ${PREFUND_SOL} SOL\n` +
+        `• SOL sweeps afterwards: up to ${plan.length} wallet(s)\n\n` +
+        `Runs sequentially on-chain — this can take several minutes.`,
+      )) return;
+
+      const errors: string[] = [];
+      const call = async (body: Record<string, unknown>) => {
+        const { data, error } = await supabase.functions.invoke("waterfall-withdraw", { body });
+        if (error) throw new Error(error.message);
+        if (data && (data as any).error) throw new Error((data as any).error);
+      };
+
+      // 2) Pre-fund wallets that hold tokens but can't pay transfer fees
+      let funded = 0;
+      for (const p of needFunding) {
+        try {
+          await call({ walletId: w1.id, mint: "SOL", amount: PREFUND_SOL, destination: p.w.pubkey });
+          funded++;
+        } catch (e: any) {
+          errors.push(`prefund ${SHORT(p.w.pubkey)}: ${e?.message || String(e)}`);
+        }
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      if (needFunding.length) await new Promise((r) => setTimeout(r, 2000));
+
+      // 3) Move every SPL token (max) → W1·Wallet 1
+      let movedTokens = 0;
+      for (const p of tokenPlan) {
+        for (const mint of p.mints) {
+          try {
+            await call({ walletId: p.w.id, mint, amount: -1, destination: w1.pubkey });
+            movedTokens++;
+          } catch (e: any) {
+            errors.push(`${SHORT(p.w.pubkey)} ${mint.slice(0, 6)}…: ${e?.message || String(e)}`);
+          }
+          await new Promise((r) => setTimeout(r, 300));
+        }
+      }
+
+      // 4) Sweep all remaining SOL → W1·Wallet 1
+      await new Promise((r) => setTimeout(r, 1500));
+      let sweptSol = 0;
+      for (const p of plan) {
+        try {
+          await call({ walletId: p.w.id, mint: "SOL", amount: -1, destination: w1.pubkey });
+          sweptSol++;
+        } catch (e: any) {
+          const msg = e?.message || String(e);
+          if (!/insufficient SOL/i.test(msg)) errors.push(`${SHORT(p.w.pubkey)} SOL: ${msg}`);
+        }
+        await new Promise((r) => setTimeout(r, 250));
+      }
+
+      console.groupCollapsed(
+        `%c[CONSOLIDATE ALL] tokens ${movedTokens}/${totalTokenMoves} · prefunded ${funded} · SOL swept ${sweptSol} · ${errors.length} error(s)`,
+        "color:#22c55e;font-weight:bold",
+      );
+      errors.forEach((e) => console.warn(e));
+      console.groupEnd();
+
+      toast({
+        title: `Consolidated into W1·Wallet 1`,
+        description:
+          `Tokens ${movedTokens}/${totalTokenMoves} · SOL swept from ${sweptSol} wallet(s)` +
+          (errors.length ? ` · ${errors.length} issue(s), see console` : ""),
+        variant: errors.length ? "destructive" : "default",
+      });
+
+      try { await refreshBalancesForBuy(); } catch { /* non-fatal */ }
+    } catch (e: any) {
+      console.error("[CONSOLIDATE ALL] fatal", e);
+      toast({ title: "Consolidate failed", description: e?.message || String(e), variant: "destructive" });
+    } finally {
+      setConsolidatingAll(false);
+    }
+  }, [wallets, refreshBalancesForBuy]);
+
   // ─── BULK BUY (per column) ─────────────────────────────────────────────
   const buyColumn = async (col: number) => {
     const mint = mintForCol(col);
