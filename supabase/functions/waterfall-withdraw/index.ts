@@ -15,6 +15,7 @@ import {
   getAccount,
   getMint,
   TOKEN_PROGRAM_ID,
+  TOKEN_2022_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "npm:@solana/spl-token@0.4.8";
 import bs58 from "npm:bs58@6.0.0";
@@ -76,23 +77,29 @@ serve(async (req) => {
       tx.add(SystemProgram.transfer({ fromPubkey: kp.publicKey, toPubkey: destPk, lamports }));
     } else {
       const mintPk = new PublicKey(mint);
-      const mintInfo = await getMint(connection, mintPk);
-      const fromAta = await getAssociatedTokenAddress(mintPk, kp.publicKey);
-      const toAta = await getAssociatedTokenAddress(mintPk, destPk);
+      // Resolve the owning token program (classic SPL vs Token-2022) from the mint account.
+      const mintAccountInfo = await connection.getAccountInfo(mintPk);
+      if (!mintAccountInfo) throw new Error("mint account not found");
+      const programId = mintAccountInfo.owner.equals(TOKEN_2022_PROGRAM_ID)
+        ? TOKEN_2022_PROGRAM_ID
+        : TOKEN_PROGRAM_ID;
+      const mintInfo = await getMint(connection, mintPk, "confirmed", programId);
+      const fromAta = await getAssociatedTokenAddress(mintPk, kp.publicKey, false, programId, ASSOCIATED_TOKEN_PROGRAM_ID);
+      const toAta = await getAssociatedTokenAddress(mintPk, destPk, false, programId, ASSOCIATED_TOKEN_PROGRAM_ID);
       let toAccountExists = true;
-      try { await getAccount(connection, toAta); } catch { toAccountExists = false; }
+      try { await getAccount(connection, toAta, "confirmed", programId); } catch { toAccountExists = false; }
       if (!toAccountExists) {
-        tx.add(createAssociatedTokenAccountInstruction(kp.publicKey, toAta, destPk, mintPk, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID));
+        tx.add(createAssociatedTokenAccountInstruction(kp.publicKey, toAta, destPk, mintPk, programId, ASSOCIATED_TOKEN_PROGRAM_ID));
       }
       let rawAmount: bigint;
       if (isMax) {
-        const fromAcc = await getAccount(connection, fromAta);
+        const fromAcc = await getAccount(connection, fromAta, "confirmed", programId);
         rawAmount = fromAcc.amount;
         if (rawAmount === 0n) throw new Error("no token balance to withdraw");
       } else {
         rawAmount = BigInt(Math.floor(numericAmount * 10 ** mintInfo.decimals));
       }
-      tx.add(createTransferCheckedInstruction(fromAta, mintPk, toAta, kp.publicKey, rawAmount, mintInfo.decimals));
+      tx.add(createTransferCheckedInstruction(fromAta, mintPk, toAta, kp.publicKey, rawAmount, mintInfo.decimals, [], programId));
     }
 
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
