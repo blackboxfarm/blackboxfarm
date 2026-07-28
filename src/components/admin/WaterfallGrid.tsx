@@ -208,6 +208,7 @@ export default function WaterfallGrid() {
   const [sellingGrid, setSellingGrid] = useState<boolean>(false);
   const [buyingCol, setBuyingCol] = useState<number | null>(null);
   const [dustSweeping, setDustSweeping] = useState<boolean>(false);
+  const [consolidatingAll, setConsolidatingAll] = useState<boolean>(false);
 
   // Skip TROLL buy/sell during cascade — just spread SOL across the wallets.
   const [skipTroll, setSkipTroll] = useState<boolean>(() => {
@@ -1184,7 +1185,8 @@ export default function WaterfallGrid() {
     } finally {
       setConsolidatingAll(false);
     }
-  }, [wallets, refreshBalancesForBuy]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallets]);
 
   // ─── BULK BUY (per column) ─────────────────────────────────────────────
   const buyColumn = async (col: number) => {
