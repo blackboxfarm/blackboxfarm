@@ -2196,6 +2196,39 @@ export default function WaterfallGrid() {
                           >
                             {consolidatingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <>⬇ CONSOLIDATE ALL → W1·W1</>}
                           </button>
+                          <button
+                            onClick={() => setConsolidateDemo((v) => !v)}
+                            disabled={consolidatingAll}
+                            className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold ${consolidateDemo ? "border-amber-500 bg-amber-500/20 text-amber-700 dark:text-amber-300" : "border-muted-foreground/40 text-muted-foreground"}`}
+                            title="Demo / dry run: prints the full step log, assumes funds are present, sends nothing on-chain"
+                          >
+                            DEMO
+                          </button>
+                        </div>
+                      )}
+                      {c === 0 && consolidateLog.length > 0 && (
+                        <div className="mt-1 rounded border border-emerald-600/30 bg-black/80 p-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[9px] font-semibold text-emerald-400">CONSOLIDATE STEP LOG</span>
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => navigator.clipboard.writeText(consolidateLog.join("\n"))}
+                                className="text-[9px] px-1 py-0.5 rounded border border-emerald-600/50 text-emerald-300 hover:bg-emerald-600/20"
+                              >
+                                Copy log
+                              </button>
+                              <button
+                                onClick={() => setConsolidateLog([])}
+                                disabled={consolidatingAll}
+                                className="text-[9px] px-1 py-0.5 rounded border border-muted-foreground/40 text-muted-foreground hover:bg-muted/20 disabled:opacity-40"
+                              >
+                                Clear
+                              </button>
+                            </div>
+                          </div>
+                          <pre className="max-h-48 overflow-auto text-[9px] leading-[1.3] text-emerald-200 whitespace-pre-wrap">
+                            {consolidateLog.join("\n")}
+                          </pre>
                         </div>
                       )}
                       {simMode && (
