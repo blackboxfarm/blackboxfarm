@@ -209,6 +209,8 @@ export default function WaterfallGrid() {
   const [buyingCol, setBuyingCol] = useState<number | null>(null);
   const [dustSweeping, setDustSweeping] = useState<boolean>(false);
   const [consolidatingAll, setConsolidatingAll] = useState<boolean>(false);
+  const [consolidateDemo, setConsolidateDemo] = useState<boolean>(false);
+  const [consolidateLog, setConsolidateLog] = useState<string[]>([]);
 
   // Skip TROLL buy/sell during cascade — just spread SOL across the wallets.
   const [skipTroll, setSkipTroll] = useState<boolean>(() => {
@@ -1079,27 +1081,44 @@ export default function WaterfallGrid() {
     const MIN_FEE_SOL = 0.0035;      // needs to cover ATA create + transfer
     const PREFUND_SOL = 0.006;       // sent from W1 when a wallet can't pay fees
 
+    const dry = consolidateDemo;
+    const t0 = Date.now();
+    const stamp = () => {
+      const s = Math.floor((Date.now() - t0) / 1000);
+      return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+    };
+    const lines: string[] = [];
+    const log = (msg: string) => {
+      const line = `[${stamp()}]${dry ? " [DRY]" : ""} ${msg}`;
+      lines.push(line);
+      console.log(`%c${line}`, "color:#22c55e");
+      setConsolidateLog([...lines]);
+    };
+    const label = (w: WaterfallWallet) => `W${w.column_index + 1}·W${w.row_index + 1}`;
+
     setConsolidatingAll(true);
+    setConsolidateLog([]);
     try {
-      // 1) Live balances for every wallet (SOL + all SPL holdings).
-      //    Chunked — a single 100-wallet scan can exceed the edge function wall clock.
-      const CHUNK = 20;
-      const allPubkeys = wallets.map((w) => w.pubkey);
-      let refreshFailures = 0;
-      for (let i = 0; i < allPubkeys.length; i += CHUNK) {
-        const chunk = allPubkeys.slice(i, i + CHUNK);
+      // ── PHASE 1 · refresh balances, one waterfall (column) at a time ──
+      log(`PHASE 1 · Refresh balances — one waterfall at a time`);
+      const cols = [...new Set(wallets.map((w) => w.column_index))].sort((a, b) => a - b);
+      const stale: string[] = [];
+      for (const col of cols) {
+        const group = wallets.filter((w) => w.column_index === col);
         try {
-          await refreshBalancesForBuy(chunk);
+          await refreshBalancesForBuy(group.map((w) => w.pubkey));
+          log(`  W${col + 1} (${group.length} wallets) … ok`);
         } catch (e: any) {
-          refreshFailures++;
-          console.warn(`[CONSOLIDATE ALL] balance refresh chunk ${i / CHUNK + 1} failed:`, e?.message || String(e));
+          stale.push(`W${col + 1}`);
+          log(`  W${col + 1} (${group.length} wallets) … FAILED: ${e?.message || String(e)}`);
         }
+        await new Promise((r) => setTimeout(r, 200));
       }
-      if (refreshFailures > 0) {
+      if (stale.length > 0) {
         const go = confirm(
-          `${refreshFailures} balance-refresh batch(es) failed — some wallets may show stale balances.\n\nContinue anyway?`,
+          `Balance refresh failed for: ${stale.join(", ")} — those wallets may show stale balances.\n\nContinue anyway?`,
         );
-        if (!go) return;
+        if (!go) { log(`ABORTED by operator (stale: ${stale.join(", ")})`); return; }
       }
 
       const others = wallets
@@ -1118,7 +1137,10 @@ export default function WaterfallGrid() {
       const needFunding = tokenPlan.filter((p) => p.sol < MIN_FEE_SOL);
       const solSweepCount = plan.filter((p) => p.sol > DUST_SOL).length;
 
+      log(`PHASE 2 · Plan — ${totalTokenMoves} token move(s) across ${tokenPlan.length} wallet(s), ${solSweepCount} SOL sweep(s)`);
+
       if (totalTokenMoves === 0 && solSweepCount === 0) {
+        log(`Nothing to consolidate — stopping.`);
         return toast({ title: "Nothing to consolidate", description: "No tokens and no sweepable SOL in the other 99 wallets." });
       }
 
@@ -1126,7 +1148,11 @@ export default function WaterfallGrid() {
       const w1Live = balancesRef.current[w1.pubkey]?.sol;
       const w1Sol = typeof w1Live === "number" ? w1Live : Number(w1.sol_balance || 0);
       const prefundNeed = needFunding.length * PREFUND_SOL;
-      if (prefundNeed > 0 && w1Sol < prefundNeed + 0.002) {
+      log(`  W1·Wallet 1 has ${w1Sol.toFixed(4)} SOL, needs ${prefundNeed.toFixed(4)} SOL for ${needFunding.length} pre-fund(s)`);
+      if (dry) {
+        log(`  DEMO MODE — solvency check skipped, funds assumed present`);
+      } else if (prefundNeed > 0 && w1Sol < prefundNeed + 0.002) {
+        log(`  ABORT — W1·Wallet 1 short by ${(prefundNeed + 0.002 - w1Sol).toFixed(4)} SOL`);
         return toast({
           title: "W1·Wallet 1 has insufficient SOL",
           description:
@@ -1137,108 +1163,130 @@ export default function WaterfallGrid() {
       }
 
       if (!confirm(
-        `CONSOLIDATE ALL → W1·Wallet 1 (${SHORT(w1.pubkey)})?\n\n` +
+        `${dry ? "[DEMO / DRY RUN] " : ""}CONSOLIDATE ALL → W1·Wallet 1 (${SHORT(w1.pubkey)})?\n\n` +
         `• Token transfers: ${totalTokenMoves} across ${tokenPlan.length} wallet(s)\n` +
         `• Fee pre-funds from W1: ${needFunding.length} × ${PREFUND_SOL} SOL (${prefundNeed.toFixed(4)} SOL of ${w1Sol.toFixed(4)})\n` +
+        `• Rent reclaim (dust sweep): all ${cols.length} waterfalls\n` +
         `• SOL sweeps afterwards: up to ${plan.length} wallet(s)\n\n` +
-        `Runs sequentially on-chain — this can take several minutes.`,
-      )) return;
+        (dry ? `Nothing is sent on-chain — this only prints the step log.` : `Runs sequentially on-chain — this can take several minutes.`),
+      )) { log(`ABORTED by operator at confirmation.`); return; }
 
       const errors: string[] = [];
       const call = async (body: Record<string, unknown>) => {
+        if (dry) return;
         const { data, error } = await supabase.functions.invoke("waterfall-withdraw", { body });
         if (error) throw new Error(error.message);
         if (data && (data as any).error) throw new Error((data as any).error);
       };
 
       // 2) Pre-fund wallets that hold tokens but can't pay transfer fees
+      log(`PHASE 3 · Pre-fund ${needFunding.length} wallet(s) × ${PREFUND_SOL} SOL from W1·Wallet 1`);
       let funded = 0;
       for (const p of needFunding) {
         try {
           await call({ walletId: w1.id, mint: "SOL", amount: PREFUND_SOL, destination: p.w.pubkey });
           funded++;
+          log(`  → ${label(p.w)} funded ${PREFUND_SOL} SOL`);
         } catch (e: any) {
-          errors.push(`prefund ${SHORT(p.w.pubkey)}: ${e?.message || String(e)}`);
+          const msg = e?.message || String(e);
+          errors.push(`prefund ${SHORT(p.w.pubkey)}: ${msg}`);
+          log(`  → ${label(p.w)} pre-fund FAILED: ${msg}`);
         }
-        await new Promise((r) => setTimeout(r, 250));
+        if (!dry) await new Promise((r) => setTimeout(r, 250));
       }
-      if (needFunding.length) await new Promise((r) => setTimeout(r, 2000));
+      if (needFunding.length && !dry) await new Promise((r) => setTimeout(r, 2000));
 
       // 3) Move every SPL token (max) → W1·Wallet 1
+      log(`PHASE 4 · Move ${totalTokenMoves} token balance(s) → W1·Wallet 1`);
       let movedTokens = 0;
       for (const p of tokenPlan) {
         for (const mint of p.mints) {
           try {
             await call({ walletId: p.w.id, mint, amount: -1, destination: w1.pubkey });
             movedTokens++;
+            log(`  ${label(p.w)} ${mint.slice(0, 6)}… max → W1·W1 ok`);
           } catch (e: any) {
-            errors.push(`${SHORT(p.w.pubkey)} ${mint.slice(0, 6)}…: ${e?.message || String(e)}`);
+            const msg = e?.message || String(e);
+            errors.push(`${SHORT(p.w.pubkey)} ${mint.slice(0, 6)}…: ${msg}`);
+            log(`  ${label(p.w)} ${mint.slice(0, 6)}… → W1·W1 FAILED: ${msg}`);
           }
-          await new Promise((r) => setTimeout(r, 300));
+          if (!dry) await new Promise((r) => setTimeout(r, 300));
         }
       }
 
-      // 4) Optional: close now-empty token accounts so their rent (~0.002 SOL each)
+      // 4) Always close now-empty token accounts so their rent (~0.002 SOL each)
       //    is reclaimed before the SOL sweep.
+      log(`PHASE 5 · Dust sweep (rent reclaim) across ${cols.length} waterfall(s)`);
       let closedCols = 0;
-      if (movedTokens > 0 && confirm(
-        `Tokens moved.\n\nClose the now-empty token accounts first to reclaim ~0.002 SOL of rent each?\n\n` +
-        `(Runs the dust sweep across all 10 waterfalls — recommended, adds a few minutes.)`,
-      )) {
-        const cols = [...new Set(wallets.map((w) => w.column_index))].sort((a, b) => a - b);
-        for (const col of cols) {
-          try {
+      for (const col of cols) {
+        try {
+          if (!dry) {
             const { data, error } = await supabase.functions.invoke("waterfall-dust-sweep", {
               body: { waterfall_column: col, start_row: 0, end_row: 9, dry_run: false },
             });
             if (error) throw new Error(error.message);
             if ((data as any)?.error) throw new Error((data as any).error);
-            closedCols++;
-          } catch (e: any) {
-            errors.push(`dust sweep W${col + 1}: ${e?.message || String(e)}`);
+            const closed = (data as any)?.closed_accounts ?? (data as any)?.closed ?? "?";
+            log(`  W${col + 1} dust swept — ${closed} account(s) closed`);
+          } else {
+            log(`  W${col + 1} dust sweep (rows 1–10)`);
           }
-          await new Promise((r) => setTimeout(r, 500));
+          closedCols++;
+        } catch (e: any) {
+          const msg = e?.message || String(e);
+          errors.push(`dust sweep W${col + 1}: ${msg}`);
+          log(`  W${col + 1} dust sweep FAILED: ${msg}`);
         }
+        if (!dry) await new Promise((r) => setTimeout(r, 500));
       }
 
       // 5) Sweep all remaining SOL → W1·Wallet 1
-      await new Promise((r) => setTimeout(r, 1500));
+      log(`PHASE 6 · Sweep SOL from ${plan.length} wallet(s) → W1·Wallet 1`);
+      if (!dry) await new Promise((r) => setTimeout(r, 1500));
       let sweptSol = 0;
       for (const p of plan) {
         try {
           await call({ walletId: p.w.id, mint: "SOL", amount: -1, destination: w1.pubkey });
           sweptSol++;
+          log(`  ${label(p.w)} SOL max → W1·W1 ok`);
         } catch (e: any) {
           const msg = e?.message || String(e);
-          if (!/insufficient SOL/i.test(msg)) errors.push(`${SHORT(p.w.pubkey)} SOL: ${msg}`);
+          if (!/insufficient SOL/i.test(msg)) {
+            errors.push(`${SHORT(p.w.pubkey)} SOL: ${msg}`);
+            log(`  ${label(p.w)} SOL FAILED: ${msg}`);
+          } else {
+            log(`  ${label(p.w)} SOL skipped (nothing to sweep)`);
+          }
         }
-        await new Promise((r) => setTimeout(r, 250));
+        if (!dry) await new Promise((r) => setTimeout(r, 250));
       }
 
-      console.groupCollapsed(
-        `%c[CONSOLIDATE ALL] tokens ${movedTokens}/${totalTokenMoves} · prefunded ${funded} · dust-swept ${closedCols} col(s) · SOL swept ${sweptSol} · ${errors.length} error(s)`,
-        "color:#22c55e;font-weight:bold",
+      log(
+        `DONE · tokens ${movedTokens}/${totalTokenMoves} · prefunded ${funded} · dust-swept ${closedCols} waterfall(s) · SOL swept ${sweptSol} · ${errors.length} error(s)`,
       );
-      errors.forEach((e) => console.warn(e));
-      console.groupEnd();
 
       toast({
-        title: `Consolidated into W1·Wallet 1`,
+        title: `${dry ? "[DEMO] " : ""}Consolidated into W1·Wallet 1`,
         description:
           `Tokens ${movedTokens}/${totalTokenMoves} · SOL swept from ${sweptSol} wallet(s)` +
-          (errors.length ? ` · ${errors.length} issue(s), see console` : ""),
+          (errors.length ? ` · ${errors.length} issue(s), see the step log` : ""),
         variant: errors.length ? "destructive" : "default",
       });
 
-      try { await refreshBalancesForBuy(); } catch { /* non-fatal */ }
+      if (!dry) {
+        for (const col of cols) {
+          try { await refreshBalancesForBuy(wallets.filter((w) => w.column_index === col).map((w) => w.pubkey)); } catch { /* non-fatal */ }
+        }
+      }
     } catch (e: any) {
       console.error("[CONSOLIDATE ALL] fatal", e);
+      log(`FATAL: ${e?.message || String(e)}`);
       toast({ title: "Consolidate failed", description: e?.message || String(e), variant: "destructive" });
     } finally {
       setConsolidatingAll(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wallets]);
+  }, [wallets, consolidateDemo]);
 
   // ─── BULK BUY (per column) ─────────────────────────────────────────────
   const buyColumn = async (col: number) => {
@@ -2148,6 +2196,39 @@ export default function WaterfallGrid() {
                           >
                             {consolidatingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <>⬇ CONSOLIDATE ALL → W1·W1</>}
                           </button>
+                          <button
+                            onClick={() => setConsolidateDemo((v) => !v)}
+                            disabled={consolidatingAll}
+                            className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold ${consolidateDemo ? "border-amber-500 bg-amber-500/20 text-amber-700 dark:text-amber-300" : "border-muted-foreground/40 text-muted-foreground"}`}
+                            title="Demo / dry run: prints the full step log, assumes funds are present, sends nothing on-chain"
+                          >
+                            DEMO
+                          </button>
+                        </div>
+                      )}
+                      {c === 0 && consolidateLog.length > 0 && (
+                        <div className="mt-1 rounded border border-emerald-600/30 bg-black/80 p-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[9px] font-semibold text-emerald-400">CONSOLIDATE STEP LOG</span>
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => navigator.clipboard.writeText(consolidateLog.join("\n"))}
+                                className="text-[9px] px-1 py-0.5 rounded border border-emerald-600/50 text-emerald-300 hover:bg-emerald-600/20"
+                              >
+                                Copy log
+                              </button>
+                              <button
+                                onClick={() => setConsolidateLog([])}
+                                disabled={consolidatingAll}
+                                className="text-[9px] px-1 py-0.5 rounded border border-muted-foreground/40 text-muted-foreground hover:bg-muted/20 disabled:opacity-40"
+                              >
+                                Clear
+                              </button>
+                            </div>
+                          </div>
+                          <pre className="max-h-48 overflow-auto text-[9px] leading-[1.3] text-emerald-200 whitespace-pre-wrap">
+                            {consolidateLog.join("\n")}
+                          </pre>
                         </div>
                       )}
                       {simMode && (
