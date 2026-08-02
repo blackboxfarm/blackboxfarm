@@ -2323,6 +2323,7 @@ export default function WaterfallGrid() {
                               costBasis={simCostBasis[w.id]}
                               onSellMintLive={sellMintLive}
                               onSellAllLive={sellAllInWallet}
+                              hideSmallTokens={hideSmallTokens}
                           />
                         ) : <span className="text-muted-foreground">—</span>}
                       </td>
