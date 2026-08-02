@@ -2388,6 +2388,7 @@ function Cell({
   simMode, onSimBuy, onSimSell, onSimTroll, realizedPnl,
   costBasis,
   onSellMintLive, onSellAllLive,
+  hideSmallTokens,
 }: {
   w: WaterfallWallet;
   tokens: TokenHolding[];
@@ -2400,6 +2401,7 @@ function Cell({
   onOpen: () => void;
   onRename: (id: string, nickname: string) => void;
   isHeadOfColumn: boolean;
+  hideSmallTokens?: boolean;
   cascade?: CascadeRun;
   isCurrentCascadeWallet: boolean;
   planHop?: PlanHop;
