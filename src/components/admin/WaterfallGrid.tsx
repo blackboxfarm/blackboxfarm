@@ -2552,8 +2552,18 @@ function Cell({
           </span>
         )}
       </div>
-      {tokens.length > 0 && (
+      {(() => {
+        const visibleTokens = hideSmallTokens ? tokens.filter((t) => t.amount >= 1000) : tokens;
+        const hiddenCount = tokens.length - visibleTokens.length;
+        if (visibleTokens.length === 0 && hiddenCount === 0) return null;
+        return (
         <div className="text-[10px] space-y-0.5">
+          {hiddenCount > 0 && (
+            <div className="text-[10px] text-muted-foreground italic">
+              +{hiddenCount} hidden under 1,000
+            </div>
+          )}
+          {visibleTokens.map((t) => {
           {tokens.map((t) => {
             const meta = tokenPrices[t.mint];
             const usd = meta ? meta.priceUsd * t.amount : 0;
