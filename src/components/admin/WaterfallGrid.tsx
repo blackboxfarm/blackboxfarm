@@ -220,6 +220,13 @@ export default function WaterfallGrid() {
     try { localStorage.setItem("waterfall_skip_troll", skipTroll ? "1" : "0"); } catch {}
   }, [skipTroll]);
 
+  const [hideSmallTokens, setHideSmallTokens] = useState<boolean>(() => {
+    try { return localStorage.getItem("waterfall_hide_small_tokens") !== "0"; } catch { return true; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("waterfall_hide_small_tokens", hideSmallTokens ? "1" : "0"); } catch {}
+  }, [hideSmallTokens]);
+
   const appendLog = useCallback((e: Omit<SimLogEntry, "ts">) => {
     setSimLog((prev) => [{ ...e, ts: Date.now() }, ...prev].slice(0, 500));
   }, []);
