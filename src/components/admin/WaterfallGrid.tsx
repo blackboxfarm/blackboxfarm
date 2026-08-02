@@ -2071,6 +2071,21 @@ export default function WaterfallGrid() {
               No buy/sell of $TROLL · ~2–4 min instead of ~25 min
             </span>
           )}
+          <span className="mx-1 text-border">|</span>
+          <label className="flex items-center gap-2 text-xs font-medium cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={hideSmallTokens}
+              onChange={() => setHideSmallTokens((v) => !v)}
+              className="h-3.5 w-3.5"
+            />
+            Hide tokens under 1,000 count
+          </label>
+          {hideSmallTokens && (
+            <span className="text-[11px] text-muted-foreground">
+              Garbage balances hidden from grid (drawer still shows all)
+            </span>
+          )}
         </div>
       </div>
 
