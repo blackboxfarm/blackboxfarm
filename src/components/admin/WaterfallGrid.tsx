@@ -2554,8 +2554,7 @@ function Cell({
       </div>
       {(() => {
         const visibleTokens = hideSmallTokens ? tokens.filter((t) => t.amount >= 1000) : tokens;
-        const hiddenCount = tokens.length - visibleTokens.length;
-        if (visibleTokens.length === 0 && hiddenCount === 0) return null;
+        if (visibleTokens.length === 0) return null;
         return (
           <div className="text-[10px] space-y-0.5">
             {visibleTokens.map((t) => {
