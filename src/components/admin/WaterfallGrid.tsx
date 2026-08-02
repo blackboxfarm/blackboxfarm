@@ -220,6 +220,13 @@ export default function WaterfallGrid() {
     try { localStorage.setItem("waterfall_skip_troll", skipTroll ? "1" : "0"); } catch {}
   }, [skipTroll]);
 
+  const [hideSmallTokens, setHideSmallTokens] = useState<boolean>(() => {
+    try { return localStorage.getItem("waterfall_hide_small_tokens") !== "0"; } catch { return true; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("waterfall_hide_small_tokens", hideSmallTokens ? "1" : "0"); } catch {}
+  }, [hideSmallTokens]);
+
   const appendLog = useCallback((e: Omit<SimLogEntry, "ts">) => {
     setSimLog((prev) => [{ ...e, ts: Date.now() }, ...prev].slice(0, 500));
   }, []);
@@ -2064,6 +2071,21 @@ export default function WaterfallGrid() {
               No buy/sell of $TROLL · ~2–4 min instead of ~25 min
             </span>
           )}
+          <span className="mx-1 text-border">|</span>
+          <label className="flex items-center gap-2 text-xs font-medium cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={hideSmallTokens}
+              onChange={() => setHideSmallTokens((v) => !v)}
+              className="h-3.5 w-3.5"
+            />
+            Hide tokens under 1,000 count
+          </label>
+          {hideSmallTokens && (
+            <span className="text-[11px] text-muted-foreground">
+              Garbage balances hidden from grid (drawer still shows all)
+            </span>
+          )}
         </div>
       </div>
 
@@ -2301,6 +2323,7 @@ export default function WaterfallGrid() {
                               costBasis={simCostBasis[w.id]}
                               onSellMintLive={sellMintLive}
                               onSellAllLive={sellAllInWallet}
+                              hideSmallTokens={hideSmallTokens}
                           />
                         ) : <span className="text-muted-foreground">—</span>}
                       </td>
@@ -2366,6 +2389,7 @@ function Cell({
   simMode, onSimBuy, onSimSell, onSimTroll, realizedPnl,
   costBasis,
   onSellMintLive, onSellAllLive,
+  hideSmallTokens,
 }: {
   w: WaterfallWallet;
   tokens: TokenHolding[];
@@ -2378,6 +2402,7 @@ function Cell({
   onOpen: () => void;
   onRename: (id: string, nickname: string) => void;
   isHeadOfColumn: boolean;
+  hideSmallTokens?: boolean;
   cascade?: CascadeRun;
   isCurrentCascadeWallet: boolean;
   planHop?: PlanHop;
@@ -2527,96 +2552,106 @@ function Cell({
           </span>
         )}
       </div>
-      {tokens.length > 0 && (
-        <div className="text-[10px] space-y-0.5">
-          {tokens.map((t) => {
-            const meta = tokenPrices[t.mint];
-            const usd = meta ? meta.priceUsd * t.amount : 0;
-            const solEq = solUsd > 0 ? usd / solUsd : 0;
-            const sym = t.symbol ?? meta?.symbol ?? "?";
-            const tokenLabel = sym && sym !== "?" ? sym : SHORT(t.mint);
-            const isTarget = targetMint === t.mint;
-            const amt = t.amount >= 1000
-              ? t.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })
-              : t.amount.toLocaleString(undefined, { maximumFractionDigits: 4 });
-            const basis = costBasis?.[t.mint];
-            let costUsd = 0;
-            let pnlPct = 0;
-            if (basis && basis.tokens > 0) {
-              const heldRatio = Math.min(1, t.amount / basis.tokens);
-              // Fallback: if we never captured a USD basis (phantom-price buy),
-              // derive it from the SOL spent × live SOL/USD.
-              const basisUsd = basis.usdIn > 0
-                ? basis.usdIn
-                : basis.solIn * (solUsd || 0) * 0.99;
-              costUsd = basis.entryPriceUsd && basis.entryPriceUsd > 0
-                ? basis.entryPriceUsd * t.amount
-                : basisUsd * heldRatio;
-              if (costUsd > 0 && usd > 0) pnlPct = ((usd - costUsd) / costUsd) * 100;
-            }
-            const hasPnl = costUsd > 0 && usd > 0;
-            const pnlColor = !hasPnl
-              ? "text-muted-foreground"
-              : usd >= costUsd
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-red-600 dark:text-red-400";
-            return (
-              <div key={t.mint} className={`truncate ${isTarget ? "text-foreground font-medium" : "text-muted-foreground"}`}>
-                <span className="font-semibold">{amt}</span> {tokenLabel}
-                {!simMode && (
-                  <button
-                    onClick={async () => {
-                      if (!confirm(`Sell ALL ${amt} ${tokenLabel} (${SHORT(t.mint)}) from ${w.nickname || "wallet"}?`)) return;
-                      setSellingMint(t.mint);
-                      try {
-                        await onSellMintLive(w, t.mint);
-                        toast({ title: `Sell sent: ${tokenLabel}` });
-                      } catch (e: any) {
-                        toast({ title: `Sell failed`, description: e?.message || String(e), variant: "destructive" });
-                      } finally { setSellingMint(null); }
-                    }}
-                    disabled={sellingMint !== null || sellingAll || busy !== null || cascadeRunning || trolling}
-                    className="ml-1 inline-flex items-center px-1 py-px rounded text-[9px] bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-40 align-middle"
-                    title={`Sell 100% of ${tokenLabel}`}
-                  >
-                    {sellingMint === t.mint ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : "Sell"}
-                  </button>
-                )}
-                {usd > 0 && (
-                  <>
-                    <span className="text-muted-foreground">{" ≈ "}</span>
-                    <span className={`font-medium ${pnlColor}`} title={hasPnl ? `Cost: $${costUsd.toFixed(4)} · ${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(1)}%` : undefined}>
-                      ${usd >= 1 ? usd.toFixed(2) : usd.toFixed(4)}
-                    </span>
-                    {solEq > 0 && <span className="text-muted-foreground"> / {solEq.toFixed(4)} SOL</span>}
-                    {hasPnl && Math.abs(pnlPct) > 0.01 && (
-                      <span className={`ml-1 font-mono ${pnlColor}`}>({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%)</span>
-                    )}
-                  </>
-                )}
+      {(() => {
+        const visibleTokens = hideSmallTokens ? tokens.filter((t) => t.amount >= 1000) : tokens;
+        const hiddenCount = tokens.length - visibleTokens.length;
+        if (visibleTokens.length === 0 && hiddenCount === 0) return null;
+        return (
+          <div className="text-[10px] space-y-0.5">
+            {hiddenCount > 0 && (
+              <div className="text-[10px] text-muted-foreground italic">
+                +{hiddenCount} hidden under 1,000
               </div>
-            );
-          })}
-          {(() => {
-            const tokensUsd = tokens.reduce((s, t) => s + (tokenPrices[t.mint]?.priceUsd ?? 0) * t.amount, 0);
-            const solValueUsd = sol * solUsd;
-            const totalUsd = tokensUsd + solValueUsd;
-            const totalSol = solUsd > 0 ? totalUsd / solUsd : sol;
-            if (tokensUsd <= 0) return null;
-            return (
-              <div className="text-[10px] text-foreground font-medium border-t border-border/40 pt-0.5">
-                Total ≈ {solUsd > 0 ? `$${totalUsd.toFixed(2)} / ` : ""}{totalSol.toFixed(4)} SOL
+            )}
+            {visibleTokens.map((t) => {
+              const meta = tokenPrices[t.mint];
+              const usd = meta ? meta.priceUsd * t.amount : 0;
+              const solEq = solUsd > 0 ? usd / solUsd : 0;
+              const sym = t.symbol ?? meta?.symbol ?? "?";
+              const tokenLabel = sym && sym !== "?" ? sym : SHORT(t.mint);
+              const isTarget = targetMint === t.mint;
+              const amt = t.amount >= 1000
+                ? t.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })
+                : t.amount.toLocaleString(undefined, { maximumFractionDigits: 4 });
+              const basis = costBasis?.[t.mint];
+              let costUsd = 0;
+              let pnlPct = 0;
+              if (basis && basis.tokens > 0) {
+                const heldRatio = Math.min(1, t.amount / basis.tokens);
+                // Fallback: if we never captured a USD basis (phantom-price buy),
+                // derive it from the SOL spent × live SOL/USD.
+                const basisUsd = basis.usdIn > 0
+                  ? basis.usdIn
+                  : basis.solIn * (solUsd || 0) * 0.99;
+                costUsd = basis.entryPriceUsd && basis.entryPriceUsd > 0
+                  ? basis.entryPriceUsd * t.amount
+                  : basisUsd * heldRatio;
+                if (costUsd > 0 && usd > 0) pnlPct = ((usd - costUsd) / costUsd) * 100;
+              }
+              const hasPnl = costUsd > 0 && usd > 0;
+              const pnlColor = !hasPnl
+                ? "text-muted-foreground"
+                : usd >= costUsd
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-red-600 dark:text-red-400";
+              return (
+                <div key={t.mint} className={`truncate ${isTarget ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                  <span className="font-semibold">{amt}</span> {tokenLabel}
+                  {!simMode && (
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`Sell ALL ${amt} ${tokenLabel} (${SHORT(t.mint)}) from ${w.nickname || "wallet"}?`)) return;
+                        setSellingMint(t.mint);
+                        try {
+                          await onSellMintLive(w, t.mint);
+                          toast({ title: `Sell sent: ${tokenLabel}` });
+                        } catch (e: any) {
+                          toast({ title: `Sell failed`, description: e?.message || String(e), variant: "destructive" });
+                        } finally { setSellingMint(null); }
+                      }}
+                      disabled={sellingMint !== null || sellingAll || busy !== null || cascadeRunning || trolling}
+                      className="ml-1 inline-flex items-center px-1 py-px rounded text-[9px] bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-40 align-middle"
+                      title={`Sell 100% of ${tokenLabel}`}
+                    >
+                      {sellingMint === t.mint ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : "Sell"}
+                    </button>
+                  )}
+                  {usd > 0 && (
+                    <>
+                      <span className="text-muted-foreground">{" ≈ "}</span>
+                      <span className={`font-medium ${pnlColor}`} title={hasPnl ? `Cost: $${costUsd.toFixed(4)} · ${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(1)}%` : undefined}>
+                        ${usd >= 1 ? usd.toFixed(2) : usd.toFixed(4)}
+                      </span>
+                      {solEq > 0 && <span className="text-muted-foreground"> / {solEq.toFixed(4)} SOL</span>}
+                      {hasPnl && Math.abs(pnlPct) > 0.01 && (
+                        <span className={`ml-1 font-mono ${pnlColor}`}>({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%)</span>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })}
+            {(() => {
+              const tokensUsd = tokens.reduce((s, t) => s + (tokenPrices[t.mint]?.priceUsd ?? 0) * t.amount, 0);
+              const solValueUsd = sol * solUsd;
+              const totalUsd = tokensUsd + solValueUsd;
+              const totalSol = solUsd > 0 ? totalUsd / solUsd : sol;
+              if (tokensUsd <= 0) return null;
+              return (
+                <div className="text-[10px] text-foreground font-medium border-t border-border/40 pt-0.5">
+                  Total ≈ {solUsd > 0 ? `$${totalUsd.toFixed(2)} / ` : ""}{totalSol.toFixed(4)} SOL
+                </div>
+              );
+            })()}
+            {realizedPnl && (Math.abs(realizedPnl.sol) > 1e-6 || Math.abs(realizedPnl.usd) > 0.001) && (
+              <div className={`text-[10px] font-medium ${realizedPnl.sol >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                Realized: {realizedPnl.sol >= 0 ? "+" : ""}{realizedPnl.sol.toFixed(4)} SOL
+                {Math.abs(realizedPnl.usd) > 0.001 && <> ({realizedPnl.usd >= 0 ? "+" : ""}${realizedPnl.usd.toFixed(2)})</>}
               </div>
-            );
-          })()}
-          {realizedPnl && (Math.abs(realizedPnl.sol) > 1e-6 || Math.abs(realizedPnl.usd) > 0.001) && (
-            <div className={`text-[10px] font-medium ${realizedPnl.sol >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
-              Realized: {realizedPnl.sol >= 0 ? "+" : ""}{realizedPnl.sol.toFixed(4)} SOL
-              {Math.abs(realizedPnl.usd) > 0.001 && <> ({realizedPnl.usd >= 0 ? "+" : ""}${realizedPnl.usd.toFixed(2)})</>}
-            </div>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        );
+      })()}
       {tokens.length === 0 && realizedPnl && (Math.abs(realizedPnl.sol) > 1e-6 || Math.abs(realizedPnl.usd) > 0.001) && (
         <div className={`text-[10px] font-medium ${realizedPnl.sol >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
           Realized: {realizedPnl.sol >= 0 ? "+" : ""}{realizedPnl.sol.toFixed(4)} SOL
