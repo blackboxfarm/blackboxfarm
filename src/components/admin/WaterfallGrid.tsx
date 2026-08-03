@@ -2311,6 +2311,18 @@ export default function WaterfallGrid() {
                           </button>
                         </div>
                       )}
+                      {c === 0 && (
+                        <div className="flex gap-1 mt-1">
+                          <button
+                            onClick={() => setSpreadOpen(true)}
+                            disabled={spreading || consolidatingAll || dustSweeping}
+                            className="flex-1 text-[10px] px-1.5 py-0.5 rounded bg-sky-600 hover:bg-sky-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold flex items-center justify-center gap-1"
+                            title="Spread SOL out of W1·Wallet 1 into any wallets you pick, with a fuzzy-even split"
+                          >
+                            {spreading ? <Loader2 className="h-3 w-3 animate-spin" /> : <>⬆ SPREAD FROM W1·W1</>}
+                          </button>
+                        </div>
+                      )}
                       {c === 0 && consolidateLog.length > 0 && (
                         <div className="mt-1 rounded border border-emerald-600/30 bg-black/80 p-1">
                           <div className="flex items-center justify-between mb-1">
