@@ -24,6 +24,7 @@ function explainDustError(raw: string): string {
   return "";
 }
 import { WaterfallWalletDrawer, type WaterfallWallet, type TokenHolding } from "./WaterfallWalletDrawer";
+import { WaterfallSpreadModal, type SpreadTarget } from "./WaterfallSpreadModal";
 
 const SHORT = (k: string) => `${k.slice(0, 4)}…${k.slice(-4)}`;
 const LAMPORTS_PER_SOL = 1_000_000_000;
@@ -211,6 +212,8 @@ export default function WaterfallGrid() {
   const [consolidatingAll, setConsolidatingAll] = useState<boolean>(false);
   const [consolidateDemo, setConsolidateDemo] = useState<boolean>(false);
   const [consolidateLog, setConsolidateLog] = useState<string[]>([]);
+  const [spreadOpen, setSpreadOpen] = useState<boolean>(false);
+  const [spreading, setSpreading] = useState<boolean>(false);
 
   // Skip TROLL buy/sell during cascade — just spread SOL across the wallets.
   const [skipTroll, setSkipTroll] = useState<boolean>(() => {
