@@ -2472,6 +2472,27 @@ export default function WaterfallGrid() {
         onRename={updateNickname}
         onWithdrawComplete={refresh}
       />
+
+      <WaterfallSpreadModal
+        open={spreadOpen}
+        onOpenChange={setSpreadOpen}
+        wallets={wallets}
+        source={wallets.find((w) => w.column_index === 0 && w.row_index === 0) ?? null}
+        sourceSol={(() => {
+          const w1 = wallets.find((w) => w.column_index === 0 && w.row_index === 0);
+          if (!w1) return 0;
+          const live = balances[w1.pubkey]?.sol;
+          return typeof live === "number" ? live : Number(w1.sol_balance || 0);
+        })()}
+        liveSol={(pk) => {
+          const live = balances[pk]?.sol;
+          if (typeof live === "number") return live;
+          const w = wallets.find((x) => x.pubkey === pk);
+          return Number(w?.sol_balance || 0);
+        }}
+        running={spreading}
+        onSpread={runSpread}
+      />
     </div>
   );
 }
