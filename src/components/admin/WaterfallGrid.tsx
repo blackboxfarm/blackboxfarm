@@ -1299,6 +1299,86 @@ export default function WaterfallGrid() {
   }, [wallets, consolidateDemo]);
 
   // ─── BULK BUY (per column) ─────────────────────────────────────────────
+  // ─── SPREAD: W1·Wallet 1 → hand-picked wallets, fuzzy-even split ───────
+  const runSpread = useCallback(async (targets: SpreadTarget[], fuzzPct: number) => {
+    const w1 = wallets.find((w) => w.column_index === 0 && w.row_index === 0);
+    if (!w1) return toast({ title: "W1·Wallet 1 not found", variant: "destructive" });
+    if (targets.length === 0) return;
+
+    const t0 = Date.now();
+    const stamp = () => {
+      const s = Math.floor((Date.now() - t0) / 1000);
+      return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+    };
+    const lines: string[] = [];
+    const log = (msg: string) => {
+      const line = `[${stamp()}] ${msg}`;
+      lines.push(line);
+      console.log(`%c${line}`, "color:#38bdf8");
+      setConsolidateLog([...lines]);
+    };
+    const label = (w: WaterfallWallet) => `W${w.column_index + 1}·W${w.row_index + 1}`;
+    const total = targets.reduce((s, t) => s + t.amount, 0);
+
+    const w1Live = balancesRef.current[w1.pubkey]?.sol;
+    const w1Sol = typeof w1Live === "number" ? w1Live : Number(w1.sol_balance || 0);
+    const fees = targets.length * 0.000005;
+    if (total + fees > w1Sol) {
+      return toast({
+        title: "W1·Wallet 1 has insufficient SOL",
+        description: `Needs ${(total + fees).toFixed(4)} SOL, has ${w1Sol.toFixed(4)} SOL.`,
+        variant: "destructive",
+      });
+    }
+    if (!confirm(
+      `SPREAD ${total.toFixed(4)} SOL from W1·Wallet 1 → ${targets.length} wallet(s)?\n\n` +
+      `• Fuzz: ±${fuzzPct}%\n` +
+      `• W1·Wallet 1 balance: ${w1Sol.toFixed(4)} SOL\n` +
+      `• ${targets.length} on-chain transfers, sent sequentially.`,
+    )) return;
+
+    setSpreading(true);
+    setConsolidateLog([]);
+    let ok = 0;
+    let sent = 0;
+    const errors: string[] = [];
+    try {
+      log(`SPREAD · ${total.toFixed(4)} SOL → ${targets.length} wallet(s) · fuzz ±${fuzzPct}%`);
+      for (const t of targets) {
+        try {
+          const { data, error } = await supabase.functions.invoke("waterfall-withdraw", {
+            body: { walletId: w1.id, mint: "SOL", amount: t.amount, destination: t.wallet.pubkey },
+          });
+          if (error) throw new Error(error.message);
+          if (data && (data as any).error) throw new Error((data as any).error);
+          ok++;
+          sent += t.amount;
+          const sig = (data as any)?.signature as string | undefined;
+          log(`  ${label(t.wallet)}  ${t.amount.toFixed(6)} SOL ok${sig ? ` (sig ${sig.slice(0, 6)}…)` : ""}`);
+        } catch (e: any) {
+          const msg = e?.message || String(e);
+          errors.push(`${label(t.wallet)}: ${msg}`);
+          log(`  ${label(t.wallet)}  ${t.amount.toFixed(6)} SOL FAILED: ${msg}`);
+        }
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      log(`DONE · ${ok}/${targets.length} sent · ${sent.toFixed(4)} SOL out · ${errors.length} error(s)`);
+      toast({
+        title: `Spread ${ok}/${targets.length}`,
+        description: errors.length ? `${errors.length} failed — see the step log` : `${sent.toFixed(4)} SOL distributed`,
+        variant: errors.length ? "destructive" : "default",
+      });
+      setSpreadOpen(false);
+      try { await refreshBalancesForBuy([w1.pubkey, ...targets.map((t) => t.wallet.pubkey)]); } catch { /* non-fatal */ }
+    } catch (e: any) {
+      log(`FATAL: ${e?.message || String(e)}`);
+      toast({ title: "Spread failed", description: e?.message || String(e), variant: "destructive" });
+    } finally {
+      setSpreading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallets]);
+
   const buyColumn = async (col: number) => {
     const mint = mintForCol(col);
     if (!mint) return toast({ title: `W${col + 1}: set a token mint first`, variant: "destructive" });
