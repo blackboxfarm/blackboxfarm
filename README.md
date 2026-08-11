@@ -217,6 +217,11 @@ For development:
 ```bash
 # Clone the repository
 git clone https://github.com/blackboxfarm/blackboxfarm.git
+cd blackboxfarm
+
+# Environment (Supabase + Turnstile — see .env.example)
+cp .env.example .env
+# Edit .env with your project keys; never commit .env
 
 # Install dependencies
 npm install
