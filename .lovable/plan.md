@@ -1,61 +1,25 @@
-## Goal
+# /brand — BlackBox Farm Brand Content Studio
 
-Add a **⬆ SPREAD FROM W1·W1** button (reverse of CONSOLIDATE ALL) that sends SOL from Waterfall 1 · Wallet 1 out to any hand-picked set of wallets in the 10×10 grid, with a fuzzy (non-identical) split.
+Port the framework BestBaliSpas uses (a single `/brand` route backed by a token file, an SVG mark library, and canvas-based export helpers) onto BlackBox Farm's cyan-on-black / gold aesthetic.
 
-## 1. Button
+## What you get at `/brand`
 
-Placed directly under `⬇ CONSOLIDATE ALL → W1·W1` in `src/components/admin/WaterfallGrid.tsx`. Source wallet is hard-locked to W1·Wallet 1 — it is never a selectable target. Opens the modal; disabled while any other cascade/consolidate/troll job is running.
+1. **Chosen identity panel** — the locked BlackBox mark + wordmark preview, with switchable background (Void black / Cyan grid / Gold), switchable tagline, and one-click export: SVG, PNG 256/512/1024, transparent PNG.
+2. **Logo directions** — 6 original SVG marks drawn in code (no AI images), each with a short story and "best for" note, previewed on black or on cyan, each downloadable as SVG/PNG.
+3. **Colour system** — click-to-copy swatches for every brand colour with its CSS token name and role, plus the signature gradient strip.
+4. **Typography** — display + body specimen cards with weight/tracking guidance.
+5. **Banner generator** — composes ready-to-post PNGs on canvas at real sizes: OG card 1200×630, X header 1500×500, square 1080×1080, Telegram/email banner 1200×300. Uses the selected background + tagline.
+6. **Do / Don't usage rules** and a **favicon & avatar set** showing every mark at 64/32/16px.
 
-## 2. Spread modal
+## Technical detail
 
-New component `src/components/admin/WaterfallSpreadModal.tsx`.
+- `src/lib/brand.ts` — literal hex exports mirroring `src/index.css` tokens (cyan `--primary`, gold `--gold`, void background, card, muted) plus `BRAND_PALETTE` and `BRAND_TYPOGRAPHY` metadata. `index.css` stays authoritative for app UI; these literals exist only so downloaded files carry real colours.
+- `src/components/brand/logos.tsx` — 6 inline SVG marks (`viewBox 0 0 64 64`, `size`/`inverse` props) + `Wordmark`, exported as `LOGO_VARIANTS`.
+- `src/lib/brandExport.ts` — `triggerDownload`, `serializeSvg`, `markToPng(svg, size, background)`, `BANNER_PRESETS`, `bannerToPng(...)`. Pure client-side canvas, no edge function, no DB.
+- `src/pages/Brand.tsx` — the page, wrapped in `SiteLayout`, with SEO title/description/OG meta.
+- Route `/brand` added to `src/App.tsx`. Not added to the main nav (internal tool) — say the word if you want it in the menu.
+- No backend, no migrations, no API credits consumed.
 
-- **Header:** live W1·W1 balance (read from the live balance map, refreshed on open) and an amount field.
-  - Amount to spread: defaults to `balance − reserve`, editable.
-  - Reserve field (default `0.02 SOL`) kept in W1·W1 for fees.
-- **10×10 picker grid** — columns W1…W10, rows Wallet 1…10, matching the main grid layout.
-  - Click a cell to toggle selection.
-  - Click-and-drag across cells to paint selection (swipe on touch) — pointer events, drag mode = select or deselect based on the first cell touched.
-  - Row / column header buttons toggle a whole row or column; **Select all** / **Clear** buttons.
-  - W1·W1 shown greyed and unselectable. Each cell shows its current SOL so you can see where money already is.
-- **Fuzz slider:** 0–15 %, default 5 %.
-- **Live preview list:** each selected wallet with its computed amount, plus totals and min/max so you can see the variance before sending.
+## Scope guardrails
 
-## 3. Fuzzy distribution math
-
-```text
-base   = amount / n
-weights[i] = 1 + (random(-1..1) × fuzz)      // fuzz = 0.05 → ±5 %
-amounts[i] = amount × weights[i] / Σweights  // renormalised so the sum is exact
-```
-
-Then clamp: each amount ≥ `0.001 SOL` (below that, drop the wallet and re-split), round to 6 decimals, and push any rounding remainder onto the largest amount so the total exactly equals the requested amount. A **Re-roll** button regenerates the random weights.
-
-## 4. Execution
-
-Sequential loop, one `waterfall-withdraw` call per target — the same edge function CONSOLIDATE already uses, no backend change needed:
-
-```ts
-body: { walletId: W1W1.id, mint: "SOL", amount: amounts[i], destination: target.pubkey }
-```
-
-~250 ms gap between calls to stay under RPC rate limits. Pre-flight solvency check: `amount + reserve + n × 0.000005` must be ≤ live W1·W1 balance, else abort with a clear message.
-
-## 5. Live log + result
-
-Same log panel style as CONSOLIDATE ALL:
-
-```text
-[00:00] SPREAD · 42.0000 SOL → 17 wallets · fuzz 5%
-[00:01]   W3·W4  2.5514 SOL ok (sig 5xQ…)
-[00:02]   W6·W9  2.3902 SOL FAILED: blockhash expired
-[00:35] DONE · 16/17 sent · 39.61 SOL out · 1 error
-```
-
-Copy-log button, then an automatic balance refresh for W1·W1 and every target. Failures are listed by wallet label and the run continues; nothing is retried automatically.
-
-## Technical notes
-
-- New file: `src/components/admin/WaterfallSpreadModal.tsx` (selection grid, fuzz math, preview).
-- Edited: `src/components/admin/WaterfallGrid.tsx` — add `spreadOpen` / `spreading` state, the button, the sequential send loop with log, and pass the live balance map + wallet list into the modal.
-- No edge function or database changes.
+Frontend only. Nothing in `index.css`, the header logo, or the favicon changes until you pick a mark and tell me to wire it site-wide.
