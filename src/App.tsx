@@ -89,6 +89,7 @@ const AutopsyRaw = lazy(() => import("./pages/AutopsyRaw"));
 const TokenArchive = lazy(() => import("./pages/TokenArchive"));
 const TwilioIdeas = lazy(() => import("./pages/TwilioIdeas"));
 const NoLube = lazy(() => import("./pages/NoLube"));
+const Brand = lazy(() => import("./pages/Brand"));
 // AutopsyQueue page removed — Autopsies admin lives inside the Super Admin Autopsies tab.
 
 const queryClient = new QueryClient();
@@ -186,6 +187,7 @@ const App = () => {
                       <Route path="/super-admin/autopsy-queue" element={<Navigate to="/super-admin?tab=autopsies" replace />} />
                       <Route path="/tester" element={<TesterFeedbackPage />} />
                       <Route path="/token-archive" element={<TokenArchive />} />
+                      <Route path="/brand" element={<Brand />} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>
