@@ -88,6 +88,10 @@ async function sendSms(
   body: string,
   mediaUrl?: string | null,
 ): Promise<{ ok: boolean; error?: string }> {
+  if (Deno.env.get('SMS_GLOBAL_KILL') !== 'false') {
+    console.warn('[SMS KILL] alpha-dev-detector SMS suppressed. Set SMS_GLOBAL_KILL=false to re-enable.');
+    return { ok: false, error: 'SMS_GLOBAL_KILL active' };
+  }
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   const TWILIO_API_KEY = Deno.env.get('TWILIO_API_KEY');
   if (!LOVABLE_API_KEY || !TWILIO_API_KEY) return { ok: false, error: 'missing_twilio_creds' };
