@@ -43,6 +43,10 @@ async function fetchPump(mint: string): Promise<{ price: number | null; mcap: nu
 }
 
 async function sendSms(body: string): Promise<void> {
+  if (Deno.env.get('SMS_GLOBAL_KILL') !== 'false') {
+    console.warn('[SMS KILL] alpha-paper-monitor SMS suppressed. Set SMS_GLOBAL_KILL=false to re-enable.');
+    return;
+  }
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   const TWILIO_API_KEY = Deno.env.get('TWILIO_API_KEY');
   if (!LOVABLE_API_KEY || !TWILIO_API_KEY) return;
